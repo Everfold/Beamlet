@@ -48,6 +48,8 @@ axum = { version = "0.8", features = ["http2", "ws"] }
 tower = "0.5"
 tower-http = "0.7"
 
+genai = "0.7"
+
 wasmtime = "50"
 wasmtime-wasi = "50"
 
