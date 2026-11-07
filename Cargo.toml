@@ -9,7 +9,6 @@ members = [
   "adapters/beamlet-message-zenoh",
 
   "agent/beamlet-agent",
-  "agent/beamlet-agent-llm",
   "agent/beamlet-agent-tool",
 
   "app/beamlet-console",
@@ -31,7 +30,6 @@ beamlet-durable = { path = "kernel/beamlet-durable" }
 beamlet-kernel = { path = "kernel/beamlet-kernel" }
 
 beamlet-agent = { path = "agent/beamlet-agent" }
-beamlet-agent-llm = { path = "agent/beamlet-agent-llm" }
 beamlet-agent-tool = { path = "agent/beamlet-agent-tool" }
 
 beamlet-message-nats = { path = "adapters/beamlet-message-nats" }
