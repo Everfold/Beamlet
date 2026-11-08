@@ -40,7 +40,7 @@ fmt:
     prek run --all-files
 
 test:
-    cargo nextest run --workspace --all-features
+    cargo nextest run --workspace
 
 doc:
     cargo doc --workspace --no-deps
