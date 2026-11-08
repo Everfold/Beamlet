@@ -49,8 +49,8 @@ license:
     cargo about generate --workspace about.hbs > licenses.html
 
 update:
-    cargo install-update -a
     cargo update
+    cargo install-update -a
     cargo deny fetch
     prek autoupdate
     nix flake update
