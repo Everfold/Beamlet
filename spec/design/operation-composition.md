@@ -1,137 +1,128 @@
 # Operation 组合与 Agent Loop
 
-状态: 设计契约, 尚未实现. 本文不新增 Task 实体, crate, 网络协议或通用注册框架. 当前 `beamlet-agent::Agent` 仍只是 Authority/Worker 本地组合, 不具备本文的 LLM Loop, capability 调用, 来源关联或派生提交映射. 已实现的内存交付保证见 [三段回执契约](receipts.md).
+状态: 2026-11-10 更新的目标契约, 尚未实现. 本文替换旧版组合方案. Agent 是独立实体, Agent Loop 的执行是 Operation; 每次 LLM Request, Codemode 与具体工具调用使用相同执行底座. 实体与状态见 [Agent 模型](agent-model.md), 结果获取见 [执行 Client](execution-client.md).
 
-## 范围与概念
+## 请求与完成边界
 
-Agent 和 Codemode 是执行逻辑, 不是新增参与方. 一次完整 Agent 或 Codemode 执行由 Operation 表达, 接纳后通过 Attempt 授权给 Worker, 返回自身 Report. 执行期间可以使用受限的 Client 能力提交其他 Operation. 不新增 TaskId 或另一套生命周期账本.
+| 执行 | Operation 输入 | Report 表达什么 |
+| --- | --- | --- |
+| Agent Loop | AgentId, 明确的启动输入/配置截点与完成策略 | 此次 Loop 返回的结果及所采用证据; 不表示 Agent 实体销毁 |
+| LLM Request | 固定模型配置, 已构造的消息, 工具声明 | 本次模型返回的完整内容或失败证据 |
+| Codemode | 代码, 输入, 固定执行器版本与获准能力范围 | 本次代码执行的结果或错误, 以及使用的执行证据 |
+| 普通 Tool | capability 版本与明确参数 | 本次工具执行的结果及外部影响证据 |
 
-Operation capability 定义可调用行为的契约, 包括目标绑定, 输入输出和权限要求. capability 的一次调用由 Operation 表达. capability 可承载 LLM, Codemode, 文件读取, Shell 或本地计算; 不要求全部返回同一种业务输出. Agent 集成组合并向执行方提供获准 capability, 注册或获得调用名称本身不代表获准执行.
+Operation 原始定义不可变. Loop 收到补充输入时将其作为独立输入事实记录, 不改写原始请求. Turn 仅用于组织交互, 不额外包一层 Operation. 不用"Agent 的一次调用"称呼 LLM Request.
 
-所有显式暴露的可调用计算都经过 Operation, 包括拼接, 过滤和解析, 不因无外部效果或同进程执行而绕开授权与证据. 执行器内部的语言求值, 协议解码和账本状态转换不是自动派生 Operation 的规则, 不将每个内部指令递归转换为新请求. 同进程可类型化直接交付, 仍保留相同接纳及校验语义.
+正常返回意味着该执行的完成契约已满足. 异步工具允许父执行先做其他工作, 但仍承担结果回收责任, 不能因选择异步就让 Agent Loop 正常结束. 异常终止须明确遗留责任与未知执行, 不推断子调用已经停止. 服务启动工具以启动步骤的结果返回, 不负责服务长期存活.
 
-## 完整 Loop 与最小调用链
-
-本文选择完整 Agent Loop: Agent 的最终 Report 表示本次 Loop 已返回, 不是要求外部继续执行的中途行动计划. 单步决策可以作为另一种明确命名的 capability, 但不混用两种完成契约.
+## 完整调用链
 
 ```text
-Client -> Agent Operation A, Attempt A1
-          |
-          +-> LLM Operation L1, Attempt L1-1
-          |     -> Report LR1: 完整输出, 含 read_file 调用块 0
-          |
-          +-> 文件读取 Operation F, Attempt F1
-          |     -> Report FR: 读取结果或失败证据
-          |
-          +-> 上下文组装 Operation P, Attempt P1
-          |     -> Report PR: 选定的上下文及证据引用
-          |
-          +-> LLM Operation L2, Attempt L2-1
-          |     -> Report LR2: 最终答案, 没有待处理的调用请求
-          |
-          +-> Agent Report AR: 最终结果及实际采用的证据引用
+Agent A, Loop Operation O / Attempt O1
+  -> LLM L1 / Attempt L1-1
+       -> LR1: Text + Call(codemode, provider_call_id=c1)
+  -> Codemode C / Attempt C1
+       -> Tool F1 / Attempt F1-1 -> FR1
+       -> Tool F2 / Attempt F2-1 -> FR2
+       -> CR: 汇总值, 使用的 FR1/FR2 引用
+  -> 构造下一次 LLM 输入
+  -> LLM L2 / Attempt L2-1
+       -> LR2: 最终输出
+  -> 检查完成条件
+  -> OR: Loop 返回结果与采用的证据引用
 ```
 
-A1 的执行逻辑负责校验 LR1 的调用请求, 提交 F, 选择相关 Report 组装下一轮输入, 最终返回 AR. LR1 的成功只表示 LLM capability 返回了符合契约的输出, 不表示工具调用已被授权或执行. LR2 是否足以结束 Loop 由明确的策略决定, 不只靠文本非空判断.
+LLM 只返回调用提议. 宿主校验后才提交 C, Authority 再授权 C1. C 的工具接口经宿主提交 F1/F2, 不直接创建授权或跳过权限检查. 返回给模型的 `c1` 结果来自 CR, 不强制展开 FR1/FR2 为模型未请求过的工具调用.
 
-示例将上下文组装作为显式 capability 调用 P, 故同样经过 Operation. P 可省略无关过程, 不能删除原执行证据或篡改 Report. 是否采用一段文本, 某个 Report 或某个调用结果是组合层决策, 不是 Kernel 的自动行为.
+同进程可直接类型化交付, 仍保留接纳, 授权和结果校验. 不要求为了记录内部子调用而经过网络.
 
-Codemode 调用遵循相同机制. 若 LR1 请求 Codemode, A1 提交 Codemode Operation C; C 的执行再提交 F 等 Operation, 聚合后返回 C 自己的 Report. 对 LLM 可以只返回 C 的选定结果, 不要求展开 C 的全部内部调用. 不增加 Codemode 专用授权层.
+## Tool 与 capability
 
-## 输入输出草案
+Tool 是面向 LLM 的调用接口, capability 是执行行为契约, Operation 是一次执行请求. Tool 可以映射一个 Operation, 也可以由组合逻辑处理; 不把 provider 的 Tool Call 标识当成 OperationId.
 
-以下类型说明组合层的数据职责, 不是可编译的公共 Rust Interface 或新增 v0 编码. `Value` 表示 Adapter 的业务值, 不引入纯 Kernel. 当前 `Operation<P>.task` 继续是泛型不可变请求定义, 字段名不意味着存在 Task 实体.
+本阶段普通工具映射具体 capability, Codemode 映射代码执行 Operation. 不再为 Codemode 建立另一套权威 Tool Reply 结果账本. 如果某个本地处理没有对应 Operation, 它的输入关联与返回必须由 Agent 明确保存, 不能伪造 Report. 不因这种可扩展性而预先建设通用 Task 框架或 Agent 间调用协议.
+
+作为执行 capability 显式暴露的普通计算, 包括拼接, 过滤, 解析或摘要, 均通过 Operation 执行. 执行器内部的变量赋值, 语言求值, 协议解码与账本更新不递归成为新 Operation. 普通历史投影不必单独创建上下文 Operation; 显式暴露的压缩/摘要调用则使用普通执行路径.
+
+## 关联数据
+
+以下是数据职责示意, 不是强制 JSON 或最终 Rust 类型:
 
 ```text
-Invocation {
-  capability: CapabilityRef,
-  input: Value
-}
+Invocation { capability_ref, input }
 
 LlmOutput {
-  blocks: [Text | ReasoningSummary | Call],
+  blocks: [Text | ProviderReasoning | Call]
   completion: Complete | Incomplete
 }
 
-Call {
-  provider_call_id: String,
-  invocation: Invocation
-}
+Call { provider_call_id, invocation }
 
-ExecutionRef {
-  authority_instance_id: AuthorityInstanceId,
-  operation_id: OperationId,
-  attempt_id: AttemptId
-}
-
-ReportPartRef {
-  authority_instance_id: AuthorityInstanceId,
-  report_id: ReportId,
-  block_index: u32
-}
+ExecutionRef { authority_id, operation_id, attempt_id }
+ReportPartRef { authority_id, report_id, block_index }
 
 InvocationOrigin {
-  submitted_by: ExecutionRef,
-  call_slot: LocalCallKey,
+  submitted_by: ClientSource | ExecutionRef
+  local_call_key
   triggered_by: Optional<ReportPartRef>
+  agent_id: Optional<AgentId>
 }
 ```
 
-`CapabilityRef` 必须明确被授权的行为版本及目标绑定, 不能只凭 LLM 输出的任意字符串直接选择执行器. 具体表示留到最小实现时决定. LLM 请求输入包含明确的模型配置及已组装上下文, 不依赖隐式可变的全局对话; 提供方凭据由 Adapter 管理, 不把凭据写入执行记录或模型上下文.
+稳定 AuthorityId 用于定位执行账本, 运行实例绑定仍由授权与消息协议保留. 实际调用身份由宿主绑定; 来源和 AgentId 仅用于关联, 不证明权限. ClientSource 的最终编码待 Client Interface 定案, 初始提交无需伪造父 Attempt.
 
-提供方 Adapter 将输出规范化为有序块, 可同时包含文本和多个调用. 仅保留提供方明确返回的推理内容或摘要, 不保证获取模型内部推理. 流式片段不直接作为可执行调用或最终 Report; 截断, 未完成参数或不支持的输出不得被当成完整工具请求执行.
-
-`provider_call_id` 只在所属模型输出范围内关联调用和工具回复. 不替代 OperationId, SubmissionKey 或框架内的调用位置. `block_index` 指规范化后不可变 Report 输出中的位置, 不能在筛选文本后重新编号. 提供方调用标识缺失或重复而不能无歧义回填时, 应拒绝该输出的自动调用处理, 不猜测对应关系.
-
-Agent 最终输出可包含选定结果和证据引用; 不要求是字符串, 也不要求所有 capability 使用包含全部业务类型的核心枚举. 输出类型或编码标签属于对应 capability 的契约.
-
-## 两种关联
-
-| 新提交 | 执行来源 submitted_by | 触发依据 triggered_by |
+| 提交 | 实际执行来源 | 触发依据 |
 | --- | --- | --- |
-| L1 | A / A1 的 ExecutionRef | 无, 由 Loop 策略发起 |
-| F | A / A1 的 ExecutionRef | LR1 的调用块 0 |
-| P | A / A1 的 ExecutionRef | 无; 实际使用的 LR1/FR 等另行记录为输入证据 |
-| L2 | A / A1 的 ExecutionRef | 无; 上下文明确引用 PR |
-| C, 若由 LR1 请求 | A / A1 的 ExecutionRef | LR1 中对应 Codemode 调用块 |
-| C 内部提交的 F | C / 对应 Attempt 的 ExecutionRef | 直接代码调用可无触发 Report |
+| Loop O | Client 启动请求 | 输入记录 |
+| L1 | O/O1 | Loop 策略, 可无 Report 触发 |
+| C | O/O1 | LR1 中的调用块 |
+| F1/F2 | C/C1 | 代码的独立调用位置, 可无 Report 触发 |
+| L2 | O/O1 | Loop 策略; 实际采用 LR1/CR 另记为数据依赖 |
 
-执行来源说明实际由哪个运行中的授权执行发起提交. 触发依据说明哪份输出中的哪项请求引出了该提交. LLM Operation 可以已经结束, 因而不能把工具 Operation 误记为仍运行的 LLM Attempt 主动提交.
+`submitted_by`, `triggered_by` 和实际使用的 Report 是三种关系, 不能压成单个 parent_id. LLM 已返回后, 工具不是由已完成的 LLM Attempt 主动提交. 反向查询可从关系生成, 不要求修改原 Operation 追加可变 children 数组.
 
-`call_slot` 区分同一执行发起的独立调用, 不按参数内容命名. 无 LLM Report 触发的 Codemode 直接调用也必须有位置, 例如宿主在提交前分配并记录的调用序号. 重传复用该位置; 循环的不同迭代和两个相同参数调用使用不同位置. 它不是新的全局业务身份, 也不承诺仅凭序号就可安全重放代码.
+同一执行中的两次相同参数调用仍是两次独立调用. `local_call_key` 由宿主为逻辑调用分配并保存, 重传和重复消费复用原位置, 不按参数哈希去重. provider_call_id 只在其模型输出范围内配对请求与回复; block_index 指不可变规范化输出的位置, 不随 prompt 裁剪重新编号.
 
-上下文实际采用哪些 Report 是数据依赖, 不与上述任一种关系等同. 一个 Operation 可以使用多份证据, 不强制把全部关系压成单个 parent_id 或一棵树. 也不沿调用链重复复制所有祖先的元数据.
+## 从结果派生调用
 
-来源和触发依据由宿主绑定并校验, 不能信任 LLM 自报身份. 它们不授予权限, 不转移 Operation 所有权, 不隐含取消传播或结果采用. 每个 Operation 仍由明确的 Authority 独立接纳. 跨 Authority 引用保留归属, 不因此获得查询权或跨 Authority 原子事务保证.
+1. 校验 Report 的 Operation/Attempt/Authority 关联, 完整性与输出契约, 选择并保存本轮采用的 Report.
+2. 校验调用参数, capability 版本, 目标, 权限和执行预算. 相同调用块重复到达时查询原派生记录.
+3. 一致地保存消费位置与派生请求: 来源, 本地调用位置, 目标 Authority, 固定 Invocation, 稳定 SubmissionKey.
+4. 提交保存的请求; 回执返回后补齐 Operation/Attempt 绑定. 合法 Report 先到时也可补齐绑定, 不因等回执而阻塞既有派发.
+5. 收录调用的选定结果, 更新等待条件. 相同或附加 Report 不自动派生第二组调用.
 
-关联随新提交接纳一起保留, 不事后修改原 Operation 请求或追加 children 数组. 反向查询可以从已保留关联派生, 不要求两份可变关系列表同步更新. 本文尚未决定字段落在具体哪一层, 不宣称当前提交协议已经保存这些关联.
+这种记录保存的是执行决定, 不意味着可以任意重放代码. 相同键不同定义必须拒绝, 不覆盖已有映射. 每次重传沿用原目标与身份, 不因超时新建 Attempt 或改派. 通知, 查询和重连返回可重复, 处理必须幂等.
 
-## 从 Report 派生提交
+## LLM 输入与证据
 
-1. 在组合层选择并记录本轮要消费的完整 LLM Report. 校验它属于预期 Operation/Attempt, 是合法输出, 且所引用调用块存在. Report 收录不自动触发执行.
-2. 校验 capability 是否可用, 参数是否符合契约, 目标和调用权限是否匹配, 执行及资源预算是否足够. 模型输出只是提议, 不生成自授权 Attempt.
-3. 为通过校验的每个独立调用, 在任何发送前预留有界的派生记录, 保存完整 Invocation, 来源, 触发依据, 目标 Authority 和一个稳定 SubmissionKey. 不能每次处理 Report 都生成新 key.
-4. 经现有接纳流程提交, 未确认时保留原 key 与定义, 不伪造 OperationId. Authority 接纳后关联其返回的原 Operation/Attempt; 观察超时不代表未接纳.
-5. 保留工具 Report 与调用块的对应关系, 由上下文组装明确选择数据. 如需继续调用 LLM, 提交新的 LLM Operation; 不修改上一份 LLM 请求或 Report.
+```text
+Agent 的输入与有序引用
+  + 选定的 LLM Report
+  + 对应的 Tool / Codemode Report
+  + 必要的明确处置事实
+  -> 选择与裁剪
+  -> provider 格式转换
+  -> 固定的下一次 LLM Request
+```
 
-同一调用的派生记录按执行来源和 call_slot 定位, 并校验触发依据. 同一个已选 LLM 调用块必须复用其已记录位置, 不能每次消费分配新位置. 相同记录重入复用完整原映射; 相同身份配不同定义或不同来源不能静默覆盖. 两个位置不同但参数相同的调用是两个独立请求, 不按内容去重. 新一轮或另一份独立授权执行的相同内容也不自动合并.
+Agent 决定顺序和采用关系, Beamlet 提供执行内容. 历史不等于 prompt, prompt 也不是隐藏的可变权威状态. 实际发出的请求需要可追溯, 不能恢复时按新 preset 或新模板重新解释原调用.
 
-消费记录必须冻结本轮已选 Report, 不因重复交付或附加 Report 自动选择另一份输出再执行一遍. 附加证据仍被收录, 但是否用于后续决策需显式策略; 不能把收录本身解释成新的执行指令. 工具错误和部分调用拒绝应成为明确的调用观察或策略输入, 不捏造 Tool Report.
+投影必须满足具体 provider 的调用/结果配对约束. Codemode 汇总可以隐藏内部细节以节省 token, 但不能删除原证据, 将未知改成成功, 或把尚未完成的工具写成已完成. provider 返回的 reasoning 内容可以记录, 不承诺读取模型未公开的内部推理. 流式片段和不完整参数不能直接授权工具调用.
 
-派生记录及消费记录需要各自的数量与字节上限. 容量不足时在发起新调用前停止, 不淘汰去重记录来恢复可执行预算. 本设计先约束同进程内重入与重传; 没有持久记录时不能声称可在崩溃后重跑 Loop 而不重复产生效果. Worker 丢失派生 key 后, 不得用新 key 自动重建未确认调用.
+异步工具如需先向模型返回执行中信息, 必须由工具契约和 provider Adapter 明确表达, 最终结果另行关联, 不能伪造完成 Report. 如果 provider 不支持当前的交互组合, 就等待必要结果或明确报错, 不生成非法消息序列.
 
-## 上下文与完成条件
+## Codemode 执行与恢复限制
 
-执行证据和 LLM 上下文是两种视图. 默认可只投影 Codemode 汇总结果, 不展开其内部全部调用. 若保留模型的调用请求, 就必须按提供方协议保留对应的调用结果或明确的未确认观察, 不产生悬空调用标识. 不把成功, 失败, 拒绝及 Effect 未知都压成成功文本. 输出摘要不能改写原 Report 或抹掉外部效果.
+Codemode 执行器运行固定代码与输入, 在受限环境中提供工具调用 Interface. `tools.read_file(...)` 等调用经宿主记录和提交 Operation, Report 到达后将结果交回执行器. 凭据和宿主内存不因代码运行自动可见; 允许能力与外部资源范围由配置授予.
 
-Agent 正常成功默认要求本次策略所需的调用已有可用证据, 结果已完成组装, 且没有被忽略的必需调用. 输出混有调用请求的文本不自动视为最终答案. 不以固定轮数或等待超时伪造完成; 预算耗尽可以停止 Loop 并返回真实失败或部分结果, 但必须明确仍未确认的下游执行. 无界 Loop 不属于本阶段实现目标.
+父 Codemode 和子工具各有自己的 Report. 父执行失败不能抹掉已发生的子工具影响, 父执行返回不隐含子执行取消. 父 Report 的影响结论必须遵循 capability 声明的范围, 不自动沿树聚合, 不能因父代码"只做编排"就宣称无影响.
 
-Agent Report 与其子 Operation 的 Report 独立. Agent 失败不回滚工具效果, 取消等待不证明工具停止, Agent 返回之后迟到证据仍应保留. Agent 的 Effect 必须按所声明的执行范围和实际证据决定, 不能因为代码只做编排就报告 None, 也不能仅从成功或失败推导效果. 本文不定义未经证明的自动 Effect 聚合算法.
+首版正常返回前回收本次代码需要处理的所有工具结果, 不把未完成子工具隐式遗留为后台服务. 进程内 await 可以继续代码, 持久化子调用记录不等于保存任意变量和控制流. 执行中崩溃时保留中断/未知事实与子执行引用, 不自动重跑整段代码. 检查点或受约束的代码重放另行设计, 不是当前实现前提.
 
-同一 Worker 池里等待子 Operation 不能占满这些子执行必需的全部槽位. 最小实现可先采用明确分开的执行容量, 但不能仅凭 async 等待就声称没有资源死锁. 这项调度能力尚未实现.
+Agent Loop 可以通过显式阶段和决定恢复; Codemode 只能恢复到其执行器明确支持的范围. 实例更替后的授权恢复仍必须先满足 [恢复契约](persistence-recovery.md), 不能因为有一份 LoopProgress 就启动第二个推进者.
 
-## 验收与后续边界
+## 调度边界
 
-后续最小实现应以本调用链验证: 正常工具闭环, 同 Report 重复消费只派生一次, 同参数不同调用分别执行, 附加证据不自动重跑, 参数或权限拒绝, 部分工具失败, 接纳回执缺失后复用 key, Agent 结束后的迟到证据, 父执行等待时子执行仍能取得容量. 不新增仓库测试用例, 运行现有测试并使用临时真实进程探针补充验收.
+父 Operation 在 await 子 Report 时保持未完成, 消息接收与其他执行仍能推进. 不假设全局并发名额, 不要求独立的编排池. 具体执行器若实施资源限制, 负责验证子调用可取得所需资源, 不让等待的父执行耗尽该资源. 旧原型的有界调度不是领域约束, 也不能未经验证直接用于任意嵌套.
 
-本批仅固定上述语义和输入输出职责. 下一实现目标是最小类型化嵌套提交路径及有界派生映射, 先用固定 LLM 输出和假工具验证, 不接真实模型或文件效果. 暂不新增 beamlet-task, Task 生命周期, 自主多 Agent 调度, 通用 capability 注册表, Workflow DSL, 数学组合引擎或持久恢复. Client Interface 的提取应以这一实际组合路径为依据.
+Sub-Agent, Agent 间请求协议与 MCP Sampling 暂不设计. 保留通过受控 Client 提交和观察执行的组合能力, 不为未来协议预建实体.

@@ -1,5 +1,7 @@
 # 非 Durable 多节点协议草案 v0
 
+历史里程碑说明: 本页保留早期内存模型与当时验证记录. 下文的提交方生成 OperationId, 尚未联网及测试数量是该里程碑的状态, 不代表当前 Console/Node. 当前接纳使用 SubmissionKey 并由 Authority 生成 OperationId, 见 [回执契约](receipts.md)和 [Hello Console](hello-console.md). 后续架构以 [设计入口](README.md)为准.
+
 状态: 内存原型已完成应用 -> Agent -> 执行驱动 -> 纯 Kernel 的分层, 并提供可独立驱动的 Authority/Worker 消息入口. 原有 40 项及新增 6 项消息流用例通过; 两个应用入口都通过兼容的本地 Agent 跑通了 100 个 Operation. 新消息流使用同进程有界通道验证, 三进程通信尚未实现; 这不是已发布协议, 也未经形式化验证.
 
 ## 1. 范围与身份

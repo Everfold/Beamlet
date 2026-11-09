@@ -1,0 +1,81 @@
+# 执行 Client 与结果观察
+
+状态: 待实现 Interface 的语义契约, 2026-11-10. 当前 Console 只有固定 Hello 提交及重复提交读取原结果的能力, 不代表已有通用查询/订阅 SDK. [回执契约](receipts.md)描述当前易失原型.
+
+## Agent 与 Authority 的联系
+
+Agent Loop 位于执行它的 Worker, 通过宿主提供的 Client Interface 联系 Authority. Client 不要求独立进程. 外部 UI, Loop, Codemode 的调用者使用相同提交与查询语义, 内部调用额外携带合法执行来源.
+
+```text
+Worker A: Agent Loop
+  -> Authority X: 提交 Tool 请求, 原 SubmissionKey K
+  <- 接纳映射: K -> Operation O / Attempt T
+
+Authority X -> Worker B: 授权 T
+Worker B -> Authority X: Report R
+Authority X: 校验并保留 R
+Authority X -> Worker A: 已保留的执行观察
+```
+
+工具 Worker 不需要知道 Agent 当前连接地址. 它向授权它的 Authority 交付 Report, Agent 从 Authority 读取已验证事实. 通知可携带完整 Report 或 ReportRef, 不把原 Worker-to-Authority Report 的绑定改写成发给 Agent 的执行授权.
+
+## 最小逻辑 Interface
+
+以下伪 IDL 仅借鉴 WIT/Protobuf 的契约表达, 不选择其编码或代码生成工具:
+
+```text
+interface execution {
+  submit(authority_id, submission) -> Admission
+  query_submission(authority_id, submission_key) -> SubmissionObservation
+  query_operation(authority_id, operation_id) -> OperationObservation
+  query_report(authority_id, report_id) -> Report
+  observe(authority_id, selection) -> stream<ExecutionNotice>
+}
+```
+
+`selection` 可以在一个共享订阅上选择多项执行, 不要求每次 Operation 建立一个网络订阅. 名称与具体返回类型在实现时收敛, 这些逻辑能力不对应固定数量的网络往返.
+
+| 契约 | 必须保留的语义 |
+| --- | --- |
+| submit | 原 SubmissionKey 与不可变请求同送; 同 Authority 同键同定义返回原接纳映射; 内容冲突拒绝 |
+| query_submission | 接纳回执丢失时找回原 Operation/Attempt; 查不到与确定未接纳不是同义词 |
+| query_operation | 返回 Authority 已知事实及 Report 引用; 不从心跳或本地超时捏造远端执行状态 |
+| query_report | 返回完整不可变证据, 包括未选为代表结果的附加 Report; 仍检查查询权限 |
+| observe | 及时传递已保留事实, 允许重复; 不承诺订阅本身可跨重启恢复或恰好一次通知 |
+
+`Unavailable`, `NotFound`, `Forbidden`, 内容冲突和已过保留范围必须能区分. 网络不可达不是 NotFound, NotFound 也不能在去重记录可能丢失的场景中证明原请求从未执行. 禁止使用新的键自动填补查询失败.
+
+接纳回执与实际派发可以在接纳事务成功后独立进行. 不需要等待 Client 收到回执才派发工具. Report 先到时先校验关联并保留, 同样可以补齐提交映射; 后来的回执不能回退结果状态.
+
+## 稳定身份, 路由与授权
+
+持久引用使用稳定 AuthorityId, 运行会话使用当前可访问端点和运行实例. Client Adapter 负责根据配置解析, 领域数据不保存临时连接对象. 首版可以采用静态映射, 不要求服务发现框架.
+
+Authority 实体标识, 运行实例标识, endpoint 与认证主体分别处理. 相同 UUID 不证明持有原账本或有权接管. 重启时恢复旧记录, 路由新实例和接受旧 Report 的规则见 [持久化与恢复](persistence-recovery.md).
+
+来源 AgentId, 父 ExecutionRef, LLM 自报的 Tool 名称和 Zenoh 路由均不自动授权. 至少区分读取 Agent/执行数据, 提交 capability, 使用外部资源和推进 Agent 的权利. 首版使用静态可信部署与明确允许列表, 不引入自动信任注册. 公网或不可信节点接入前须落实实际认证, 不能把原型绑定校验描述为安全认证.
+
+## 结果订阅与恢复补齐
+
+正常观察流程:
+
+1. 建立可接收通知的共享通道, 确认注册成功, 缓冲期间到达的通知.
+2. 查询所跟踪执行的当前状态与已有 Report.
+3. 合并快照与通知, 按执行绑定和 ReportId 去重.
+4. 选定并保存业务采用/消费位置, 再推进 Loop.
+
+观察者注册成功是应用层条件, 不等于仅发现一个传输订阅者. 结果可能先于订阅完成, 所以必须查询已有事实. 查询响应与通知可以倒序或重复, 合并不能使已知事实回退.
+
+断线后按持久引用重新查询, 然后恢复观察. 即使连接未报错, 尽力通知也可能丢失; 尚未满足的等待条件应在截止点或受限周期内对账查询. 没有持久通知游标或可靠注册协议时, 不能仅靠一次订阅加查询宣称永不漏结果. 首版可以依靠保留事实与重复查询收敛, 不要求另建可靠消息日志.
+
+Report 收录不等于 Agent 已处理. Agent 对已处理结果去重, 不因额外 Report 自动再执行另一套工具. 订阅对象和 future 不序列化; 执行引用与消费位置持久化.
+
+## 传输和延迟
+
+同进程直接类型化调用或通道交付. 跨进程采用消息 Adapter, 当前主要使用 Zenoh, 不强制 Broker/Router. 路由可达性必须实际建立, 连接某个 peer 不意味着任意节点天然互通.
+
+复用连接与订阅, 通知优先携带已有完整 Report, 查询用于补齐和审阅. 独立调用并行, 可批量传输或提交事务, 但保持每个调用独立身份. 不为每个字段或状态变化增加网络往返.
+
+新增记录前检查实现所需的字节/队列边界, 满时背压或明确拒绝, 不通过删除去重记录重新获得执行资格. 这些是 Adapter 资源管理, 不引入统一 Operation 容量原语.
+
+确认语义由运行模式明确约定: 易失模式只确认内存接纳, 持久模式在数据库提交后确认. 两者不能在 Client 不知情时静默降级. 具体协商字段属于后续协议设计.

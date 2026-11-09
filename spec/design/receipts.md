@@ -2,13 +2,15 @@
 
 本契约区分三段应用层确认. Transport 发送返回, 订阅匹配, 启动公告及心跳均不代替回执. 当前全部保留仍是进程内存, 不承诺持久化, 跨重启恢复或外部效果 exactly-once.
 
+2026-11-10 的持久模式目标见 [持久化与恢复](persistence-recovery.md): 对应记录提交成功后才能确认持久接纳/保留. 本页固定预算和易失回执描述当前原型, 不表示该目标已实现.
+
 ## 三段确认
 
 | 回执 | 方向 | 允许确认的事实 | 不允许推断 | 本批状态 |
 | --- | --- | --- | --- | --- |
 | Operation 接纳 | Authority -> Client | 指定 Authority 已校验并保留不可变 Operation 及其原接纳结果 | Worker 已接纳, 开始执行, 最终成功 | 已实现, 含原提交有界重投 |
 | Attempt 接纳 | Worker -> Authority | 指定 Worker 已校验并接纳该 Authority 的原 Attempt | 执行已开始或完成, 没有外部效果, 已产生 Report | 已实现, 含原授权有界重投 |
-| Report 收录 | Authority -> Worker | 指定 Authority 已校验并保留完整 Report | 已采用为 Operation 最终结果, 业务成功, 已持久化 | 本批实现 |
+| Report 收录 | Authority -> Worker | 指定 Authority 已校验并保留完整 Report | 已采用为 Operation 最终结果, 业务成功, 已持久化 | 已实现, 含原证据有界重投 |
 
 接收方必须先校验并保留, 再回复. 拒绝, 解析失败, 身份或内容冲突不能发出肯定回执. 相同身份和完整内容的重复消息复用已保留事实, 可以再次回复相同回执; 相同身份配不同内容仍须拒绝. 不为回执创建新的 Operation, Attempt 或 Report 身份.
 
