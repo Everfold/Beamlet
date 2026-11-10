@@ -150,7 +150,7 @@ cargo run -p beamlet-node --offline --example volatile
 
 LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
 
-Authority 接纳与 Worker 入队不是同一事实. LocalExecution 提交时若 Authority 已接纳而 Worker 因队列已满拒绝, 请求仍保留为 accepted; 重复提交返回原授权, 不自动重投或生成新 Attempt. 该未决情况有独立测试, 不声称已经执行, 也没有持久交付保证.
+Authority 接纳与 Worker 入队不是同一事实. 本地队列暂满时, LocalExecution/LocalClient 返回接纳结果并保留 Accepted. 库内 local_delivery 在后续推进时补送原授权, 已派发或已报告的请求不会再次执行; 不创建新 Attempt, 不提供跨重启交付保证. Node 将此推进与消息接收并列等待, 长任务不会阻塞查询、提交或停止信号.
 
 三种假任务均无外部效果, 因此明确使用 impact = none, 而不是从成功或失败推导效果. v0 测试 Adapter 在入账前检查派发大小, 假任务执行 Adapter 在入队前试算完整报告大小; 超限时不创建对应的新记录, 不截断结果. 试算不是执行或完成证据. 通用领域与执行驱动没有 JSON 字节上限或 delay 参数语义, 具体编码及输出预算必须由实际 Adapter 负责.
 

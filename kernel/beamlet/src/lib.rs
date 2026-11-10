@@ -18,6 +18,7 @@ pub mod attempt_delivery;
 pub mod composition;
 pub mod executor;
 pub mod lifecycle;
+pub mod local_delivery;
 pub mod memory;
 pub mod observe;
 pub mod query;

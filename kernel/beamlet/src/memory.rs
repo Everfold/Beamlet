@@ -405,6 +405,14 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         )
     }
 
+    /// 尚未记录派发的原授权, 不包含已经收录报告的请求
+    pub fn undispatched(&self) -> impl Iterator<Item = &Delivery<P, O, E>> {
+        self.operations
+            .values()
+            .filter(|view| view.phase == OperationPhase::Accepted)
+            .map(|view| &view.dispatch)
+    }
+
     /// 返回已保留状态的只读视图, 不暴露记录表的可变访问
     pub fn operation(&self, id: OperationId) -> Option<&OperationView<P, O, E>> {
         self.operations.get(&id)

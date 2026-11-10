@@ -4,8 +4,8 @@ use crate::{
     Authority, LocalClient, Worker,
     executor::ExecutorError,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
-    memory::{Admission, Limits, OperationView, StateError, Submission},
-    model::{Delivery, DispatchAttempt, Message, Operation, SubmitReport},
+    memory::{Limits, OperationView, StateError, Submission},
+    model::{Delivery, DispatchAttempt, Operation, SubmitReport},
 };
 use std::future::Future;
 use thiserror::Error;
@@ -85,18 +85,18 @@ where
         Ok(Self::from_parts(authority, worker))
     }
 
-    /// 将调用方意图关联到唯一授权, 并仅为首次接纳尝试派发
+    /// 将调用方意图关联到唯一授权, 排队暂满的原授权在后续推进时补送
     ///
     /// # 错误
     /// 身份冲突或容量不足时返回错误. 若 Authority 已接纳而 Worker 拒绝入队,
-    /// 请求仍保留为 Accepted; 不回滚事实, 也不自动重投或新建授权
+    /// 排队暂满时仍返回已接纳结果并保留 Accepted, next_report 会补送; 其他交付错误不撤销接纳事实
     pub fn submit(
         &mut self,
         operation: Operation<P>,
         attempt: AttemptId,
     ) -> Result<Submission<P, O, E>, LocalExecutionError> {
         let accepted = self.authority.submit(operation, attempt)?;
-        deliver_new(&mut self.authority, &mut self.worker, &accepted)?;
+        crate::local_delivery::deliver(&mut self.authority, &mut self.worker, &accepted.dispatch)?;
         Ok(accepted)
     }
 
@@ -118,11 +118,7 @@ where
         F: Fn(DispatchAttempt<P>) -> Fut,
         Fut: Future<Output = SubmitReport<O, E>> + Send + 'static,
     {
-        let Some(report) = self.worker.next_report(execute).await? else {
-            return Ok(None);
-        };
-        self.authority.receive_report(report.clone())?;
-        Ok(Some(report))
+        crate::local_delivery::next_report(&mut self.authority, &mut self.worker, execute).await
     }
 
     /// 按稳定 OperationId 查询当前观察, 不暴露可变底层状态
@@ -143,27 +139,6 @@ where
         self.authority.mark_wait_timeout(id)?;
         Ok(())
     }
-}
-
-// 两个本地入口共用交付规则: 仅首次接纳交付, 失败后保留账本事实.
-pub(crate) fn deliver_new<P, O, E>(
-    authority: &mut Authority<P, O, E>,
-    worker: &mut Worker<P, O, E>,
-    accepted: &Submission<P, O, E>,
-) -> Result<(), StateError>
-where
-    P: Clone + Eq + Send + 'static,
-    O: Clone + Eq + Send + 'static,
-    E: Clone + Eq + Send + 'static,
-{
-    if accepted.admission == Admission::New {
-        let Message::DispatchAttempt(attempt) = &accepted.dispatch.message else {
-            unreachable!("接纳结果必须包含 Attempt");
-        };
-        worker.receive_dispatch(accepted.dispatch.clone())?;
-        authority.mark_dispatched(attempt.operation.operation_id)?;
-    }
-    Ok(())
 }
 
 /// 应用用例错误, 独立于执行结果中的业务错误

@@ -199,18 +199,11 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
             .await?;
         let mut observations =
             Observations::new(authority.instance, plan.worker_slots(authority.instance))?;
-        let mut local = HashMap::new();
+        let mut local = Vec::new();
         let mut local_announcements = Vec::new();
         for worker in plan.local_workers(authority.instance) {
             let worker_id: RoleInstanceId = worker.instance.into();
-            local.insert(
-                worker_id,
-                Worker::<Task, String, String>::new(
-                    instance,
-                    vec![worker_id],
-                    beamlet::memory::Limits::default(),
-                )?,
-            );
+            local.push(worker_id);
             let announcement = Announcement::started(
                 Uuid::from_u128(node_id.as_u128()),
                 Uuid::from_u128(node_instance.as_u128()),
@@ -248,10 +241,19 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     ) in authorities
     {
         let mut instances: Vec<Uuid> = local
-            .keys()
+            .iter()
             .map(|id| Uuid::from_u128(id.as_u128()))
             .collect();
         instances.push(Uuid::from_u128(authority.instance.as_u128()));
+        let local_worker = if local.is_empty() {
+            None
+        } else {
+            Some(Worker::<Task, String, String>::new(
+                authority.instance.as_u128().into(),
+                local,
+                beamlet::memory::Limits::default(),
+            )?)
+        };
         drivers.start(instances, StopPolicy::Drain, |control| async move {
             tokio::select! {
                 result = roles::serve_authority_pair(
@@ -260,7 +262,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                     roles::AuthoritySetup {
                         instance: authority.instance.as_u128().into(),
                         workers: authority.workers.into_iter().map(|id| id.as_u128().into()).collect(),
-                        local_workers: local,
+                        local_worker,
                         request_prefix: prefix,
                     },
                     control,

@@ -66,6 +66,23 @@ where
         Ok(None)
     }
 
+    /// 此驱动是否承载指定的 Worker 实例
+    pub fn contains(&self, instance: RoleInstanceId) -> bool {
+        self.executor.worker(instance).is_some()
+    }
+
+    /// 启动已排队的工作, 不等待任何工作完成
+    ///
+    /// # 恐慌
+    /// 有工作可启动时须处于 Tokio 运行时中; 执行函数构造过程恐慌时终止
+    pub fn start_ready<F, Fut>(&mut self, execute: F) -> usize
+    where
+        F: Fn(DispatchAttempt<P>) -> Fut,
+        Fut: Future<Output = SubmitReport<O, E>> + Send + 'static,
+    {
+        self.executor.start_ready(execute)
+    }
+
     /// 已接纳且尚未缓存 Report 的排队或运行 Attempt 数量
     pub fn pending(&self) -> usize {
         self.executor.pending()

@@ -3,7 +3,7 @@
 use crate::{
     Authority, Worker,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
-    local_execution::deliver_new,
+    local_delivery::deliver,
     memory::{Admission, OperationView, StateError},
     model::{Delivery, Message, SubmitReport},
     state::{OperationPhase, WaitStatus},
@@ -134,7 +134,7 @@ pub enum LocalClientError {
     /// 本次提交未接纳, 同键内容冲突保留为 StateError::SubmissionConflict
     #[error(transparent)]
     Submission(#[from] StateError),
-    /// 已接纳但本地交付失败; 可按原键找回执行, 不自动重投
+    /// 已接纳但本地交付失败; 可按原键找回执行, 不生成新授权
     #[error("请求已接纳, 本地交付失败: {source}")]
     Dispatch {
         /// 已接纳的原执行身份
@@ -148,7 +148,7 @@ pub enum LocalClientError {
 /// 借用应用显式提供的 Authority, Worker 与身份生成函数的本地绑定
 ///
 /// 构造和查询不分配执行 ID, 不创建线程, 网络, 数据库或任务.
-/// 仅首次接纳会交付授权入队, Worker 的执行与 Report 收录由宿主继续驱动.
+/// 队列暂满时保留原授权; 宿主通过 local_delivery::next_report 或 LocalExecution 继续驱动.
 /// 释放 Client 后角色及其队列和运行任务仍由应用持有, 可以重新绑定查询.
 /// 此入口用于可信同进程调用, 不提供远端认证, 通知或持久恢复.
 ///
@@ -239,11 +239,11 @@ where
 {
     /// 按原键接纳并尝试本地交付, 返回结构化观察, 不执行任务
     ///
-    /// 仅新提交调用 ID 生成函数; 重复提交返回当前观察且不重新交付.
+    /// 仅新提交调用 ID 生成函数; 重复提交可补送 Accepted 原授权, 已派发授权不会重复入队.
     ///
     /// # 错误
     /// 内容冲突, ID 冲突或容量不足返回 Submission; 接纳后的交付错误返回 Dispatch,
-    /// 其中保留已接纳执行的绑定. 两种错误均不创建失败 Report 或自动重试.
+    /// 其中保留已接纳执行的绑定. 排队暂满仍返回已接纳结果, 等待后续本地推进; 不创建失败 Report.
     pub fn submit(
         &mut self,
         key: SubmissionKey,
@@ -251,7 +251,7 @@ where
     ) -> Result<SubmissionReceipt<P>, LocalClientError> {
         let accepted = self.authority.submit_keyed(key, task, &mut self.allocate)?;
         let binding = ExecutionBinding::from_dispatch(&accepted.dispatch);
-        deliver_new(self.authority, self.worker, &accepted)
+        deliver(self.authority, self.worker, &accepted.dispatch)
             .map_err(|source| LocalClientError::Dispatch { binding, source })?;
         Ok(SubmissionReceipt {
             submission_key: key,

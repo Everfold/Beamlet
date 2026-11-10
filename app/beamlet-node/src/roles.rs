@@ -1,6 +1,6 @@
 //! 静态 Authority/Worker 进程, 只在应用边界交付已有授权和证据
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use beamlet::{
@@ -86,7 +86,7 @@ pub async fn run_authority(
         transport,
         instance,
         workers,
-        HashMap::new(),
+        None,
         NODE_INBOX_PREFIX.to_owned(),
     )
     .await
@@ -96,7 +96,7 @@ pub(crate) async fn serve_authority(
     transport: Arc<Transport>,
     instance: RoleInstanceId,
     workers: Vec<RoleInstanceId>,
-    local_workers: HashMap<RoleInstanceId, Worker<Task, String, String>>,
+    local_worker: Option<Worker<Task, String, String>>,
     request_prefix: String,
 ) -> Result<()> {
     shutdown::standalone(move |control| {
@@ -106,7 +106,7 @@ pub(crate) async fn serve_authority(
             AuthoritySetup {
                 instance,
                 workers,
-                local_workers,
+                local_worker,
                 request_prefix,
             },
             control,
@@ -118,7 +118,7 @@ pub(crate) async fn serve_authority(
 pub(crate) struct AuthoritySetup {
     pub instance: RoleInstanceId,
     pub workers: Vec<RoleInstanceId>,
-    pub local_workers: HashMap<RoleInstanceId, Worker<Task, String, String>>,
+    pub local_worker: Option<Worker<Task, String, String>>,
     pub request_prefix: String,
 }
 
@@ -126,12 +126,26 @@ pub(crate) async fn serve_authority_pair(
     transport: Arc<Transport>,
     report_transport: Option<Transport>,
     setup: AuthoritySetup,
-    mut shutdown: Shutdown,
+    shutdown: Shutdown,
 ) -> Result<()> {
+    serve_authority_with_executor(transport, report_transport, setup, shutdown, execute_hello).await
+}
+
+async fn serve_authority_with_executor<F, Fut>(
+    transport: Arc<Transport>,
+    report_transport: Option<Transport>,
+    setup: AuthoritySetup,
+    mut shutdown: Shutdown,
+    execute: F,
+) -> Result<()>
+where
+    F: Fn(DispatchAttempt<Task>) -> Fut + Send + Sync,
+    Fut: std::future::Future<Output = SubmitReport<String, String>> + Send + 'static,
+{
     let AuthoritySetup {
         instance,
         workers,
-        mut local_workers,
+        mut local_worker,
         request_prefix,
     } = setup;
     let limits = beamlet::memory::Limits::default();
@@ -359,24 +373,25 @@ pub(crate) async fn serve_authority_pair(
                 }
                 if submission.admission == Admission::New {
                     pending.insert(operation);
-                    if let Some(worker) = local_workers.get_mut(&submission.dispatch.target_instance_id) {
-                        let cached = worker.receive_dispatch(submission.dispatch.clone())?;
-                        println!("本地 Attempt 接纳已确认: Operation={operation}; 类型化返回, 不表示执行完成");
-                        authority.mark_dispatched(operation)?;
-                        let report = match cached {
-                            Some(report) => report,
-                            None => worker.next_report(execute_hello).await?.context("本地 Worker 未产生 Report")?,
-                        };
-                        let receipt = ReportRetained::for_report(&report)?;
-                        authority.receive_report(report)?;
-                        queue_notice(&authority, receipt.report_id.as_u128().into(), &mut sends, &transport, &protocol, limits.queue_capacity);
-                        println!("本地 Report 收录已确认: Report={}; 类型化返回, 不走网络回执, 不表示持久化", receipt.report_id);
-                        pending.remove(&operation);
-                        println!("本地类型化交付: Operation={operation}");
+                    if local_worker.as_ref().is_some_and(|worker| worker.contains(submission.dispatch.target_instance_id)) {
+                        // The local library driver picks up the retained authorization independently.
                         continue;
                     }
                     attempts.retain(&submission.dispatch, |dispatch| Dispatch::from_delivery(dispatch)?.to_json(&protocol))?;
                 }
+            }
+            completed = async {
+                if let Some(worker) = &mut local_worker
+                    && let Some(report) = beamlet::local_delivery::next_report(&mut authority, worker, &execute).await? {
+                    return Ok::<_, beamlet::LocalExecutionError>(report);
+                }
+                std::future::pending().await
+            } => {
+                let report = completed?;
+                let Message::SubmitReport(evidence) = &report.message else { unreachable!("本地驱动只返回 Report"); };
+                pending.remove(&evidence.operation_id);
+                queue_notice(&authority, evidence.report_id, &mut sends, &transport, &protocol, limits.queue_capacity);
+                println!("本地 Report 收录已确认: Report={}; 类型化交付", evidence.report_id);
             }
             completed = sends.join_next(), if !sends.is_empty() => {
                 let (purpose, result) = completed.context("发送完成记录缺失")?.context("发送任务失败")?;
@@ -922,5 +937,116 @@ mod input_tests {
             summary.exits[0].result.as_ref().unwrap(),
             &Completion::Drained
         );
+    }
+}
+
+#[cfg(test)]
+mod local_progress_tests {
+    use super::*;
+    use beamlet::{
+        lifecycle::{Completion, Group, StopPolicy},
+        memory::OperationPhase,
+        remote::Client,
+    };
+    use beamlet_agent::testing::submission::HelloClientCodec;
+    use beamlet_message_zenoh::ClientTransport;
+    use tokio::sync::Notify;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn authority_answers_queries_while_a_local_operation_is_waiting() {
+        timeout(Duration::from_secs(10), async {
+            let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let endpoint = format!("tcp/{}", socket.local_addr().unwrap());
+            drop(socket);
+            let server = Arc::new(
+                Transport::listen(&endpoint, "beamlet/test/local/submit/*", Limits::default())
+                    .await
+                    .unwrap(),
+            );
+            let console = Uuid::new_v4().simple().to_string();
+            let mut client_transport = Transport::connect(
+                &endpoint,
+                &format!("beamlet/v0/console/{console}/inbox"),
+                Limits::default(),
+            )
+            .await
+            .unwrap();
+            let started = Arc::new(Notify::new());
+            let release = Arc::new(Notify::new());
+            let execute = {
+                let started = Arc::clone(&started);
+                let release = Arc::clone(&release);
+                move |attempt| {
+                    let started = Arc::clone(&started);
+                    let release = Arc::clone(&release);
+                    async move {
+                        started.notify_one();
+                        release.notified().await;
+                        execute_hello(attempt).await
+                    }
+                }
+            };
+            let mut group =
+                Group::new(tokio::runtime::Handle::current(), Duration::from_secs(2)).unwrap();
+            group
+                .start(vec![Uuid::from_u128(1)], StopPolicy::Drain, |shutdown| {
+                    serve_authority_with_executor(
+                        server,
+                        None,
+                        AuthoritySetup {
+                            instance: 1.into(),
+                            workers: vec![2.into()],
+                            local_worker: Some(
+                                Worker::new(
+                                    1.into(),
+                                    vec![2.into()],
+                                    beamlet::memory::Limits::default(),
+                                )
+                                .unwrap(),
+                            ),
+                            request_prefix: "beamlet/test/local/submit/".to_owned(),
+                        },
+                        shutdown,
+                        execute,
+                    )
+                })
+                .unwrap();
+            {
+                let sender = client_transport
+                    .sender(&format!("beamlet/test/local/submit/{console}"))
+                    .await
+                    .unwrap();
+                sender.wait_for_receiver().await.unwrap();
+                sender
+                    .send(
+                        Submission::hello(Uuid::from_u128(7))
+                            .to_json(&ProtocolLimits::default())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+            }
+            started.notified().await;
+            let channel = ClientTransport::bind(
+                &mut client_transport,
+                &format!("{}{console}", query::prefix(1.into())),
+            )
+            .await
+            .unwrap();
+            let mut client = Client::new(channel, HelloClientCodec::default(), Some(1.into()));
+            let snapshot = client.query_submission(1.into(), 7.into()).await.unwrap();
+            assert_eq!(snapshot.phase, OperationPhase::Dispatched);
+            assert!(snapshot.adopted_report.is_none());
+            release.notify_one();
+            let stopped = group.drain().await;
+            assert!(
+                stopped
+                    .exits
+                    .iter()
+                    .all(|exit| matches!(exit.result, Ok(Completion::Drained)))
+            );
+        })
+        .await
+        .expect("local execution must not block Authority requests or drain");
     }
 }

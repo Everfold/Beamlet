@@ -168,7 +168,7 @@ fn unknown_queries_do_not_reserve_keys_or_consume_capacity_and_are_authority_sco
 }
 
 #[tokio::test]
-async fn delivery_refusal_exposes_accepted_binding_and_repeating_does_not_redeliver() {
+async fn full_local_queue_preserves_binding_and_is_redelivered_by_the_driver() {
     let limits = Limits {
         queue_capacity: 1,
         ..Limits::default()
@@ -178,34 +178,37 @@ async fn delivery_refusal_exposes_accepted_binding_and_repeating_does_not_redeli
         .client(|| (10.into(), 20.into()))
         .submit(7.into(), "first".to_owned())
         .unwrap();
-    let error = execution
+    let accepted = execution
         .client(|| (11.into(), 21.into()))
         .submit(8.into(), "second".to_owned())
-        .unwrap_err();
-    let LocalClientError::Dispatch {
-        binding,
-        source: StateError::QueueFull,
-    } = error
-    else {
-        panic!("expected a delivery failure with the accepted execution binding");
-    };
+        .unwrap();
+    assert_eq!(accepted.operation.phase, OperationPhase::Accepted);
+    let binding = accepted.operation.binding;
     assert_eq!(binding.operation_id, 11.into());
     assert_eq!(binding.attempt_id, 21.into());
-    execution.next_report(execute).await.unwrap().unwrap();
-    {
-        let mut client = execution.client(no_allocation);
-        let recovered = client.query_submission(8.into()).unwrap();
-        assert_eq!(recovered.binding, binding);
-        assert_eq!(recovered.phase, OperationPhase::Accepted);
-        assert_eq!(recovered.adopted_report, None);
-        let duplicate = client.submit(8.into(), "second".to_owned()).unwrap();
-        assert_eq!(duplicate.admission, Admission::Duplicate);
-        assert_eq!(duplicate.operation, recovered);
+    let duplicate = execution
+        .client(no_allocation)
+        .submit(8.into(), "second".to_owned())
+        .unwrap();
+    assert_eq!(duplicate.admission, Admission::Duplicate);
+    assert_eq!(duplicate.operation.binding, binding);
+    let mut completed = 0;
+    while execution.next_report(execute).await.unwrap().is_some() {
+        completed += 1;
     }
-    assert!(
-        execution.next_report(execute).await.unwrap().is_none(),
-        "freed queue space does not authorize automatic redelivery"
-    );
+    assert_eq!(completed, 2);
+    let recovered = execution
+        .client(no_allocation)
+        .query_submission(8.into())
+        .unwrap();
+    assert_eq!(recovered.binding, binding);
+    assert_eq!(recovered.phase, OperationPhase::Reported);
+    assert!(recovered.adopted_report.is_some());
+    execution
+        .client(no_allocation)
+        .submit(8.into(), "second".to_owned())
+        .unwrap();
+    assert!(execution.next_report(execute).await.unwrap().is_none());
 }
 
 #[tokio::test]

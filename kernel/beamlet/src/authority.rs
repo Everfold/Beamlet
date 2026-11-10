@@ -134,6 +134,11 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         self.ledger.receive_report(report)
     }
 
+    /// 只读遍历尚未记录派发的原授权, 供宿主补送本地暂缓的交付
+    pub fn undispatched(&self) -> impl Iterator<Item = &Delivery<P, O, E>> {
+        self.ledger.undispatched()
+    }
+
     /// 查询请求的当前观察, 不访问 Worker 的状态
     pub fn operation(&self, operation: OperationId) -> Option<&OperationView<P, O, E>> {
         self.ledger.operation(operation)

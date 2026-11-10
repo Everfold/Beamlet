@@ -107,7 +107,7 @@ async fn cancelled_execution_wait_keeps_the_original_execution_and_adopts_late_e
 }
 
 #[tokio::test]
-async fn worker_refusal_retains_authority_acceptance_without_automatic_redelivery() {
+async fn full_queue_defers_original_authorization_until_the_driver_can_deliver() {
     let limits = Limits {
         queue_capacity: 1,
         ..Limits::default()
@@ -115,10 +115,7 @@ async fn worker_refusal_retains_authority_acceptance_without_automatic_redeliver
     let mut execution =
         LocalExecution::<Input, u64, &'static str>::new(2.into(), vec![3.into()], limits).unwrap();
     execution.submit(operation(1, 21), 1.into()).unwrap();
-    assert!(matches!(
-        execution.submit(operation(2, 7), 2.into()),
-        Err(LocalExecutionError::State(StateError::QueueFull))
-    ));
+    execution.submit(operation(2, 7), 2.into()).unwrap();
     assert_eq!(
         execution.operation(2.into()).unwrap().phase,
         OperationPhase::Accepted
@@ -131,10 +128,11 @@ async fn worker_refusal_retains_authority_acceptance_without_automatic_redeliver
         Admission::Duplicate
     );
     execution.next_report(execute).await.unwrap().unwrap();
+    execution.next_report(execute).await.unwrap().unwrap();
     assert!(execution.next_report(execute).await.unwrap().is_none());
     let view = execution.operation(2.into()).unwrap();
-    assert_eq!(view.phase, OperationPhase::Accepted);
-    assert!(view.adopted_report.is_none());
+    assert_eq!(view.phase, OperationPhase::Reported);
+    assert!(view.adopted_report.is_some());
     assert!(
         matches!(&view.dispatch.message, Message::DispatchAttempt(attempt) if attempt.attempt_id == AttemptId::from(2))
     );
@@ -175,10 +173,7 @@ fn explicit_assembly_preserves_queued_work_without_starting_a_runtime() {
     authority.mark_dispatched(1.into()).unwrap();
 
     let mut execution = LocalExecution::from_parts(authority, worker);
-    assert!(matches!(
-        execution.submit(operation(2, 7), 2.into()),
-        Err(LocalExecutionError::State(StateError::QueueFull))
-    ));
+    execution.submit(operation(2, 7), 2.into()).unwrap();
     let (authority, worker) = execution.into_parts();
     assert_eq!(
         worker.pending(),
@@ -218,7 +213,14 @@ async fn assembly_does_not_rewrite_role_bindings_or_execute_a_misrouted_attempt(
             execution.operation(1.into()).unwrap().phase,
             OperationPhase::Accepted
         );
-        assert!(execution.next_report(execute).await.unwrap().is_none());
+        if worker_authority == 9 {
+            assert!(matches!(
+                execution.next_report(execute).await,
+                Err(LocalExecutionError::State(StateError::UntrustedAuthority))
+            ));
+        } else {
+            assert!(execution.next_report(execute).await.unwrap().is_none());
+        }
         let (_, worker) = execution.into_parts();
         assert_eq!(
             worker.pending(),
