@@ -5,8 +5,10 @@ use uuid::Uuid;
 
 use super::protocol::{PROTOCOL_VERSION, ProtocolError};
 use beamlet::{
+    ExecutionBinding,
     id::RoleInstanceId,
     model::{Delivery, Message},
+    report_delivery::Binding,
 };
 
 /// 单条收录回执的应用字节上限
@@ -45,6 +47,19 @@ pub fn inbox(worker: RoleInstanceId) -> String {
 }
 
 impl ReportRetained {
+    /// 投影已解码回执的完整绑定, 接收者仍须验证实际路由及发送方
+    pub fn binding(&self) -> Binding {
+        Binding {
+            execution: ExecutionBinding {
+                authority_instance_id: self.source_instance_id.as_u128().into(),
+                worker_instance_id: self.target_instance_id.as_u128().into(),
+                operation_id: self.operation_id.as_u128().into(),
+                attempt_id: self.attempt_id.as_u128().into(),
+            },
+            report_id: self.report_id.as_u128().into(),
+        }
+    }
+
     /// 从原 Report 提取反向回执绑定, 调用方必须先收录再发送
     ///
     /// # 错误

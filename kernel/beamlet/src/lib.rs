@@ -20,3 +20,4 @@ pub mod memory;
 pub mod observe;
 pub mod query;
 pub mod remote;
+pub mod report_delivery;

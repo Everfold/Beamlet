@@ -11,6 +11,7 @@ use beamlet::{
     id::{OperationId, ReportId, RoleInstanceId, SubmissionKey},
     memory::{Admission, StateError},
     model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
+    report_delivery::{self, Event as ReportEvent, Outbox as ReportOutbox},
 };
 use beamlet_agent::testing::{
     attempt_receipt::{self, AttemptAccepted},
@@ -27,13 +28,11 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::{
-    report_delivery::{ReportDeliveries, SEND_BUDGET},
-    shutdown::{self, Shutdown},
-};
+use crate::shutdown::{self, Shutdown};
 
 pub(crate) const NODE_INBOX_PREFIX: &str = "beamlet/v0/node/inbox/";
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
+const SEND_BUDGET: Duration = Duration::from_millis(500);
 
 type HelloAuthority = Authority<Task, String, String>;
 
@@ -54,7 +53,7 @@ enum SendPurpose {
     Receipt,
     SubmissionReceipt,
     AttemptReceipt,
-    Report(ReportId),
+    Report(report_delivery::Ticket),
 }
 
 struct Outgoing {
@@ -509,8 +508,7 @@ fn queue_send(sends: &mut Sends, transport: &Arc<Transport>, outgoing: Outgoing)
             SendPurpose::Notice
             | SendPurpose::SubmissionReceipt
             | SendPurpose::Receipt
-            | SendPurpose::AttemptReceipt
-            | SendPurpose::Report(_) => SEND_BUDGET,
+            | SendPurpose::AttemptReceipt => SEND_BUDGET,
             _ => SEND_TIMEOUT,
         };
         let result = send(&transport, &outgoing.destination, outgoing.bytes, budget).await;
@@ -538,6 +536,34 @@ fn queue_attempt(sends: &mut Sends, transport: &Arc<Transport>, transmission: Tr
             .await;
         (
             SendPurpose::Dispatch(ticket),
+            result.map_err(anyhow::Error::from),
+        )
+    });
+}
+
+fn queue_report(
+    sends: &mut Sends,
+    transport: &Arc<Transport>,
+    transmission: report_delivery::Transmission,
+) {
+    let ticket = transmission.ticket();
+    println!(
+        "Worker 发送原 Report: Report={}; 发送尝试次数={}/{}; 尚未确认 Authority 收录",
+        ticket.binding().report_id,
+        ticket.number(),
+        report_delivery::MAX_SENDS
+    );
+    let transport = Arc::clone(transport);
+    sends.spawn(async move {
+        let result = transmission
+            .send(|authority, bytes| async move {
+                let sender = transport.sender(&report_inbox(authority)).await?;
+                sender.wait_for_receiver().await?;
+                sender.send(bytes).await
+            })
+            .await;
+        (
+            SendPurpose::Report(ticket),
             result.map_err(anyhow::Error::from),
         )
     });
@@ -622,7 +648,14 @@ pub(crate) async fn serve_worker(
     let protocol = ProtocolLimits::default();
     let inbox = worker_inbox(instance);
     let receipt_inbox = receipt::inbox(instance);
-    let mut deliveries = ReportDeliveries::new(limits);
+    let mut deliveries = ReportOutbox::new(
+        instance,
+        authority,
+        report_delivery::Limits {
+            max_records: limits.max_records,
+            max_pending: limits.queue_capacity,
+        },
+    )?;
     let mut sends = Sends::new();
     let mut draining = false;
     let mut tick = interval(Duration::from_millis(100));
@@ -637,20 +670,19 @@ pub(crate) async fn serve_worker(
                 deliveries.unconfirmed()
             );
         }
-        deliveries.refresh();
         while sends.len() < limits.queue_capacity {
-            let Some((report, bytes)) = deliveries.next_send() else {
+            let Some(event) = deliveries.next_event() else {
                 break;
             };
-            queue_send(
-                &mut sends,
-                &transport,
-                Outgoing {
-                    destination: report_inbox(authority),
-                    bytes,
-                    purpose: SendPurpose::Report(report),
-                },
-            );
+            match event {
+                ReportEvent::Send(transmission) => {
+                    queue_report(&mut sends, &transport, transmission)
+                }
+                ReportEvent::Exhausted(progress) => eprintln!(
+                    "Report 交付预算耗尽: Report={}; 发送尝试次数={}; 收录未确认, 保留原证据, 不重跑",
+                    progress.binding.report_id, progress.sends
+                ),
+            }
         }
         tokio::select! {
             biased;
@@ -658,8 +690,9 @@ pub(crate) async fn serve_worker(
             completed = sends.join_next(), if !sends.is_empty() => {
                 let (purpose, result) = completed.context("Report 发送完成记录缺失")?.context("Report 发送任务失败")?;
                 match purpose {
-                    SendPurpose::Report(report) => {
-                        deliveries.sent(report);
+                    SendPurpose::Report(ticket) => {
+                        let report = ticket.binding().report_id;
+                        deliveries.sent(ticket);
                         if let Err(error) = result { eprintln!("Report 本次发送未确认: Report={report}; {error}; 仅在原交付预算内重投, 不重跑"); }
                     }
                     SendPurpose::AttemptReceipt => {
@@ -672,7 +705,7 @@ pub(crate) async fn serve_worker(
                 let report = completed?.context("Worker 完成记录缺失")?;
                 let Message::SubmitReport(evidence) = &report.message else { bail!("Worker 完成结果不包含 Report"); };
                 println!("Worker 已缓存 Report: Operation={} Attempt={} Report={}", evidence.operation_id, evidence.attempt_id, evidence.report_id);
-                deliveries.retain(&report, &protocol)?;
+                deliveries.retain(&report, |delivery| hello::encode_report(delivery, &protocol))?;
             }
             _ = tick.tick() => {
                 if draining && worker.pending() == 0 && deliveries.unconfirmed() == 0 && sends.is_empty() {
@@ -686,7 +719,7 @@ pub(crate) async fn serve_worker(
                         let result = (|| {
                             let receipt = ReportRetained::from_json(&message.payload)?;
                             ensure!(message.key_expr == receipt_inbox && message.key_expr == receipt.topic(), "Report 收录回执实际路由不符");
-                            if deliveries.acknowledge(&receipt)? {
+                            if deliveries.acknowledge(receipt.binding())? {
                                 println!("Worker 已确认 Authority 收录 Report: Operation={} Attempt={} Report={}; 不表示已采用或持久化", receipt.operation_id, receipt.attempt_id, receipt.report_id);
                             }
                             Ok::<_, anyhow::Error>(())
@@ -719,7 +752,7 @@ pub(crate) async fn serve_worker(
                 let receipt = AttemptAccepted::for_dispatch(&dispatch)?;
                 match worker.receive_dispatch(dispatch) {
                     Ok(report) => {
-                        if let Some(report) = report { deliveries.retain(&report, &protocol)?; }
+                        if let Some(report) = report { deliveries.retain(&report, |delivery| hello::encode_report(delivery, &protocol))?; }
                         if sends.len() < limits.queue_capacity {
                             queue_send(&mut sends, &transport, Outgoing {
                                 destination: receipt.topic(), bytes: receipt.to_json()?, purpose: SendPurpose::AttemptReceipt,
