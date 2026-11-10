@@ -4,7 +4,7 @@
 
 ## Specification
 
-- [Specification and review guide](spec/README.md) — proposed structure; specification drafting is pending.
+- [Specification and review guide](spec/README.md) — Chinese outlines are in place; detailed specifications are pending.
 - [Historical design archive](archive/README.md)
 
 ## Usage
