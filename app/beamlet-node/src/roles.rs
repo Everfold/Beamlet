@@ -734,8 +734,18 @@ pub(crate) async fn serve_worker(
                 }
             }
             received = transport.recv_message() => {
-                let message = received.context("Worker 接收授权失败")?;
-                ensure!(message.key_expr == inbox, "Worker 消息地址与预期不符");
+                let message = match received {
+                    Ok(message) => message,
+                    Err(error @ (beamlet_message_zenoh::Error::UnexpectedDelete | beamlet_message_zenoh::Error::MessageTooLarge)) => {
+                        eprintln!("已忽略非法授权消息: {error}");
+                        continue;
+                    }
+                    Err(error) => return Err(error).context("Worker 接收授权失败"),
+                };
+                if message.key_expr != inbox {
+                    eprintln!("已忽略错误路由的授权消息");
+                    continue;
+                }
                 let dispatch = match Dispatch::from_json(&message.payload, &protocol) {
                     Ok(dispatch) => dispatch.delivery(),
                     Err(error) => { eprintln!("授权无效, 未接纳: {error}"); continue; }
@@ -822,4 +832,95 @@ async fn execute_hello(attempt: DispatchAttempt<Task>) -> SubmitReport<String, S
 
 fn hello() -> &'static str {
     "World"
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    use beamlet::lifecycle::{Completion, Group, StopPolicy};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn invalid_messages_do_not_stop_worker_or_prevent_next_authorization() {
+        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("tcp/{}", socket.local_addr().unwrap());
+        drop(socket);
+        let authority = Transport::listen(
+            &endpoint,
+            &report_inbox(1.into()),
+            Limits::new(128 * 1024, 16).unwrap(),
+        )
+        .await
+        .unwrap();
+        let worker = Transport::connect(&endpoint, &worker_inbox(2.into()), Limits::default())
+            .await
+            .unwrap();
+        let receipts = worker.subscribe(&receipt::inbox(2.into())).await.unwrap();
+        let mut group =
+            Group::new(tokio::runtime::Handle::current(), Duration::from_secs(5)).unwrap();
+        group
+            .start((), StopPolicy::Drain, |control| {
+                serve_worker(worker, receipts, 2.into(), 1.into(), control)
+            })
+            .unwrap();
+        timeout(Duration::from_secs(10), async {
+            let sender = authority.sender(&worker_inbox(2.into())).await.unwrap();
+            sender.wait_for_receiver().await.unwrap();
+            let raw = zenoh::open(
+                zenoh::Config::from_json5(
+                    &serde_json::json!({
+                        "mode": "client", "connect": {"endpoints": [endpoint]},
+                        "scouting": {"multicast": {"enabled": false}, "gossip": {"enabled": false}}
+                    })
+                    .to_string(),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            let publisher = raw.declare_publisher(worker_inbox(2.into())).await.unwrap();
+            let matches = publisher.matching_listener().await.unwrap();
+            while !publisher.matching_status().await.unwrap().matching() {
+                matches.recv_async().await.unwrap();
+            }
+            publisher.delete().await.unwrap();
+            publisher.put(vec![0; 65537]).await.unwrap();
+            publisher.put(b"invalid json".to_vec()).await.unwrap();
+            let mut ledger =
+                HelloAuthority::new(1.into(), vec![2.into()], beamlet::memory::Limits::default())
+                    .unwrap();
+            let accepted = ledger
+                .submit_keyed(3.into(), Task::Hello, || (4.into(), 5.into()))
+                .unwrap();
+            publisher
+                .put(
+                    Dispatch::from_delivery(&accepted.dispatch)
+                        .unwrap()
+                        .to_json(&ProtocolLimits::default())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let report =
+                hello::decode_report(&authority.recv().await.unwrap(), &ProtocolLimits::default())
+                    .unwrap();
+            ledger.receive_report(report.clone()).unwrap();
+            let receipt = ReportRetained::for_report(&report).unwrap();
+            authority
+                .sender(&receipt.topic())
+                .await
+                .unwrap()
+                .send(receipt.to_json().unwrap())
+                .await
+                .unwrap();
+            assert!(ledger.operation(4.into()).unwrap().adopted_report.is_some());
+        })
+        .await
+        .unwrap();
+        let summary = group.drain().await;
+        assert!(!summary.timed_out);
+        assert_eq!(
+            summary.exits[0].result.as_ref().unwrap(),
+            &Completion::Drained
+        );
+    }
 }
