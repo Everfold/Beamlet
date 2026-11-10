@@ -14,18 +14,18 @@ use uuid::Uuid;
 
 /// 固定 Hello 协议与通用远端 Client 之间的编码 Adapter
 #[derive(Debug, Default)]
-pub struct HelloSubmissionCodec {
-    limits: Limits,
+pub struct HelloClientCodec {
+    pub(super) limits: Limits,
 }
 
-impl HelloSubmissionCodec {
+impl HelloClientCodec {
     /// 使用应用提供的协议上限, 校验在编码和解码入口执行
     pub fn new(limits: Limits) -> Self {
         Self { limits }
     }
 }
 
-impl Codec for HelloSubmissionCodec {
+impl Codec for HelloClientCodec {
     type Task = Task;
     type Output = String;
     type Failure = String;
@@ -227,13 +227,13 @@ impl SubmissionReply {
 fn invalid() -> ProtocolError {
     ProtocolError::Json(serde::de::Error::custom("提交回复身份关联或结构不合法"))
 }
-fn check(version: u16) -> Result<(), ProtocolError> {
+pub(super) fn check(version: u16) -> Result<(), ProtocolError> {
     if version != PROTOCOL_VERSION {
         return Err(ProtocolError::UnsupportedVersion(version));
     }
     Ok(())
 }
-fn encode<T: Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, ProtocolError> {
+pub(super) fn encode<T: Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, ProtocolError> {
     limits.validate()?;
     let bytes = serde_json::to_vec(value)?;
     if bytes.len() > limits.max_message_bytes {
@@ -241,7 +241,7 @@ fn encode<T: Serialize>(value: &T, limits: &Limits) -> Result<Vec<u8>, ProtocolE
     }
     Ok(bytes)
 }
-fn decode<T: serde::de::DeserializeOwned>(
+pub(super) fn decode<T: serde::de::DeserializeOwned>(
     bytes: &[u8],
     limits: &Limits,
 ) -> Result<T, ProtocolError> {

@@ -1,4 +1,4 @@
-//! 将显式绑定的 Zenoh 会话与目标接入通用远端提交流程
+//! 将显式绑定的 Zenoh 会话与目标接入通用远端提交或查询流程
 
 use crate::{Error, Sender, Transport};
 
@@ -11,25 +11,25 @@ use crate::{Error, Sender, Transport};
 ///
 /// ```no_run
 /// use beamlet::remote::Client;
-/// use beamlet_agent::testing::{hello::Task, submission::HelloSubmissionCodec};
-/// use beamlet_message_zenoh::{Limits, SubmissionTransport, Transport};
+/// use beamlet_agent::testing::{hello::Task, submission::HelloClientCodec};
+/// use beamlet_message_zenoh::{Limits, ClientTransport, Transport};
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let mut connection = Transport::connect(
 ///     "tcp/127.0.0.1:7447", "beamlet/v0/console/example/inbox", Limits::default(),
 /// ).await?;
-/// let channel = SubmissionTransport::bind(&mut connection, "beamlet/v0/node/inbox/example").await?;
-/// let mut client = Client::new(channel, HelloSubmissionCodec::default(), None);
+/// let channel = ClientTransport::bind(&mut connection, "beamlet/v0/node/inbox/example").await?;
+/// let mut client = Client::new(channel, HelloClientCodec::default(), None);
 /// let observed = client.submit(7.into(), &Task::Hello).await?;
 /// # Ok(())
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct SubmissionTransport<'session> {
+pub struct ClientTransport<'session> {
     transport: &'session Transport,
     sender: Sender<'session>,
 }
 
-impl<'session> SubmissionTransport<'session> {
+impl<'session> ClientTransport<'session> {
     /// 在应用提供的连接上绑定明确目标, 不新建网络连接或接收订阅
     ///
     /// # 错误
@@ -48,7 +48,7 @@ impl<'session> SubmissionTransport<'session> {
     }
 }
 
-impl beamlet::remote::Transport for SubmissionTransport<'_> {
+impl beamlet::remote::Transport for ClientTransport<'_> {
     type Error = Error;
 
     async fn send(&self, bytes: &[u8]) -> Result<(), Error> {

@@ -1,7 +1,7 @@
 //! 静态 Zenoh 字节收发 Adapter, 不解释任务, 授权或执行结果
 
-mod submission;
-pub use submission::SubmissionTransport;
+mod client;
+pub use client::ClientTransport;
 
 use thiserror::Error;
 use zenoh::{

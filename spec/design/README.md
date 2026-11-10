@@ -83,7 +83,7 @@ beamlet-agent -> beamlet -> beamlet-kernel
 
 `LocalClient::new` 借用应用提供的 Authority, Worker 与 ID 生成函数, 提供提交, 原键查询, Operation/Report 查询及结构化错误; `LocalExecution::client` 提供同一绑定的便捷入口. Client 释放借用后由宿主推进执行, 重新绑定即可读取结果; 查询和绑定本身不启动任务. 本地示例已通过 Client 提交和查询.
 
-`beamlet::remote::Client` 接受显式 Transport 和 Codec, 负责原键有界重投, 回执关联与结果等待. Zenoh 的 SubmissionTransport 借用应用已有连接和专用回复订阅; Console 已改为库调用及展示. 固定 Hello 编码保留在测试 Adapter, 通用执行库不依赖它. 远端纯查询与订阅合并尚未实现, 具体返回值及内存边界见 [Client 契约](execution-client.md).
+`beamlet::remote::Client` 接受显式 Transport 和 Codec, 提供原键有界重投, 回执关联与结果等待, 以及按原键/Operation/Report 的只读查询. Authority::answer_query 只读投影账本, 远端与本地返回相同快照; 查询要求明确的 Authority 和独立关联 ID, 区分未找到与网络失败. Zenoh 的 ClientTransport 借用应用已有连接和专用回复订阅; Console 调用库并展示结果. 固定 Hello 编码保留在测试 Adapter, 通用执行库不依赖它. 订阅合并尚未实现, 具体返回值及内存边界见 [Client 契约](execution-client.md).
 
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 

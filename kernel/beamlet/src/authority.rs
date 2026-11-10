@@ -6,6 +6,7 @@ use crate::{
         Authority as Ledger, Limits, OperationView, ReportDisposition, StateError, Submission,
     },
     model::{Delivery, Message, Operation},
+    query,
 };
 
 /// Authority 的应用入口, 将请求接纳与消息交付分开
@@ -139,6 +140,23 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
     /// 查询已保留的证据, 包括未被采用为结果的 Report
     pub fn report(&self, report: ReportId) -> Option<&Delivery<P, O, E>> {
         self.ledger.report(report)
+    }
+
+    /// 只读回答明确指向本实例的查询, 不分配身份, 派发, 修改等待状态或接触 Worker
+    ///
+    /// # 错误
+    /// 目标不是本实例时返回 WrongAuthority, 不冒充目标账本回答 NotFound
+    pub fn answer_query(
+        &self,
+        request: query::Request,
+    ) -> Result<query::Reply<P, O, E>, query::WrongAuthority> {
+        if request.authority_instance_id != self.instance {
+            return Err(query::WrongAuthority);
+        }
+        Ok(query::Reply {
+            request,
+            observation: query::observe(self, request.selection),
+        })
     }
 
     /// 只标记等待超时, 不取消执行或产生新授权

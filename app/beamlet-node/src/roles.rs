@@ -13,6 +13,7 @@ use beamlet_agent::testing::{
     attempt_receipt::{self, AttemptAccepted},
     hello::{self, Dispatch, Response, ResponseMessage, Task},
     protocol::Limits as ProtocolLimits,
+    query,
     receipt::{self, ReportRetained},
     submission::{Submission, SubmissionReply},
 };
@@ -136,6 +137,8 @@ pub(crate) async fn serve_authority_pair(
     let reports = report_inbox(instance);
     let receipt_inbox = attempt_receipt::inbox(instance);
     let receipts = transport.subscribe(&receipt_inbox).await?;
+    let query_prefix = query::prefix(instance);
+    let queries = transport.subscribe(&format!("{query_prefix}*")).await?;
     let mut attempts = AttemptDeliveries::new(limits);
     let mut waiters: Vec<Waiter> = Vec::new();
     let mut sends = Sends::new();
@@ -203,9 +206,13 @@ pub(crate) async fn serve_authority_pair(
                     tokio::select! {
                         received = transport.recv_message() => received,
                         received = reports.recv_message() => received,
+                        received = queries.recv_message() => received,
                     }
                 } else {
-                    transport.recv_message().await
+                    tokio::select! {
+                        received = transport.recv_message() => received,
+                        received = queries.recv_message() => received,
+                    }
                 }
             } => {
                 let message = match received {
@@ -245,11 +252,28 @@ pub(crate) async fn serve_authority_pair(
                     }
                     continue;
                 }
-                let Some(console) = message.key_expr.strip_prefix(&request_prefix) else {
-                    continue;
-                };
+                let (console, is_query) = if let Some(console) = message.key_expr.strip_prefix(&query_prefix) {
+                    (console, true)
+                } else if let Some(console) = message.key_expr.strip_prefix(&request_prefix) {
+                    (console, false)
+                } else { continue; };
                 if console.len() != 32 || !console.bytes().all(|byte| byte.is_ascii_hexdigit()) {
                     eprintln!("已忽略无效 Console 路由: {console:?}");
+                    continue;
+                }
+                if is_query {
+                    if sends.len() >= limits.queue_capacity {
+                        eprintln!("查询回复发送槽位已满; 未修改账本");
+                        continue;
+                    }
+                    match query::respond(&authority, &message.payload, &protocol) {
+                        Ok(bytes) => queue_send(&mut sends, &transport, Outgoing {
+                            destination: format!("beamlet/v0/console/{console}/inbox"),
+                            bytes,
+                            purpose: SendPurpose::Reply,
+                        }),
+                        Err(error) => eprintln!("已忽略无效查询: {error}"),
+                    }
                     continue;
                 }
                 let request = match Submission::from_json(&message.payload, &protocol) {

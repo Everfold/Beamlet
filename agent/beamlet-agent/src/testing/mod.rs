@@ -6,5 +6,6 @@ pub mod hello;
 pub mod lifecycle;
 pub mod memory;
 pub mod protocol;
+pub mod query;
 pub mod receipt;
 pub mod submission;

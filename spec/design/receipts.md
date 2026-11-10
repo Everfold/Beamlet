@@ -36,7 +36,7 @@ Console 专用回复路由不变. 显式 `--authority` 校验目标运行实例;
 
 Console 通过 `beamlet::remote::Client` 提交, 每次调用编码一次, 最多发送 3 次相同字节, 每次匹配及发送共用 500 毫秒预算, 结束后间隔 1 秒. 从调用开始的总观察预算 10 秒; 建连和入口就绪各有独立 10 秒预算. 同 key 重投不延长 Authority 的等待窗口, Attempt 或 Report 交付预算. 收到肯定映射后停止提交重投, 继续等待结果; 只有接纳而无 Report 不能宣称完成. 耗尽不创建新 key 或授权. 超时及接收错误携带原提交键与已知接纳映射, 取消等待不会留下后台重投. 用户后来显式查询属于新的有界观察, 仍须使用原 key 和仍运行的 Authority.
 
-Draining 拒绝未保留的新 key, 仍回复已有映射及证据. Authority 重启会丢失提交映射及 Operation; 旧 key 不保证跨重启去重. 显式旧运行实例不会自动解析到新实例. 当前远端 Client 提供通用提交驱动, 尚未提供远端只读查询, 持久提交箱或跨重启恢复.
+Draining 拒绝未保留的新 key, 仍回复已有映射及证据. Authority 重启会丢失提交映射及 Operation; 旧 key 不保证跨重启去重. 显式旧运行实例不会自动解析到新实例. 当前远端 Client 提供独立的只读查询: 指定原 Authority 与原键/OperationId/ReportId, 每次使用独立查询关联 ID, 只发送一次并共用 10 秒期限; 查询不刷新提交或交付预算, 网络失败不等于 NotFound. 详见 [Client 契约](execution-client.md). 持久提交箱及跨重启恢复尚未提供.
 
 ## Attempt 回执与有界授权交付
 

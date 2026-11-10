@@ -16,4 +16,5 @@ pub use worker::Worker;
 
 pub mod executor;
 pub mod memory;
+pub mod query;
 pub mod remote;

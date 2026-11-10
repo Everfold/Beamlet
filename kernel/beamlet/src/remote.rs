@@ -1,8 +1,9 @@
-//! 远端提交的有界交付与结果等待, 编码和连接由应用显式提供
+//! 远端提交的有界交付与只读查询, 编码和连接由应用显式提供
 
 use crate::{
-    ReportObservation,
-    id::{AttemptId, OperationId, RoleInstanceId, SubmissionKey},
+    OperationObservation, ReportObservation,
+    id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
+    query,
 };
 use std::{error::Error as StdError, future::Future, time::Duration};
 use thiserror::Error;
@@ -14,7 +15,7 @@ const SEND_TIMEOUT: Duration = Duration::from_millis(500);
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// 一次提交使用的专用回复通道; 单个通道不得由多个 Client 竞争消费
+/// 提交或查询使用的专用回复通道; 单个通道不得由多个 Client 竞争消费
 ///
 /// 方法取消后不得遗留后台重投. recv 须可取消; None 表示已丢弃一条非法消息,
 /// 连接关闭须返回错误. 具体连接, 订阅和字节上限由实现与应用管理.
@@ -157,13 +158,14 @@ pub enum ClientError<C, T> {
     },
 }
 
-/// 在显式通道上顺序提交, 复用连接和回复订阅
+/// 在显式通道上顺序提交或查询, 复用连接和回复订阅
 ///
 /// 每次调用只编码一次, 最多发送三次原字节; 每次匹配及发送共用 500ms,
 /// 发送结束后间隔 1s, 总观察期限为 10s. 合法接纳或结果停止重投.
 /// 创建 Client 不建立连接或启动后台任务. 丢弃等待 future 不取消远端执行,
 /// 调用方仍须保留原键; 再次调用 submit 是用户显式发起的新观察预算.
-/// 当前只返回第一份结果观察, 查询, 订阅合并和持久恢复另行提供.
+/// 查询需要明确的 expected_authority 及实现 query::Codec 的编码器.
+/// 当前只返回本次调用的第一份匹配观察, 订阅合并和持久恢复另行提供.
 #[derive(Debug)]
 pub struct Client<T, C> {
     transport: T,
@@ -172,7 +174,7 @@ pub struct Client<T, C> {
 }
 
 impl<T, C> Client<T, C> {
-    /// 绑定应用提供的专用回复通道及 Codec; None 在首份合法接纳时绑定实例
+    /// 绑定专用回复通道及 Codec; None 仅允许提交, 在该次提交中以首份合法接纳确定实例
     pub fn new(transport: T, codec: C, expected_authority: Option<RoleInstanceId>) -> Self {
         Self {
             transport,
@@ -250,4 +252,105 @@ fn valid_outcome<O, E>(binding: Binding, outcome: Option<&Outcome<O, E>>) -> boo
         && observation.report.operation_id == binding.operation_id
         && observation.report.attempt_id == binding.attempt_id
         && observation.report.validate().is_ok()
+}
+
+impl<T: Transport, C: query::Codec> Client<T, C> {
+    /// 在已绑定 Authority 上执行一次只读查询; request_id 须由应用为每次调用独立生成
+    ///
+    /// 共用已有连接, 总期限 10s, 只发送一次查询. 错关联, 旧回复和非法快照不满足查询,
+    /// 不延长期限. 本方法不调用提交接口, 不生成执行 ID 或将超时解释为 NotFound.
+    ///
+    /// # 错误
+    /// 未指定 Authority, 编码失败, 连接不可用, 等待超时或匹配的 NotFound 时返回错误
+    pub async fn query(
+        &mut self,
+        request_id: query::Id,
+        selection: query::Selection,
+    ) -> Result<
+        query::Observation<C::Task, C::Output, C::Failure>,
+        query::ClientError<C::Error, T::Error>,
+    > {
+        let request = query::Request {
+            id: request_id,
+            authority_instance_id: self
+                .expected_authority
+                .ok_or(query::ClientError::AuthorityRequired)?,
+            selection,
+        };
+        let bytes = self
+            .codec
+            .encode_query(request)
+            .map_err(query::ClientError::Encode)?;
+        let deadline = Instant::now() + OBSERVATION_TIMEOUT;
+        timeout_at(deadline, self.transport.send(&bytes))
+            .await
+            .map_err(|_| query::ClientError::TimedOut { request })?
+            .map_err(|source| query::ClientError::Transport { request, source })?;
+        loop {
+            tokio::select! {
+                biased;
+                _ = sleep_until(deadline) => return Err(query::ClientError::TimedOut { request }),
+                received = self.transport.recv() => {
+                    let Some(bytes) = received.map_err(|source| query::ClientError::Transport { request, source })? else { continue };
+                    let Ok(reply) = self.codec.decode_query(&bytes) else { continue };
+                    if !reply.matches(request) { continue; }
+                    return match reply.observation {
+                        query::Observation::NotFound => Err(query::ClientError::NotFound { request }),
+                        observation => Ok(observation),
+                    };
+                }
+            }
+        }
+    }
+
+    /// 按原提交键读取执行快照, 不要求重送任务定义
+    /// # 错误
+    /// 与 query 相同; 原键不存在时为 NotFound
+    pub async fn query_submission(
+        &mut self,
+        request_id: query::Id,
+        key: SubmissionKey,
+    ) -> Result<OperationObservation<C::Task>, query::ClientError<C::Error, T::Error>> {
+        let query::Observation::Operation(view) = self
+            .query(request_id, query::Selection::Submission(key))
+            .await?
+        else {
+            unreachable!("已验证的原键查询只能返回 Operation");
+        };
+        Ok(view)
+    }
+
+    /// 按 OperationId 读取当前快照
+    /// # 错误
+    /// 与 query 相同; 原 Operation 不存在时为 NotFound
+    pub async fn query_operation(
+        &mut self,
+        request_id: query::Id,
+        id: OperationId,
+    ) -> Result<OperationObservation<C::Task>, query::ClientError<C::Error, T::Error>> {
+        let query::Observation::Operation(view) = self
+            .query(request_id, query::Selection::Operation(id))
+            .await?
+        else {
+            unreachable!("已验证的请求查询只能返回 Operation");
+        };
+        Ok(view)
+    }
+
+    /// 按 ReportId 读取完整证据, 也可读取未被选为代表结果的 Report
+    /// # 错误
+    /// 与 query 相同; 原 Report 不存在时为 NotFound
+    pub async fn query_report(
+        &mut self,
+        request_id: query::Id,
+        id: ReportId,
+    ) -> Result<ReportObservation<C::Output, C::Failure>, query::ClientError<C::Error, T::Error>>
+    {
+        let query::Observation::Report(view) =
+            self.query(request_id, query::Selection::Report(id)).await?
+        else {
+            unreachable!("已验证的证据查询只能返回 Report");
+        };
+        Ok(view)
+    }
 }

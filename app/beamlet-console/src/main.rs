@@ -4,12 +4,14 @@ use std::{env, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use beamlet::{
+    ReportObservation,
     id::SubmissionKey,
     model::ExecutionResult,
+    query::{Observation, Selection},
     remote::{Binding, Client, ClientError, Outcome},
 };
-use beamlet_agent::testing::{hello::Task, submission::HelloSubmissionCodec};
-use beamlet_message_zenoh::{Limits, SubmissionTransport, Transport};
+use beamlet_agent::testing::{hello::Task, submission::HelloClientCodec};
+use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, BufReader},
     time::timeout,
@@ -20,7 +22,7 @@ mod notifications;
 const NODE_INBOX: &str = "beamlet/v0/node/inbox";
 const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_LINE_BYTES: usize = 64 * 1024;
-type HelloClient<'a> = Client<SubmissionTransport<'a>, HelloSubmissionCodec>;
+type HelloClient<'a> = Client<ClientTransport<'a>, HelloClientCodec>;
 
 #[tokio::main(worker_threads = 2)]
 async fn main() -> std::process::ExitCode {
@@ -38,6 +40,7 @@ async fn run() -> Result<()> {
     let mut authority = None;
     let mut message = None;
     let mut submission_key = None;
+    let mut query = None;
     let mut subscribe = false;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -61,10 +64,24 @@ async fn run() -> Result<()> {
                 );
             }
             "--subscribe" => subscribe = true,
+            "--query-submission" | "--query-operation" | "--query-report" => {
+                ensure!(query.is_none(), "一次只能选择一种查询");
+                let id = args
+                    .next()
+                    .with_context(|| format!("{arg} 需要 UUID"))?
+                    .parse::<Uuid>()
+                    .context("查询 UUID 无效")?
+                    .as_u128();
+                query = Some(match arg.as_str() {
+                    "--query-submission" => Selection::Submission(id.into()),
+                    "--query-operation" => Selection::Operation(id.into()),
+                    _ => Selection::Report(id.into()),
+                });
+            }
             "--demo" => return Ok(beamlet_agent::testing::demo::print().await?),
             "--help" | "-h" => {
                 println!(
-                    "用法: beamlet-console [--connect tcp/127.0.0.1:7447] [--authority UUID] [--subscribe] [--message hello [--submission-key UUID]] [--demo]\n--subscribe 启用只读角色启动/退出通知; 输入结束后继续订阅, Ctrl-C 退出"
+                    "用法: beamlet-console [--connect tcp/127.0.0.1:7447] [--authority UUID] [--subscribe] [--message hello [--submission-key UUID]] [--demo]\n只读查询: --authority UUID 配合 --query-submission UUID / --query-operation UUID / --query-report UUID\n--subscribe 启用只读角色启动/退出通知; 输入结束后继续订阅, Ctrl-C 退出"
                 );
                 return Ok(());
             }
@@ -72,6 +89,16 @@ async fn run() -> Result<()> {
         }
     }
 
+    if query.is_some() {
+        ensure!(
+            authority.is_some(),
+            "只读查询需要 --authority UUID 指定原 Authority 运行实例"
+        );
+        ensure!(
+            message.is_none() && submission_key.is_none(),
+            "查询不能与提交参数一起使用"
+        );
+    }
     if submission_key.is_some() && message.is_none() {
         bail!("--submission-key 必须与 --message hello 一起使用");
     }
@@ -83,12 +110,16 @@ async fn run() -> Result<()> {
     // 每次启动使用新的路由 ID, 不复用其他 Console 或旧进程的回复地址
     let console_id = Uuid::new_v4().simple().to_string();
     let inbox = format!("beamlet/v0/console/{console_id}/inbox");
-    let destination = match authority {
-        Some(authority) => format!(
+    let destination = match (query, authority) {
+        (Some(_), Some(authority)) => format!(
+            "{}{console_id}",
+            beamlet_agent::testing::query::prefix(authority.as_u128().into())
+        ),
+        (_, Some(authority)) => format!(
             "beamlet/v0/authority/{}/submit/{console_id}",
             authority.simple()
         ),
-        None => format!("{NODE_INBOX}/{console_id}"),
+        _ => format!("{NODE_INBOX}/{console_id}"),
     };
     let mut transport = timeout(
         ROUND_TRIP_TIMEOUT,
@@ -106,7 +137,7 @@ async fn run() -> Result<()> {
     } else {
         None
     };
-    let channel = SubmissionTransport::bind(&mut transport, &destination).await?;
+    let channel = ClientTransport::bind(&mut transport, &destination).await?;
     if !subscribe {
         timeout(ROUND_TRIP_TIMEOUT, channel.wait_for_receiver())
             .await
@@ -114,11 +145,14 @@ async fn run() -> Result<()> {
     }
     let mut client = Client::new(
         channel,
-        HelloSubmissionCodec::default(),
+        HelloClientCodec::default(),
         authority.map(|id| id.as_u128().into()),
     );
     println!("Console 已连接: {endpoint} (会话 {console_id})");
     let business = async {
+        if let Some(selection) = query {
+            return query_and_display(&mut client, selection).await;
+        }
         if let Some(request) = request {
             return submit_and_display(&mut client, request).await;
         }
@@ -204,26 +238,60 @@ async fn submit_and_display(
     };
     display_binding(submission.binding);
     match submission.outcome {
-        Outcome::Report(observation) => {
-            let report = observation.report;
-            println!("Report: {}", report.report_id);
-            match report.result {
-                ExecutionResult::Succeeded { output } => {
-                    println!("状态: 成功; ImpactStatus: {:?}", report.impact);
-                    println!("输出: {output}");
-                }
-                ExecutionResult::Failed { error } => {
-                    bail!("执行失败; ImpactStatus: {:?}; 原因: {error}", report.impact)
-                }
-                ExecutionResult::Rejected { error } => bail!(
-                    "执行前拒绝; ImpactStatus: {:?}; 原因: {error}",
-                    report.impact
-                ),
-            }
-        }
+        Outcome::Report(observation) => display_report(observation)?,
         Outcome::Pending => println!("状态: 待定; 不创建新授权"),
         Outcome::SubmissionError(error) => bail!("提交返回错误, 不是 Report: {error}"),
         _ => bail!("不支持的结果观察"),
+    }
+    Ok(())
+}
+
+async fn query_and_display(client: &mut HelloClient<'_>, selection: Selection) -> Result<()> {
+    let observed = client
+        .query(Uuid::new_v4().as_u128().into(), selection)
+        .await?;
+    match observed {
+        Observation::Operation(view) => {
+            println!("Authority: {}", view.binding.authority_instance_id);
+            println!("Worker: {}", view.binding.worker_instance_id);
+            println!("Operation: {}", view.binding.operation_id);
+            println!("Attempt: {}", view.binding.attempt_id);
+            println!(
+                "任务: {:?}; 观察阶段: {:?}; 等待状态: {:?}",
+                view.task, view.phase, view.wait_status
+            );
+            match view.adopted_report {
+                Some(id) => println!("采用的 Report: {id}"),
+                None => println!("尚无采用的 Report"),
+            }
+        }
+        Observation::Report(view) => {
+            println!("Authority: {}", view.authority_instance_id);
+            println!("Worker: {}", view.worker_instance_id);
+            println!("Operation: {}", view.report.operation_id);
+            println!("Attempt: {}", view.report.attempt_id);
+            display_report(view)?;
+        }
+        Observation::NotFound => unreachable!("Client 将 NotFound 返回为查询错误"),
+    }
+    Ok(())
+}
+
+fn display_report(observation: ReportObservation<String, String>) -> Result<()> {
+    let report = observation.report;
+    println!("Report: {}", report.report_id);
+    match report.result {
+        ExecutionResult::Succeeded { output } => {
+            println!("状态: 成功; ImpactStatus: {:?}", report.impact);
+            println!("输出: {output}");
+        }
+        ExecutionResult::Failed { error } => {
+            bail!("执行失败; ImpactStatus: {:?}; 原因: {error}", report.impact)
+        }
+        ExecutionResult::Rejected { error } => bail!(
+            "执行前拒绝; ImpactStatus: {:?}; 原因: {error}",
+            report.impact
+        ),
     }
     Ok(())
 }

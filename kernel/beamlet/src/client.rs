@@ -39,7 +39,6 @@ impl ExecutionBinding {
 
 /// Authority 已知事实的独立快照, 修改或丢弃它不会修改账本
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[non_exhaustive]
 pub struct OperationObservation<P> {
     /// 原执行身份关联
     pub binding: ExecutionBinding,
@@ -54,7 +53,7 @@ pub struct OperationObservation<P> {
 }
 
 impl<P: Clone> OperationObservation<P> {
-    fn from_view<O, E>(view: &OperationView<P, O, E>) -> Self {
+    pub(crate) fn from_view<O, E>(view: &OperationView<P, O, E>) -> Self {
         let Message::DispatchAttempt(attempt) = &view.dispatch.message else {
             unreachable!("Authority 的请求记录必须包含 Attempt");
         };
@@ -65,6 +64,19 @@ impl<P: Clone> OperationObservation<P> {
             wait_status: view.wait_status,
             adopted_report: view.adopted_report,
         }
+    }
+}
+
+impl<O: Clone, E: Clone> ReportObservation<O, E> {
+    pub(crate) fn from_delivery<P>(delivery: &Delivery<P, O, E>) -> Self {
+        let Message::SubmitReport(report) = &delivery.message else {
+            unreachable!("Authority 的证据记录必须包含 Report");
+        };
+        Self::new(
+            delivery.target_instance_id,
+            delivery.source_instance_id,
+            report.clone(),
+        )
     }
 }
 
@@ -214,14 +226,7 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq, F> LocalClient<'_, P, O, E, F>
             .authority
             .report(id)
             .ok_or(LocalClientError::ReportNotFound(id))?;
-        let Message::SubmitReport(report) = &delivery.message else {
-            unreachable!("Authority 的证据记录必须包含 Report");
-        };
-        Ok(ReportObservation {
-            authority_instance_id: delivery.target_instance_id,
-            worker_instance_id: delivery.source_instance_id,
-            report: report.clone(),
-        })
+        Ok(ReportObservation::from_delivery(delivery))
     }
 }
 

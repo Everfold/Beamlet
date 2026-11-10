@@ -71,10 +71,11 @@
 
 ### T7. 提供远端只读查询入口
 
-状态: 待实现; 依赖 T6.
+状态: 已实现; Authority::answer_query 以只读借用提供三类查询, remote::Client 使用独立查询关联与明确 Authority, 返回与本地相同的执行快照或完整证据. Zenoh 绑定和 Hello 编码复用为 ClientTransport/HelloClientCodec, 无旧名称兼容入口; Node 仅接入查询路由, Console 提供三种查询命令. 六项通用查询测试及两项 Zenoh/编码测试通过, 覆盖重连找回, 迟到关联, 非法回复, 原等待状态与附加证据, 网络失败及未知记录不触发提交. 工作区 121 项测试(含文档测试), 全功能 Clippy 与库文档检查通过. 实际 Node/Console 验证新进程可找回原键/Operation/Report, 三类未知记录与不可达 Authority 明确区分, 未知键查询后仍可提交; 两次显式提交仅执行两次, Node 正常排空退出.
 
 - 范围: 将原键, Operation 和 Report 查询接入 Zenoh, Authority 查询处理归库, Console 调用并展示. 如编码和服务接入超过单项规模, 实施前继续拆分.
 - 验收: 重新连接后按原键找回执行; 查询不创建或重新交付执行; 未找到与网络不可达明确区分; 返回事实与本地查询一致.
+- 提交: `beamlet: add remote read-only execution queries`.
 
 ### T8. 合并结果观察并通过查询补齐
 

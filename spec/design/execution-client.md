@@ -1,6 +1,6 @@
 # 执行 Client 与结果观察
 
-状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, beamlet 已提供本地 LocalClient 提交及查询, 以及不依赖编码和连接实现的 remote::Client 提交驱动. Console 已通过库调用远端 Hello 提交, 通用远端查询/订阅 SDK 尚未实现. [回执契约](receipts.md)描述当前易失原型.
+状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, beamlet 已提供本地 LocalClient 提交及查询, 以及不依赖编码和连接实现的 remote::Client 提交与只读查询驱动. Console 已通过库调用远端 Hello 提交和查询; 订阅合并尚未实现. [回执契约](receipts.md)描述当前易失原型.
 
 当前库入口为 `Authority::submit_keyed(key, task, allocate)`: 定义按类型 P 的 Eq 比较, 传输信封和临时回复地址由 Adapter 处理. 只有新键通过记录容量检查后才调用 allocate 生成 OperationId/AttemptId; 同键同定义返回原授权, 冲突或容量不足不生成身份. 已用 ID 被拒绝, 不把新键关联到已有执行. `check_submission(key, &task)` 返回已接纳执行的当前观察或定义冲突, 未知键返回空值; 它不修改状态或预留后续接纳资格, 也不是远端查询 SDK.
 
@@ -19,7 +19,7 @@
 
 查询返回独立快照, 不创建执行, 不分配 ID, 不修改等待状态. 未知键, Operation 或 Report 分别返回对应 NotFound; 同键不同内容是 SubmissionConflict. Worker 拒绝交付时, `LocalClientError::Dispatch` 携带已接纳的 ExecutionBinding 与交付错误; 原提交键仍能查到 Accepted, 没有合成失败 Report. 再次提交同键只返回原接纳事实, 即使后来队列空闲也不自动重新交付.
 
-ExecutionBinding 当前包含 `authority_instance_id`, `worker_instance_id`, OperationId 和 AttemptId. 前两项是运行实例身份, 不冒充跨重启的稳定 AuthorityId. 当前绑定只访问可信同进程内存账本; NotFound 仅表示该账本未保留记录, 不能证明重启前从未执行. 本地同步查询不引入网络不可达或权限错误占位项, 远端查询和持久恢复实现时再加入对应事实.
+ExecutionBinding 当前包含 `authority_instance_id`, `worker_instance_id`, OperationId 和 AttemptId. 前两项是运行实例身份, 不冒充跨重启的稳定 AuthorityId. 当前绑定只访问可信同进程内存账本; NotFound 仅表示该账本未保留记录, 不能证明重启前从未执行. 本地同步查询不引入网络不可达或权限错误占位项; 远端查询单独区分传输失败与未找到.
 
 Node/Console 的共享 `--demo` 已通过该 Client 提交 100 个任务, 由宿主驱动执行, 再按原键找回执行并查询报告. 固定任务协议仍用于独立进程演示, 没有混入本地 Client 接口.
 
@@ -27,13 +27,34 @@ Node/Console 的共享 `--demo` 已通过该 Client 提交 100 个任务, 由宿
 
 `beamlet::remote::Client::new(transport, codec, expected_authority)` 接受应用提供的专用回复通道, 编码 Adapter 与可选目标实例. Transport trait 只负责有界字节发送和可取消接收, Codec trait 只负责完整提交编码与严格回复解码. 通用库拥有重投预算, 提交键及执行关联校验和结果等待, 不依赖 Zenoh 或固定 Hello 类型.
 
-Zenoh 的 `SubmissionTransport::bind(&mut transport, target)` 在已有会话上声明目标发送端, 借用已有回复订阅, 不另建连接. 独占借用防止多个 Client 竞争同一回复队列; 应用可事先通过 Transport::subscribe 建立共用 Session 的其他独立订阅. 释放 Client 后原连接仍归应用. Console 选择连接, 路由及可选 Authority, 使用测试 Adapter 的 HelloSubmissionCodec, 调用 Client 后展示结构化结果.
+Zenoh 的 `ClientTransport::bind(&mut transport, target)` 在已有会话上声明目标发送端, 借用已有回复订阅, 不另建连接. 独占借用防止多个 Client 竞争同一回复队列; 应用可事先通过 Transport::subscribe 建立共用 Session 的其他独立订阅. 释放 Client 后原连接仍归应用. Console 选择连接, 路由及可选 Authority, 使用测试 Adapter 的 HelloClientCodec, 调用 Client 后展示结构化结果.
 
 `submit(key, &task)` 编码一次, 最多三次发送相同字节, 每次匹配及发送最多 500ms, 两次发送间隔 1s, 总观察期限 10s. Report 或 Pending 可以先于独立接纳回执到达, 校验成功即可绑定原 Authority/Operation/Attempt 并停止重投. 接纳映射不含 Worker 身份, 不为缺失字段构造虚假值; 完整 ReportObservation 保留原 Worker 到 Authority 的方向. 错键, 错实例, 冲突映射及非法证据不确认接纳; 已确认映射不被后来的无映射拒绝推翻.
 
 结果 `Submission` 包含原键, Binding 和 Outcome: Pending, 完整 Report, 或已关联请求的 SubmissionError. 业务失败和执行前拒绝保留在 Report 中. 编码失败, 未取得映射的提交拒绝, 接收连接错误及总期限到达分别返回 ClientError; 断线和超时携带原键, 已知映射及已发送次数, 不声称远端执行已停止. 取消等待 future 停止本地驱动, 不产生后台重投; 显式再次调用 submit 才开始新的调用预算.
 
-当前 Client 顺序处理调用并返回第一份结果观察. Console 在收到该观察后展示关联及结果, 超时或断线也可展示已有映射. 纯查询, 并发请求分流, 通知合并和断线查询补齐属于后续任务, 当前接口不将重复提交冒充只读查询.
+当前 Client 顺序处理调用并返回第一份匹配观察. Console 在收到该观察后展示关联及结果, 超时或断线也可展示已有映射. 并发请求分流, 通知合并和自动断线补齐属于后续任务.
+
+## 当前远端只读查询
+
+`beamlet::query` 定义 Request, Selection, Reply 和独立的 Codec trait. Request 包含应用为每次查询生成的 `query::Id`, 明确的 Authority 运行实例, 以及原提交键/OperationId/ReportId 三选一. 查询 ID 仅关联消息, 不是执行身份; 同一回复队列及其重建后必须保持唯一. 重新查询同一选择也使用新的查询 ID, 防止迟到的旧快照满足本次查询.
+
+`Authority::answer_query(&self, request)` 只读访问账本, 与 LocalClient 使用相同快照投影. 查询返回完整 OperationObservation 或 ReportObservation, 包含原 Worker 绑定和附加证据; 未保留记录返回 NotFound. 目标不是本实例返回 WrongAuthority, 不代替另一账本回答 NotFound. 接口不接收 Worker 或执行 ID 分配器, 不接纳/派发任务, 不改变等待状态或交付预算.
+
+remote::Client 在编码器实现 `query::Codec` 时提供以下方法:
+
+| 方法 | 返回值 |
+| --- | --- |
+| `query_submission(query_id, key)` | OperationObservation |
+| `query_operation(query_id, id)` | OperationObservation |
+| `query_report(query_id, id)` | ReportObservation |
+| `query(query_id, selection)` | 带类型的 Operation/Report 观察 |
+
+查询必须在构造 Client 时提供 `Some(authority_instance_id)`, 未指定时在任何 I/O 前返回 AuthorityRequired. 从发送条件等待到匹配回复共用 10s 总期限, 只发送一次, 无自动重投. 回复必须匹配本次查询 ID, Authority, 选择及执行绑定, 并通过状态/证据校验; 非法及无关回复不延长期限. 编码失败, Transport, TimedOut 与匹配的 NotFound 分别返回 `query::ClientError`. 业务失败的 Report 仍是成功查询得到的证据.
+
+应用显式为查询绑定目标路由; Hello Adapter 使用 `beamlet/v0/authority/{instance}/query/{console}`. ClientTransport 和 HelloClientCodec 同时供提交与查询使用. Node 为每个 Authority 订阅查询入口, 将请求交给测试 Adapter 的 `query::respond(&authority, bytes, limits)`, 排队发送返回字节; 该入口在仍运行的 Draining 期间也可读取, 发送队列满只丢弃本次回复, 不修改记录. 查询路由与旧提交接入约定独立, 默认本地组合 Node 同样提供查询.
+
+Console 支持 `--authority UUID --query-submission UUID`, `--query-operation UUID` 或 `--query-report UUID`; 查询选项互斥, 不与提交参数混用. 每次连接使用独立回复地址, 每次查询生成独立查询 ID. 原 Console 退出后, 新 Console 可以只带原键和原 Authority 找回全部执行关联, 再按 ReportId 读取证据. 这要求原 Authority 仍保留内存账本; 重启丢失记录, 旧实例不可达或查询失败都不能自动转为新提交. 当前没有认证/权限服务或跨重启持久恢复.
 
 ## Agent 与 Authority 的联系
 

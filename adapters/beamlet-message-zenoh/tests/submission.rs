@@ -7,9 +7,9 @@ use beamlet::{
 use beamlet_agent::testing::{
     hello::{Response, Task},
     protocol::{Limits as ProtocolLimits, Uuid},
-    submission::{HelloSubmissionCodec, Submission, SubmissionReply},
+    submission::{HelloClientCodec, Submission, SubmissionReply},
 };
-use beamlet_message_zenoh::{Limits, SubmissionTransport, Transport};
+use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::timeout;
 
@@ -113,13 +113,11 @@ async fn library_client_reuses_explicit_session_and_does_not_own_shared_subscrip
         };
         let application = async {
             {
-                let channel =
-                    SubmissionTransport::bind(&mut connection, "beamlet/test/submissions")
-                        .await
-                        .unwrap();
+                let channel = ClientTransport::bind(&mut connection, "beamlet/test/submissions")
+                    .await
+                    .unwrap();
                 channel.wait_for_receiver().await.unwrap();
-                let mut client =
-                    Client::new(channel, HelloSubmissionCodec::default(), Some(2.into()));
+                let mut client = Client::new(channel, HelloClientCodec::default(), Some(2.into()));
                 let mut bindings = Vec::new();
                 for key in [7, 7, 8] {
                     let result = client.submit(key.into(), &Task::Hello).await.unwrap();
@@ -156,7 +154,7 @@ async fn library_client_reuses_explicit_session_and_does_not_own_shared_subscrip
 #[test]
 fn hello_codec_preserves_key_and_rejects_mismatched_report_binding() {
     use beamlet::remote::{Codec, Reply};
-    let codec = HelloSubmissionCodec::default();
+    let codec = HelloClientCodec::default();
     let limits = ProtocolLimits::default();
     let request = codec.encode(7.into(), &Task::Hello).unwrap();
     assert_eq!(
