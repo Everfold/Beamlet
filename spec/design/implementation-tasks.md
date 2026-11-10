@@ -14,7 +14,7 @@
 
 ### T1. 将独立 Authority/Worker 驱动迁入 beamlet
 
-状态: 待实现.
+状态: 已实现; 独立驱动与六项消息流程测试已迁入 beamlet, Agent crate 通过重导出兼容旧入口. 全工作区测试, Clippy 与相关库文档检查通过.
 
 - 范围: 将 `agent/beamlet-agent/src/authority.rs` 与 `worker.rs` 的既有实现迁入 `kernel/beamlet`, 通过 `beamlet::Authority` 与 `beamlet::Worker` 提供. 原 Agent crate 保留兼容导出, 不复制实现. 迁移独立角色消息流程测试.
 - 验收: 仅依赖 beamlet 的调用者可以显式构造两种角色, 交付授权并收录结果; 重复投递, 等待取消, 错误绑定和乱序返回维持既有语义; 原 Agent 组合入口仍可用.

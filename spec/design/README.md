@@ -75,7 +75,7 @@ beamlet-agent -> beamlet -> beamlet-kernel
 | beamlet-agent-tool | 工具及执行环境的集成位置; 不另建授权账本 |
 | beamlet-durable / 消息 Adapter | 执行持久化及消息交付的实现; Agent 存储映射由 Agent 层拥有 |
 
-这是目标职责, 不是要求每个 Interface 立刻新增 crate. 当前 `beamlet-agent::Agent` 只是 Authority/Worker 本地组合, 通用 Authority/Worker 包装也位于该 crate; 实现新 Agent 前需要调整名称与归属. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
+这是目标职责, 不是要求每个 Interface 立刻新增 crate. 独立 Authority/Worker 驱动已迁入 beamlet, beamlet-agent 保留兼容导出; 当前 `beamlet-agent::Agent` 仍只是 Authority/Worker 本地组合, 后续调整该组合入口的名称与归属. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
 
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 

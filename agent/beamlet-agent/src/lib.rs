@@ -1,12 +1,9 @@
 //! 应用执行入口: 关联意图, 派发授权并收录完成证据, 不实现自主 Agent Loop
 
-mod authority;
-mod worker;
-
-pub use authority::Authority;
+/// 通用执行角色的兼容导出, 独立使用时可直接依赖 beamlet
+pub use beamlet::{Authority, Worker};
 use std::future::Future;
 use thiserror::Error;
-pub use worker::Worker;
 
 /// 显式启用的固定假任务与 v0 JSON 测试支持, 不属于通用 Agent 契约
 #[cfg(feature = "test-support")]

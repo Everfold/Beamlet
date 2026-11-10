@@ -1,11 +1,12 @@
 //! 独立 Authority 入口, 只接纳请求与收录证据, 不持有执行器
 
 use crate::{
-    Limits, OperationView, ReportDisposition, StateError, Submission,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
+    memory::{
+        Authority as Ledger, Limits, OperationView, ReportDisposition, StateError, Submission,
+    },
     model::{Delivery, Message, Operation},
 };
-use beamlet::memory::Authority as Ledger;
 
 /// Authority 的应用入口, 将请求接纳与消息交付分开
 ///

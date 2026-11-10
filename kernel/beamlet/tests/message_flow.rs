@@ -1,7 +1,7 @@
-use beamlet_agent::{
-    Admission, Authority, Limits, OperationPhase, ReportDisposition, StateError, WaitStatus,
-    Worker,
+use beamlet::{
+    Authority, Worker,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
+    memory::{Admission, Limits, OperationPhase, ReportDisposition, StateError, WaitStatus},
     model::{Delivery, DispatchAttempt, Effect, ExecutionResult, Message, Operation, SubmitReport},
 };
 use std::sync::{

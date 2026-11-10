@@ -1,12 +1,12 @@
 //! 独立 Worker 消息入口, 执行并缓存证据, 不持有 Authority
 
 use crate::{
-    ExecutorError, Limits, StateError,
+    executor::{Executor, ExecutorError},
     id::RoleInstanceId,
+    memory::{Limits, StateError},
     model::{Delivery, DispatchAttempt, Message, SubmitReport},
     state::WorkerPhase,
 };
-use beamlet::executor::Executor;
 use std::future::Future;
 
 /// 独立 Worker 驱动, 可以承载同一进程内静态配置的一个或多个 Worker

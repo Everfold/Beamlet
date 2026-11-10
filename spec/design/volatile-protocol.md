@@ -112,7 +112,7 @@ app/beamlet-console, app/beamlet-node
 
 - 纯领域: [id.rs](../../kernel/beamlet-kernel/src/id.rs), [model.rs](../../kernel/beamlet-kernel/src/model.rs), [state.rs](../../kernel/beamlet-kernel/src/state.rs). 身份是调用方提供的 128 位值; 领域对象使用不透明的输入, 输出与错误类型; 拒绝效果和完成阶段规则不依赖 JSON, UUID 库, Tokio, 数据库或传输.
 - 底层实现: [memory.rs](../../kernel/beamlet/src/memory.rs) 提供有界内存 Authority/Worker, 静态轮询, 去重和证据保留; [executor.rs](../../kernel/beamlet/src/executor.rs) 提供通用 Tokio 驱动, 每个 Worker 有独立上限, 共享有界的在途完成集合. 执行函数由调用方直接传入, 不创建能力注册表.
-- 应用入口: [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 提供可独立驱动的 [Authority](../../agent/beamlet-agent/src/authority.rs) 与 [Worker](../../agent/beamlet-agent/src/worker.rs), 以及保留旧行为的本地 Agent 组合. 应用只依赖该 crate 即可提交, 交付授权, 执行并收录证据; 不实现自主 Agent Loop.
+- 应用入口: 原 [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 入口保留本地 Agent 组合与兼容导出. 独立 [Authority](../../kernel/beamlet/src/authority.rs) 与 [Worker](../../kernel/beamlet/src/worker.rs) 驱动现已迁入 beamlet, 可直接提交, 交付授权, 执行并收录证据; 不实现自主 Agent Loop.
 - 测试 Adapter: 显式启用 test-support 后, [protocol.rs](../../agent/beamlet-agent/src/testing/protocol.rs) 提供严格 v0 JSON 与领域转换, [memory.rs](../../agent/beamlet-agent/src/testing/memory.rs) 提供协议校验和只读投影, [executor.rs](../../agent/beamlet-agent/src/testing/executor.rs) 提供固定 echo/delay/fail. 默认 Agent 构建不包含这些模块. UUID 字符串的传输表示不变, 纯领域身份通过 from_u128 构造.
 - 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 暂时调用同一份 [Agent 演示用例](../../agent/beamlet-agent/src/testing/demo.rs). 各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 它们还不是网络节点或交互式 Console.
 
@@ -130,7 +130,7 @@ Authority 与 Worker 分别持有状态, 不相互引用, 也不直接修改对�
 
 交付方负责处理发送失败或背压, 本轮没有待发队列, 可靠重投或恢复机制. 通道已满时, 尚未发出的请求保留为 accepted, 重复提交只返回原授权, 不自动重投或产生新 Attempt.
 
-[消息流用例](../../agent/beamlet-agent/tests/message_flow.rs) 只通过 beamlet-agent 公开入口和容量为 1 的 Tokio 通道交互, 不导入底层 crate. 六项用例覆盖独立 echo, 重复交付与缓存证据, 取消等待及迟到证据, 交付背压, 非法消息与证据冲突, 两个独立 Worker 的乱序关联. 延迟使用 Tokio 虚拟时间, 这些测试不是跨进程或断网验证.
+[消息流用例](../../kernel/beamlet/tests/message_flow.rs) 已随独立角色驱动迁入 beamlet, 通过该库公开入口和容量为 1 的 Tokio 通道交互. 六项用例覆盖独立 echo, 重复交付与缓存证据, 取消等待及迟到证据, 交付背压, 非法消息与证据冲突, 两个独立 Worker 的乱序关联. 延迟使用 Tokio 虚拟时间, 这些测试不是跨进程或断网验证.
 
 复验独立用例, 共 46 项:
 
