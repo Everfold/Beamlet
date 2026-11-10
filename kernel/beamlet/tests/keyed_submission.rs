@@ -291,3 +291,121 @@ fn preflight_does_not_reserve_space_and_unkeyed_records_share_the_limit() {
         OperationPhase::Accepted
     );
 }
+
+#[test]
+fn additional_reports_cannot_consume_another_operations_first_report_slot() {
+    let mut authority = authority(
+        2,
+        Limits {
+            max_records: 2,
+            ..Limits::default()
+        },
+    );
+    authority
+        .submit_keyed(7.into(), input(1), || (10.into(), 20.into()))
+        .unwrap();
+    authority
+        .submit_keyed(8.into(), input(2), || (11.into(), 21.into()))
+        .unwrap();
+    let report = |worker: u128, operation: u128, attempt: u128, id: u128| {
+        Delivery::new(
+            worker.into(),
+            2.into(),
+            Message::SubmitReport(SubmitReport {
+                report_id: id.into(),
+                operation_id: operation.into(),
+                attempt_id: attempt.into(),
+                impact: ImpactStatus::None,
+                result: ExecutionResult::Succeeded { output: 42 },
+            }),
+        )
+    };
+    let first = report(3, 10, 20, 30);
+    authority.receive_report(first.clone()).unwrap();
+    assert!(matches!(
+        authority.receive_report(report(3, 10, 20, 31)),
+        Err(StateError::Capacity)
+    ));
+    assert!(authority.report(31.into()).is_none());
+    assert_eq!(
+        authority.operation(10.into()).unwrap().adopted_report,
+        Some(30.into())
+    );
+    // An invalid binding cannot spend the reserved slot either.
+    assert!(matches!(
+        authority.receive_report(report(3, 11, 21, 32)),
+        Err(StateError::InvalidBinding)
+    ));
+    authority.receive_report(report(4, 11, 21, 32)).unwrap();
+    assert_eq!(
+        authority.receive_report(first).unwrap(),
+        beamlet::memory::ReportDisposition::Duplicate
+    );
+    assert_eq!(
+        authority
+            .submit_keyed(8.into(), input(2), no_allocation)
+            .unwrap()
+            .admission,
+        Admission::Duplicate
+    );
+}
+
+#[test]
+fn additional_evidence_reduces_new_admission_before_allocating_identities() {
+    let mut authority = authority(
+        2,
+        Limits {
+            max_records: 3,
+            ..Limits::default()
+        },
+    );
+    authority
+        .submit_keyed(7.into(), input(1), || (10.into(), 20.into()))
+        .unwrap();
+    for id in [30, 31] {
+        authority
+            .receive_report(Delivery::new(
+                3.into(),
+                2.into(),
+                Message::SubmitReport(SubmitReport {
+                    report_id: id.into(),
+                    operation_id: 10.into(),
+                    attempt_id: 20.into(),
+                    impact: ImpactStatus::None,
+                    result: ExecutionResult::Succeeded { output: 42 },
+                }),
+            ))
+            .unwrap();
+    }
+    authority
+        .submit_keyed(8.into(), input(2), || (11.into(), 21.into()))
+        .unwrap();
+    assert!(matches!(
+        authority.submit_keyed(9.into(), input(3), no_allocation),
+        Err(StateError::Capacity)
+    ));
+    assert!(matches!(
+        authority.submit(
+            Operation {
+                operation_id: 12.into(),
+                task: input(3)
+            },
+            22.into()
+        ),
+        Err(StateError::Capacity)
+    ));
+    assert!(authority.operation(12.into()).is_none());
+    authority
+        .receive_report(Delivery::new(
+            4.into(),
+            2.into(),
+            Message::SubmitReport(SubmitReport {
+                report_id: 32.into(),
+                operation_id: 11.into(),
+                attempt_id: 21.into(),
+                impact: ImpactStatus::None,
+                result: ExecutionResult::Succeeded { output: 7 },
+            }),
+        ))
+        .unwrap();
+}

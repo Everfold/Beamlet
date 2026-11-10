@@ -13,7 +13,7 @@ use thiserror::Error;
 /// 内存记录, 排队与运行槽位的独立上限, 不限制具体编码字节
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Limits {
-    /// 每种身份记录表的容量上限
+    /// 每种身份记录表的容量上限; Authority 为每个未报告请求预留一份 Report
     pub max_records: usize,
     /// 每个 Worker 的等待队列上限
     pub queue_capacity: usize,
@@ -206,7 +206,9 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
                 dispatch: existing.dispatch.clone(),
             });
         }
-        if self.operations.len() >= self.limits.max_records {
+        if self.operations.len() >= self.limits.max_records
+            || self.reserved_reports() >= self.limits.max_records
+        {
             return Err(StateError::Capacity);
         }
         let (operation_id, attempt_id) = allocate();
@@ -262,7 +264,9 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         }) {
             return Err(StateError::AttemptConflict);
         }
-        if self.operations.len() >= self.limits.max_records {
+        if self.operations.len() >= self.limits.max_records
+            || self.reserved_reports() >= self.limits.max_records
+        {
             return Err(StateError::Capacity);
         }
         let dispatch = Delivery::new(
@@ -354,6 +358,7 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         let Message::SubmitReport(report) = &envelope.message else {
             return Err(StateError::WrongMessage);
         };
+        let reserved_reports = self.reserved_reports();
         let view = self
             .operations
             .get_mut(&report.operation_id)
@@ -373,7 +378,9 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
                 Err(StateError::ReportConflict)
             };
         }
-        if self.reports.len() >= self.limits.max_records {
+        if self.reports.len() >= self.limits.max_records
+            || (view.adopted_report.is_some() && reserved_reports >= self.limits.max_records)
+        {
             return Err(StateError::Capacity);
         }
         let disposition = if view.adopted_report.is_none() {
@@ -385,6 +392,17 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         view.phase = OperationPhase::Reported;
         self.reports.insert(report.report_id, envelope);
         Ok(disposition)
+    }
+
+    // Every accepted operation without evidence owns one future report slot.
+    // Additional evidence must not spend another operation's reservation.
+    fn reserved_reports(&self) -> usize {
+        self.reports.len().saturating_add(
+            self.operations
+                .values()
+                .filter(|view| view.adopted_report.is_none())
+                .count(),
+        )
     }
 
     /// 返回已保留状态的只读视图, 不暴露记录表的可变访问
