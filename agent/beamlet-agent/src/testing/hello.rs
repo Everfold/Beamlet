@@ -167,6 +167,12 @@ pub fn decode_report(
     limits: &Limits,
 ) -> Result<model::Delivery<Task, String, String>, ProtocolError> {
     let envelope = Envelope::from_json(bytes, limits)?;
+    report_from_envelope(envelope)
+}
+
+pub(crate) fn report_from_envelope(
+    envelope: Envelope,
+) -> Result<model::Delivery<Task, String, String>, ProtocolError> {
     let Message::SubmitReport(report) = envelope.message else {
         return Err(invalid_message("预期为 Report 信封"));
     };
@@ -282,6 +288,11 @@ impl Response {
     /// 返回已通过编码校验的响应内容
     pub fn message(&self) -> &ResponseMessage {
         &self.message
+    }
+
+    /// 取出响应内容, 不复制已保留的 Report
+    pub fn into_message(self) -> ResponseMessage {
+        self.message
     }
 
     /// 编码并校验整个包装的字节预算, 不只校验内层 Report

@@ -92,6 +92,21 @@ pub struct ReportObservation<O, E> {
     pub report: SubmitReport<O, E>,
 }
 
+impl<O, E> ReportObservation<O, E> {
+    /// 从原实例绑定与完整证据构造观察; 不证明已收录, 不执行认证或存储
+    pub fn new(
+        authority: RoleInstanceId,
+        worker: RoleInstanceId,
+        report: SubmitReport<O, E>,
+    ) -> Self {
+        Self {
+            authority_instance_id: authority,
+            worker_instance_id: worker,
+            report,
+        }
+    }
+}
+
 /// 本地提交或查询错误, 未找到记录与内容冲突有不同表示
 #[derive(Debug, Error)]
 pub enum LocalClientError {

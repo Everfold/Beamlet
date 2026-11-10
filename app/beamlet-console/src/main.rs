@@ -3,12 +3,13 @@
 use std::{env, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
-use beamlet_agent::testing::{
-    hello::ResponseMessage,
-    protocol::{ExecutionResult, Limits as ProtocolLimits, Message},
-    submission::{Submission, SubmissionReply},
+use beamlet::{
+    id::SubmissionKey,
+    model::ExecutionResult,
+    remote::{Binding, Client, ClientError, Outcome},
 };
-use beamlet_message_zenoh::{Limits, Sender, Transport};
+use beamlet_agent::testing::{hello::Task, submission::HelloSubmissionCodec};
+use beamlet_message_zenoh::{Limits, SubmissionTransport, Transport};
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, BufReader},
     time::timeout,
@@ -19,6 +20,7 @@ mod notifications;
 const NODE_INBOX: &str = "beamlet/v0/node/inbox";
 const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_LINE_BYTES: usize = 64 * 1024;
+type HelloClient<'a> = Client<SubmissionTransport<'a>, HelloSubmissionCodec>;
 
 #[tokio::main(worker_threads = 2)]
 async fn main() -> std::process::ExitCode {
@@ -88,7 +90,7 @@ async fn run() -> Result<()> {
         ),
         None => format!("{NODE_INBOX}/{console_id}"),
     };
-    let transport = timeout(
+    let mut transport = timeout(
         ROUND_TRIP_TIMEOUT,
         Transport::connect(&endpoint, &inbox, Limits::default()),
     )
@@ -104,18 +106,23 @@ async fn run() -> Result<()> {
     } else {
         None
     };
-    let sender = transport.sender(&destination).await?;
+    let channel = SubmissionTransport::bind(&mut transport, &destination).await?;
     if !subscribe {
-        timeout(ROUND_TRIP_TIMEOUT, sender.wait_for_receiver())
+        timeout(ROUND_TRIP_TIMEOUT, channel.wait_for_receiver())
             .await
             .context("Node 订阅尚未就绪")??;
     }
+    let mut client = Client::new(
+        channel,
+        HelloSubmissionCodec::default(),
+        authority.map(|id| id.as_u128().into()),
+    );
     println!("Console 已连接: {endpoint} (会话 {console_id})");
     let business = async {
         if let Some(request) = request {
-            return exchange(&transport, &sender, &request, authority).await;
+            return submit_and_display(&mut client, request).await;
         }
-        interactive(&transport, &sender, authority).await?;
+        interactive(&mut client).await?;
         if subscribe {
             std::future::pending::<Result<()>>().await
         } else {
@@ -134,11 +141,7 @@ async fn run() -> Result<()> {
     }
 }
 
-async fn interactive(
-    transport: &Transport,
-    sender: &Sender<'_>,
-    authority: Option<Uuid>,
-) -> Result<()> {
+async fn interactive(client: &mut HelloClient<'_>) -> Result<()> {
     println!("输入 hello 后按回车, 每次生成新 Operation; Ctrl-D 结束输入");
     let mut input = BufReader::new(io::stdin());
     loop {
@@ -167,87 +170,69 @@ async fn interactive(
                 continue;
             }
         };
-        exchange(transport, sender, &request, authority).await?;
+        submit_and_display(client, request).await?;
     }
 }
 
-fn hello_request(command: &str, submission_key: Option<Uuid>) -> Result<Submission> {
+fn hello_request(command: &str, submission_key: Option<Uuid>) -> Result<(SubmissionKey, Task)> {
     ensure!(
         command.trim().eq_ignore_ascii_case("hello"),
         "当前仅支持固定任务 hello, 不再原样回显输入"
     );
-    Ok(Submission::hello(
-        submission_key.unwrap_or_else(Uuid::new_v4),
+    Ok((
+        submission_key.unwrap_or_else(Uuid::new_v4).as_u128().into(),
+        Task::Hello,
     ))
 }
 
-async fn exchange(
-    transport: &Transport,
-    sender: &Sender<'_>,
-    request: &Submission,
-    expected_authority: Option<Uuid>,
+async fn submit_and_display(
+    client: &mut HelloClient<'_>,
+    (key, task): (SubmissionKey, Task),
 ) -> Result<()> {
-    let limits = ProtocolLimits::default();
-    let bytes = request.to_json(&limits)?;
-    println!("SubmissionKey: {}", request.submission_key);
-    timeout(ROUND_TRIP_TIMEOUT, async {
-        let mut attempts = 0;
-        let mut next = tokio::time::Instant::now();
-        let mut binding = None;
-        loop {
-            tokio::select! {
-                _ = tokio::time::sleep_until(next), if binding.is_none() && attempts < 3 => {
-                    attempts += 1;
-                    println!("提交尝试: 次数={attempts}/3; 使用原 SubmissionKey");
-                    let sent = timeout(Duration::from_millis(500), async {
-                        sender.wait_for_receiver().await?;
-                        sender.send(bytes.clone()).await
-                    }).await;
-                    if !matches!(sent, Ok(Ok(()))) { eprintln!("提交本次发送未确认; 使用原 SubmissionKey, 尝试次数={attempts}/3"); }
-                    next = tokio::time::Instant::now() + Duration::from_secs(1);
+    println!("SubmissionKey: {key}");
+    let submission = match client.submit(key, &task).await {
+        Ok(submission) => submission,
+        Err(error) => {
+            if let ClientError::TimedOut { progress } | ClientError::Transport { progress, .. } =
+                &error
+                && let Some(binding) = progress.binding
+            {
+                display_binding(binding);
+            }
+            return Err(error.into());
+        }
+    };
+    display_binding(submission.binding);
+    match submission.outcome {
+        Outcome::Report(observation) => {
+            let report = observation.report;
+            println!("Report: {}", report.report_id);
+            match report.result {
+                ExecutionResult::Succeeded { output } => {
+                    println!("状态: 成功; ImpactStatus: {:?}", report.impact);
+                    println!("输出: {output}");
                 }
-                received = transport.recv() => {
-                    let bytes = match received {
-                        Ok(bytes) => bytes,
-                        Err(error @ (beamlet_message_zenoh::Error::UnexpectedDelete | beamlet_message_zenoh::Error::MessageTooLarge)) => { eprintln!("已忽略非法提交回复: {error}"); continue; }
-                        Err(error) => return Err(error.into()),
-                    };
-                    let reply = match SubmissionReply::from_json(&bytes, &limits) {
-                        Ok(reply) => reply,
-                        Err(error) => { eprintln!("已忽略非法提交回复: {error}"); continue; }
-                    };
-                    if reply.submission_key != request.submission_key || expected_authority.is_some_and(|id| id != reply.authority_instance_id) {
-                        eprintln!("已忽略其他提交或 Authority 的回复"); continue;
-                    }
-                    if let Some(error) = reply.error { bail!("提交返回错误, 不是 Report: {error}"); }
-                    let current = (reply.authority_instance_id, reply.operation_id.context("接纳缺少 Operation")?, reply.attempt_id.context("接纳缺少 Attempt")?);
-                    if let Some(previous) = binding {
-                        if previous != current { eprintln!("已忽略与原接纳映射冲突的回复"); continue; }
-                    } else {
-                        binding = Some(current);
-                        println!("Operation: {}", current.1);
-                        println!("Attempt: {}", current.2);
-                        println!("状态: 已接纳; Authority={}; 不代表开始执行或完成", current.0);
-                    }
-                    let Some(response) = reply.response else { continue; };
-                    match response.message() {
-                        ResponseMessage::Report(delivery) => {
-                            let Message::SubmitReport(report) = &delivery.message else { bail!("响应不包含 Report"); };
-                            println!("Report: {}", report.report_id);
-                            match &report.result {
-                                ExecutionResult::Succeeded { output } => { println!("状态: 成功; ImpactStatus: {}", report.impact); println!("输出: {output}"); }
-                                ExecutionResult::Failed { error } => bail!("执行失败; ImpactStatus: {}; 原因: {error}", report.impact),
-                                ExecutionResult::Rejected { error } => bail!("执行前拒绝; ImpactStatus: {}; 原因: {error}", report.impact),
-                                _ => bail!("不支持的执行结果"),
-                            }
-                        }
-                        ResponseMessage::Pending { .. } => println!("状态: 待定; 不创建新授权"),
-                        ResponseMessage::SubmissionError { error, .. } => bail!("提交返回错误, 不是 Report: {error}"),
-                        _ => bail!("不支持的响应消息"),
-                    }
-                    return Ok::<_,anyhow::Error>(());
+                ExecutionResult::Failed { error } => {
+                    bail!("执行失败; ImpactStatus: {:?}; 原因: {error}", report.impact)
                 }
+                ExecutionResult::Rejected { error } => bail!(
+                    "执行前拒绝; ImpactStatus: {:?}; 原因: {error}",
+                    report.impact
+                ),
             }
         }
-    }).await.context("等待结果超时; 提交可能已接纳或正在执行, 重投预算不再延长; 查询须复用原 SubmissionKey")?
+        Outcome::Pending => println!("状态: 待定; 不创建新授权"),
+        Outcome::SubmissionError(error) => bail!("提交返回错误, 不是 Report: {error}"),
+        _ => bail!("不支持的结果观察"),
+    }
+    Ok(())
+}
+
+fn display_binding(binding: Binding) {
+    println!("Operation: {}", binding.operation_id);
+    println!("Attempt: {}", binding.attempt_id);
+    println!(
+        "状态: 已接纳; Authority={}; 不代表开始执行或完成",
+        binding.authority_instance_id
+    );
 }

@@ -4,8 +4,87 @@ use super::{
     protocol::{Limits, Message, PROTOCOL_VERSION, ProtocolError},
 };
 use beamlet::model::{Delivery, Message as DomainMessage};
+use beamlet::{
+    ReportObservation,
+    id::SubmissionKey,
+    remote::{Binding, Codec, Outcome, Reply},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+/// 固定 Hello 协议与通用远端 Client 之间的编码 Adapter
+#[derive(Debug, Default)]
+pub struct HelloSubmissionCodec {
+    limits: Limits,
+}
+
+impl HelloSubmissionCodec {
+    /// 使用应用提供的协议上限, 校验在编码和解码入口执行
+    pub fn new(limits: Limits) -> Self {
+        Self { limits }
+    }
+}
+
+impl Codec for HelloSubmissionCodec {
+    type Task = Task;
+    type Output = String;
+    type Failure = String;
+    type Error = ProtocolError;
+
+    fn encode(&self, key: SubmissionKey, task: &Task) -> Result<Vec<u8>, ProtocolError> {
+        Submission {
+            protocol_version: PROTOCOL_VERSION,
+            submission_key: Uuid::from_u128(key.as_u128()),
+            task: *task,
+        }
+        .to_json(&self.limits)
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<Reply<String, String>, ProtocolError> {
+        let reply = SubmissionReply::from_json(bytes, &self.limits)?;
+        let key = reply.submission_key.as_u128().into();
+        let authority_instance_id = reply.authority_instance_id.as_u128().into();
+        if let Some(reason) = reply.error {
+            return Ok(Reply::Rejected {
+                key,
+                authority_instance_id,
+                reason,
+            });
+        }
+        let binding = Binding {
+            authority_instance_id,
+            operation_id: reply.operation_id.ok_or_else(invalid)?.as_u128().into(),
+            attempt_id: reply.attempt_id.ok_or_else(invalid)?.as_u128().into(),
+        };
+        let outcome = reply
+            .response
+            .map(|response| -> Result<_, ProtocolError> {
+                match response.into_message() {
+                    ResponseMessage::Report(envelope) => {
+                        let delivery = super::hello::report_from_envelope(envelope)?;
+                        let DomainMessage::SubmitReport(report) = delivery.message else {
+                            unreachable!("Report 转换必须返回执行证据");
+                        };
+                        Ok(Outcome::Report(ReportObservation::new(
+                            delivery.target_instance_id,
+                            delivery.source_instance_id,
+                            report,
+                        )))
+                    }
+                    ResponseMessage::Pending { .. } => Ok(Outcome::Pending),
+                    ResponseMessage::SubmissionError { error, .. } => {
+                        Ok(Outcome::SubmissionError(error))
+                    }
+                }
+            })
+            .transpose()?;
+        Ok(Reply::Accepted {
+            key,
+            binding,
+            outcome,
+        })
+    }
+}
 
 /// Client 重投时必须保持同一 key 和完整定义
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
