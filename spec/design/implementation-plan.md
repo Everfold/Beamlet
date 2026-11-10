@@ -2,6 +2,8 @@
 
 状态: 2026-11-10 的实现准备, 本批仅记录设计与实现顺序. 按 [设计入口](README.md)及关联契约实施, 不将接口草案或候选命名当作已发布 API.
 
+具体执行按 [实现任务与提交](implementation-tasks.md)逐项推进. 每个任务完成实现, 验证及相关文档更新后单独 commit, 保持每个提交可构建且可独立审阅.
+
 ## 当前代码与目标差距
 
 | 范围 | 已有实现 | 仍需实现 |
@@ -11,7 +13,7 @@
 | 回执 | Operation/Attempt/Report 三段回执与有限原消息重投 | 持久提交后确认, 重启恢复与旧实例隔离 |
 | Node | 角色组合, 稳定/运行身份配置, 生命周期, 心跳, Draining | 稳定身份解析, 基础设施独立接入与明确运行模式 |
 | Agent | `beamlet-agent::Agent` 目前只是本地 Authority/Worker 包装 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |
-| 存储与工具 | Diesel SQLite 依赖, durable/tool crate 脚手架 | Agent/执行存储, 事务与迁移, LLM/工具/Codemode 执行器 |
+| 存储与工具 | durable/tool crate 脚手架, workspace 已声明 kite_sql | Agent/执行存储, 事务与迁移, LLM/工具/Codemode 执行器; 存储阶段前对齐依赖与设计中的 Diesel + SQLite 选择 |
 
 本批仅编写和核对文档. 不把以往会话中的测试次数当作本次运行结果, 不宣称持久性或安全协议已实现.
 

@@ -12,6 +12,7 @@
 | [执行 Client 与结果观察](execution-client.md) | Agent 如何提交, 查询和接收 Report, UI 如何查询和接收回答 |
 | [持久化与恢复](persistence-recovery.md) | Diesel/SQLite, 异步提交, 故障窗口与恢复限制 |
 | [实现顺序与验收](implementation-plan.md) | 当前差距, 前置决策与分阶段验收 |
+| [实现任务与提交](implementation-tasks.md) | 最近的小任务, 每项验收与 commit 边界 |
 
 [术语表](../../GLOSSARY.md)定义领域用语. [Node 与角色组合](node-composition.md), [三段回执](receipts.md), [Hello Console](hello-console.md)记录已有原型. [非 Durable 协议 v0](volatile-protocol.md)保留早期里程碑, 其中旧提交接口和旧实现状态不作为新实现依据.
 
