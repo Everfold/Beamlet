@@ -7,7 +7,7 @@ use beamlet::{
     Authority, Worker,
     id::{OperationId, ReportId, RoleInstanceId},
     memory::{Admission, StateError},
-    model::{Delivery, DispatchAttempt, Effect, ExecutionResult, Message, SubmitReport},
+    model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
 };
 use beamlet_agent::testing::{
     attempt_receipt::{self, AttemptAccepted},
@@ -677,7 +677,7 @@ async fn execute_hello(attempt: DispatchAttempt<Task>) -> SubmitReport<String, S
         report_id: Uuid::new_v4().as_u128().into(),
         operation_id: attempt.operation.operation_id,
         attempt_id: attempt.attempt_id,
-        effect: Effect::None,
+        impact: ImpactStatus::None,
         result: ExecutionResult::Succeeded { output },
     }
 }

@@ -117,7 +117,7 @@ fn prepare(attempt: &domain::DispatchAttempt<TestTask>) -> Prepared {
             operation_id: attempt.operation.operation_id,
             attempt_id: attempt.attempt_id,
             // 固定分支不调用外部系统, 不能推广为"失败等于无效果"
-            effect: domain::Effect::None,
+            impact: domain::ImpactStatus::None,
             result,
         },
     }

@@ -23,14 +23,14 @@ pub struct DispatchAttempt<P> {
     pub operation: Operation<P>,
 }
 
-/// 效果证据的三个互斥结论, 不由执行成功或失败推导
+/// 影响证据的三个互斥结论, 不由执行成功或失败推导
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Effect {
-    /// 证据确认没有外部效果
+pub enum ImpactStatus {
+    /// 证据确认没有外部影响
     None,
-    /// 已观察到效果, 不承诺完整或仅发生一次
+    /// 已观察到影响, 不承诺完整或仅发生一次
     Observed,
-    /// 现有证据无法确定是否产生效果
+    /// 现有证据无法确定是否产生影响
     Unknown,
 }
 
@@ -42,7 +42,7 @@ pub enum ExecutionResult<O, E> {
         /// 执行输出, 不代表 Authority 的采用决定
         output: O,
     },
-    /// 执行失败, 但不能据此推断无效果
+    /// 执行失败, 但不能据此推断无影响
     Failed {
         /// 错误证据
         error: E,
@@ -63,20 +63,22 @@ pub struct SubmitReport<O, E> {
     pub operation_id: OperationId,
     /// 所属执行授权
     pub attempt_id: AttemptId,
-    /// 独立的效果证据
-    pub effect: Effect,
+    /// 独立的影响证据
+    pub impact: ImpactStatus,
     /// 执行结果
     pub result: ExecutionResult<O, E>,
 }
 
 impl<O, E> SubmitReport<O, E> {
-    /// 校验执行前拒绝不能声称可能已产生效果
+    /// 校验执行前拒绝不能声称可能已产生影响
     ///
     /// # 错误
-    /// 拒绝结果带有非空效果证据时返回错误
+    /// 拒绝结果带有非空影响证据时返回错误
     pub fn validate(&self) -> Result<(), RuleError> {
-        if matches!(self.result, ExecutionResult::Rejected { .. }) && self.effect != Effect::None {
-            return Err(RuleError::InvalidRejectionEffect);
+        if matches!(self.result, ExecutionResult::Rejected { .. })
+            && self.impact != ImpactStatus::None
+        {
+            return Err(RuleError::InvalidRejectionImpact);
         }
         Ok(())
     }
@@ -117,7 +119,7 @@ impl<P, O, E> Delivery<P, O, E> {
     /// 只校验领域证据, 不读取编码, 时钟或外部状态
     ///
     /// # 错误
-    /// 报告的效果与拒绝结论矛盾时返回错误
+    /// 报告的影响与拒绝结论矛盾时返回错误
     pub fn validate(&self) -> Result<(), RuleError> {
         if let Message::SubmitReport(report) = &self.message {
             report.validate()?;

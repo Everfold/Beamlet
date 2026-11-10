@@ -247,8 +247,8 @@ impl From<runtime::StateError> for StateError {
         use beamlet::state::RuleError;
         match error {
             runtime::StateError::InvalidLimits => Self::Protocol(ProtocolError::InvalidLimits),
-            runtime::StateError::Rule(RuleError::InvalidRejectionEffect) => {
-                Self::Protocol(ProtocolError::InvalidRejectionEffect)
+            runtime::StateError::Rule(RuleError::InvalidRejectionImpact) => {
+                Self::Protocol(ProtocolError::InvalidRejectionImpact)
             }
             runtime::StateError::Rule(RuleError::InvalidTransition) => Self::InvalidTransition,
             runtime::StateError::InvalidWorkers => Self::InvalidWorkers,

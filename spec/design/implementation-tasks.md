@@ -12,7 +12,7 @@
 
 角色与基础设施通过公开接口由应用显式组装. 可复用实现归库, Node/Console 保留参数, 交互, 装配, 信号接入与展示. 独立角色无需统一 Node 容器, 本地内存执行无需 Zenoh 或数据库.
 
-## 最近五个任务
+## 近期任务
 
 ### T1. 将独立 Authority/Worker 驱动迁入 beamlet
 
@@ -39,7 +39,7 @@
 
 ### T3. 统一影响字段的领域命名
 
-状态: 待实现; 在 T2 后执行, 避免与移动文件混为一个 diff.
+状态: 已实现; 领域与原型 Adapter 使用 ImpactStatus/impact, 错误名称与 Console 显示同步更新. JSON 仅接受 impact 字段, 无旧字段别名或转换层. 工作区检查, 证据规则与编码测试, Node/Console 经 Zenoh 的实际往返验证通过.
 
 - 范围: 按已确认设计将领域类型 `Effect` 调整为 `ImpactStatus`, 字段使用 `impact`, 更新库调用点. 原型 JSON 同步改为 impact, 不提供 Effect/effect 别名或旧字段映射.
 - 验收: 无影响/已观察/未知与成功/失败独立; 当前消息采用 impact 字段往返; 拒绝与证据校验语义不变.

@@ -2,7 +2,9 @@ use beamlet::{
     Authority, Worker,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
     memory::{Admission, Limits, OperationPhase, ReportDisposition, StateError, WaitStatus},
-    model::{Delivery, DispatchAttempt, Effect, ExecutionResult, Message, Operation, SubmitReport},
+    model::{
+        Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, Operation, SubmitReport,
+    },
 };
 use std::sync::{
     Arc,
@@ -21,7 +23,7 @@ async fn echo(attempt: DispatchAttempt<Input>) -> SubmitReport<&'static str, &'s
         report_id: (90 + attempt.attempt_id.as_u128()).into(),
         operation_id: attempt.operation.operation_id,
         attempt_id: attempt.attempt_id,
-        effect: Effect::None,
+        impact: ImpactStatus::None,
         result: ExecutionResult::Succeeded {
             output: attempt.operation.task.0,
         },
@@ -99,7 +101,7 @@ async fn authority_and_work_complete_echo_only_through_messages() {
         Message::SubmitReport(SubmitReport {
             operation_id: received_operation,
             attempt_id: received_attempt,
-            effect: Effect::None,
+            impact: ImpactStatus::None,
             result: ExecutionResult::Succeeded { output: "hello" },
             ..
         }) if *received_operation == operation_id && *received_attempt == attempt_id

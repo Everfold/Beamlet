@@ -8,7 +8,7 @@
 
 | 范围 | 已有实现 | 仍需实现 |
 | --- | --- | --- |
-| Kernel | Operation/Attempt/Report, Effect, Authority 观察与 Worker 阶段规则 | 目标契约要求的演进; 不是新增 Task 或全局状态机 |
+| Kernel | Operation/Attempt/Report, ImpactStatus, Authority 观察与 Worker 阶段规则 | 目标契约要求的演进; 不是新增 Task 或全局状态机 |
 | 执行路径 | 有界内存账本, beamlet 中的独立 Authority/Worker 与 LocalExecution 显式组合, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与组合调用 Interface |
 | 回执 | Operation/Attempt/Report 三段回执与有限原消息重投 | 持久提交后确认, 重启恢复与旧实例隔离 |
 | Node | 角色组合, 稳定/运行身份配置, 生命周期, 心跳, Draining | 稳定身份解析, 基础设施独立接入与明确运行模式 |
@@ -26,7 +26,7 @@
 | 完成与停止 | 子执行和结果处理全部完成后正常结束; 异步工具结果触发后续 LLM, 无交互型/任务型分类; 停止不再发起业务调用, 收取已有结果, 超时保留未确认 | stop 的请求/响应, 支持取消工具的显式取消请求, 异常终止和未确认责任的处置交接编码 |
 | UI 回答 | Agent 保存已发布回答并提供查询与通知, 最终 Report 表达整个 Loop 结束; 首版完整回答, 流式后续接入 | 回答稳定位置/引用编码, 查询与观察的方法签名 |
 | 配置与版本 | preset_id + 固定版本 + overrides; 按字段覆盖, 数组整体替换, 缺省与清空区分 | 版本和清空编码, 字段路径, schema 版本与迁移 |
-| Report 影响字段 | 类型 `ImpactStatus`, 字段 `impact`; 三种证据结论与执行结果独立 | 统一调整 Rust API 与原型 JSON 字段, 补全影响范围说明 |
+| Report 影响字段 | 类型 `ImpactStatus`, 字段 `impact`; 三种证据结论与执行结果独立 | 后续持久化表示与执行范围说明 |
 
 恢复执行权的机制未明确前, 只允许实现可验证的恢复查询与记录保留, 不自动续行不确定执行. 不为解决这些问题提前增加共识系统或通用 Workflow 框架.
 

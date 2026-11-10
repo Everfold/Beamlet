@@ -31,7 +31,7 @@ Authority 接纳 Operation, 生成执行授权, 选择 Worker, 并收集同一 O
 | --- | --- | --- |
 | SubmitOperation | 提交方 → Authority | operation_id, task, constraints |
 | DispatchAttempt | Authority → Worker | attempt_id, 完整 Operation 定义及 operation_id |
-| SubmitReport | Worker → Authority | report_id, operation_id, attempt_id, outcome, effect, 以及 output 或 error |
+| SubmitReport | Worker → Authority | report_id, operation_id, attempt_id, outcome, impact, 以及 output 或 error |
 
 `task` 仅为固定测试数据 `{kind, input}`: echo 回显 JSON; delay 接收 `{delay_ms, value}`, 在指定延迟后返回 value; fail 接收 `{message}` 并返回测试错误. 这不是能力描述, 动态注册或插件协议.
 
@@ -40,9 +40,9 @@ Authority 接纳 Operation, 生成执行授权, 选择 Worker, 并收集同一 O
 Report 的字段含义:
 
 - `outcome`: `succeeded`, `failed` 或 `rejected`, 描述处理结果.
-- `effect`: `none`, `observed` 或 `unknown`, 描述现有证据对外部效果的判断; `observed` 不承诺完整成功或仅发生一次.
+- `impact`: `none`, `observed` 或 `unknown`, 描述现有证据对外部效果的判断; `observed` 不承诺完整成功或仅发生一次.
 - `output` 与 `error`: 成功提供 output, 失败或拒绝提供有界错误信息.
-- 错误或超时不自动推导为 `effect = none`; 缺少确定证据时使用 `unknown`.
+- 错误或超时不自动推导为 `impact = none`; 缺少确定证据时使用 `unknown`.
 - `rejected` 仅用于执行器在运行处理函数之前明确拒绝, 效果必须为 `none`.
 
 ### 响应不是新的业务动作
@@ -152,6 +152,6 @@ LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部�
 
 Authority 接纳与 Worker 入队不是同一事实. LocalExecution 提交时若 Authority 已接纳而 Worker 因队列已满拒绝, 请求仍保留为 accepted; 重复提交返回原授权, 不自动重投或生成新 Attempt. 该未决情况有独立测试, 不声称已经执行, 也没有持久交付保证.
 
-三种假任务均无外部效果, 因此明确使用 effect = none, 而不是从成功或失败推导效果. v0 测试 Adapter 在入账前检查派发大小, 假任务执行 Adapter 在入队前试算完整报告大小; 超限时不创建对应的新记录, 不截断结果. 试算不是执行或完成证据. 通用领域与执行驱动没有 JSON 字节上限或 delay 参数语义, 具体编码及输出预算必须由实际 Adapter 负责.
+三种假任务均无外部效果, 因此明确使用 impact = none, 而不是从成功或失败推导效果. v0 测试 Adapter 在入账前检查派发大小, 假任务执行 Adapter 在入队前试算完整报告大小; 超限时不创建对应的新记录, 不截断结果. 试算不是执行或完成证据. 通用领域与执行驱动没有 JSON 字节上限或 delay 参数语义, 具体编码及输出预算必须由实际 Adapter 负责.
 
 丢弃执行器会中止未完成的本地任务并丢失内存记录. 这些结果尚未证明三进程通信, 断网, 崩溃恢复或真实 Tool 效果; 后续再接 Zenoh, 不扩展能力或 Durable 范围. 本文不规定最终发布兼容策略.

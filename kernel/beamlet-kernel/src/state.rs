@@ -64,9 +64,9 @@ impl WorkerPhase {
 /// 领域规则错误, 不包含协议或运行时错误
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum RuleError {
-    /// 执行前拒绝不能附带可能存在的外部效果
-    #[error("执行前拒绝必须确认没有外部效果")]
-    InvalidRejectionEffect,
+    /// 执行前拒绝不能附带可能存在的外部影响
+    #[error("执行前拒绝必须确认没有外部影响")]
+    InvalidRejectionImpact,
     /// 当前阶段不允许此结果
     #[error("Worker 状态转换无效")]
     InvalidTransition,

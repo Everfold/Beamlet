@@ -1,6 +1,6 @@
 use beamlet_kernel::{
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
-    model::{Effect, ExecutionResult, Operation, SubmitReport},
+    model::{ExecutionResult, ImpactStatus, Operation, SubmitReport},
     state::{RuleError, WorkerPhase},
 };
 
@@ -17,34 +17,43 @@ fn identities_preserve_bits_without_uuid_or_serialization_dependencies() {
     );
 }
 
-fn evidence(effect: Effect, result: ExecutionResult<u8, u8>) -> SubmitReport<u8, u8> {
+fn evidence(impact: ImpactStatus, result: ExecutionResult<u8, u8>) -> SubmitReport<u8, u8> {
     SubmitReport {
         report_id: 1.into(),
         operation_id: 2.into(),
         attempt_id: 3.into(),
-        effect,
+        impact,
         result,
     }
 }
 
 #[test]
-fn failure_does_not_infer_effects_and_rejection_requires_none() {
-    for effect in [Effect::None, Effect::Observed, Effect::Unknown] {
+fn execution_outcome_does_not_infer_impact_and_rejection_requires_none() {
+    for impact in [
+        ImpactStatus::None,
+        ImpactStatus::Observed,
+        ImpactStatus::Unknown,
+    ] {
         assert!(
-            evidence(effect, ExecutionResult::Failed { error: 7 })
+            evidence(impact, ExecutionResult::Succeeded { output: 7 })
+                .validate()
+                .is_ok()
+        );
+        assert!(
+            evidence(impact, ExecutionResult::Failed { error: 7 })
                 .validate()
                 .is_ok()
         );
     }
     assert!(
-        evidence(Effect::None, ExecutionResult::Rejected { error: 7 })
+        evidence(ImpactStatus::None, ExecutionResult::Rejected { error: 7 })
             .validate()
             .is_ok()
     );
-    for effect in [Effect::Observed, Effect::Unknown] {
+    for impact in [ImpactStatus::Observed, ImpactStatus::Unknown] {
         assert_eq!(
-            evidence(effect, ExecutionResult::Rejected { error: 7 }).validate(),
-            Err(RuleError::InvalidRejectionEffect)
+            evidence(impact, ExecutionResult::Rejected { error: 7 }).validate(),
+            Err(RuleError::InvalidRejectionImpact)
         );
     }
 }

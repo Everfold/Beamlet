@@ -4,7 +4,7 @@ use beamlet_agent::testing::{
         WorkerPhase,
     },
     protocol::{
-        AttemptId, DispatchAttempt, Effect, Envelope, ExecutionResult, Limits, Message,
+        AttemptId, DispatchAttempt, Envelope, ExecutionResult, ImpactStatus, Limits, Message,
         OperationId, ProtocolError, ReportId, RoleInstanceId, SubmitOperation, SubmitReport,
         TestTask,
     },
@@ -50,14 +50,19 @@ fn authorization(envelope: &Envelope) -> &DispatchAttempt {
     }
 }
 
-fn evidence(dispatch: &Envelope, id: u128, effect: Effect, result: ExecutionResult) -> Envelope {
+fn evidence(
+    dispatch: &Envelope,
+    id: u128,
+    impact: ImpactStatus,
+    result: ExecutionResult,
+) -> Envelope {
     Envelope::new(
         dispatch.target_instance_id,
         dispatch.source_instance_id,
         Message::SubmitReport(SubmitReport::for_attempt(
             report_id(id),
             authorization(dispatch),
-            effect,
+            impact,
             result,
         )),
     )
@@ -67,7 +72,7 @@ fn success(dispatch: &Envelope, id: u128) -> Envelope {
     evidence(
         dispatch,
         id,
-        Effect::None,
+        ImpactStatus::None,
         ExecutionResult::Succeeded {
             output: json!("ok"),
         },
@@ -106,7 +111,16 @@ fn all_three_messages_and_fixed_tasks_round_trip() {
             error: "invalid input".into(),
         },
     ] {
-        messages.push(evidence(&d, 1, Effect::None, result));
+        for impact in [
+            ImpactStatus::None,
+            ImpactStatus::Observed,
+            ImpactStatus::Unknown,
+        ] {
+            if matches!(result, ExecutionResult::Rejected { .. }) && impact != ImpactStatus::None {
+                continue;
+            }
+            messages.push(evidence(&d, 1, impact, result.clone()));
+        }
     }
     for envelope in messages {
         let encoded = envelope.to_json(&limits).expect("valid envelope");
@@ -117,6 +131,8 @@ fn all_three_messages_and_fixed_tasks_round_trip() {
     }
     let wire = serde_json::to_value(success(&d, 1)).expect("report JSON");
     assert_eq!(wire["message"]["body"]["outcome"], "succeeded");
+    assert_eq!(wire["message"]["body"]["impact"], "none");
+    assert!(wire["message"]["body"].get("effect").is_none());
     assert!(wire["message"]["body"].get("result").is_none());
 }
 
@@ -168,7 +184,7 @@ fn report_decoder_rejects_extra_or_contradictory_outcome_fields() {
     let mut a = authority(limits);
     let d = dispatch(&mut a, 1);
     let base = serde_json::to_value(success(&d, 1)).expect("report JSON");
-    for field in ["unexpected", "error"] {
+    for field in ["unexpected", "error", "effect"] {
         let mut value = base.clone();
         value["message"]["body"][field] = json!("not valid for success");
         assert!(
@@ -176,6 +192,16 @@ fn report_decoder_rejects_extra_or_contradictory_outcome_fields() {
             "extra report field accepted: {field}"
         );
     }
+    let mut obsolete = base;
+    let body = obsolete["message"]["body"]
+        .as_object_mut()
+        .expect("report body");
+    let impact = body.remove("impact").expect("required impact field");
+    body.insert("effect".into(), impact);
+    assert!(
+        Envelope::from_json(&serde_json::to_vec(&obsolete).expect("case JSON"), &limits).is_err(),
+        "report must require impact rather than accepting effect as an alias"
+    );
 }
 
 #[test]
@@ -204,14 +230,14 @@ fn byte_limit_is_inclusive_and_checked_before_parsing() {
 }
 
 #[test]
-fn failure_does_not_imply_no_effect_and_rejection_requires_no_effect() {
+fn failure_does_not_imply_no_impact_and_rejection_requires_no_impact() {
     let limits = Limits::default();
     let mut a = authority(limits);
     let d = dispatch(&mut a, 1);
     let unknown = evidence(
         &d,
         1,
-        Effect::Unknown,
+        ImpactStatus::Unknown,
         ExecutionResult::Failed {
             error: "remote timeout".into(),
         },
@@ -224,14 +250,14 @@ fn failure_does_not_imply_no_effect_and_rejection_requires_no_effect() {
     let rejected = evidence(
         &d,
         2,
-        Effect::Unknown,
+        ImpactStatus::Unknown,
         ExecutionResult::Rejected {
             error: "refused before execution".into(),
         },
     );
     assert!(matches!(
         rejected.validate(&limits),
-        Err(ProtocolError::InvalidRejectionEffect)
+        Err(ProtocolError::InvalidRejectionImpact)
     ));
 }
 
@@ -421,7 +447,7 @@ fn reports_are_deduplicated_and_additional_evidence_does_not_replace_adoption() 
     let conflicting = evidence(
         &d,
         1,
-        Effect::Unknown,
+        ImpactStatus::Unknown,
         ExecutionResult::Failed {
             error: "different evidence".into(),
         },
@@ -434,7 +460,7 @@ fn reports_are_deduplicated_and_additional_evidence_does_not_replace_adoption() 
     let additional = evidence(
         &d,
         2,
-        Effect::Unknown,
+        ImpactStatus::Unknown,
         ExecutionResult::Failed {
             error: "additional evidence".into(),
         },
@@ -548,7 +574,7 @@ fn queued_attempt_can_be_rejected_but_cannot_claim_execution_before_start() {
     let rejected = evidence(
         &d,
         2,
-        Effect::None,
+        ImpactStatus::None,
         ExecutionResult::Rejected {
             error: "rejected before start".into(),
         },
@@ -700,7 +726,7 @@ fn one_hundred_operations_route_and_report_without_cross_talk() {
                 let r = evidence(
                     &running,
                     next_report,
-                    Effect::None,
+                    ImpactStatus::None,
                     ExecutionResult::Succeeded {
                         output: input.clone(),
                     },

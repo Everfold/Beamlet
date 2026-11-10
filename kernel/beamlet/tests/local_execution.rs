@@ -3,7 +3,7 @@ use beamlet::{
     executor::ExecutorError,
     id::{AttemptId, OperationId},
     memory::{Admission, Limits, OperationPhase, StateError, WaitStatus},
-    model::{DispatchAttempt, Effect, ExecutionResult, Message, Operation, SubmitReport},
+    model::{DispatchAttempt, ExecutionResult, ImpactStatus, Message, Operation, SubmitReport},
 };
 use std::time::Duration;
 
@@ -26,7 +26,7 @@ async fn execute(attempt: DispatchAttempt<Input>) -> SubmitReport<u64, &'static 
         report_id: (1000 + attempt.attempt_id.as_u128()).into(),
         operation_id: attempt.operation.operation_id,
         attempt_id: attempt.attempt_id,
-        effect: Effect::None,
+        impact: ImpactStatus::None,
         result: ExecutionResult::Succeeded {
             output: u64::from(attempt.operation.task.0) * 2,
         },

@@ -4,8 +4,8 @@ use beamlet_agent::testing::{
     executor::WorkerExecutor,
     memory::{Authority, OperationPhase, ReportDisposition, StateError, WaitStatus, WorkerPhase},
     protocol::{
-        AttemptId, Effect, Envelope, ExecutionResult, Limits, Message, OperationId, ProtocolError,
-        RoleInstanceId, SubmitOperation, SubmitReport, TestTask,
+        AttemptId, Envelope, ExecutionResult, ImpactStatus, Limits, Message, OperationId,
+        ProtocolError, RoleInstanceId, SubmitOperation, SubmitReport, TestTask,
     },
 };
 use serde_json::json;
@@ -74,7 +74,7 @@ async fn echo_runs_from_submission_to_authority_result() {
     assert_eq!(completed.target_instance_id, node(2));
     assert_eq!(evidence.operation_id, operation(1));
     assert_eq!(evidence.attempt_id, attempt(1));
-    assert_eq!(evidence.effect, Effect::None);
+    assert_eq!(evidence.impact, ImpactStatus::None);
     assert_eq!(
         evidence.result,
         ExecutionResult::Succeeded {
@@ -121,7 +121,7 @@ async fn delay_returns_after_the_requested_virtual_time() {
     let started = tokio::time::Instant::now();
     let completed = executor.complete_next().await.unwrap().unwrap();
     assert_eq!(started.elapsed(), std::time::Duration::from_millis(250));
-    assert_eq!(report(&completed).effect, Effect::None);
+    assert_eq!(report(&completed).impact, ImpactStatus::None);
     assert_eq!(
         report(&completed).result,
         ExecutionResult::Succeeded {
@@ -155,7 +155,7 @@ async fn task_failure_returns_evidence_and_releases_its_slot() {
     assert_eq!(executor.start_ready(), 1);
     let failed = executor.complete_next().await.unwrap().unwrap();
     assert_eq!(report(&failed).attempt_id, attempt(1));
-    assert_eq!(report(&failed).effect, Effect::None);
+    assert_eq!(report(&failed).impact, ImpactStatus::None);
     assert_eq!(
         report(&failed).result,
         ExecutionResult::Failed {
@@ -523,7 +523,7 @@ async fn one_hundred_operations_execute_on_two_workers_without_cross_talk() {
             "duplicate report for operation {id}"
         );
         assert_eq!(evidence.attempt_id, attempt(id));
-        assert_eq!(evidence.effect, Effect::None);
+        assert_eq!(evidence.impact, ImpactStatus::None);
         match (id % 3, &evidence.result) {
             (0 | 1, ExecutionResult::Succeeded { output }) => {
                 assert_eq!(*output, json!({"operation": id}));

@@ -129,20 +129,20 @@ pub struct DispatchAttempt {
     pub operation: SubmitOperation,
 }
 
-/// 有关外部效果的证据, 与执行成功或失败相互独立
+/// 有关外部影响的证据, 与执行成功或失败相互独立
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
-pub enum Effect {
-    /// 证据确认没有产生外部效果
+pub enum ImpactStatus {
+    /// 证据确认没有产生外部影响
     None,
-    /// 已观察到外部效果, 但不代表效果完整或只发生一次
+    /// 已观察到外部影响, 但不代表影响完整或只发生一次
     Observed,
-    /// 现有证据无法确定是否产生了外部效果
+    /// 现有证据无法确定是否产生了外部影响
     Unknown,
 }
 
-impl std::fmt::Display for Effect {
+impl std::fmt::Display for ImpactStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::None => "None",
@@ -162,7 +162,7 @@ pub enum ExecutionResult {
         /// 处理函数的输出, 不代表 Authority 的采用决定
         output: Value,
     },
-    /// 处理函数失败; 外部效果仍可能未知, 或已经被观察到
+    /// 处理函数失败; 外部影响仍可能未知, 或已经被观察到
     Failed {
         /// 长度受限的错误文本
         error: String,
@@ -187,8 +187,8 @@ pub struct SubmitReport {
     /// 本次尝试执行所依据的授权
     #[serde(with = "identity_json")]
     pub attempt_id: AttemptId,
-    /// 外部效果证据, 不从处理函数的执行结果推断
-    pub effect: Effect,
+    /// 外部影响证据, 不从处理函数的执行结果推断
+    pub impact: ImpactStatus,
     /// 执行结果平铺为传输中的 outcome, output 或 error 字段
     #[serde(flatten)]
     pub result: ExecutionResult,
@@ -199,14 +199,14 @@ impl SubmitReport {
     pub fn for_attempt(
         report_id: ReportId,
         attempt: &DispatchAttempt,
-        effect: Effect,
+        impact: ImpactStatus,
         result: ExecutionResult,
     ) -> Self {
         Self {
             report_id,
             operation_id: attempt.operation.operation_id,
             attempt_id: attempt.attempt_id,
-            effect,
+            impact,
             result,
         }
     }
@@ -261,7 +261,7 @@ impl Envelope {
     /// 仅序列化符合原型资源限制的消息信封
     ///
     /// # 错误
-    /// 不支持的版本, 无效上限或效果组合, 超限延迟,
+    /// 不支持的版本, 无效上限或影响组合, 超限延迟,
     /// 超大消息及 JSON 编码失败都会返回错误
     pub fn to_json(&self, limits: &Limits) -> Result<Vec<u8>, ProtocolError> {
         self.validate_content(limits)?;
@@ -305,7 +305,7 @@ impl Envelope {
             Message::SubmitReport(report) => {
                 core_report(report)
                     .validate()
-                    .map_err(|_| ProtocolError::InvalidRejectionEffect)?;
+                    .map_err(|_| ProtocolError::InvalidRejectionImpact)?;
                 None
             }
         };
@@ -337,9 +337,9 @@ pub enum ProtocolError {
     /// 延迟超过配置的最大值
     #[error("延迟超过配置的最大值")]
     DelayTooLarge,
-    /// 执行前的拒绝不能同时声称可能产生了外部效果
-    #[error("执行前拒绝必须确认没有外部效果")]
-    InvalidRejectionEffect,
+    /// 执行前的拒绝不能同时声称可能产生了外部影响
+    #[error("执行前拒绝必须确认没有外部影响")]
+    InvalidRejectionImpact,
     /// JSON 格式错误, 或不符合严格的消息结构
     #[error("协议 JSON 无效: {0}")]
     Json(#[from] serde_json::Error),
@@ -376,10 +376,10 @@ pub(crate) fn core_report(value: &SubmitReport) -> domain::SubmitReport<Value, S
         report_id: value.report_id,
         operation_id: value.operation_id,
         attempt_id: value.attempt_id,
-        effect: match value.effect {
-            Effect::None => domain::Effect::None,
-            Effect::Observed => domain::Effect::Observed,
-            Effect::Unknown => domain::Effect::Unknown,
+        impact: match value.impact {
+            ImpactStatus::None => domain::ImpactStatus::None,
+            ImpactStatus::Observed => domain::ImpactStatus::Observed,
+            ImpactStatus::Unknown => domain::ImpactStatus::Unknown,
         },
         result: match &value.result {
             ExecutionResult::Succeeded { output } => domain::ExecutionResult::Succeeded {
@@ -438,10 +438,10 @@ impl Envelope {
                     report_id: value.report_id,
                     operation_id: value.operation_id,
                     attempt_id: value.attempt_id,
-                    effect: match value.effect {
-                        domain::Effect::None => Effect::None,
-                        domain::Effect::Observed => Effect::Observed,
-                        domain::Effect::Unknown => Effect::Unknown,
+                    impact: match value.impact {
+                        domain::ImpactStatus::None => ImpactStatus::None,
+                        domain::ImpactStatus::Observed => ImpactStatus::Observed,
+                        domain::ImpactStatus::Unknown => ImpactStatus::Unknown,
                     },
                     result: match &value.result {
                         domain::ExecutionResult::Succeeded { output } => {

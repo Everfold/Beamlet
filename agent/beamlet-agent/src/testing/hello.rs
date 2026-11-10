@@ -158,7 +158,7 @@ pub fn encode_report(
     envelope.to_json(limits)
 }
 
-/// 解码原有 v0 Report, 将 Hello 的字符串结果显式还原为领域数据
+/// 解码 v0 Report, 将 Hello 的字符串结果显式还原为领域数据
 ///
 /// # 错误
 /// 非 Report, 非字符串输出, 非法证据或有界协议检查失败时返回错误
@@ -170,10 +170,10 @@ pub fn decode_report(
     let Message::SubmitReport(report) = envelope.message else {
         return Err(invalid_message("预期为 Report 信封"));
     };
-    let effect = match report.effect {
-        protocol::Effect::None => model::Effect::None,
-        protocol::Effect::Observed => model::Effect::Observed,
-        protocol::Effect::Unknown => model::Effect::Unknown,
+    let impact = match report.impact {
+        protocol::ImpactStatus::None => model::ImpactStatus::None,
+        protocol::ImpactStatus::Observed => model::ImpactStatus::Observed,
+        protocol::ImpactStatus::Unknown => model::ImpactStatus::Unknown,
     };
     let result = match report.result {
         ExecutionResult::Succeeded {
@@ -192,7 +192,7 @@ pub fn decode_report(
             report_id: report.report_id,
             operation_id: report.operation_id,
             attempt_id: report.attempt_id,
-            effect,
+            impact,
             result,
         }),
     ))
@@ -255,10 +255,10 @@ impl Response {
             report_id: report.report_id,
             operation_id: report.operation_id,
             attempt_id: report.attempt_id,
-            effect: match report.effect {
-                model::Effect::None => protocol::Effect::None,
-                model::Effect::Observed => protocol::Effect::Observed,
-                model::Effect::Unknown => protocol::Effect::Unknown,
+            impact: match report.impact {
+                model::ImpactStatus::None => protocol::ImpactStatus::None,
+                model::ImpactStatus::Observed => protocol::ImpactStatus::Observed,
+                model::ImpactStatus::Unknown => protocol::ImpactStatus::Unknown,
             },
             result: match &report.result {
                 model::ExecutionResult::Succeeded { output } => ExecutionResult::Succeeded {

@@ -78,7 +78,7 @@ Authority 校验并收录 Report 后, 在有界发送槽位中尝试回复回执
 
 ## Draining 与本地交付
 
-Worker 正常排空要求已接纳执行完成, 所有已生成 Report 获得匹配的收录回执, 且发送任务结束. 耗尽后仍有未确认项不能宣称正常排空; 等待迟到回执或 Node 的共同 Draining 期限. 到期非零退出, 对外退出观察为 `unconfirmed`, 不生成失败 Report 或 `Effect::None`. 运行期的发送次数/观察期限不会因进入 Draining 或重复消息而重置.
+Worker 正常排空要求已接纳执行完成, 所有已生成 Report 获得匹配的收录回执, 且发送任务结束. 耗尽后仍有未确认项不能宣称正常排空; 等待迟到回执或 Node 的共同 Draining 期限. 到期非零退出, 对外退出观察为 `unconfirmed`, 不生成失败 Report 或 `ImpactStatus::None`. 运行期的发送次数/观察期限不会因进入 Draining 或重复消息而重置.
 
 Authority 在 Draining 中仍收录合法迟到或重复 Report 并尝试回复. Authority 正常排空只要求本地收录及已有发送尝试结束, 不等待 Worker 确认已收到回执. 同时关闭两端时可能出现 Authority 已保留但 Worker 未收到回执的情况, 此时 Worker 应保留未确认结论. 不引入 ACK-of-ACK 或隐含关闭宽限期.
 

@@ -235,9 +235,9 @@ async fn exchange(
                             let Message::SubmitReport(report) = &delivery.message else { bail!("响应不包含 Report"); };
                             println!("Report: {}", report.report_id);
                             match &report.result {
-                                ExecutionResult::Succeeded { output } => { println!("状态: 成功; Effect: {}", report.effect); println!("输出: {output}"); }
-                                ExecutionResult::Failed { error } => bail!("执行失败; Effect: {}; 原因: {error}", report.effect),
-                                ExecutionResult::Rejected { error } => bail!("执行前拒绝; Effect: {}; 原因: {error}", report.effect),
+                                ExecutionResult::Succeeded { output } => { println!("状态: 成功; ImpactStatus: {}", report.impact); println!("输出: {output}"); }
+                                ExecutionResult::Failed { error } => bail!("执行失败; ImpactStatus: {}; 原因: {error}", report.impact),
+                                ExecutionResult::Rejected { error } => bail!("执行前拒绝; ImpactStatus: {}; 原因: {error}", report.impact),
                                 _ => bail!("不支持的执行结果"),
                             }
                         }

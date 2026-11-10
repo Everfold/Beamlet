@@ -1,6 +1,6 @@
 # Hello Console 执行演示
 
-Node 组合模式已支持共享消息会话及多个 Authority/Worker, 见 [Node 与角色组合](node-composition.md). 本页下文保留旧 CLI 的单 Authority 演示; 它不代表组合模式的拓扑限制. 执行角色已统一命名为 Worker, Rust 接口与授权消息地址同步采用该名称.
+Node 组合模式已支持共享消息会话及多个 Authority/Worker, 见 [Node 与角色组合](node-composition.md). 本页下文介绍单 Authority 演示; 它不代表组合模式的拓扑限制. 执行角色已统一命名为 Worker, Rust 接口与授权消息地址同步采用该名称.
 
 当前里程碑: Console 经 Zenoh 提交 Operation, Authority 授权, Worker 实际调用 `hello()` 返回 `"World"`, Authority 收录 Report 后向提交方返回证据副本. Node 支持本地组合模式, 也支持独立 Authority/Worker 进程.
 
@@ -32,9 +32,9 @@ just node
 just console --subscribe
 ```
 
-Console 可看到本地 Authority 和 Worker 的启动通知. 保持 Console 运行, 在 Node 终端按 Ctrl-C, 可观察到这两个角色的退出通知. 通知尽力发送, 不承诺强杀时可达; `已发布` 日志不等于 Client 已收到. 默认配置与文件配置使用同一套共享会话, 公共通知及 Draining 协调流程, 同 Node 的执行交付仍为类型化交付. `--listen` 可覆盖默认监听地址. 未指定角色时直接使用默认配置. 显式配置文件无法读取或内容无效时直接报错, 不静默回退默认配置. 本次逻辑身份和运行实例均随机生成, 不跨启动保留; 需要固定逻辑身份时使用配置模式. 显式旧独立 `--role authority`/`--role worker` CLI 暂不提供公共通知.
+Console 可看到本地 Authority 和 Worker 的启动通知. 保持 Console 运行, 在 Node 终端按 Ctrl-C, 可观察到这两个角色的退出通知. 通知尽力发送, 不承诺强杀时可达; `已发布` 日志不等于 Client 已收到. 默认配置与文件配置使用同一套共享会话, 公共通知及 Draining 协调流程, 同 Node 的执行交付仍为类型化交付. `--listen` 可覆盖默认监听地址. 未指定角色时直接使用默认配置. 显式配置文件无法读取或内容无效时直接报错, 不静默回退默认配置. 本次逻辑身份和运行实例均随机生成, 不跨启动保留; 需要固定逻辑身份时使用配置模式. 显式独立 `--role authority`/`--role worker` CLI 暂不提供公共通知.
 
-也可直接启动 Console, 输入 `hello` 后按 Enter. 每条输入创建新的 Operation; 相同任务不代表相同请求. 不再将任意输入文本回显为结果. `Hello` 大小写兼容.
+也可直接启动 Console, 输入 `hello` 后按 Enter. 每条输入创建新的 Operation; 相同任务不代表相同请求. 不再将任意输入文本回显为结果. 输入不区分大小写.
 
 正常输出包含:
 
@@ -45,13 +45,13 @@ Operation: <OperationId>
 Attempt: <AttemptId>
 状态: 已接纳; Authority=<AuthorityInstanceId>; 不代表开始执行或完成
 Report: <ReportId>
-状态: 成功; Effect: None
+状态: 成功; ImpactStatus: None
 输出: "World"
 ```
 
-程序自有的日志, 帮助和错误提示使用中文说明, Operation, Attempt, Report, Authority, Worker, Node, Console, Effect 等领域名词及枚举标识保留原文. CLI 参数, JSON 字段与协议标识保持不变; 第三方库及系统原始诊断不承诺中文化. 日志文本不是机器交互协议.
+程序自有的日志, 帮助和错误提示使用中文说明, Operation, Attempt, Report, Authority, Worker, Node, Console, ImpactStatus 等领域名词及枚举标识保留原文. CLI 参数, JSON 字段与协议标识使用既定英文名称; 第三方库及系统原始诊断不承诺中文化. 日志文本不是机器交互协议.
 
-`Effect::None` 来自该固定函数不执行外部效果, 不是从成功状态推导出的结论.
+`ImpactStatus::None` 来自该固定函数不执行外部效果, 不是从成功状态推导出的结论.
 
 ### 重复提交
 
