@@ -336,38 +336,29 @@ fn work_deduplicates_queued_running_and_completed_attempts() {
 }
 
 #[test]
-fn queue_and_running_limits_are_independent_and_invalid_completion_keeps_slot() {
+fn queue_limits_do_not_gate_running_operations_and_invalid_evidence_keeps_state() {
     let mut limits = Limits::default();
     limits.queue_capacity = 1;
-    limits.max_concurrency = 1;
-    let mut a = Authority::new(node(2), vec![node(3)], limits).expect("valid Authority");
-    let mut w = Worker::new(node(3), node(2), limits).expect("valid Worker");
+    let mut a = Authority::new(node(2), vec![node(3)], limits).unwrap();
+    let mut w = Worker::new(node(3), node(2), limits).unwrap();
     let d1 = dispatch(&mut a, 1);
     let d2 = dispatch(&mut a, 2);
     let d3 = dispatch(&mut a, 3);
-    w.accept(d1.clone()).expect("first queued");
+    w.accept(d1.clone()).unwrap();
     assert!(matches!(w.accept(d2.clone()), Err(StateError::QueueFull)));
-    assert_eq!(
-        w.phase(attempt(2)),
-        None,
-        "refused delivery was not accepted"
-    );
+    assert_eq!(w.phase(attempt(2)), None);
     assert_eq!(w.start_next(), Some(d1.clone()));
-    w.accept(d2.clone()).expect("queue space available");
-    assert!(w.start_next().is_none(), "running slot remains occupied");
-    assert!(matches!(w.accept(d3.clone()), Err(StateError::QueueFull)));
+    w.accept(d2.clone()).unwrap();
+    assert_eq!(w.start_next(), Some(d2.clone()));
     let mut bad = success(&d1, 1);
     bad.source_instance_id = node(99);
     assert!(matches!(w.complete(bad), Err(StateError::InvalidBinding)));
-    assert!(
-        w.start_next().is_none(),
-        "invalid evidence must not release a slot"
-    );
-    w.complete(success(&d1, 1)).expect("first complete");
-    assert_eq!(w.start_next(), Some(d2.clone()));
-    w.accept(d3.clone()).expect("third queued");
-    w.complete(success(&d2, 2)).expect("second complete");
-    assert_eq!(w.start_next(), Some(d3));
+    assert_eq!(w.phase(attempt(1)), Some(WorkerPhase::Running));
+    w.accept(d3.clone()).unwrap();
+    assert_eq!(w.start_next(), Some(d3.clone()));
+    for (id, dispatch) in [(1, d1), (2, d2), (3, d3)] {
+        w.complete(success(&dispatch, id)).unwrap();
+    }
 }
 
 #[test]
@@ -675,12 +666,11 @@ fn invalid_limits_and_worker_lists_are_rejected() {
         Authority::new(node(2), vec![node(3), node(3)], limits),
         Err(StateError::InvalidWorkers)
     ));
-    for field in 0..4 {
+    for field in 0..3 {
         let mut invalid = limits;
         match field {
             0 => invalid.max_records = 0,
             1 => invalid.queue_capacity = 0,
-            2 => invalid.max_concurrency = 0,
             _ => invalid.max_message_bytes = 0,
         }
         assert!(Worker::new(node(3), node(2), invalid).is_err());
@@ -718,7 +708,7 @@ fn one_hundred_operations_route_and_report_without_cross_talk() {
             if batch.is_empty() {
                 break;
             }
-            assert!(batch.len() <= limits.max_concurrency);
+            assert!(batch.len() <= limits.max_records);
             for running in batch.into_iter().rev() {
                 let TestTask::Echo(input) = &authorization(&running).operation.task else {
                     panic!("expected echo fixture");

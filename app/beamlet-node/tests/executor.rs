@@ -131,9 +131,8 @@ async fn delay_returns_after_the_requested_virtual_time() {
 }
 
 #[tokio::test]
-async fn task_failure_returns_evidence_and_releases_its_slot() {
-    let mut limits = Limits::default();
-    limits.max_concurrency = 1;
+async fn task_failure_returns_evidence_without_blocking_other_operations() {
+    let limits = Limits::default();
     let mut authority = Authority::new(node(2), vec![node(3)], limits).unwrap();
     let mut executor = WorkerExecutor::new(node(3), node(2), limits).unwrap();
     for (id, task) in [
@@ -151,39 +150,34 @@ async fn task_failure_returns_evidence_and_releases_its_slot() {
             .dispatch;
         executor.accept(dispatch).unwrap();
     }
-
-    assert_eq!(executor.start_ready(), 1);
-    let failed = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&failed).attempt_id, attempt(1));
-    assert_eq!(report(&failed).impact, ImpactStatus::None);
+    assert_eq!(executor.start_ready(), 2);
+    let mut reports = Vec::new();
+    while let Some(completed) = executor.complete_next().await.unwrap() {
+        reports.push(report(&completed).clone());
+        authority.receive_report(completed).unwrap();
+    }
+    reports.sort_by_key(|report| report.attempt_id);
+    assert_eq!(reports.len(), 2);
+    assert_eq!(reports[0].impact, ImpactStatus::None);
     assert_eq!(
-        report(&failed).result,
+        reports[0].result,
         ExecutionResult::Failed {
             error: "预期失败".into()
         }
     );
-    assert_eq!(executor.in_flight(), 0);
-    authority.receive_report(failed).unwrap();
-
-    assert_eq!(executor.start_ready(), 1);
-    let succeeded = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&succeeded).attempt_id, attempt(2));
     assert_eq!(
-        report(&succeeded).result,
+        reports[1].result,
         ExecutionResult::Succeeded {
             output: json!("still runs")
         }
     );
-    authority.receive_report(succeeded).unwrap();
+    assert_eq!(executor.in_flight(), 0);
     assert_eq!(executor.start_ready(), 0);
-    assert!(executor.complete_next().await.unwrap().is_none());
 }
 
 #[tokio::test(start_paused = true)]
-async fn concurrency_is_bounded_and_short_tasks_do_not_wait_for_long_ones() {
-    let mut limits = Limits::default();
-    limits.max_concurrency = 2;
-    let mut executor = WorkerExecutor::new(node(3), node(2), limits).unwrap();
+async fn waiting_operations_do_not_delay_ready_operations() {
+    let mut executor = WorkerExecutor::new(node(3), node(2), Limits::default()).unwrap();
     for (id, task) in [
         (
             1,
@@ -199,33 +193,20 @@ async fn concurrency_is_bounded_and_short_tasks_do_not_wait_for_long_ones() {
                 value: json!("short"),
             },
         ),
-        (3, TestTask::Echo(json!("queued"))),
+        (3, TestTask::Echo(json!("ready"))),
     ] {
         executor.accept(authorized(id, task)).unwrap();
     }
-    assert_eq!(executor.start_ready(), 2);
+    assert_eq!(executor.start_ready(), 3);
     assert_eq!(executor.start_ready(), 0);
-    assert_eq!(executor.in_flight(), 2);
-    assert_eq!(
-        executor.worker().phase(attempt(3)),
-        Some(WorkerPhase::Queued)
-    );
-
+    assert_eq!(executor.in_flight(), 3);
     let started = tokio::time::Instant::now();
-    let short = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&short).attempt_id, attempt(2));
-    assert_eq!(started.elapsed(), std::time::Duration::from_millis(100));
-    assert_eq!(executor.start_ready(), 1);
-    assert_eq!(executor.in_flight(), 2);
-
-    let queued = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&queued).attempt_id, attempt(3));
-    assert_eq!(started.elapsed(), std::time::Duration::from_millis(100));
-    let long = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&long).attempt_id, attempt(1));
-    assert_eq!(started.elapsed(), std::time::Duration::from_millis(200));
+    for (id, elapsed) in [(3, 0), (2, 100), (1, 200)] {
+        let completed = executor.complete_next().await.unwrap().unwrap();
+        assert_eq!(report(&completed).attempt_id, attempt(id));
+        assert_eq!(started.elapsed(), std::time::Duration::from_millis(elapsed));
+    }
     assert_eq!(executor.in_flight(), 0);
-    assert!(executor.complete_next().await.unwrap().is_none());
 }
 
 #[tokio::test(start_paused = true)]
@@ -403,7 +384,6 @@ async fn invalid_deliveries_never_start_execution() {
 async fn queue_and_retention_limits_apply_before_spawning() {
     let mut limits = Limits::default();
     limits.queue_capacity = 1;
-    limits.max_concurrency = 1;
     limits.max_records = 2;
     let mut executor = WorkerExecutor::new(node(3), node(2), limits).unwrap();
     let first = authorized(1, TestTask::Echo(json!("first")));
@@ -418,12 +398,11 @@ async fn queue_and_retention_limits_apply_before_spawning() {
 
     assert_eq!(executor.start_ready(), 1);
     executor.accept(second).unwrap();
-    assert_eq!(executor.start_ready(), 0);
-    assert_eq!(executor.in_flight(), 1);
-    let original = executor.complete_next().await.unwrap().unwrap();
     assert_eq!(executor.start_ready(), 1);
-    let next = executor.complete_next().await.unwrap().unwrap();
-    assert_eq!(report(&next).attempt_id, attempt(2));
+    assert_eq!(executor.in_flight(), 2);
+    executor.complete_next().await.unwrap().unwrap();
+    executor.complete_next().await.unwrap().unwrap();
+    let original = executor.report(attempt(1)).unwrap();
 
     assert!(matches!(
         executor.accept(authorized(3, TestTask::Echo(json!("full")))),
@@ -463,7 +442,6 @@ async fn zero_delay_needs_no_clock_advance() {
 #[tokio::test(start_paused = true)]
 async fn one_hundred_operations_execute_on_two_workers_without_cross_talk() {
     let mut limits = Limits::default();
-    limits.max_concurrency = 3;
     limits.queue_capacity = 50;
     limits.max_records = 128;
     let mut authority = Authority::new(node(2), vec![node(3), node(4)], limits).unwrap();
@@ -504,7 +482,7 @@ async fn one_hundred_operations_execute_on_two_workers_without_cross_talk() {
     while received.len() < 100 {
         for worker in &mut workers {
             worker.start_ready();
-            assert!(worker.in_flight() <= limits.max_concurrency);
+            assert!(worker.in_flight() <= limits.max_records);
         }
         let [left, right] = &mut workers;
         let (index, completed) = tokio::select! {

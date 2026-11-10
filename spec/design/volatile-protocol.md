@@ -62,7 +62,7 @@ Report 的字段含义:
 2. **单次授权.** 每个被接纳的 Operation 首版只生成一个 Attempt, 并固定 Authority, 目标 Worker 运行实例和测试任务定义; 不竞速, 不自动换节点, 不自动产生第二个 Attempt.
 3. **执行关联检查.** Worker 检查目标实例, 已配置的受信 Authority, 固定任务种类与输入; Authority 检查 Report 的来源实例与 Operation/Attempt 绑定. 旧运行实例的消息不得自动绑定到重启后的新实例.
 4. **进程内去重.** Worker 对排队, 运行, 已完成的 Attempt 去重, 不因重复派发再次运行; 已完成时可重发缓存的同一 Report. Authority 去重 Report, 额外或冲突证据不能静默覆盖已有记录或结果.
-5. **资源有界.** 输入输出, 队列, 并发数, 请求与证据记录数量都有配置上限; 不静默淘汰仍用于去重的记录. 容量不足时显式拒绝或返回背压错误, 不无限创建任务.
+5. **资源有界.** 输入输出, 队列, 请求与证据记录数量都有配置上限; 不静默淘汰仍用于去重的记录. 容量不足时显式拒绝或返回背压错误, 不无限创建任务.
 
 请求在接纳前验证协议版本, 固定任务参数和容量; Authority 仅从静态 Worker 列表中选择目标. Worker 对未知任务或无效输入明确拒绝; 本协议不提供任意代码执行.
 
@@ -72,7 +72,7 @@ Authority 的基本视图为 `accepted → dispatched → reported`. 等待超�
 
 1. 启动方为 A, B, C 分配本次运行身份, 向 Authority A 注入 Worker B, C 的地址与实例 ID. B, C 均内置 echo, delay, fail; A 简单轮询静态列表, 不做注册, 发现或健康评分.
 2. 提交方发送 O1: `task = {kind: "echo", input: "hello"}`. A 保存内存关联 O1 → T1 → B, 返回接纳响应, 然后派发 T1.
-3. B 按队列与并发限制运行 T1; 相同 T1 重复到达只关联现有执行. B 完成后生成 R1, 并向 A 回报.
+3. B 从有界队列启动 T1; 相同 T1 重复到达只关联现有执行. B 完成后生成 R1, 并向 A 回报.
 4. A 检查 B, O1, T1, R1 的绑定, 保存证据与采用决定; 提交方按 O1 查询结果. 若提交方等待已经超时, R1 仍可到达并更新结果.
 5. A 之后接纳独立请求 O2, 生成 T2 并分配给 C. 这里是多个独立 Operation 的路由, 不是把 O1, O2 合成一个业务工作流.
 
@@ -148,7 +148,7 @@ cargo run -p beamlet-console --offline
 cargo run -p beamlet-node --offline --example volatile
 ```
 
-LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
+LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口. next_report 启动已经接纳的排队任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 通用执行层不以整个 Operation 生命周期持有并发许可, 等待子 Operation 不会占住子执行的启动名额. 启动数量由已接纳记录上限约束; LLM、数据库或其他实际资源的并发限制由应用注入的执行逻辑在使用资源期间持有, 等待子工作前必须释放. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
 
 Authority 接纳与 Worker 入队不是同一事实. 本地队列暂满时, LocalExecution/LocalClient 返回接纳结果并保留 Accepted. 库内 local_delivery 在后续推进时补送原授权, 已派发或已报告的请求不会再次执行; 不创建新 Attempt, 不提供跨重启交付保证. Node 将此推进与消息接收并列等待, 长任务不会阻塞查询、提交或停止信号.
 

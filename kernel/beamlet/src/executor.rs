@@ -9,7 +9,7 @@ use std::{collections::HashMap, future::Future};
 use thiserror::Error;
 use tokio::task::{JoinError, JoinSet};
 
-/// 多个本地 Worker 共用完成队列; 每个 Worker 仍有独立排队与并发上限
+/// 多个本地 Worker 共用完成队列; 每个 Worker 仍有独立记录与排队上限
 ///
 /// 本对象没有网络或恢复机制. 丢弃它会中止尚未完成的任务并丢失状态
 #[derive(Debug)]
@@ -63,7 +63,8 @@ where
             .accept(delivery)
     }
 
-    /// 仅在取得槽位后调用执行函数; 不注册处理器或创建无限等待许可的任务
+    /// 仅启动已接纳的有界记录; 具体资源的并发限制由执行函数显式管理
+    /// 不以整个 Operation 生命周期持有资源许可, 以免等待中的父执行阻塞子执行
     ///
     /// 执行函数接收普通授权, 并负责返回带有身份与效果证据的报告
     /// 报告仍须通过 Worker 的关联与阶段校验

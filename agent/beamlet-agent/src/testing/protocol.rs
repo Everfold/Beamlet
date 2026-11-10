@@ -25,8 +25,6 @@ pub struct Limits {
     pub max_records: usize,
     /// 每个 Worker 中已接纳但尚未开始的 Attempt 数量上限
     pub queue_capacity: usize,
-    /// 每个 Worker 中标记为运行中的 Attempt 数量上限
-    pub max_concurrency: usize,
 }
 
 impl Default for Limits {
@@ -37,7 +35,6 @@ impl Default for Limits {
             max_delay_ms: 60_000,
             max_records: runtime.max_records,
             queue_capacity: runtime.queue_capacity,
-            max_concurrency: runtime.max_concurrency,
         }
     }
 }
@@ -49,11 +46,7 @@ impl Limits {
     /// 数量或字节上限为零时返回错误. 延迟上限允许为零,
     /// 此时延迟任务只能使用零毫秒延迟
     pub fn validate(&self) -> Result<(), ProtocolError> {
-        if self.max_message_bytes == 0
-            || self.max_records == 0
-            || self.queue_capacity == 0
-            || self.max_concurrency == 0
-        {
+        if self.max_message_bytes == 0 || self.max_records == 0 || self.queue_capacity == 0 {
             return Err(ProtocolError::InvalidLimits);
         }
         Ok(())
@@ -467,7 +460,6 @@ impl Limits {
         beamlet::memory::Limits {
             max_records: self.max_records,
             queue_capacity: self.queue_capacity,
-            max_concurrency: self.max_concurrency,
         }
     }
 }

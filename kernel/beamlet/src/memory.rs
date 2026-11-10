@@ -10,22 +10,19 @@ use beamlet_kernel::{
 use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 
-/// 内存记录, 排队与运行槽位的独立上限, 不限制具体编码字节
+/// 内存记录与排队的独立上限, 不限制具体编码字节
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Limits {
     /// 每种身份记录表的容量上限; Authority 为每个未报告请求预留一份 Report
     pub max_records: usize,
     /// 每个 Worker 的等待队列上限
     pub queue_capacity: usize,
-    /// 每个 Worker 的在途执行上限
-    pub max_concurrency: usize,
 }
 impl Default for Limits {
     fn default() -> Self {
         Self {
             max_records: 1024,
             queue_capacity: 256,
-            max_concurrency: 8,
         }
     }
 }
@@ -35,7 +32,7 @@ impl Limits {
     /// # 错误
     /// 任一上限为零时返回错误
     pub fn validate(&self) -> Result<(), StateError> {
-        if self.max_records == 0 || self.queue_capacity == 0 || self.max_concurrency == 0 {
+        if self.max_records == 0 || self.queue_capacity == 0 {
             return Err(StateError::InvalidLimits);
         }
         Ok(())
@@ -524,13 +521,10 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Worker<P, O, E> {
         Ok(WorkerPhase::Queued)
     }
 
-    /// 有空闲并发槽位时取出一个排队中的 Attempt
+    /// 取出一个排队中的 Attempt; 等待中的父执行不占用子执行启动许可
     ///
     /// 仅修改显式状态, 不创建任务, 不等待, 也不运行工具
     pub fn start_next(&mut self) -> Option<Delivery<P, O, E>> {
-        if self.running >= self.limits.max_concurrency {
-            return None;
-        }
         let id = self.queue.pop_front()?;
         let record = self
             .attempts
@@ -541,7 +535,7 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Worker<P, O, E> {
         Some(record.dispatch.clone())
     }
 
-    /// 记录调用方提供的证据, 同一次执行最多释放一个运行槽位
+    /// 记录调用方提供的证据, 同一次执行最多减记一次运行计数
     ///
     /// 运行中的 Attempt 可以成功或失败; 排队中的 Attempt 只能在开始前明确拒绝
     /// 重复提交完全相同的完成记录不会产生额外影响
