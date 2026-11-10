@@ -3,10 +3,14 @@
 mod client;
 pub use client::ClientTransport;
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 use thiserror::Error;
+use tokio::sync::{Mutex, mpsc};
 use zenoh::{
     Session,
-    handlers::{FifoChannel, FifoChannelHandler},
     pubsub::{Publisher, Subscriber},
     qos::CongestionControl,
     sample::{Sample, SampleKind},
@@ -56,11 +60,13 @@ pub struct ReceivedMessage {
 
 /// 持有一个接收地址的静态连接, 不做节点发现或业务重投
 ///
-/// 接收队列满时向 Zenoh 施加背压, 不使用会静默覆盖数据的环形队列
-/// 慢消费者可能阻塞 Zenoh 接收线程, 调用方应及时排空队列
+/// 接收回调不阻塞共享会话. 队列满时丢弃新到消息并计数, 保留已排队消息.
+/// 发送完成不表示入队; 关键业务须由原身份回执/重投或查询补齐.
 #[derive(Debug)]
 pub struct Transport {
-    subscriber: Subscriber<FifoChannelHandler<Sample>>,
+    _subscriber: Subscriber<()>,
+    receiver: Mutex<mpsc::Receiver<Result<ReceivedMessage, Error>>>,
+    dropped: Arc<AtomicU64>,
     session: Session,
     limits: Limits,
 }
@@ -110,16 +116,48 @@ impl Transport {
     /// # 错误
     /// 订阅配置或会话无效时返回错误
     pub async fn subscribe(&self, inbox: &str) -> Result<Self, Error> {
-        let subscriber = self
-            .session
+        Self::bind(self.session.clone(), inbox, self.limits).await
+    }
+
+    async fn bind(session: Session, inbox: &str, limits: Limits) -> Result<Self, Error> {
+        let (sender, receiver) = mpsc::channel(limits.receive_capacity);
+        let dropped = Arc::new(AtomicU64::new(0));
+        let counter = Arc::clone(&dropped);
+        let subscriber = session
             .declare_subscriber(inbox.to_owned())
-            .with(FifoChannel::new(self.limits.receive_capacity))
+            .callback(move |sample: Sample| {
+                // Reserve before copying; oversized payloads never enter our bounded queue.
+                let Ok(permit) = sender.try_reserve() else {
+                    let _ = counter.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                        Some(value.saturating_add(1))
+                    });
+                    return;
+                };
+                let message = if sample.kind() != SampleKind::Put {
+                    Err(Error::UnexpectedDelete)
+                } else if sample.payload().len() > limits.max_message_bytes {
+                    Err(Error::MessageTooLarge)
+                } else {
+                    Ok(ReceivedMessage {
+                        key_expr: sample.key_expr().to_string(),
+                        payload: sample.payload().to_bytes().into_owned(),
+                    })
+                };
+                permit.send(message);
+            })
             .await?;
         Ok(Self {
-            subscriber,
-            session: self.session.clone(),
-            limits: self.limits,
+            _subscriber: subscriber,
+            receiver: Mutex::new(receiver),
+            dropped,
+            session,
+            limits,
         })
+    }
+
+    /// 此订阅因队列满而丢弃的新消息累计数; 饱和计数, 不证明业务执行失败
+    pub fn dropped_messages(&self) -> u64 {
+        self.dropped.load(Ordering::Relaxed)
     }
 
     async fn open(
@@ -139,15 +177,7 @@ impl Transport {
             }
         });
         let session = zenoh::open(zenoh::Config::from_json5(&config.to_string())?).await?;
-        let subscriber = session
-            .declare_subscriber(inbox.to_owned())
-            .with(FifoChannel::new(limits.receive_capacity))
-            .await?;
-        Ok(Self {
-            subscriber,
-            session,
-            limits,
-        })
+        Self::bind(session, inbox, limits).await
     }
 
     /// 为一个具体接收地址声明发送端, 不声明业务能力
@@ -179,17 +209,12 @@ impl Transport {
     /// # 错误
     /// 接收失败, 出现 Delete 或负载超限时返回错误
     pub async fn recv_message(&self) -> Result<ReceivedMessage, Error> {
-        let sample = self.subscriber.recv_async().await?;
-        if sample.kind() != SampleKind::Put {
-            return Err(Error::UnexpectedDelete);
-        }
-        if sample.payload().len() > self.limits.max_message_bytes {
-            return Err(Error::MessageTooLarge);
-        }
-        Ok(ReceivedMessage {
-            key_expr: sample.key_expr().to_string(),
-            payload: sample.payload().to_bytes().into_owned(),
-        })
+        self.receiver
+            .lock()
+            .await
+            .recv()
+            .await
+            .ok_or(Error::Closed)?
     }
 }
 
@@ -237,6 +262,9 @@ impl Sender<'_> {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// 接收订阅已关闭
+    #[error("接收订阅已关闭")]
+    Closed,
     /// 显式静态 peer 至少需要一个监听或连接地址
     #[error("至少配置一个监听或连接地址")]
     MissingEndpoints,

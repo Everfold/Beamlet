@@ -12,6 +12,8 @@ Node 是组合与生命周期容器, 不是业务执行角色. Client 提交意�
 
 消息会话, 网络监听与连接, 遥测导出, 生命周期管理及未来存储是 Node 基础设施. 它们独立于业务角色配置. 内嵌消息会话不等于内嵌 broker/router; 遥测 exporter 不等于 collector. 当前不新增遥测平台或通用插件框架. 多个角色可共享消息会话, 但不共享授权权力或账本.
 
+Zenoh 订阅使用独立有界队列, 回调不阻塞共享会话. 队列满时丢弃新消息并由 `Transport::dropped_messages` 计数, 不覆盖原队列; 控制和结果消息仍依赖原身份回执/重投或查询补齐. 发送成功不证明接收端入队, 也不证明角色接纳.
+
 同 Node 的绑定角色使用类型化交付, 保留接纳与证据校验步骤, 不强制经过网络或 JSON. 跨 Node 通过 Adapter 编码交付. 连接必须实际提供路由可达性, 不承诺任意拓扑天然互通.
 
 Agent Loop, Codemode 及其派生 Operation 的待实现组合契约见 [Operation 组合与 Agent Loop](operation-composition.md). 该契约不新增参与方或 Task 生命周期, 不改变下述已实现状态.

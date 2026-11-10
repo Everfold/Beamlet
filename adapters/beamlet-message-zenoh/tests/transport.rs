@@ -74,3 +74,43 @@ async fn static_peer_requires_explicit_endpoints_before_opening_a_session() {
         Err(Error::MissingEndpoints)
     ));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn overflowing_one_subscription_does_not_block_another_and_preserves_queued_messages() {
+    let (slow, endpoint) = listener("beamlet/test/slow", Limits::new(64, 1).unwrap()).await;
+    let fast = slow.subscribe("beamlet/test/fast").await.unwrap();
+    let source = Transport::connect(&endpoint, "beamlet/test/unused", Limits::default())
+        .await
+        .unwrap();
+    let to_slow = source.sender("beamlet/test/slow").await.unwrap();
+    let to_fast = source.sender("beamlet/test/fast").await.unwrap();
+    timeout(Duration::from_secs(10), async {
+        to_slow.wait_for_receiver().await.unwrap();
+        to_fast.wait_for_receiver().await.unwrap();
+        to_slow.send(b"first".to_vec()).await.unwrap();
+        to_fast.send(b"baseline".to_vec()).await.unwrap();
+        assert_eq!(fast.recv().await.unwrap(), b"baseline");
+        to_slow.send(b"second".to_vec()).await.unwrap();
+        while slow.dropped_messages() == 0 {
+            tokio::task::yield_now().await;
+        }
+        to_fast.send(b"independent".to_vec()).await.unwrap();
+        assert_eq!(fast.recv().await.unwrap(), b"independent");
+        assert_eq!(slow.dropped_messages(), 1);
+        assert_eq!(fast.dropped_messages(), 0);
+        assert_eq!(
+            slow.recv().await.unwrap(),
+            b"first",
+            "overflow must not evict accepted messages"
+        );
+        to_slow.send(b"second".to_vec()).await.unwrap();
+        assert_eq!(
+            slow.recv().await.unwrap(),
+            b"second",
+            "caller can redeliver the original message"
+        );
+        assert_eq!(slow.dropped_messages(), 1);
+    })
+    .await
+    .unwrap();
+}
