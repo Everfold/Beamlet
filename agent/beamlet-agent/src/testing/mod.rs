@@ -9,3 +9,4 @@ pub mod protocol;
 pub mod query;
 pub mod receipt;
 pub mod submission;
+pub mod worker_lifecycle;

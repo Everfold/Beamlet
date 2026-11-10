@@ -88,6 +88,27 @@ fn present_outcome<'de, D: serde::Deserializer<'de>>(
 }
 
 impl RoleNotice {
+    /// 投影已解码通知的完整归属与事实, 实际路由仍由接收方验证
+    pub fn observation(&self) -> beamlet::role_observation::Notice {
+        use beamlet::role_observation::{Binding, ExitOutcome as Outcome, Identity, Notice, Phase};
+        Notice {
+            binding: Binding {
+                node_id: self.node_id.as_u128().into(),
+                node_instance_id: self.node_instance_id.as_u128().into(),
+                identity: match self.role {
+                    Role::Authority => Identity::Authority(self.role_id.as_u128().into()),
+                    Role::Worker => Identity::Worker(self.role_id.as_u128().into()),
+                },
+                instance: self.role_instance_id.as_u128().into(),
+            },
+            phase: match self.outcome {
+                None => Phase::Started,
+                Some(ExitOutcome::Drained) => Phase::Exited(Outcome::Drained),
+                Some(ExitOutcome::Unconfirmed) => Phase::Exited(Outcome::Unconfirmed),
+            },
+        }
+    }
+
     /// 为已启动的本地角色构造不可变通知, 不创建任何执行授权
     pub fn new(
         role: Role,
@@ -120,15 +141,6 @@ impl RoleNotice {
     /// 退出结果为空表示启动事实, 不等于当前在线
     pub fn exit_outcome(&self) -> Option<ExitOutcome> {
         self.outcome
-    }
-
-    /// 比较角色和 Node 的完整绑定, 不比较生命周期阶段
-    pub fn same_binding(&self, other: &Self) -> bool {
-        self.role == other.role
-            && self.node_id == other.node_id
-            && self.node_instance_id == other.node_instance_id
-            && self.role_id == other.role_id
-            && self.role_instance_id == other.role_instance_id
     }
 
     /// 绑定角色种类和运行实例的具体公共发布地址

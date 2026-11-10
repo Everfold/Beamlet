@@ -21,3 +21,5 @@ pub mod observe;
 pub mod query;
 pub mod remote;
 pub mod report_delivery;
+pub mod role_observation;
+pub mod worker_observation;

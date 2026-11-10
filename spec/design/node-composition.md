@@ -42,13 +42,17 @@ Agent Loop 可在获准的 Worker 上运行, 与 Authority 部署位置分离, �
 
 ## Worker 启动公告与心跳: 当前实现
 
+观察规则现由 `beamlet::worker_observation::Observations` 提供. 应用显式传入 AuthorityInstanceId 及最多 64 个 Slot (WorkerInstanceId + Source::Local/Remote). 观察表校验完整 Binding, 非零心跳序号用 NonZeroU64 表达, 新实例无法通过公告增补配置. `record` 返回绑定新增及状态变化; `poll_expired` 每次返回一个刚变为可疑的实例, 宿主轮询至 None. 若在线状态已经超时但尚未轮询, 新的有效递增心跳返回 ExpiredThenOnline, 供宿主依序展示可疑和恢复; 不产生调度动作. 错误输入不修改归属, 序号或接收时间.
+
+`snapshot` 返回独立内存副本, 不推进时钟或刷新期限. 本地/远端输入来源由应用声明, 库阻止混用; 来源标记不构成认证. 库不持有网络连接或后台任务, Node 显式提供计时器及消息输入. Worker 公告的版本, JSON, 字节上限与地址规则位于 `beamlet_agent::testing::worker_lifecycle`, 与纯观察结构分开.
+
 配置模式下, Authority 为 `beamlet/v0/authority/<authority-instance-simple>/lifecycle/worker/*` 声明独立有界订阅, 与业务收件箱共享同一 Zenoh 会话. Worker 向该前缀下的 `<worker-instance-simple>` 发布一次 `worker_started` 公告. 严格 JSON 包含 `protocol_version: 0`, `kind: "worker_started"`, `node_id`, `node_instance_id`, `worker_id`, `worker_instance_id`, `authority_instance_id`. 单条公告最多 4096 字节; 不接受未知字段或其他版本.
 
 每个 Authority 最多配置 64 个 Worker 实例, 观察表仅为这些实例预留槽位. 公告必须匹配实际路由及目标 Authority 实例. 同实例同内容为重复观察, 同实例更改 Worker 或 Node 归属时拒绝覆盖. 未配置的实例不能借公告进入观察表, 旧实例不会自动替换新实例. 同 Node 的 Worker 由组合入口直接交付同一类型的公告, 不编码或走网络.
 
 运行实例允许列表只是一项绑定校验, 不是网络身份认证. WorkerId 与 Node 归属是未认证的自报元数据; 首次记录不证明这些稳定身份的所有权. 公告不会建立新的信任关系, 不修改授权绑定, 不接纳 Operation 或 Attempt, 不代表 Worker 在线, 也不改变静态调度或收录的 Report.
 
-远端启动公告与接收 Attempt 并行, 等待订阅及发送共用 10 秒预算, 不重投原公告. 发布成功也没有 Authority 收录确认; Authority 缺席或公告丢失时, Worker 仍可接收已配置 Authority 的 Attempt. 当前没有观察查询 API, 无跨重启保留; 重启后角色实例仍须由部署方更换. 独立角色 CLI 模式尚不发送公告或心跳.
+远端启动公告与接收 Attempt 并行, 等待订阅及发送共用 10 秒预算, 不重投原公告. 发布成功也没有 Authority 收录确认; Authority 缺席或公告丢失时, Worker 仍可接收已配置 Authority 的 Attempt. 提供库内只读快照, 尚无远端观察查询 API 或跨重启保留; 重启后角色实例仍须由部署方更换. 独立角色 CLI 模式尚不发送公告或心跳.
 
 配置模式的 Worker 每 1 秒发布一次 `kind: "worker_heartbeat"` 消息, 复用相同路由及完整实例绑定字段, 另带从 1 开始的递增 `sequence: u64`. 心跳必须携带非零序号, 启动公告不能携带序号. 两类消息都限制为 4096 字节, 严格校验版本与字段. 心跳自身包含绑定, 所以首次有效心跳也可为已配置的运行实例建立观察, 不要求启动公告先到达. 这不允许新增受信实例或替换已记录的归属.
 
@@ -61,6 +65,8 @@ Authority 使用本地单调时钟记录收到有效递增序号的时间, 每 2
 心跳不改变静态轮转调度, 可疑 Worker 仍可能被选中, 相关 Operation 保持原有等待和 Pending 语义. 心跳超时不删除绑定, Attempt 或 Report, 不证明执行停止或无效果, 不自动创建新 Attempt 或改派. Draining 与对外退出通知已实现, 见下文.
 
 ## Client 可选生命周期通知订阅: 当前实现
+
+公共事实合并现由 `beamlet::role_observation::Observations` 提供. 应用显式设置记录上限, 将测试 Adapter 解码后的 RoleNotice 投影为类型化 Notice; `record` 返回事实是否改变, `snapshot` 返回独立副本. Identity 区分 AuthorityId/WorkerId, Binding 同时固定 NodeId, NodeInstanceId 和 RoleInstanceId. Phase 区分 Started 与 Exited(ExitOutcome), 不把启动等同于在线, 不将退出声明扩大为外部效果停止. Console 保留路由校验与展示, 删除原内置合并表. 两类观察都不拥有发布任务或驱动 Draining; 生命周期驱动及 Node 组装接口继续独立拆分.
 
 统一使用 Client, 不新增 Observer 身份或另一种业务角色. Client 可以提交 Operation, 也可以只读订阅角色通知, 两种能力可以同时使用. Client 不发布自己的启动, 心跳或退出通知. 当前 Console 仍使用随机回复会话区分业务请求, 这不是生命周期身份公告.
 

@@ -12,10 +12,12 @@ use beamlet::{
         AuthorityId, AuthorityInstanceId, NodeId, NodeInstanceId, RoleInstanceId, WorkerId,
         WorkerInstanceId,
     },
+    worker_observation::{self, Observations, Slot, Source},
 };
 use beamlet_agent::testing::{
     hello::Task,
     lifecycle::{ExitOutcome, Role, RoleNotice},
+    worker_lifecycle::{self, Announcement},
 };
 use beamlet_message_zenoh::{Limits, Transport};
 use serde::Deserialize;
@@ -27,8 +29,7 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
-    lifecycle::{self, Announcement, Observations},
-    roles,
+    lifecycle, roles,
     shutdown::{self, Phase, Shutdown},
 };
 
@@ -126,7 +127,7 @@ impl Config {
         for authority in &self.authorities {
             let mut workers = HashSet::new();
             ensure!(
-                authority.workers.len() <= lifecycle::MAX_WORKERS,
+                authority.workers.len() <= worker_observation::MAX_WORKERS,
                 "每个 Authority 最多配置 64 个 Worker 实例"
             );
             ensure!(
@@ -258,9 +259,19 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
         // 两种地址各有独立有界队列, 由同一 Authority 驱动处理
         let combined = (requests, reports);
         let announcements = transport
-            .subscribe(&lifecycle::inbox(authority.instance))
+            .subscribe(&worker_lifecycle::inbox(authority.instance))
             .await?;
-        let mut observations = Observations::new(authority.instance, &authority.workers)?;
+        let mut observations = Observations::new(
+            authority.instance.as_u128().into(),
+            authority.workers.iter().map(|worker| Slot {
+                instance: worker.as_u128().into(),
+                source: if config.workers.iter().any(|local| local.instance == *worker) {
+                    Source::Local
+                } else {
+                    Source::Remote
+                },
+            }),
+        )?;
         let mut local = HashMap::new();
         let mut local_announcements = Vec::new();
         for worker in config
@@ -285,7 +296,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                 worker.instance,
                 worker.authority,
             );
-            observations.record(announcement.clone())?;
+            lifecycle::record(&mut observations, announcement.clone(), Source::Local)?;
             local_announcements.push(announcement);
         }
         authorities.push((
@@ -338,7 +349,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                     },
                     control,
                 ) => result,
-                result = observations.serve(announcements, local_announcements) => result,
+                result = lifecycle::observe(observations, announcements, local_announcements) => result,
             };
             (instances, result)
         });
