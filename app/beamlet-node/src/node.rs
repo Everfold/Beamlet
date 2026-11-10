@@ -6,6 +6,7 @@ use anyhow::{Context, Result, ensure};
 use beamlet::{
     Worker, composition,
     id::{NodeInstanceId, RoleInstanceId},
+    lifecycle::{Completion, DEFAULT_DRAIN_TIMEOUT, Group, StopPolicy},
     worker_observation::{Observations, Source},
 };
 use beamlet_agent::testing::{
@@ -15,17 +16,10 @@ use beamlet_agent::testing::{
 };
 use beamlet_message_zenoh::{Limits, Transport};
 use serde::Deserialize;
-use tokio::{
-    fs,
-    task::JoinSet,
-    time::{Duration, timeout},
-};
+use tokio::{fs, runtime::Handle, time::Duration};
 use uuid::Uuid;
 
-use crate::{
-    lifecycle, roles,
-    shutdown::{Phase, Shutdown},
-};
+use crate::{lifecycle, roles};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -60,7 +54,7 @@ struct WorkerConfig {
 }
 
 fn default_drain_ms() -> u64 {
-    composition::DEFAULT_DRAIN_TIMEOUT.as_secs() * 1000
+    DEFAULT_DRAIN_TIMEOUT.as_secs() * 1000
 }
 
 impl Default for FileConfig {
@@ -181,9 +175,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     let subscription = format!("beamlet/v0/node-session/{node_instance}/inbox");
     let transport =
         Arc::new(Transport::node(&listen, &connect, &subscription, Limits::default()).await?);
-    let mut tasks = JoinSet::new();
-    let (stop, control) = Shutdown::channel();
-    let mut announcements_task = JoinSet::new();
+    let mut drivers = Group::new(Handle::current(), plan.drain_timeout())?;
     // 先声明所有订阅再启动角色, 避免共享会话中的局部启动顺序影响就绪
     let mut authorities = Vec::new();
     let mut workers = Vec::new();
@@ -246,6 +238,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
             *worker,
         ));
     }
+    let driver_count = authorities.len() + workers.len();
     for (
         (requests, reports),
         authority,
@@ -254,14 +247,13 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
         (observations, announcements, local_announcements),
     ) in authorities
     {
-        let control = control.clone();
         let mut instances: Vec<Uuid> = local
             .keys()
             .map(|id| Uuid::from_u128(id.as_u128()))
             .collect();
         instances.push(Uuid::from_u128(authority.instance.as_u128()));
-        tasks.spawn(async move {
-            let result = tokio::select! {
+        drivers.start(instances, StopPolicy::Drain, |control| async move {
+            tokio::select! {
                 result = roles::serve_authority_pair(
                     Arc::new(requests),
                     Some(reports),
@@ -274,9 +266,8 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                     control,
                 ) => result,
                 result = lifecycle::observe(observations, announcements, local_announcements) => result,
-            };
-            (instances, result)
-        });
+            }
+        })?;
     }
     for (worker_transport, receipt_transport, worker) in workers {
         let announcement = Announcement::started(
@@ -287,23 +278,24 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
             Uuid::from_u128(worker.authority.as_u128()),
         );
         let publisher = Arc::clone(&transport);
-        let control = control.clone();
-        tasks.spawn(async move {
-            let result = tokio::select! {
-                result = lifecycle::maintain(&publisher, announcement) => result,
-                result = roles::serve_worker(
-                    worker_transport,
-                    receipt_transport,
-                    worker.instance.as_u128().into(),
-                    worker.authority.as_u128().into(),
-                    control,
-                ) => result,
-            };
-            (vec![Uuid::from_u128(worker.instance.as_u128())], result)
-        });
+        drivers.start(
+            vec![Uuid::from_u128(worker.instance.as_u128())],
+            StopPolicy::Drain,
+            |control| async move {
+                tokio::select! {
+                    result = lifecycle::maintain(&publisher, announcement) => result,
+                    result = roles::serve_worker(
+                        worker_transport,
+                        receipt_transport,
+                        worker.instance.as_u128().into(),
+                        worker.authority.as_u128().into(),
+                        control,
+                    ) => result,
+                }
+            },
+        )?;
     }
     let role_count = notices.len();
-    let driver_count = tasks.len();
     for notice in &notices {
         println!(
             "角色生命周期: {} 状态=Running; 逻辑身份={} 运行实例={} NodeId={} NodeInstanceId={}; 本地驱动已启动, 不代表远端可达",
@@ -321,28 +313,16 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     if !notices.is_empty() {
         let publisher = Arc::clone(&transport);
         let starts = notices.clone();
-        announcements_task
-            .spawn(async move { lifecycle::publish_starts(&publisher, starts).await });
+        drivers.start(Vec::new(), StopPolicy::Abort, |_| async move {
+            lifecycle::publish_starts(&publisher, starts).await
+        })?;
     }
     println!("Node 已就绪: 消息会话共享; 角色数量={role_count}; 驱动数量={driver_count}");
-    let failure = tokio::select! {
-        finished = tasks.join_next(), if !tasks.is_empty() => {
-            Some(finished.context("角色完成记录缺失")
-                .and_then(|result| result.context("角色任务失败"))
-                .and_then(|(_, result)| result)
-                .err().unwrap_or_else(|| anyhow::anyhow!("角色意外停止")))
-        }
-        finished = announcements_task.join_next(), if !announcements_task.is_empty() => {
-            Some(finished.context("公告完成记录缺失")
-                .and_then(|result| result.context("公告任务失败"))
-                .and_then(|result| result)
-                .err().unwrap_or_else(|| anyhow::anyhow!("公告任务意外停止")))
-        }
-        signal = tokio::signal::ctrl_c() => {
-            signal.context("接收退出信号失败").err()
-        }
+    let mut failure = tokio::select! {
+        _ = drivers.wait() => None,
+        signal = tokio::signal::ctrl_c() => signal.context("接收退出信号失败").err(),
     };
-    stop.send_replace(Phase::Draining);
+    drivers.stop();
     println!(
         "Node 进入 Draining: 停止新接纳; 等待上限={} 毫秒",
         plan.drain_timeout().as_millis()
@@ -357,38 +337,27 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
             notice.node_instance_id
         );
     }
-    // 停止对外重播, 共享会话保留到角色退出和发送尝试结束之后
-    announcements_task.abort_all();
-    while announcements_task.join_next().await.is_some() {}
-    let mut failure = failure;
-    let drained = timeout(plan.drain_timeout(), async {
-        while let Some(result) = tasks.join_next().await {
-            let result = result
-                .context("Draining 角色任务失败")
-                .and_then(|(instances, result)| {
-                    if result.is_ok() {
-                        for instance in instances {
-                            outcomes.insert(instance, ExitOutcome::Drained);
-                        }
-                    }
-                    result
-                });
-            if let Err(error) = result {
-                eprintln!("Draining 角色未正常完成: {error}; 不生成失败 Report");
+    let summary = drivers.drain().await;
+    for exit in summary.exits {
+        match exit.result {
+            Ok(Completion::Drained) => {
+                for instance in exit.label {
+                    outcomes.insert(instance, ExitOutcome::Drained);
+                }
+            }
+            Ok(Completion::Aborted) => {}
+            Err(error) => {
+                eprintln!("Draining 驱动未正常完成: {error}; 不生成失败 Report");
                 if failure.is_none() {
-                    failure = Some(error);
+                    failure = Some(anyhow::anyhow!("{error}"));
                 }
             }
         }
-    })
-    .await;
-    if drained.is_err() {
+    }
+    if summary.timed_out {
         eprintln!(
-            "Node Draining 到期: 剩余角色={}; 执行或交付未确认, 不生成失败 Report; 中止后内存状态不保证恢复",
-            tasks.len()
+            "Node Draining 到期: 执行或交付未确认, 不生成失败 Report; 已中止并收回剩余驱动, 内存状态不保证恢复"
         );
-        tasks.abort_all();
-        while tasks.join_next().await.is_some() {}
         failure = Some(anyhow::anyhow!("Node Draining 到期, 未确认执行或交付"));
     }
     for notice in &notices {

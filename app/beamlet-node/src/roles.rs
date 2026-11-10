@@ -9,6 +9,7 @@ use beamlet::{
         self, Event as AttemptEvent, Outbox as AttemptOutbox, Ticket, Transmission,
     },
     id::{OperationId, ReportId, RoleInstanceId, SubmissionKey},
+    lifecycle::Shutdown,
     memory::{Admission, StateError},
     model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
     report_delivery::{self, Event as ReportEvent, Outbox as ReportOutbox},
@@ -28,7 +29,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
-use crate::shutdown::{self, Shutdown};
+use crate::shutdown;
 
 pub(crate) const NODE_INBOX_PREFIX: &str = "beamlet/v0/node/inbox/";
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
@@ -98,7 +99,7 @@ pub(crate) async fn serve_authority(
     local_workers: HashMap<RoleInstanceId, Worker<Task, String, String>>,
     request_prefix: String,
 ) -> Result<()> {
-    shutdown::standalone(|control| {
+    shutdown::standalone(move |control| {
         serve_authority_pair(
             transport,
             None,
@@ -631,8 +632,10 @@ pub async fn run_worker(
     .await
     .context("Worker 连接超时")??;
     let receipts = transport.subscribe(&receipt::inbox(instance)).await?;
-    shutdown::standalone(|control| serve_worker(transport, receipts, instance, authority, control))
-        .await
+    shutdown::standalone(move |control| {
+        serve_worker(transport, receipts, instance, authority, control)
+    })
+    .await
 }
 
 pub(crate) async fn serve_worker(

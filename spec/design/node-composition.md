@@ -30,6 +30,18 @@ Plan 保留原配置顺序, 以只读切片和迭代器提供 authorities/worker
 
 Node 文件 DTO 仅解析严格 JSON 并转换为库 Config, 64KiB 文件上限, 默认 Hello 配置, UUID 生成, 消息路由和日志留在应用. 默认入口与文件入口都消费同一 Plan, 不维护另一份配置校验或分组规则. 当前 CLI 继续使用 Zenoh; `Transport::node` 在创建会话前检查至少一个 listen/connect 地址, 消息 Adapter 负责具体端点语法. 纯本地库组装没有这一要求. 此阶段不新增 CLI 的无网络模式, 自动连接, 数据库或观测平台, 也不实现跨重启运行身份解析.
 
+## 生命周期驱动的库入口
+
+`beamlet::lifecycle::Group` 接受应用提供的 Tokio Handle 和共同排空期限. 构造不启动任务, 不创建运行时, 角色, 消息连接或系统信号监听. `start(label, policy, constructor)` 才在指定运行时启动应用提供的驱动 future, 将只读 Shutdown 交给构造闭包. 标签用于关联退出结果, 不取代 composition 的角色身份校验; 一个标签可以包含本地 Authority 及其多个 Worker 的实例. 此接口也可独立用于单角色, 无需 Node 配置或网络.
+
+应用明确选择 StopPolicy: 业务驱动使用 Drain, 在停止请求后继续完成已有工作; 公共启动公告使用 Abort, 停止时即请求中止. Group 只管理直接持有的驱动任务, 不接管外部服务或递归收回驱动自行创建的脱离任务. 角色内部工作与资源的关闭仍由相应驱动负责.
+
+`wait` 等待任意驱动意外结束, 保存结果并向其余驱动请求停止; 应用把它与自己的 Ctrl-C, UI 命令或其他停止来源组合. 取消 wait 不丢失结果, 空组保持等待. `stop` 同步发送不可撤销的停止请求并设置一次绝对期限, 重复请求不延期, 之后禁止 start 且不会调用传入的构造闭包. `drain` 消费组, 使用同一期限继续轮询业务驱动; 一个驱动错误不打断其他驱动排空. 到期后中止剩余任务并全部收回, 返回带原标签的独立结果和是否超期. 默认期限 `lifecycle::DEFAULT_DRAIN_TIMEOUT` 为 10 秒, 允许 1ms..=60s; composition 与生命周期组共用校验规则.
+
+正常返回仅表示驱动在停止请求之后成功完成; 运行期间提前返回, 原始错误, panic 和超期都保留为未确认. 即使提前返回的结果在 stop 之后才被收回, 也不会被误标为正常排空. 按 Abort 策略收回附属任务有单独的 Aborted 结果, 不冒充业务排空. Group 不生成 Report 或改变 ImpactStatus. 丢弃 Group 或 drain future 只请求中止, 不能替代等待 drain 完成的收回保证; 期限依赖任务让出执行权, 中止不证明外部效果停止.
+
+配置/默认 Node 和独立 Authority/Worker CLI 均调用上述库入口. 应用保留信号接入, 角色 future 的显式组装, 结果展示和退出公告发布; 删除原应用 watch 状态和重复的排空/中止循环. 公共启动公告作为 Abort 附属任务加入同一组, 退出公告在 drain 返回后通过仍持有的消息会话发布. 其他应用可直接传入自己的驱动和停止来源, 不依赖这些 CLI 或 Hello 协议.
+
 ## 身份与请求
 
 目标稳定身份为 NodeId, AuthorityId, WorkerId; 每次启动独立生成 NodeInstanceId, AuthorityInstanceId, WorkerInstanceId. 角色重启不得复用旧运行身份. 公告与心跳只表达观察, 不自动建立信任或授权.

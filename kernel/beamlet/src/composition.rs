@@ -9,10 +9,6 @@ use thiserror::Error;
 
 /// 当前原型的 Node 角色总数上限, 不表示执行容量
 pub const MAX_ROLES: usize = 64;
-/// 应用可选择的默认排空期限, 不会自动启动排空
-pub const DEFAULT_DRAIN_TIMEOUT: Duration = Duration::from_secs(10);
-const MIN_DRAIN_TIMEOUT: Duration = Duration::from_millis(1);
-const MAX_DRAIN_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// 应用指定的 Authority 身份及有序 Worker 实例列表
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,7 +53,7 @@ impl Config {
     /// # 错误
     /// 期限, 角色数量, 重复身份, 错角色引用或本地绑定不一致时拒绝
     pub fn into_plan(self) -> Result<Plan, Error> {
-        if !(MIN_DRAIN_TIMEOUT..=MAX_DRAIN_TIMEOUT).contains(&self.drain_timeout) {
+        if !crate::lifecycle::valid_drain_timeout(self.drain_timeout) {
             return Err(Error::InvalidDrainTimeout);
         }
         if self.authorities.len().saturating_add(self.workers.len()) > MAX_ROLES {

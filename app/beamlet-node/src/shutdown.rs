@@ -1,61 +1,33 @@
-//! 应用层统一退出信号与有限 Draining, 不推断执行或外部效果
+//! 独立角色的应用信号与展示边界; 生命周期驱动由 beamlet 持有
 
 use std::future::Future;
 
 use anyhow::{Context, Result, bail};
-use beamlet::composition::DEFAULT_DRAIN_TIMEOUT;
-use tokio::{sync::watch, time::timeout};
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum Phase {
-    Running,
-    Draining,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Shutdown {
-    receiver: watch::Receiver<Phase>,
-}
-
-impl Shutdown {
-    pub(crate) fn channel() -> (watch::Sender<Phase>, Self) {
-        let (sender, receiver) = watch::channel(Phase::Running);
-        (sender, Self { receiver })
-    }
-
-    pub(crate) fn is_draining(&self) -> bool {
-        *self.receiver.borrow() == Phase::Draining || self.receiver.has_changed().is_err()
-    }
-
-    pub(crate) async fn requested(&mut self) {
-        let _ = self
-            .receiver
-            .wait_for(|phase| *phase == Phase::Draining)
-            .await;
-    }
-}
+use beamlet::lifecycle::{DEFAULT_DRAIN_TIMEOUT, Group, Shutdown, StopPolicy};
+use tokio::runtime::Handle;
 
 pub(crate) async fn standalone<F, Fut>(start: F) -> Result<()>
 where
     F: FnOnce(Shutdown) -> Fut,
-    Fut: Future<Output = Result<()>>,
+    Fut: Future<Output = Result<()>> + Send + 'static,
 {
-    let (sender, control) = Shutdown::channel();
-    let driver = start(control);
-    tokio::pin!(driver);
-    tokio::select! {
-        result = &mut driver => return result,
-        signal = tokio::signal::ctrl_c() => { signal.context("接收退出信号失败")?; }
-    }
-    sender.send_replace(Phase::Draining);
+    let mut drivers = Group::new(Handle::current(), DEFAULT_DRAIN_TIMEOUT)?;
+    drivers.start((), StopPolicy::Drain, start)?;
+    let signal = tokio::select! {
+        _ = drivers.wait() => Ok(()),
+        signal = tokio::signal::ctrl_c() => signal.context("接收退出信号失败"),
+    };
+    drivers.stop();
     println!(
         "Node 进入 Draining: 停止新接纳; 等待上限={} 毫秒",
         DEFAULT_DRAIN_TIMEOUT.as_millis()
     );
-    match timeout(DEFAULT_DRAIN_TIMEOUT, &mut driver).await {
-        Ok(result) => result,
-        Err(_) => {
-            bail!("Node Draining 到期; 执行或交付未确认, 不生成失败 Report, 内存状态不保证恢复")
-        }
+    let summary = drivers.drain().await;
+    if summary.timed_out {
+        bail!("Node Draining 到期; 执行或交付未确认, 不生成失败 Report, 内存状态不保证恢复");
     }
+    for exit in summary.exits {
+        exit.result.map_err(|error| anyhow::anyhow!("{error}"))?;
+    }
+    signal
 }

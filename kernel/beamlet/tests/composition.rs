@@ -1,5 +1,6 @@
 use beamlet::{
-    composition::{Authority, Config, DEFAULT_DRAIN_TIMEOUT, Error, Worker},
+    composition::{Authority, Config, Error, Worker},
+    lifecycle::DEFAULT_DRAIN_TIMEOUT,
     worker_observation::{Observations, Source},
 };
 use std::time::Duration;
