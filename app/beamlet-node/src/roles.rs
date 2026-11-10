@@ -5,6 +5,9 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::{Context, Result, bail, ensure};
 use beamlet::{
     Authority, Worker,
+    attempt_delivery::{
+        self, Event as AttemptEvent, Outbox as AttemptOutbox, Ticket, Transmission,
+    },
     id::{OperationId, ReportId, RoleInstanceId, SubmissionKey},
     memory::{Admission, StateError},
     model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
@@ -25,7 +28,6 @@ use tokio::{
 use uuid::Uuid;
 
 use crate::{
-    attempt_delivery::AttemptDeliveries,
     report_delivery::{ReportDeliveries, SEND_BUDGET},
     shutdown::{self, Shutdown},
 };
@@ -47,7 +49,7 @@ struct Waiter {
 
 enum SendPurpose {
     Notice,
-    Dispatch(OperationId),
+    Dispatch(Ticket),
     Reply,
     Receipt,
     SubmissionReceipt,
@@ -140,7 +142,13 @@ pub(crate) async fn serve_authority_pair(
     let receipts = transport.subscribe(&receipt_inbox).await?;
     let query_prefix = query::prefix(instance);
     let queries = transport.subscribe(&format!("{query_prefix}*")).await?;
-    let mut attempts = AttemptDeliveries::new(limits);
+    let mut attempts = AttemptOutbox::new(
+        instance,
+        attempt_delivery::Limits {
+            max_records: limits.max_records,
+            max_pending: limits.queue_capacity,
+        },
+    )?;
     let mut waiters: Vec<Waiter> = Vec::new();
     let mut sends = Sends::new();
     let mut pending = std::collections::HashSet::new();
@@ -170,18 +178,18 @@ pub(crate) async fn serve_authority_pair(
             limits.queue_capacity,
         )?;
         while sends.len() < limits.queue_capacity {
-            let Some((operation, destination, bytes)) = attempts.next_send() else {
+            let Some(event) = attempts.next_event() else {
                 break;
             };
-            queue_send(
-                &mut sends,
-                &transport,
-                Outgoing {
-                    destination,
-                    bytes,
-                    purpose: SendPurpose::Dispatch(operation),
-                },
-            );
+            match event {
+                AttemptEvent::Send(transmission) => {
+                    queue_attempt(&mut sends, &transport, transmission)
+                }
+                AttemptEvent::Exhausted(progress) => eprintln!(
+                    "Attempt 交付预算耗尽: Operation={}; 接纳未确认, 不改派或重新授权",
+                    progress.binding.operation_id
+                ),
+            }
         }
         tokio::select! {
             _ = shutdown.requested(), if !draining => {}
@@ -191,7 +199,7 @@ pub(crate) async fn serve_authority_pair(
                         let result = (|| {
                             let receipt = AttemptAccepted::from_json(&message.payload)?;
                             ensure!(message.key_expr == receipt_inbox && message.key_expr == receipt.topic(), "Attempt 回执实际路由不符");
-                            if attempts.acknowledge(&receipt)? {
+                            if attempts.acknowledge(receipt.binding())? {
                                 println!("Authority 已确认 Worker 接纳: Operation={} Attempt={}; 不表示执行已开始或完成", receipt.operation_id, receipt.attempt_id);
                             }
                             Ok::<_,anyhow::Error>(())
@@ -237,7 +245,7 @@ pub(crate) async fn serve_authority_pair(
                     match authority.receive_report(delivery) {
                         Ok(disposition) => {
                             pending.remove(&operation);
-                            attempts.reported(operation);
+                            attempts.reported(&authority, receipt.report_id.as_u128().into())?;
                             println!("Authority 已接收 Report: {disposition}; 停止原授权重投");
                             if sends.len() < limits.queue_capacity {
                                 queue_send(&mut sends, &transport, Outgoing {
@@ -367,20 +375,22 @@ pub(crate) async fn serve_authority_pair(
                         println!("本地类型化交付: Operation={operation}");
                         continue;
                     }
-                    attempts.retain(&submission.dispatch, &protocol)?;
+                    attempts.retain(&submission.dispatch, |dispatch| Dispatch::from_delivery(dispatch)?.to_json(&protocol))?;
                 }
             }
             completed = sends.join_next(), if !sends.is_empty() => {
                 let (purpose, result) = completed.context("发送完成记录缺失")?.context("发送任务失败")?;
                 match (purpose, result) {
                     (SendPurpose::Notice, _) => {},
-                    (SendPurpose::Dispatch(operation), Ok(())) => {
-                        attempts.sent(operation);
+                    (SendPurpose::Dispatch(ticket), Ok(())) => {
+                        let operation = ticket.binding().operation_id;
+                        attempts.sent(ticket);
                         authority.mark_dispatched(operation)?;
                         println!("Authority 已发出授权: Operation={operation}; 本次发送完成本身不证明 Worker 接纳");
                     }
-                    (SendPurpose::Dispatch(operation), Err(error)) => {
-                        attempts.sent(operation);
+                    (SendPurpose::Dispatch(ticket), Err(error)) => {
+                        let operation = ticket.binding().operation_id;
+                        attempts.sent(ticket);
                         eprintln!("授权本次发送未确认: Operation={operation}; {error}; 仅在原预算内重投, 不创建新授权");
                     },
                     (SendPurpose::Reply, Err(error)) => eprintln!("Console 回复未确认: {error}; 证据已保留, 不重试"),
@@ -500,12 +510,36 @@ fn queue_send(sends: &mut Sends, transport: &Arc<Transport>, outgoing: Outgoing)
             | SendPurpose::SubmissionReceipt
             | SendPurpose::Receipt
             | SendPurpose::AttemptReceipt
-            | SendPurpose::Dispatch(_)
             | SendPurpose::Report(_) => SEND_BUDGET,
             _ => SEND_TIMEOUT,
         };
         let result = send(&transport, &outgoing.destination, outgoing.bytes, budget).await;
         (outgoing.purpose, result)
+    });
+}
+
+fn queue_attempt(sends: &mut Sends, transport: &Arc<Transport>, transmission: Transmission) {
+    let ticket = transmission.ticket();
+    println!(
+        "Authority 重用原授权发送: Operation={} Attempt={}; 发送尝试次数={}/{}",
+        ticket.binding().operation_id,
+        ticket.binding().attempt_id,
+        ticket.number(),
+        attempt_delivery::MAX_SENDS
+    );
+    let transport = Arc::clone(transport);
+    sends.spawn(async move {
+        let result = transmission
+            .send(|worker, bytes| async move {
+                let sender = transport.sender(&worker_inbox(worker)).await?;
+                sender.wait_for_receiver().await?;
+                sender.send(bytes).await
+            })
+            .await;
+        (
+            SendPurpose::Dispatch(ticket),
+            result.map_err(anyhow::Error::from),
+        )
     });
 }
 

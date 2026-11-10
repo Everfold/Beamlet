@@ -14,6 +14,7 @@ pub use client::{
 pub use local_execution::{LocalExecution, LocalExecutionError};
 pub use worker::Worker;
 
+pub mod attempt_delivery;
 pub mod executor;
 pub mod memory;
 pub mod observe;

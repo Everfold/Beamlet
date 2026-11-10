@@ -42,6 +42,12 @@ Authority 收录后可发送携带执行快照及完整证据的尽力结果通�
 
 ## Attempt 回执与有界授权交付
 
+通用交付入口为 `beamlet::attempt_delivery::Outbox<P>`, 绑定一个 Authority 运行实例. 应用显式提供 max_records/max_pending, 编码函数和既有连接; 库不依赖 Hello/JSON/Zenoh, 不启动网络或后台任务. `retain` 保留原 DispatchAttempt 的完整定义及四项绑定, 仅首次加入时编码. 重复加入按完整 P::Eq 校验, 即使待发字节已释放也不允许同身份替换任务; 编码失败或记录冲突不占用新记录. 原 AttemptId 不能在箱内绑定另一个 Operation.
+
+宿主在自己的驱动循环中调用 `next_event`, 获取 Send(Transmission) 或一次性的 Exhausted(Progress); 队列满时不获取发送项. Transmission::send 接收应用的匹配等待/发送函数, 库执行固定 500ms 限时并交付原 Worker ID 和原字节. 无论成功, 错误或宿主取消, 用原 Ticket 调用 sent; Ticket 包含发送序号, 重复及旧完成记录不会释放后续发送或推迟重投. 取得发送项即计数, 发送中不发出同记录的下一项; 总期限到达仍可释放待发字节, 不保证撤销已交给宿主/传输层的消息. 宿主须持续轮询期限及管理发送任务, Node 沿用 100ms 时钟检查, 无硬实时保证.
+
+`acknowledge` 只验证已解码回执的完整 ExecutionBinding; 路由及认证检查归 Adapter. `reported(&authority, report_id)` 读取 Authority 已收录的原证据再确认交付, 不接受仅凭 OperationId 的模糊确认. `progress` 返回 Active/Unconfirmed/Confirmed 及已发次数, 不表示 Worker 实际执行阶段或持久性. 没有网络交付记录的本地执行不建立额外回执记录. Node 原 AttemptDeliveries 模块已删除, 不维护第二份重投状态机.
+
 严格 JSON `protocol_version: 0`, `kind: "attempt_accepted"`, 字段为 `source_instance_id` (Worker), `target_instance_id` (Authority), `operation_id`, `attempt_id`. 单条最多 4096 字节, 拒绝未知字段, 种类或版本. 发送至 `beamlet/v0/authority/<authority-instance-simple>/receipts`, 使用同 Session 的独立有界订阅. Authority 校验实际路由及原授权的完整身份绑定, 未知或冲突回执不改变状态. 静态绑定不是网络认证.
 
 Worker 必须在 `receive_dispatch` 成功后才尝试回复. 合法重复无论处于排队, 运行还是完成阶段均可重复回复同一接纳事实, 不重复执行; 内容冲突, 容量拒绝或 Draining 拒绝新授权均不回复肯定回执. 回执发送任务与 Report 共享最多 256 个发送槽位, 每次预算 500 毫秒, 满时不回滚原接纳也不积累无界待发任务. Worker 不主动重投回执, 由 Authority 重投原授权触发再次回复.
@@ -90,4 +96,4 @@ Authority 在 Draining 中仍收录合法迟到或重复 Report 并尝试回复.
 
 ## 验收边界
 
-真实进程应覆盖: 正常远端回执, Report 或回执丢失后相同证据重投, 非法/错绑定/重复/迟到回执, Authority 对重复和附加证据回执, 耗尽后重复授权不能重置预算, Draining 期间确认和到期未确认. 仍运行现有测试, 本批不新增仓库测试用例. 网络故障下的有限进程验收不是持久恢复或形式证明.
+真实进程应覆盖: 正常远端回执, Report 或回执丢失后相同证据重投, 非法/错绑定/重复/迟到回执, Authority 对重复和附加证据回执, 耗尽后重复授权不能重置预算, Draining 期间确认和到期未确认. 库行为测试覆盖 Attempt 的预算, 去重与完整确认绑定, Zenoh 测试覆盖丢失首份回执后的原字节重投及 Worker 只执行一次. 网络故障下的有限进程验收不是持久恢复或形式证明.

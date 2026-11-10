@@ -85,6 +85,8 @@ beamlet-agent -> beamlet -> beamlet-kernel
 
 `beamlet::remote::Client` 接受显式 Transport 和 Codec, 提供原键有界重投, 回执关联与结果等待, 以及按原键/Operation/Report 的只读查询. Authority::answer_query 只读投影账本, 远端与本地返回相同快照; 查询要求明确的 Authority 和独立关联 ID, 区分未找到与网络失败. `observe::State` 单调合并快照及已收录通知, 按 ReportId 去重; Client::observe 在有限期限内通过查询补齐采用报告, 断线后可保留 State 重新绑定. Zenoh 的 ClientTransport 借用应用已有连接和专用回复订阅; 结果通知使用独立队列并共享 Session, Console 调用库并展示结果. 固定 Hello 编码保留在测试 Adapter, 通用执行库不依赖它. 当前结果观察不提供持久消费或自动重建连接, 具体返回值及内存边界见 [Client 契约](execution-client.md).
 
+`attempt_delivery::Outbox` 提供原授权的有界重投, 完整定义/绑定校验, 回执确认与耗尽观察. 编码一次, 复用原身份和字节; 发送限时归库, 路由和发送任务集合由应用提供. Authority 已收录 Report 也可停止重投, 不以传输成功推断接纳或完成. 具体预算见 [回执契约](receipts.md).
+
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 
 库接受类型化配置和必要依赖, 完成可复用的配置校验, 返回结构化结果, 错误和观察; CLI 参数解析, 终端交互, 展示及退出码映射留在应用. 调用通用执行能力不要求依赖 Agent 库. 其他应用应能直接通过相同库接口完成相同行为, 无需导入 Node/Console 应用实现或复制其控制流程.

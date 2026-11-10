@@ -3,6 +3,7 @@
 use super::protocol::{PROTOCOL_VERSION, ProtocolError};
 use super::receipt::MAX_BYTES;
 use beamlet::{
+    ExecutionBinding,
     id::RoleInstanceId,
     model::{Delivery, Message},
 };
@@ -40,6 +41,15 @@ pub fn inbox(authority: RoleInstanceId) -> String {
 }
 
 impl AttemptAccepted {
+    /// 投影已解码回执的完整执行绑定, 接收者仍须验证实际路由及发送方
+    pub fn binding(&self) -> ExecutionBinding {
+        ExecutionBinding {
+            authority_instance_id: self.target_instance_id.as_u128().into(),
+            worker_instance_id: self.source_instance_id.as_u128().into(),
+            operation_id: self.operation_id.as_u128().into(),
+            attempt_id: self.attempt_id.as_u128().into(),
+        }
+    }
     /// 提取原授权的反向绑定, 调用方必须先成功接纳
     ///
     /// # 错误

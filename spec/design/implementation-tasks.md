@@ -85,9 +85,17 @@
 - 验收: 订阅前完成仍能查到; 旧消息不回退已知事实; 相同 Report 不重复消费; 通知遗漏或重新连接后查询补齐, 不以新提交替代查询.
 - 提交: `beamlet: reconcile result notifications with bounded queries`.
 
+### T9. 下沉 Attempt 的交付与重投驱动
+
+状态: 已完成. 通用 `attempt_delivery::Outbox` 已承接原授权交付, Node 仅保留显式组装及 I/O. 新增 7 项库行为测试和 1 项真实 Zenoh 测试; 工作区 141 项测试, 全功能 Clippy 和文档检查通过. 独立进程验证 Worker 延迟上线后重投原授权且只执行一次, 缺席时三次耗尽且重复提交不刷新预算; 本地提交, 查询, 观察与排空回归通过.
+
+- 范围: 将 Node 的原授权交付表移入 beamlet, 由库持有完整定义校验, 编码一次, 固定发送预算, 确认与耗尽观察; 应用提供编解码, 路由, 连接及发送任务集合. 删除 Node 原模块, 不保留兼容入口.
+- 验收: 回执丢失只重投原身份和字节, 不重复执行; 错绑定/定义冲突不改变已有记录; Authority 成功收录 Report 才能停止对应重投; 迟到回执仍可确认, 耗尽后重复加入不恢复预算; 旧发送完成不能释放后续发送占用. 本地交付保持类型化直接返回.
+- 提交: `beamlet: extract bounded attempt delivery from node`.
+
 ## 后续拆分时点
 
-T6–T8 完成后继续细拆原授权/原 Report 交付驱动, 生命周期观察与 Node 显式组装. 提交重投, Attempt 重投, Report 重投和生命周期迁移分别验收, 不合成一次全量搬迁.
+T9 完成后继续细拆原 Report 交付驱动, 生命周期观察与 Node 显式组装. 提交重投, Attempt 重投, Report 重投和生命周期迁移分别验收, 不合成一次全量搬迁.
 
 执行底座可独立使用后, 依次细拆存储事务与恢复, Agent 数据与 Loop, 回答查询与通知, 输入投影与 fork, 工具/Codemode 集成. 每项都沿用同一提交规则. 不提前实现 Sub-Agent, MCP Sampling 或跨节点自动接管.
 
