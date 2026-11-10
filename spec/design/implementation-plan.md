@@ -9,13 +9,13 @@
 | 范围 | 已有实现 | 仍需实现 |
 | --- | --- | --- |
 | Kernel | Operation/Attempt/Report, Effect, Authority 观察与 Worker 阶段规则 | 目标契约要求的演进; 不是新增 Task 或全局状态机 |
-| 执行路径 | 有界内存账本, beamlet 中的独立 Authority/Worker 驱动, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与组合调用 Interface |
+| 执行路径 | 有界内存账本, beamlet 中的独立 Authority/Worker 与 LocalExecution 显式组合, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与组合调用 Interface |
 | 回执 | Operation/Attempt/Report 三段回执与有限原消息重投 | 持久提交后确认, 重启恢复与旧实例隔离 |
 | Node | 角色组合, 稳定/运行身份配置, 生命周期, 心跳, Draining | 稳定身份解析, 基础设施独立接入与明确运行模式 |
-| Agent | `beamlet-agent::Agent` 目前只是本地 Authority/Worker 包装 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |
+| Agent | `beamlet-agent::Agent`/`AgentError` 仅是 LocalExecution 及其错误的兼容导出 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |
 | 存储与工具 | durable/tool crate 脚手架, workspace 已声明 kite_sql | Agent/执行存储, 事务与迁移, LLM/工具/Codemode 执行器; 存储阶段前对齐依赖与设计中的 Diesel + SQLite 选择 |
 
-本批仅编写和核对文档. 不把以往会话中的测试次数当作本次运行结果, 不宣称持久性或安全协议已实现.
+逐项实现进度与验证结果见 [实现任务与提交](implementation-tasks.md). 本计划中的目标不等于已实现能力; 验证结果以对应任务的实际运行记录为准.
 
 ## 已收口的选择与剩余实现细节
 

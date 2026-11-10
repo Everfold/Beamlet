@@ -112,15 +112,15 @@ app/beamlet-console, app/beamlet-node
 
 - 纯领域: [id.rs](../../kernel/beamlet-kernel/src/id.rs), [model.rs](../../kernel/beamlet-kernel/src/model.rs), [state.rs](../../kernel/beamlet-kernel/src/state.rs). 身份是调用方提供的 128 位值; 领域对象使用不透明的输入, 输出与错误类型; 拒绝效果和完成阶段规则不依赖 JSON, UUID 库, Tokio, 数据库或传输.
 - 底层实现: [memory.rs](../../kernel/beamlet/src/memory.rs) 提供有界内存 Authority/Worker, 静态轮询, 去重和证据保留; [executor.rs](../../kernel/beamlet/src/executor.rs) 提供通用 Tokio 驱动, 每个 Worker 有独立上限, 共享有界的在途完成集合. 执行函数由调用方直接传入, 不创建能力注册表.
-- 应用入口: 原 [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 入口保留本地 Agent 组合与兼容导出. 独立 [Authority](../../kernel/beamlet/src/authority.rs) 与 [Worker](../../kernel/beamlet/src/worker.rs) 驱动现已迁入 beamlet, 可直接提交, 交付授权, 执行并收录证据; 不实现自主 Agent Loop.
+- 应用入口: [LocalExecution](../../kernel/beamlet/src/local_execution.rs) 及独立 [Authority](../../kernel/beamlet/src/authority.rs)/[Worker](../../kernel/beamlet/src/worker.rs) 驱动现已位于 beamlet, 可直接提交, 交付授权, 执行并收录证据. 原 [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 仅保留 Agent/AgentError 兼容导出, 不实现自主 Agent Loop.
 - 测试 Adapter: 显式启用 test-support 后, [protocol.rs](../../agent/beamlet-agent/src/testing/protocol.rs) 提供严格 v0 JSON 与领域转换, [memory.rs](../../agent/beamlet-agent/src/testing/memory.rs) 提供协议校验和只读投影, [executor.rs](../../agent/beamlet-agent/src/testing/executor.rs) 提供固定 echo/delay/fail. 默认 Agent 构建不包含这些模块. UUID 字符串的传输表示不变, 纯领域身份通过 from_u128 构造.
-- 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 暂时调用同一份 [Agent 演示用例](../../agent/beamlet-agent/src/testing/demo.rs). 各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 它们还不是网络节点或交互式 Console.
+- 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 在本里程碑调用同一份 [本地演示用例](../../agent/beamlet-agent/src/testing/demo.rs), 该用例现已显式组装 LocalExecution. 原里程碑各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 当时尚未实现网络节点或交互式 Console.
 
-原有 app/beamlet-node/src/protocol.rs, memory.rs, executor.rs 只保留兼容导出, 不再持有实现. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 新增 4 项纯领域测试和 4 项 Agent 入口测试. 新增 Agent 测试只导入 beamlet-agent, 不使用 JSON 或固定假任务类型. 不将重复测试入口计作新增覆盖.
+原有 app/beamlet-node/src/protocol.rs, memory.rs, executor.rs 只保留兼容导出, 不再持有实现. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 当时新增 4 项纯领域测试和 4 项组合入口测试. 组合入口测试现已迁入 [beamlet](../../kernel/beamlet/tests/local_execution.rs), 直接使用通用库, 不使用 JSON 或固定假任务类型, 并补充显式组装与状态保留验收. 不将重复测试入口计作新增覆盖.
 
 ### 独立消息入口
 
-Authority 与 Worker 分别持有状态, 不相互引用, 也不直接修改对方的记录. Agent 保留为单进程本地组合, 需要自行交付消息时使用两个独立入口:
+Authority 与 Worker 分别持有状态, 不相互引用, 也不直接修改对方的记录. LocalExecution 是可选的单进程本地组合, 需要自行交付消息时使用两个独立入口:
 
 1. Authority::submit 接纳本地应用 Operation, 返回待交付授权, 不向 Worker 入队或自动发送消息.
 2. 调用方交付授权后调用 Authority::mark_dispatched, 只记录已发出, 不声称 Worker 已接纳.
@@ -132,11 +132,12 @@ Authority 与 Worker 分别持有状态, 不相互引用, 也不直接修改对�
 
 [消息流用例](../../kernel/beamlet/tests/message_flow.rs) 已随独立角色驱动迁入 beamlet, 通过该库公开入口和容量为 1 的 Tokio 通道交互. 六项用例覆盖独立 echo, 重复交付与缓存证据, 取消等待及迟到证据, 交付背压, 非法消息与证据冲突, 两个独立 Worker 的乱序关联. 延迟使用 Tokio 虚拟时间, 这些测试不是跨进程或断网验证.
 
-复验独立用例, 共 46 项:
+复验迁移后的独立用例:
 
 ```bash
 cargo test -p beamlet-kernel --offline --test primitives
-cargo test -p beamlet-agent --no-default-features --offline --test execution --test message_flow
+cargo test -p beamlet --offline --test local_execution --test message_flow
+cargo test -p beamlet-agent --no-default-features --offline --test compatibility
 cargo test -p beamlet-node --offline --test volatile --test executor
 ```
 
@@ -148,9 +149,9 @@ cargo run -p beamlet-console --offline
 cargo run -p beamlet-node --offline --example volatile
 ```
 
-兼容的本地 Agent 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
+LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口, 旧 Agent 名称兼容同一实现. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
 
-Authority 接纳与 Worker 入队不是同一事实. Agent 提交时若 Authority 已接纳而 Worker 因队列已满拒绝, 请求仍保留为 accepted; 重复提交返回原授权, 不自动重投或生成新 Attempt. 该未决情况有独立测试, 不声称已经执行, 也没有持久交付保证.
+Authority 接纳与 Worker 入队不是同一事实. LocalExecution 提交时若 Authority 已接纳而 Worker 因队列已满拒绝, 请求仍保留为 accepted; 重复提交返回原授权, 不自动重投或生成新 Attempt. 该未决情况有独立测试, 不声称已经执行, 也没有持久交付保证.
 
 三种假任务均无外部效果, 因此明确使用 effect = none, 而不是从成功或失败推导效果. v0 测试 Adapter 在入账前检查派发大小, 假任务执行 Adapter 在入队前试算完整报告大小; 超限时不创建对应的新记录, 不截断结果. 试算不是执行或完成证据. 通用领域与执行驱动没有 JSON 字节上限或 delay 参数语义, 具体编码及输出预算必须由实际 Adapter 负责.
 

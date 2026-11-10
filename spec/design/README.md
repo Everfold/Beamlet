@@ -75,7 +75,9 @@ beamlet-agent -> beamlet -> beamlet-kernel
 | beamlet-agent-tool | 工具及执行环境的集成位置; 不另建授权账本 |
 | beamlet-durable / 消息 Adapter | 执行持久化及消息交付的实现; Agent 存储映射由 Agent 层拥有 |
 
-这是目标职责, 不是要求每个 Interface 立刻新增 crate. 独立 Authority/Worker 驱动已迁入 beamlet, beamlet-agent 保留兼容导出; 当前 `beamlet-agent::Agent` 仍只是 Authority/Worker 本地组合, 后续调整该组合入口的名称与归属. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
+这是目标职责, 不是要求每个 Interface 立刻新增 crate. 独立 Authority/Worker 驱动及可选本地组合 `LocalExecution` 已位于 beamlet, beamlet-agent 的 `Agent`/`AgentError` 仅作为旧名称重导出. 新领域 Agent Loop 尚未实现. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
+
+当前本地组合通过 `LocalExecution::from_parts(authority, worker)` 接管应用创建的角色, 保留已有状态与各自配置; `into_parts` 可取回角色继续独立驱动. 组合动作不启动任务或基础设施, 不补发已有授权, 实例绑定仍在每次交付时校验. `new` 是按显式身份和相同内存上限创建角色的便捷入口, 两种方式使用同一实现.
 
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 

@@ -1,11 +1,11 @@
-//! 由 Agent 入口驱动的单进程演示, 应用不自行拼装执行循环
+//! 由通用本地执行组合驱动的单进程演示, 应用不自行拼装执行循环
 
 use super::{
     executor::execute,
     protocol::{Envelope, Limits, TestTask, Uuid, Value},
 };
-use crate::{
-    Agent, AgentError,
+use beamlet::{
+    Authority, LocalExecution, LocalExecutionError, Worker,
     id::{OperationId, RoleInstanceId},
     model::{ExecutionResult, Message, Operation},
 };
@@ -32,13 +32,17 @@ pub struct DemoResult {
 /// 返回配置, 驱动或结果关联错误, 不自动重跑
 pub async fn run() -> Result<DemoResult, DemoError> {
     let limits = Limits::default();
-    let authority: RoleInstanceId = Uuid::new_v4().as_u128().into();
+    let authority_id: RoleInstanceId = Uuid::new_v4().as_u128().into();
     let workers: [RoleInstanceId; 2] = [
         Uuid::new_v4().as_u128().into(),
         Uuid::new_v4().as_u128().into(),
     ];
-    let mut agent =
-        Agent::<TestTask, Value, String>::new(authority, workers.to_vec(), limits.core())?;
+    let authority =
+        Authority::<TestTask, Value, String>::new(authority_id, workers.to_vec(), limits.core())
+            .map_err(LocalExecutionError::from)?;
+    let worker = Worker::new(authority_id, workers.to_vec(), limits.core())
+        .map_err(LocalExecutionError::from)?;
+    let mut execution = LocalExecution::from_parts(authority, worker);
     let mut first: Option<OperationId> = None;
     for index in 0..100 {
         let id = Uuid::new_v4().as_u128().into();
@@ -52,7 +56,7 @@ pub async fn run() -> Result<DemoResult, DemoError> {
                 message: format!("预期测试失败 {index}"),
             },
         };
-        agent.submit(
+        execution.submit(
             Operation {
                 operation_id: id,
                 task,
@@ -65,7 +69,7 @@ pub async fn run() -> Result<DemoResult, DemoError> {
     let mut succeeded = 0;
     let mut failed = 0;
     let mut worker_counts = [0; 2];
-    while let Some(delivery) = agent.next_report(execute).await? {
+    while let Some(delivery) = execution.next_report(execute).await? {
         let Message::SubmitReport(report) = &delivery.message else {
             return Err(DemoError::Incomplete);
         };
@@ -84,10 +88,10 @@ pub async fn run() -> Result<DemoResult, DemoError> {
     if completed != 100 {
         return Err(DemoError::Incomplete);
     }
-    let view = agent
+    let view = execution
         .operation(first.ok_or(DemoError::Incomplete)?)
         .ok_or(DemoError::Incomplete)?;
-    let retained = agent
+    let retained = execution
         .report(view.adopted_report.ok_or(DemoError::Incomplete)?)
         .ok_or(DemoError::Incomplete)?;
     Ok(DemoResult {
@@ -124,9 +128,9 @@ pub async fn print() -> Result<(), DemoError> {
 /// 演示支持错误, 不属于通用 Agent 的领域契约
 #[derive(Debug, Error)]
 pub enum DemoError {
-    /// Agent 推进失败
+    /// 本地执行驱动失败; 变体名称保留兼容
     #[error(transparent)]
-    Agent(#[from] AgentError),
+    Agent(#[from] LocalExecutionError),
     /// 原型固定场景未获得完整关联结果
     #[error("演示未保留全部预期结果")]
     Incomplete,
