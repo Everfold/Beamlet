@@ -216,8 +216,11 @@ pub enum StateError {
     /// 发送方不是配置的 Authority 运行实例
     #[error("发送方不是配置的 Authority")]
     UntrustedAuthority,
-    /// 该 Operation 身份已经绑定到不同的定义
-    #[error("Operation 身份与已保留定义冲突")]
+    /// 同一提交键已经关联不同的完整定义
+    #[error("SubmissionKey 与已保留定义冲突")]
+    SubmissionConflict,
+    /// 该 Operation 身份已被占用, 不能关联新的请求或不同定义
+    #[error("Operation 身份与已保留请求冲突")]
     OperationConflict,
     /// 同一 Attempt 身份被用于不同的绑定或请求
     #[error("Attempt 身份与已保留授权冲突")]
@@ -255,6 +258,7 @@ impl From<runtime::StateError> for StateError {
             runtime::StateError::WrongTarget => Self::WrongTarget,
             runtime::StateError::WrongMessage => Self::WrongMessage,
             runtime::StateError::UntrustedAuthority => Self::UntrustedAuthority,
+            runtime::StateError::SubmissionConflict => Self::SubmissionConflict,
             runtime::StateError::OperationConflict => Self::OperationConflict,
             runtime::StateError::AttemptConflict => Self::AttemptConflict,
             runtime::StateError::ReportConflict => Self::ReportConflict,

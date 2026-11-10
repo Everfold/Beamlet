@@ -47,9 +47,9 @@
 
 ### T4. 下沉按提交键接纳的通用能力
 
-状态: 待实现; 依赖 T1.
+状态: 已实现; SubmissionKey 与接纳映射由通用 Authority 账本持有, Node 已调用 submit_keyed/check_submission, 不再维护提交去重表. 六项库用例覆盖去重, 定义冲突, Authority 隔离, 终态保留, 容量拒绝与 ID 碰撞后的原子性. 工作区测试, 全功能 Clippy, 文档与示例检查通过; 三个独立 Console 连接验证同键复用全部执行 ID, 换键创建新执行, Worker 共执行两次并正常排空退出.
 
-- 范围: 从已有固定任务提交路径提炼 SubmissionKey 到 Operation/Attempt 的关联规则, 放入通用执行库; Authority 在接纳时分配执行身份. 保持现有协议 Adapter 的输入/输出, 让其调用通用接纳实现.
+- 范围: 从已有固定任务提交路径提炼 SubmissionKey 到 Operation/Attempt 的关联规则, 放入通用执行库; Authority 仅在新接纳时调用应用显式提供的身份生成函数. 协议 Adapter 将库返回的原授权投影为接纳回复.
 - 验收: 同 Authority 同键同内容返回原执行, 同键异内容拒绝, 相同内容不同键产生不同执行; 接纳失败不留下半份键映射; 核心逻辑无需 Zenoh 或应用 crate.
 - 提交: `beamlet: centralize keyed operation admission`.
 

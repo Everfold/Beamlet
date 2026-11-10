@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::{Context, Result, bail, ensure};
 use beamlet::{
     Authority, Worker,
-    id::{OperationId, ReportId, RoleInstanceId},
+    id::{OperationId, ReportId, RoleInstanceId, SubmissionKey},
     memory::{Admission, StateError},
     model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
 };
@@ -137,7 +137,6 @@ pub(crate) async fn serve_authority_pair(
     let receipt_inbox = attempt_receipt::inbox(instance);
     let receipts = transport.subscribe(&receipt_inbox).await?;
     let mut attempts = AttemptDeliveries::new(limits);
-    let mut submissions: HashMap<Uuid, (Submission, SubmissionReply)> = HashMap::new();
     let mut waiters: Vec<Waiter> = Vec::new();
     let mut sends = Sends::new();
     let mut pending = std::collections::HashSet::new();
@@ -265,44 +264,55 @@ pub(crate) async fn serve_authority_pair(
                     continue;
                 }
                 let key = request.submission_key;
-                let existing = submissions.get(&key);
-                let rejection = if let Some((retained, _)) = existing {
-                    (retained != &request).then_some("SubmissionKey 与已保留定义冲突")
-                } else if shutdown.is_draining() {
+                let submission_key = SubmissionKey::from_u128(key.as_u128());
+                let existing = match authority.check_submission(submission_key, &request.task) {
+                    Ok(existing) => existing,
+                    Err(error) => {
+                        queue_submission(&mut sends, &transport, console, SubmissionReply::rejected(key, Uuid::from_u128(instance.as_u128()), error.to_string()), &protocol)?;
+                        continue;
+                    }
+                };
+                let rejection = if existing.is_none() && shutdown.is_draining() {
                     Some("NodeShutdown: 新提交未接纳")
-                } else if submissions.len() >= limits.max_records || !attempts.has_capacity() {
-                    Some("提交记录或 Attempt 交付槽位已满; 新提交未接纳")
+                } else if existing.is_none() && !attempts.has_capacity() {
+                    Some("Attempt 交付槽位已满; 新提交未接纳")
                 } else { None };
                 if let Some(error) = rejection {
                     queue_submission(&mut sends, &transport, console, SubmissionReply::rejected(key, Uuid::from_u128(instance.as_u128()), error.to_owned()), &protocol)?;
                     continue;
                 }
-                let operation = existing.map(|(_,binding)| binding.operation_id.expect("接纳映射必须包含 Operation"))
-                    .unwrap_or_else(Uuid::new_v4);
-                let operation = beamlet::id::OperationId::from_u128(operation.as_u128());
-                let adopted = authority.operation(operation).and_then(|view| view.adopted_report);
-                let already_waiting = waiters.iter().any(|waiter| waiter.operation == operation && waiter.console == console);
+                let operation = existing.map(|view| {
+                    let Message::DispatchAttempt(dispatch) = &view.dispatch.message else {
+                        unreachable!("Authority 只能保留 Attempt 信封");
+                    };
+                    dispatch.operation.operation_id
+                });
+                let adopted = existing.and_then(|view| view.adopted_report);
+                let already_waiting = operation.is_some_and(|operation| waiters.iter().any(|waiter| waiter.operation == operation && waiter.console == console));
                 if adopted.is_none() && !already_waiting && waiters.len() >= limits.queue_capacity {
-                    if let Some((_, binding)) = existing {
+                    if let Some(existing) = existing {
+                        let operation = operation.expect("已接纳执行必须包含 Operation");
+                        let binding = SubmissionReply::accepted(key, &existing.dispatch)?;
                         queue_submission(&mut sends, &transport, console, binding.clone(), &protocol)?;
-                        queue_reply(&mut sends, &transport, console, binding, Response::new(ResponseMessage::Pending { operation_id: Uuid::from_u128(operation.as_u128()) }), &protocol)?;
+                        queue_reply(&mut sends, &transport, console, &binding, Response::new(ResponseMessage::Pending { operation_id: Uuid::from_u128(operation.as_u128()) }), &protocol)?;
                     } else {
                         queue_submission(&mut sends, &transport, console, SubmissionReply::rejected(key, Uuid::from_u128(instance.as_u128()), "等待回复记录已满; 新提交未接纳".to_owned()), &protocol)?;
                     }
                     continue;
                 }
-                let submission = match authority.submit(request.operation(Uuid::from_u128(operation.as_u128())), Uuid::new_v4().as_u128().into()) {
+                let submission = match authority.submit_keyed(submission_key, request.task, || {
+                    (Uuid::new_v4().as_u128().into(), Uuid::new_v4().as_u128().into())
+                }) {
                     Ok(submission) => submission,
-                    Err(error @ (StateError::Capacity | StateError::QueueFull | StateError::OperationConflict | StateError::AttemptConflict)) => {
+                    Err(error @ (StateError::Capacity | StateError::SubmissionConflict | StateError::OperationConflict | StateError::AttemptConflict)) => {
                         queue_submission(&mut sends, &transport, console, SubmissionReply::rejected(key, Uuid::from_u128(instance.as_u128()), error.to_string()), &protocol)?;
                         continue;
                     }
                     Err(error) => return Err(error.into()),
                 };
                 let Message::DispatchAttempt(dispatch) = &submission.dispatch.message else { bail!("接纳结果缺少 Attempt"); };
-                let binding = SubmissionReply::accepted(key, Uuid::from_u128(instance.as_u128()), Uuid::from_u128(operation.as_u128()), Uuid::from_u128(dispatch.attempt_id.as_u128()));
-                // 单一驱动同步完成映射和接纳, 在发布回执或执行前没有 await
-                submissions.entry(key).or_insert_with(|| (request, binding.clone()));
+                let operation = dispatch.operation.operation_id;
+                let binding = SubmissionReply::accepted(key, &submission.dispatch)?;
                 queue_submission(&mut sends, &transport, console, binding.clone(), &protocol)?;
                 println!("Authority 已接纳: SubmissionKey={key} Operation={operation} Worker={} 接纳结果={}", submission.dispatch.target_instance_id, submission.admission);
                 if let Some(report_id) = adopted {

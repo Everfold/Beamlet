@@ -9,7 +9,7 @@
 | 范围 | 已有实现 | 仍需实现 |
 | --- | --- | --- |
 | Kernel | Operation/Attempt/Report, ImpactStatus, Authority 观察与 Worker 阶段规则 | 目标契约要求的演进; 不是新增 Task 或全局状态机 |
-| 执行路径 | 有界内存账本, beamlet 中的独立 Authority/Worker 与 LocalExecution 显式组合, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与组合调用 Interface |
+| 执行路径 | 有界内存账本, 按 SubmissionKey 的通用接纳, beamlet 中的独立 Authority/Worker 与 LocalExecution 显式组合, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与 Client 调用 Interface |
 | 回执 | Operation/Attempt/Report 三段回执与有限原消息重投 | 持久提交后确认, 重启恢复与旧实例隔离 |
 | Node | 角色组合, 稳定/运行身份配置, 生命周期, 心跳, Draining | 稳定身份解析, 基础设施独立接入与明确运行模式 |
 | Agent | 原型测试支持; 通用执行入口由 beamlet 提供 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |

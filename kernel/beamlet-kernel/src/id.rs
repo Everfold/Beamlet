@@ -48,6 +48,10 @@ macro_rules! identity {
 }
 
 identity!(OperationId, "标识不可变逻辑请求; 身份不由输入内容决定");
+identity!(
+    SubmissionKey,
+    "在指定 Authority 内关联同一次提交, 不等于 Operation 身份"
+);
 identity!(AttemptId, "标识一次执行授权, 而非一次消息交付");
 identity!(ReportId, "标识执行证据, 与证据是否被采用无关");
 

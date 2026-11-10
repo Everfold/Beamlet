@@ -3,6 +3,7 @@ use super::{
     hello::{Response, ResponseMessage, Task},
     protocol::{Limits, Message, PROTOCOL_VERSION, ProtocolError},
 };
+use beamlet::model::{Delivery, Message as DomainMessage};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -21,13 +22,6 @@ impl Submission {
             protocol_version: PROTOCOL_VERSION,
             submission_key,
             task: Task::Hello,
-        }
-    }
-    /// Authority 分配身份后还原内部不可变请求
-    pub fn operation(&self, id: Uuid) -> beamlet::model::Operation<Task> {
-        beamlet::model::Operation {
-            operation_id: id.as_u128().into(),
-            task: self.task,
         }
     }
     /// 有界编码
@@ -59,17 +53,26 @@ pub struct SubmissionReply {
     pub error: Option<String>,
 }
 impl SubmissionReply {
-    /// 已成功接纳的原映射, 不代表已执行
-    pub fn accepted(key: Uuid, authority: Uuid, operation: Uuid, attempt: Uuid) -> Self {
-        Self {
+    /// 将库返回的原授权投影为接纳映射, 不代表已执行
+    ///
+    /// # 错误
+    /// 领域消息不是 DispatchAttempt 时返回错误
+    pub fn accepted<P, O, E>(
+        key: Uuid,
+        delivery: &Delivery<P, O, E>,
+    ) -> Result<Self, ProtocolError> {
+        let DomainMessage::DispatchAttempt(attempt) = &delivery.message else {
+            return Err(invalid());
+        };
+        Ok(Self {
             protocol_version: PROTOCOL_VERSION,
             submission_key: key,
-            authority_instance_id: authority,
-            operation_id: Some(operation),
-            attempt_id: Some(attempt),
+            authority_instance_id: Uuid::from_u128(delivery.source_instance_id.as_u128()),
+            operation_id: Some(Uuid::from_u128(attempt.operation.operation_id.as_u128())),
+            attempt_id: Some(Uuid::from_u128(attempt.attempt_id.as_u128())),
             response: None,
             error: None,
-        }
+        })
     }
     /// 未接纳的提交错误, 不创建业务身份或 Report
     pub fn rejected(key: Uuid, authority: Uuid, error: String) -> Self {

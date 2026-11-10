@@ -26,7 +26,9 @@ Report 回执须绑定 Authority/Worker 运行实例, OperationId, AttemptId 和
 
 Console 使用严格 JSON `Submission { protocol_version: 0, submission_key, task: "hello" }`, 不接受 Client 指定 OperationId. `--submission-key UUID` 仅与 `--message hello` 使用; 未指定时生成新 key. 原 `--operation-id` 参数及旧请求不再接受, 不能把旧 OperationId 静默解释成提交键. Dispatch 内完整 Operation 与 Worker Report 编码保持不变.
 
-每个 Authority 驱动同步校验并调用领域接纳, 在任何 await, 回执发布或执行前建立提交映射. 映射包含完整解码定义和原 Operation/Attempt, 最多 1024 条, 不淘汰终态记录. 同 Authority 同 key 同定义复用原接纳, 不推进调度或创建新授权; 不同定义冲突. 当前仅有固定 Hello 定义, 不支持的任务在解码时拒绝. 新 key 即使内容相同仍分配新 OperationId. 不同 Authority 不共享映射.
+提交映射现由 beamlet 的通用 Authority 内存账本持有. Node 在交付条件检查后调用 `submit_keyed`, 在任何 await, 回执发布或执行前同步保存提交键, Operation 与 Attempt. 键引用已保留 Operation 中的完整任务定义, 与 Operation 记录共用 max_records 上限, 默认最多 1024 条, 不淘汰终态记录. 同 Authority 同 key 同定义复用原接纳, 不推进路由或调用身份生成函数; 不同定义返回 SubmissionConflict. 新 key 即使内容相同仍分配新 Operation/Attempt, 不同 Authority 不共享映射. 当前协议只接受固定 Hello, 不支持的任务在解码时拒绝; 库接纳逻辑不依赖该任务或 JSON.
+
+应用显式提供 ID 生成函数, 由 Authority 仅在新键通过容量检查后调用; 生成的 OperationId 或 AttemptId 已被使用时拒绝, 不自动重新生成. 失败不创建键映射或 Operation, 不推进路由; 候选 ID 不要求回收. `check_submission` 用于接纳前校验已有定义和读取当前观察, 不预留资格. Node 不维护第二份提交表, `SubmissionReply::accepted` 直接从库返回的原授权生成协议映射. 以上原子性仅限本次内存账本, 不构成持久事务或崩溃恢复保证.
 
 `SubmissionReply` 严格包装 `protocol_version`, `submission_key`, `authority_instance_id`, `operation_id`, `attempt_id`, `response`, `error`. 肯定回执含原映射, `response` 和 `error` 为 null. 结果携带相同映射及现有 Response, 因而合法 Report 或 Pending 先到也能关联接纳, 停止提交重投. 校验 Report 内 Operation/Attempt 及目标 Authority 与外层一致. 提交错误不生成 Report 或虚构业务身份; 不据此推翻之前的接纳事实. 全包装上限 64 KiB, 拒绝未知字段, 版本及结构冲突.
 

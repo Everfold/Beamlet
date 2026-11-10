@@ -1,7 +1,7 @@
 //! 独立 Authority 入口, 只接纳请求与收录证据, 不持有执行器
 
 use crate::{
-    id::{AttemptId, OperationId, ReportId, RoleInstanceId},
+    id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
     memory::{
         Authority as Ledger, Limits, OperationView, ReportDisposition, StateError, Submission,
     },
@@ -53,6 +53,56 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
             ),
             attempt,
         )
+    }
+
+    /// 校验提交键与完整定义, 返回已接纳执行的当前观察
+    ///
+    /// 未知键返回空值, 不分配身份或预留资格. 供调用方在接纳前检查交付资源;
+    /// 提交时仍会再次校验. 传输版本与临时回复地址不属于任务定义.
+    ///
+    /// # 错误
+    /// 同键不同定义时返回 SubmissionConflict
+    pub fn check_submission(
+        &self,
+        key: SubmissionKey,
+        task: &P,
+    ) -> Result<Option<&OperationView<P, O, E>>, StateError> {
+        self.ledger.check_submission(key, task)
+    }
+
+    /// 按提交键接纳完整定义, 仅在创建新执行时调用应用提供的身份生成函数
+    ///
+    /// 接纳成功前同步保存键映射, Operation 与 Attempt; 不执行或派发任务.
+    /// 重复键沿用原授权, 内容冲突与容量不足时不调用 allocate.
+    /// 分配的 ID 冲突时拒绝, 不自动重新生成; 候选 ID 不要求回收.
+    /// 此保证仅限当前内存账本, 不提供持久性或跨实例去重.
+    ///
+    /// # 示例
+    ///
+    /// ```
+    /// use beamlet::{Authority, memory::{Admission, Limits}};
+    /// let mut authority = Authority::<String, String, String>::new(
+    ///     1.into(), vec![2.into()], Limits::default(),
+    /// )?;
+    /// let accepted = authority.submit_keyed(7.into(), "hello".to_owned(), || {
+    ///     (10.into(), 20.into()) // 应用选择身份生成机制
+    /// })?;
+    /// assert_eq!(accepted.admission, Admission::New);
+    /// # Ok::<(), beamlet::memory::StateError>(())
+    /// ```
+    ///
+    /// # 错误
+    /// 提交内容冲突, 记录容量不足或生成的身份已被使用时返回错误
+    pub fn submit_keyed<F>(
+        &mut self,
+        key: SubmissionKey,
+        task: P,
+        allocate: F,
+    ) -> Result<Submission<P, O, E>, StateError>
+    where
+        F: FnOnce() -> (OperationId, AttemptId),
+    {
+        self.ledger.submit_keyed(key, task, allocate)
     }
 
     /// 调用方确认已发出后记录派发观察, 不代表 Worker 已接纳

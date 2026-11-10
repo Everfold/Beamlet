@@ -3,8 +3,8 @@
 /// 领域状态由纯 Kernel 定义
 pub use beamlet_kernel::state::{OperationPhase, WaitStatus, WorkerPhase};
 use beamlet_kernel::{
-    id::{AttemptId, OperationId, ReportId, RoleInstanceId},
-    model::{Delivery, DispatchAttempt, Message},
+    id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
+    model::{Delivery, DispatchAttempt, Message, Operation},
     state::RuleError,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -115,6 +115,7 @@ pub struct Authority<P, O, E> {
     next_worker: usize,
     limits: Limits,
     operations: HashMap<OperationId, OperationView<P, O, E>>,
+    submission_keys: HashMap<SubmissionKey, OperationId>,
     reports: HashMap<ReportId, Delivery<P, O, E>>,
 }
 
@@ -140,8 +141,80 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
             next_worker: 0,
             limits,
             operations: HashMap::new(),
+            submission_keys: HashMap::new(),
             reports: HashMap::new(),
         })
+    }
+
+    /// 校验同键提交的完整定义, 返回已接纳执行的当前观察
+    ///
+    /// 未知键返回空值; 不分配身份, 不修改记录或预留接纳资格.
+    /// 定义按 P 的 Eq 语义比较, 不包含临时回复路由或传输信封.
+    ///
+    /// # 错误
+    /// 同一键已经关联不同的定义时返回 SubmissionConflict
+    pub fn check_submission(
+        &self,
+        key: SubmissionKey,
+        task: &P,
+    ) -> Result<Option<&OperationView<P, O, E>>, StateError> {
+        let Some(operation) = self.submission_keys.get(&key) else {
+            return Ok(None);
+        };
+        let view = self
+            .operations
+            .get(operation)
+            .expect("提交键必须关联已接纳的 Operation");
+        let Message::DispatchAttempt(attempt) = &view.dispatch.message else {
+            unreachable!("Authority 只能保留 Attempt 信封");
+        };
+        if &attempt.operation.task != task {
+            return Err(StateError::SubmissionConflict);
+        }
+        Ok(Some(view))
+    }
+
+    /// 在同一内存账本中同步接纳提交键, Operation 和一次授权
+    ///
+    /// 重复提交沿用原授权, 不推进路由或调用身份生成函数.
+    /// 仅新键通过容量检查后调用 allocate; 生成的身份冲突时拒绝, 不自动重新生成.
+    /// 接纳失败不创建提交键或 Operation 记录, 但已生成的候选 ID 可以被消耗.
+    /// 每个键对应独立 Operation, 映射随账本保留, 不因终态淘汰.
+    ///
+    /// # 错误
+    /// 提交内容冲突, 记录容量不足或生成的身份已被使用时返回错误
+    pub fn submit_keyed<F>(
+        &mut self,
+        key: SubmissionKey,
+        task: P,
+        allocate: F,
+    ) -> Result<Submission<P, O, E>, StateError>
+    where
+        F: FnOnce() -> (OperationId, AttemptId),
+    {
+        if let Some(existing) = self.check_submission(key, &task)? {
+            return Ok(Submission {
+                admission: Admission::Duplicate,
+                dispatch: existing.dispatch.clone(),
+            });
+        }
+        if self.operations.len() >= self.limits.max_records {
+            return Err(StateError::Capacity);
+        }
+        let (operation_id, attempt_id) = allocate();
+        if self.operations.contains_key(&operation_id) {
+            return Err(StateError::OperationConflict);
+        }
+        let accepted = self.submit(
+            Delivery::new(
+                self.instance,
+                self.instance,
+                Message::SubmitOperation(Operation { operation_id, task }),
+            ),
+            attempt_id,
+        )?;
+        self.submission_keys.insert(key, operation_id);
+        Ok(accepted)
     }
 
     /// 预览接纳与静态路由, 不保存请求, 也不推进轮询
@@ -524,8 +597,11 @@ pub enum StateError {
     /// 发送方不是配置的 Authority 运行实例
     #[error("发送方不是配置的 Authority")]
     UntrustedAuthority,
-    /// 该 Operation 身份已经绑定到不同的定义
-    #[error("Operation 身份与已保留定义冲突")]
+    /// 同一提交键已经关联不同的完整定义
+    #[error("SubmissionKey 与已保留定义冲突")]
+    SubmissionConflict,
+    /// 该 Operation 身份已被占用, 不能关联新的请求或不同定义
+    #[error("Operation 身份与已保留请求冲突")]
     OperationConflict,
     /// 同一 Attempt 身份被用于不同的绑定或请求
     #[error("Attempt 身份与已保留授权冲突")]

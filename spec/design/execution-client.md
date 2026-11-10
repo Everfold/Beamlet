@@ -1,6 +1,8 @@
 # 执行 Client 与结果观察
 
-状态: 待实现 Interface 的语义契约, 2026-11-10. 当前 Console 只有固定 Hello 提交及重复提交读取原结果的能力, 不代表已有通用查询/订阅 SDK. [回执契约](receipts.md)描述当前易失原型.
+状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, Console 已复用该实现, 仍只有固定 Hello 提交及重复提交读取原结果的能力; 通用 Client 查询/订阅 SDK 尚未实现. [回执契约](receipts.md)描述当前易失原型.
+
+当前库入口为 `Authority::submit_keyed(key, task, allocate)`: 定义按类型 P 的 Eq 比较, 传输信封和临时回复地址由 Adapter 处理. 只有新键通过记录容量检查后才调用 allocate 生成 OperationId/AttemptId; 同键同定义返回原授权, 冲突或容量不足不生成身份. 已用 ID 被拒绝, 不把新键关联到已有执行. `check_submission(key, &task)` 返回已接纳执行的当前观察或定义冲突, 未知键返回空值; 它不修改状态或预留后续接纳资格, 也不是远端查询 SDK.
 
 ## Agent 与 Authority 的联系
 
