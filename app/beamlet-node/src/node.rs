@@ -1,18 +1,12 @@
 //! Node 组合入口, 网络会话与静态业务角色分别配置
 
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result, ensure};
 use beamlet::{
-    Worker,
-    id::{
-        AuthorityId, AuthorityInstanceId, NodeId, NodeInstanceId, RoleInstanceId, WorkerId,
-        WorkerInstanceId,
-    },
-    worker_observation::{self, Observations, Slot, Source},
+    Worker, composition,
+    id::{NodeInstanceId, RoleInstanceId},
+    worker_observation::{Observations, Source},
 };
 use beamlet_agent::testing::{
     hello::Task,
@@ -30,12 +24,12 @@ use uuid::Uuid;
 
 use crate::{
     lifecycle, roles,
-    shutdown::{self, Phase, Shutdown},
+    shutdown::{Phase, Shutdown},
 };
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Config {
+struct FileConfig {
     node_id: Uuid,
     #[serde(default = "default_drain_ms")]
     drain_timeout_ms: u64,
@@ -66,10 +60,10 @@ struct WorkerConfig {
 }
 
 fn default_drain_ms() -> u64 {
-    shutdown::DEFAULT_DRAIN_MS
+    composition::DEFAULT_DRAIN_TIMEOUT.as_secs() * 1000
 }
 
-impl Default for Config {
+impl Default for FileConfig {
     fn default() -> Self {
         let authority = Uuid::new_v4();
         let worker = Uuid::new_v4();
@@ -92,82 +86,6 @@ impl Default for Config {
     }
 }
 
-impl Config {
-    fn validate(&self) -> Result<()> {
-        ensure!(
-            (1..=60_000).contains(&self.drain_timeout_ms),
-            "Draining 期限必须为 1..=60000 毫秒"
-        );
-        ensure!(
-            !self.listen.is_empty() || !self.connect.is_empty(),
-            "至少配置一个监听或连接地址"
-        );
-        ensure!(
-            self.authorities.len() + self.workers.len() <= 64,
-            "每个 Node 最多配置 64 个角色实例"
-        );
-        let mut identities = HashSet::new();
-        for identity in self
-            .authorities
-            .iter()
-            .map(|a| a.id)
-            .chain(self.workers.iter().map(|w| w.id))
-        {
-            ensure!(identities.insert(identity), "逻辑角色身份重复: {identity}");
-        }
-        let mut instances = HashSet::new();
-        for instance in self
-            .authorities
-            .iter()
-            .map(|a| a.instance)
-            .chain(self.workers.iter().map(|w| w.instance))
-        {
-            ensure!(instances.insert(instance), "角色实例身份重复: {instance}");
-        }
-        for authority in &self.authorities {
-            let mut workers = HashSet::new();
-            ensure!(
-                authority.workers.len() <= worker_observation::MAX_WORKERS,
-                "每个 Authority 最多配置 64 个 Worker 实例"
-            );
-            ensure!(
-                !authority.workers.is_empty(),
-                "Authority 至少需要一个 Worker"
-            );
-            for worker in &authority.workers {
-                ensure!(
-                    *worker != authority.instance && workers.insert(*worker),
-                    "Worker 绑定无效或重复"
-                );
-                ensure!(
-                    !self.authorities.iter().any(|a| a.instance == *worker),
-                    "Worker 目标指向了 Authority 实例"
-                );
-                if let Some(local) = self.workers.iter().find(|w| w.instance == *worker) {
-                    ensure!(
-                        local.authority == authority.instance,
-                        "本地 Worker 绑定了其他 Authority"
-                    );
-                }
-            }
-        }
-        for worker in &self.workers {
-            ensure!(worker.instance != worker.authority, "Worker 不能授权自身");
-            if let Some(local) = self
-                .authorities
-                .iter()
-                .find(|a| a.instance == worker.authority)
-            {
-                ensure!(
-                    local.workers.contains(&worker.instance),
-                    "本地 Authority 未配置此 Worker"
-                );
-            }
-        }
-        Ok(())
-    }
-}
-
 /// 从可选 JSON 路径启动 Node, 无路径时默认承载一个 Authority 和一个本地 Worker
 ///
 /// `listen` 只可覆盖默认配置的监听地址. 显式文件读取失败不会回退默认配置.
@@ -183,10 +101,10 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
         let mut bytes = Vec::new();
         file.take(64 * 1024 + 1).read_to_end(&mut bytes).await?;
         ensure!(bytes.len() <= 64 * 1024, "Node 配置超过 64 KiB");
-        let config: Config = serde_json::from_slice(&bytes).context("解析 Node 配置失败")?;
+        let config: FileConfig = serde_json::from_slice(&bytes).context("解析 Node 配置失败")?;
         (config, None)
     } else {
-        let mut config = Config::default();
+        let mut config = FileConfig::default();
         if let Some(endpoint) = listen {
             config.listen = vec![endpoint.to_owned()];
         }
@@ -195,92 +113,104 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
         );
         (config, Some(roles::NODE_INBOX_PREFIX))
     };
-    config.validate()?;
-    let node_id = NodeId::from_u128(config.node_id.as_u128());
+    let FileConfig {
+        node_id,
+        drain_timeout_ms,
+        listen,
+        connect,
+        authorities,
+        workers,
+    } = config;
+    let plan = composition::Config {
+        node_id: node_id.as_u128().into(),
+        drain_timeout: Duration::from_millis(drain_timeout_ms),
+        authorities: authorities
+            .into_iter()
+            .map(|authority| composition::Authority {
+                id: authority.id.as_u128().into(),
+                instance: authority.instance.as_u128().into(),
+                workers: authority
+                    .workers
+                    .into_iter()
+                    .map(|worker| worker.as_u128().into())
+                    .collect(),
+            })
+            .collect(),
+        workers: workers
+            .into_iter()
+            .map(|worker| composition::Worker {
+                id: worker.id.as_u128().into(),
+                instance: worker.instance.as_u128().into(),
+                authority: worker.authority.as_u128().into(),
+            })
+            .collect(),
+    }
+    .into_plan()?;
+    let node_id = plan.node_id();
     let node_instance = NodeInstanceId::from_u128(Uuid::new_v4().as_u128());
     println!("Node 身份: 逻辑身份={node_id} 运行实例={node_instance}");
     let mut notices = Vec::new();
-    for authority in &config.authorities {
+    for authority in plan.authorities() {
         notices.push(RoleNotice::new(
             Role::Authority,
-            config.node_id,
+            Uuid::from_u128(node_id.as_u128()),
             Uuid::from_u128(node_instance.as_u128()),
-            authority.id,
-            authority.instance,
+            Uuid::from_u128(authority.id.as_u128()),
+            Uuid::from_u128(authority.instance.as_u128()),
         ));
-        let id = AuthorityId::from_u128(authority.id.as_u128());
-        let instance = AuthorityInstanceId::from_u128(authority.instance.as_u128());
+        let id = authority.id;
+        let instance = authority.instance;
         println!(
             "角色生命周期: Authority 状态=Starting; 逻辑身份={id} 运行实例={instance} NodeId={node_id} NodeInstanceId={node_instance}; 配置已校验, 尚未就绪"
         );
     }
-    for worker in &config.workers {
+    for worker in plan.workers() {
         notices.push(RoleNotice::new(
             Role::Worker,
-            config.node_id,
+            Uuid::from_u128(node_id.as_u128()),
             Uuid::from_u128(node_instance.as_u128()),
-            worker.id,
-            worker.instance,
+            Uuid::from_u128(worker.id.as_u128()),
+            Uuid::from_u128(worker.instance.as_u128()),
         ));
-        let id = WorkerId::from_u128(worker.id.as_u128());
-        let instance = WorkerInstanceId::from_u128(worker.instance.as_u128());
+        let id = worker.id;
+        let instance = worker.instance;
         println!(
             "角色生命周期: Worker 状态=Starting; 逻辑身份={id} 运行实例={instance} NodeId={node_id} NodeInstanceId={node_instance}; 配置已校验, 尚未就绪"
         );
     }
     let subscription = format!("beamlet/v0/node-session/{node_instance}/inbox");
-    let transport = Arc::new(
-        Transport::node(
-            &config.listen,
-            &config.connect,
-            &subscription,
-            Limits::default(),
-        )
-        .await?,
-    );
+    let transport =
+        Arc::new(Transport::node(&listen, &connect, &subscription, Limits::default()).await?);
     let mut tasks = JoinSet::new();
     let (stop, control) = Shutdown::channel();
     let mut announcements_task = JoinSet::new();
     // 先声明所有订阅再启动角色, 避免共享会话中的局部启动顺序影响就绪
     let mut authorities = Vec::new();
     let mut workers = Vec::new();
-    for authority in config.authorities {
+    for authority in plan.authorities() {
         let prefix = match request_prefix {
             Some(prefix) => prefix.to_owned(),
             None => format!(
                 "beamlet/v0/authority/{}/submit/",
-                authority.instance.simple()
+                Uuid::from_u128(authority.instance.as_u128()).simple()
             ),
         };
         let requests = transport.subscribe(&format!("{prefix}*")).await?;
-        let instance: RoleInstanceId =
-            AuthorityInstanceId::from_u128(authority.instance.as_u128()).into();
+        let instance: RoleInstanceId = authority.instance.into();
         let reports = transport.subscribe(&roles::report_inbox(instance)).await?;
         // 两种地址各有独立有界队列, 由同一 Authority 驱动处理
         let combined = (requests, reports);
         let announcements = transport
-            .subscribe(&worker_lifecycle::inbox(authority.instance))
+            .subscribe(&worker_lifecycle::inbox(Uuid::from_u128(
+                authority.instance.as_u128(),
+            )))
             .await?;
-        let mut observations = Observations::new(
-            authority.instance.as_u128().into(),
-            authority.workers.iter().map(|worker| Slot {
-                instance: worker.as_u128().into(),
-                source: if config.workers.iter().any(|local| local.instance == *worker) {
-                    Source::Local
-                } else {
-                    Source::Remote
-                },
-            }),
-        )?;
+        let mut observations =
+            Observations::new(authority.instance, plan.worker_slots(authority.instance))?;
         let mut local = HashMap::new();
         let mut local_announcements = Vec::new();
-        for worker in config
-            .workers
-            .iter()
-            .filter(|w| w.authority == authority.instance)
-        {
-            let worker_id: RoleInstanceId =
-                WorkerInstanceId::from_u128(worker.instance.as_u128()).into();
+        for worker in plan.local_workers(authority.instance) {
+            let worker_id: RoleInstanceId = worker.instance.into();
             local.insert(
                 worker_id,
                 Worker::<Task, String, String>::new(
@@ -290,36 +220,30 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                 )?,
             );
             let announcement = Announcement::started(
-                config.node_id,
+                Uuid::from_u128(node_id.as_u128()),
                 Uuid::from_u128(node_instance.as_u128()),
-                worker.id,
-                worker.instance,
-                worker.authority,
+                Uuid::from_u128(worker.id.as_u128()),
+                Uuid::from_u128(worker.instance.as_u128()),
+                Uuid::from_u128(worker.authority.as_u128()),
             );
             lifecycle::record(&mut observations, announcement.clone(), Source::Local)?;
             local_announcements.push(announcement);
         }
         authorities.push((
             combined,
-            authority,
+            authority.clone(),
             local,
             prefix,
             (observations, announcements, local_announcements),
         ));
     }
-    for worker in config.workers {
-        if authorities
-            .iter()
-            .any(|(_, a, _, _, _)| a.instance == worker.authority)
-        {
-            continue;
-        }
+    for worker in plan.remote_workers() {
         let inbox = roles::worker_inbox(worker.instance.as_u128().into());
         let receipts = beamlet_agent::testing::receipt::inbox(worker.instance.as_u128().into());
         workers.push((
             transport.subscribe(&inbox).await?,
             transport.subscribe(&receipts).await?,
-            worker,
+            *worker,
         ));
     }
     for (
@@ -335,7 +259,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
             .keys()
             .map(|id| Uuid::from_u128(id.as_u128()))
             .collect();
-        instances.push(authority.instance);
+        instances.push(Uuid::from_u128(authority.instance.as_u128()));
         tasks.spawn(async move {
             let result = tokio::select! {
                 result = roles::serve_authority_pair(
@@ -356,11 +280,11 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     }
     for (worker_transport, receipt_transport, worker) in workers {
         let announcement = Announcement::started(
-            config.node_id,
+            Uuid::from_u128(node_id.as_u128()),
             Uuid::from_u128(node_instance.as_u128()),
-            worker.id,
-            worker.instance,
-            worker.authority,
+            Uuid::from_u128(worker.id.as_u128()),
+            Uuid::from_u128(worker.instance.as_u128()),
+            Uuid::from_u128(worker.authority.as_u128()),
         );
         let publisher = Arc::clone(&transport);
         let control = control.clone();
@@ -375,7 +299,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                     control,
                 ) => result,
             };
-            (vec![worker.instance], result)
+            (vec![Uuid::from_u128(worker.instance.as_u128())], result)
         });
     }
     let role_count = notices.len();
@@ -421,7 +345,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     stop.send_replace(Phase::Draining);
     println!(
         "Node 进入 Draining: 停止新接纳; 等待上限={} 毫秒",
-        config.drain_timeout_ms
+        plan.drain_timeout().as_millis()
     );
     for notice in &notices {
         println!(
@@ -437,7 +361,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     announcements_task.abort_all();
     while announcements_task.join_next().await.is_some() {}
     let mut failure = failure;
-    let drained = timeout(Duration::from_millis(config.drain_timeout_ms), async {
+    let drained = timeout(plan.drain_timeout(), async {
         while let Some(result) = tasks.join_next().await {
             let result = result
                 .context("Draining 角色任务失败")

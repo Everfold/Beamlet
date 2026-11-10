@@ -92,6 +92,9 @@ impl Transport {
         inbox: &str,
         limits: Limits,
     ) -> Result<Self, Error> {
+        if listen.is_empty() && connect.is_empty() {
+            return Err(Error::MissingEndpoints);
+        }
         Self::open(
             "peer",
             listen.iter().map(String::as_str).collect(),
@@ -234,6 +237,9 @@ impl Sender<'_> {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// 显式静态 peer 至少需要一个监听或连接地址
+    #[error("至少配置一个监听或连接地址")]
+    MissingEndpoints,
     /// 字节或队列上限为零
     #[error("传输资源上限必须为正数")]
     InvalidLimits,

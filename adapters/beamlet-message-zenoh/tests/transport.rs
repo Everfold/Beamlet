@@ -66,3 +66,11 @@ async fn byte_limits_apply_to_sends_and_receives_without_poisoning_the_session()
     .await
     .expect("byte-budget checks must not stall the connection");
 }
+
+#[tokio::test]
+async fn static_peer_requires_explicit_endpoints_before_opening_a_session() {
+    assert!(matches!(
+        Transport::node(&[], &[], "beamlet/test/unused", Limits::default()).await,
+        Err(Error::MissingEndpoints)
+    ));
+}

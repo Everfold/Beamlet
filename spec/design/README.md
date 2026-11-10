@@ -91,6 +91,8 @@ beamlet-agent -> beamlet -> beamlet-kernel
 
 `worker_observation::Observations` 为显式配置的本地/远端 Worker 保存完整归属和心跳序号, 通过宿主轮询推进在线/可疑观察. `role_observation::Observations` 按运行实例合并公共启动/退出事实, 保留退出终态. 两者均提供只读内存快照, 不接入网络或改变执行调度. 编解码属于测试 Adapter, Node/Console 消费结构化变化并展示.
 
+`composition::Config::into_plan` 校验角色身份, 本地双向绑定及排空期限, 生成不可变 Plan. 应用按原顺序读取 Authority/Worker, 本地组合, 绑定远端 Authority 的 Worker 及心跳槽位, 再显式创建驱动. 组装计划无网络地址或存储字段, 不生成身份或启动任务; 纯本地应用无需接入基础设施. 当前 Node CLI 仍显式选用 Zenoh, 地址配置由消息 Adapter 处理.
+
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 
 库接受类型化配置和必要依赖, 完成可复用的配置校验, 返回结构化结果, 错误和观察; CLI 参数解析, 终端交互, 展示及退出码映射留在应用. 调用通用执行能力不要求依赖 Agent 库. 其他应用应能直接通过相同库接口完成相同行为, 无需导入 Node/Console 应用实现或复制其控制流程.

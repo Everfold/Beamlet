@@ -20,6 +20,16 @@ Agent Loop, Codemode 及其派生 Operation 的待实现组合契约见 [Operati
 
 Agent Loop 可在获准的 Worker 上运行, 与 Authority 部署位置分离, 通过 [执行 Client](execution-client.md)提交和查询子执行. Agent, Authority, Worker 与存储可以分节点; 首版优先本地组合, 不要求另建远程存储服务. Agent 创建关联与执行恢复的规则见 [Agent 模型](agent-model.md)和 [恢复契约](persistence-recovery.md).
 
+## 组装配置的库入口
+
+`beamlet::composition::Config` 只包含 NodeId, Duration 排空期限以及 Authority/Worker 类型化配置. Authority 显式携带 AuthorityId, AuthorityInstanceId 和有序 WorkerInstanceId 列表; Worker 显式携带 WorkerId, WorkerInstanceId 和 AuthorityInstanceId. 无 serde, UUID 生成, 地址, 数据库或遥测依赖. `into_plan` 同步校验后返回不可变 Plan, 构造过程不创建角色, 不启动运行时或 I/O. 空角色, 仅 Authority, 仅 Worker 和混合配置均可表示.
+
+校验保留当前原型约束: 排空期限 1ms..=60s, 每 Node 最多 64 个角色, 每 Authority 配置 1..=64 个不重复 Worker. 本地稳定角色身份和运行实例分别唯一, 两种身份空间不混用; Authority 与 Worker 之间也不能复用同类身份值. Worker 目标不能指向已知 Authority, Authority 引用不能指向已知 Worker (含自指). 对本 Node 同时承载的绑定, Authority 的列表与 Worker 的唯一 Authority 必须一致. 不能据此检查远端角色所有权, 可达性或历史实例是否复用.
+
+Plan 保留原配置顺序, 以只读切片和迭代器提供 authorities/workers/local_workers/remote_workers/worker_slots. 每个本地 Worker 恰好属于一个本地 Authority 组合或一个独立远端绑定驱动; unknown Authority 不会形成假本地组合. 观察槽位按 Authority 原 Worker 顺序标注 Local/Remote, 不根据公告增补信任. 应用明确选择实例创建和启动时机, 可以不使用 Node 容器而直接调用已有 Authority/Worker 或 LocalExecution.
+
+Node 文件 DTO 仅解析严格 JSON 并转换为库 Config, 64KiB 文件上限, 默认 Hello 配置, UUID 生成, 消息路由和日志留在应用. 默认入口与文件入口都消费同一 Plan, 不维护另一份配置校验或分组规则. 当前 CLI 继续使用 Zenoh; `Transport::node` 在创建会话前检查至少一个 listen/connect 地址, 消息 Adapter 负责具体端点语法. 纯本地库组装没有这一要求. 此阶段不新增 CLI 的无网络模式, 自动连接, 数据库或观测平台, 也不实现跨重启运行身份解析.
+
 ## 身份与请求
 
 目标稳定身份为 NodeId, AuthorityId, WorkerId; 每次启动独立生成 NodeInstanceId, AuthorityInstanceId, WorkerInstanceId. 角色重启不得复用旧运行身份. 公告与心跳只表达观察, 不自动建立信任或授权.

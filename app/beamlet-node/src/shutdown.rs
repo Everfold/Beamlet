@@ -1,12 +1,10 @@
 //! 应用层统一退出信号与有限 Draining, 不推断执行或外部效果
 
 use std::future::Future;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use beamlet::composition::DEFAULT_DRAIN_TIMEOUT;
 use tokio::{sync::watch, time::timeout};
-
-pub(crate) const DEFAULT_DRAIN_MS: u64 = 10_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Phase {
@@ -52,9 +50,9 @@ where
     sender.send_replace(Phase::Draining);
     println!(
         "Node 进入 Draining: 停止新接纳; 等待上限={} 毫秒",
-        DEFAULT_DRAIN_MS
+        DEFAULT_DRAIN_TIMEOUT.as_millis()
     );
-    match timeout(Duration::from_millis(DEFAULT_DRAIN_MS), &mut driver).await {
+    match timeout(DEFAULT_DRAIN_TIMEOUT, &mut driver).await {
         Ok(result) => result,
         Err(_) => {
             bail!("Node Draining 到期; 执行或交付未确认, 不生成失败 Report, 内存状态不保证恢复")

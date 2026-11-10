@@ -15,6 +15,7 @@ pub use local_execution::{LocalExecution, LocalExecutionError};
 pub use worker::Worker;
 
 pub mod attempt_delivery;
+pub mod composition;
 pub mod executor;
 pub mod memory;
 pub mod observe;
