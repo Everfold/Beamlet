@@ -28,11 +28,14 @@ _Avoid_: Work, Runner 作为对外角色名
 面向 LLM 的调用接口, 由宿主将调用映射为具体处理行为; 与 Operation 不要求一一对应.
 
 **Agent**:
-具有独立身份, 配置, 输入, 历史关联和推进状态的持续实体; 不归属于某个固定 Authority 或 Worker.
+通过自身的 Loop Operation 参与执行, 具有配置, 输入, 历史关联和推进状态的独立实体; 相同配置的新创建和 fork 均产生不同 Agent.
 _Avoid_: Authority/Worker 本地组合入口作为领域 Agent
 
 **Agent Loop**:
-Agent 根据输入与已取得结果持续决定后续调用的执行逻辑, 其一次执行由 Operation 表达; Loop 返回不代表 Agent 实体销毁.
+Agent 根据输入与已取得结果持续决定后续调用的执行逻辑, 由该 Agent 对应的 Operation 表达. 正常结束要求其负责的子执行与结果处理全部完成, Loop 返回后数据可保留.
+
+**Agent 输出**:
+Agent 已选择向应用或 UI 发布的回答, 可以在 Loop 尚未结束时产生; 不等同于整个 Loop 的最终 Report.
 
 **LLM Request**:
 以固定模型配置, 已构造输入和工具声明请求模型生成内容的一次执行, 由独立 Operation 表达.
@@ -59,8 +62,9 @@ _Avoid_: Agent 的一次调用
 **Report**:
 有关一次授权执行的证据, 独立于 Authority 是否采用及业务是否成功.
 
-**外部影响证据**:
+**ImpactStatus**:
 对某次执行在声明范围内是否影响外部世界的证据结论, 区分确认无影响, 已观察影响与无法确定; 与执行成功或失败独立.
+_Avoid_: Effect, 无限定的 Status 或 Evidence
 
 **SubmissionKey**:
 在指定 Authority 内关联同一次提交的稳定去重键, 不等于 Operation 的身份.

@@ -7,9 +7,9 @@
 | 文档 | 回答的问题 |
 | --- | --- |
 | 本页 | 原语, 分层, 角色, 部署与设计取舍 |
-| [Agent 实体与状态](agent-model.md) | Agent 数据, preset, Loop 状态, 输入, 单写者与 fork |
+| [Agent 实体与状态](agent-model.md) | Agent 数据, preset, Loop 状态, 创建身份与 fork |
 | [Operation 组合与 Agent Loop](operation-composition.md) | Loop, LLM Request, Tool, Codemode 如何关联与完成 |
-| [执行 Client 与结果观察](execution-client.md) | Agent 在 Worker 上如何提交, 查询和接收 Report |
+| [执行 Client 与结果观察](execution-client.md) | Agent 如何提交, 查询和接收 Report, UI 如何查询和接收回答 |
 | [持久化与恢复](persistence-recovery.md) | Diesel/SQLite, 异步提交, 故障窗口与恢复限制 |
 | [实现顺序与验收](implementation-plan.md) | 当前差距, 前置决策与分阶段验收 |
 
@@ -25,7 +25,9 @@
 | Agent | 独立持久化的实体, 保存配置, 输入, 历史引用与推进状态 |
 | Capability / Tool | Capability 定义可执行行为; Tool 是面向 LLM 的调用接口, 两者与 Operation 不要求一一对应 |
 
-Agent Loop 的执行是 Operation. 每次 LLM Request 是独立 Operation, 不称为 Agent 的一次调用. Codemode 的一次代码执行和具体工具调用也可以是 Operation. Agent 实体跨 Loop 保留数据, 不把实体永久生命周期等同于一条永不结束的 Operation. Loop 的启动输入范围和完成策略必须明确, 不强制一条用户消息对应一个 Loop 或一个 Turn.
+Agent 通过自身的 Loop Operation 参与执行, 每次 LLM Request 是其中的独立 Operation, 不称为 Agent 的一次调用. Codemode 的一次代码执行和具体工具调用也可以是 Operation. 相同配置的不同创建请求和 fork 都产生不同 Agent, 不提供用第二个 Loop Operation 再次启动原 Agent 的入口. 不强制一条用户消息对应一个 Loop 或一个 Turn; 执行结束后仍可保存 Agent 数据供审阅和复制.
+
+Agent 采用统一的正常完成规则: 其负责的子 Operation 全部结束, 工具结果已进入后续 LLM 处理, 且没有待提交调用或未处理输入/结果时结束 Loop. 异步工具仍会带来后续 LLM Operation, 期间 Agent 保持未完成. 不增加交互型/任务型分类或按此分类配置结束策略.
 
 ```text
 Agent A
@@ -39,7 +41,7 @@ Agent A
        -> Loop Report OR
 ```
 
-Report 当前代码中的 `Effect` 是外部影响的证据结论, 不是独立计算原语, 也不表示编程语言的 Effect 系统. `None / Observed / Unknown` 的语义继续保留. 新名称尚未定案, `EffectEvidence` 和 `ImpactStatus` 只是讨论过的候选, 本批不改 API 或编码. 执行失败不推导无影响, 执行成功不证明影响仅发生一次.
+Report 的外部影响证据类型采用 `ImpactStatus`, 字段采用 `impact`, 不是独立计算原语, 也不表示编程语言的 Effect 系统. 确认无影响, 已观察影响与未知的语义继续保留. 当前代码仍使用 `Effect` 和 `effect`, API/编码迁移另行实现, 不能将旧格式未经版本处理直接更名. 执行失败不推导无影响, 执行成功不证明影响仅发生一次.
 
 ## 执行底座的状态
 
@@ -56,17 +58,16 @@ Report 当前代码中的 `Effect` 是外部影响的证据结论, 不是独立�
 ## 代码分层
 
 ```text
-应用 / Console / Node / 未来 UI
-                |
-         beamlet-agent
-                |
-             beamlet
-                |
-         beamlet-kernel
+应用入口: Node / Console / UI
+  -> 显式选择角色与基础设施, 通过公开接口组装和驱动
+
+beamlet-agent -> beamlet -> beamlet-kernel
+存储 / 消息 Adapter -> 对应库接口与领域类型
 ```
 
 | 模块 | 目标职责 |
 | --- | --- |
+| Node / Console / UI 应用入口 | 参数与交互输入, 显式选择并组装角色/基础设施, 调用库接口, 展示输出与映射进程退出码 |
 | beamlet-kernel | 身份, 执行领域对象, 纯状态规则与证据绑定校验; 不依赖 Agent, 数据库或消息编码 |
 | beamlet | 通用执行账本与驱动, Authority/Worker, 提交和观察 Interface; 不理解 LLM Loop 策略 |
 | beamlet-agent | Agent 实体, preset/override, Loop 策略, 输入构造, 结果采用与 fork |
@@ -75,6 +76,16 @@ Report 当前代码中的 `Effect` 是外部影响的证据结论, 不是独立�
 
 这是目标职责, 不是要求每个 Interface 立刻新增 crate. 当前 `beamlet-agent::Agent` 只是 Authority/Worker 本地组合, 通用 Authority/Worker 包装也位于该 crate; 实现新 Agent 前需要调整名称与归属. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
 
+`beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
+
+库接受类型化配置和必要依赖, 完成可复用的配置校验, 返回结构化结果, 错误和观察; CLI 参数解析, 终端交互, 展示及退出码映射留在应用. 调用通用执行能力不要求依赖 Agent 库. 其他应用应能直接通过相同库接口完成相同行为, 无需导入 Node/Console 应用实现或复制其控制流程.
+
+组装关系由应用明确给出: 角色使用哪个 Client/执行器, 本地交付还是消息 Adapter, 哪份存储, 哪个观测性出口. 通用角色逻辑依赖所需能力, 具体 Zenoh, Diesel/SQLite 和遥测实现留在对应 Adapter. 构造角色不隐式创建另一角色, 建立网络连接, 打开数据库或注册全局遥测; 基础设施连接与角色启动由显式调用触发. 缺失必需依赖或模式冲突时返回错误, 不自动换用另一后端.
+
+应用可以传入已有基础设施句柄并决定共享关系. 接口须明确资源由谁持有及何时关闭; 停止一个角色不关闭其他角色仍在使用的连接或存储. 可选组装辅助可以执行应用声明的启动/关闭顺序, 使用者仍能分别使用相同角色与 Adapter 接口.
+
+按实际职责抽取模块, 优先复用已有库, 不为下沉实现预建通用插件框架或机械增加 trait/crate. 库接口的验收覆盖完整行为, 应用测试聚焦装配与交互.
+
 官方持久化以 Diesel + SQLite 为主. 用户可以提供符合契约的后端, 本阶段不设计或实现其他后端. Agent 存储与执行账本逻辑分离, 可以共用数据库与连接管理, 不要求两个数据库或全局事务.
 
 ## 角色与部署
@@ -82,6 +93,7 @@ Report 当前代码中的 `Effect` 是外部影响的证据结论, 不是独立�
 ```mermaid
 flowchart LR
     UI["应用 / UI"] -->|"输入 / 控制 / 查询"| AG["Worker A: Agent Loop"]
+    AG -->|"已保存回答 / 输出通知"| UI
     AG -->|"Client: 提交 / 查询 / 观察"| AU["Authority"]
     AU -->|"授权 Attempt"| W["Worker B: LLM / Tool / Codemode"]
     W -->|"Report"| AU
@@ -91,7 +103,9 @@ flowchart LR
     W <--> WS["Worker 接纳 / 执行 / 交付记录"]
 ```
 
-Client 是提交和观察能力, 不要求独立服务. Worker 可以同时使用 Client 能力提交子 Operation. Authority 拥有 Operation 权威记录, 不拥有 Agent 的决策状态. Agent Loop 可以在任意获准且能访问其数据和能力的 Worker 上运行; AgentId 不绑定 AuthorityId 或 WorkerId. 当前 Loop 结束后可以选择另一 Worker, 运行中迁移和自动故障接管不在首版承诺内.
+Client 是提交和观察能力, 不要求独立服务. Worker 可以同时使用 Client 能力提交子 Operation. Authority 拥有 Operation 权威记录, 不拥有 Agent 的决策状态. Agent Loop 可以在任意获准且能访问其数据和能力的 Worker 上运行; AgentId 不由固定 Worker 位置决定. 新创建或 fork 的 Agent 可在另一 Worker 上执行, 这不表示第二个 Operation 继续原 Agent. 原执行的恢复遵守通用授权规则, 运行中迁移和自动故障接管不在首版承诺内.
+
+Agent 保存已发布回答并提供查询与通知, UI 可以在 Loop 尚未结束时显示回答; 整个 Loop 的结束由最终 Report 表达. 输出查询和通知由 Agent 层提供, 执行 Report 仍由 Authority 保留, 具体约束见 [结果与 UI 输出观察](execution-client.md).
 
 Node 是组装与生命周期容器, 不是另一种执行授权方. 用户分别选择稳定身份, 承载角色以及接入的基础设施. 稳定 NodeId/AuthorityId/WorkerId 可由用户提供或首次生成后保存; 运行实例 ID 每次启动更换. UUID 不是地址, 认证凭证或接管许可.
 

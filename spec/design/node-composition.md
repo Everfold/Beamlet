@@ -6,6 +6,10 @@
 
 Node 是组合与生命周期容器, 不是业务执行角色. Client 提交意图和读取结果, Authority 持有权威 Operation 记录并授权, Worker 接纳授权并执行. Runner 可指 Worker 内部的执行机制, 不作为对外角色名. 执行角色统一使用 Worker, 不保留 Work 作为另一种角色名.
 
+角色构造, 依赖绑定与生命周期驱动应由可复用库显式提供, Node 组合辅助可选. `beamlet-node` 和 `beamlet-console` 可执行入口保持为调用层, 负责参数, 显式组装, 系统信号接入和输出展示; 角色驱动, 配置约束校验, 交付去重/重投, 观察合并及存储操作放入对应库. 当前原型中仍位于应用的可复用实现随相关功能迁回库, 其他应用接入时不需要复制 Node/Console 的内部流程. 下文描述已有行为, 不表示当前实现位置已经符合此目标.
+
+应用分别选择角色, 存储, 本地或远端交付, 消息会话及观测性出口, 通过公开接口传入依赖并显式启动. 独立角色不要求套入 Node 容器, 构造角色也不隐式启动其他角色或基础设施. 共享句柄的持有和关闭责任由组装接口明确表达; 单个角色退出只释放自己的使用关系, 不连带关闭其他角色仍在使用的资源.
+
 消息会话, 网络监听与连接, 遥测导出, 生命周期管理及未来存储是 Node 基础设施. 它们独立于业务角色配置. 内嵌消息会话不等于内嵌 broker/router; 遥测 exporter 不等于 collector. 当前不新增遥测平台或通用插件框架. 多个角色可共享消息会话, 但不共享授权权力或账本.
 
 同 Node 的绑定角色使用类型化交付, 保留接纳与证据校验步骤, 不强制经过网络或 JSON. 跨 Node 通过 Adapter 编码交付. 连接必须实际提供路由可达性, 不承诺任意拓扑天然互通.
@@ -14,7 +18,7 @@ Agent Loop, Codemode 及其派生 Operation 的待实现组合契约见 [Operati
 
 目标配置分别表达身份, 角色与基础设施: 用户可提供稳定 ID 或首次生成并保存, 独立选择 Zenoh 连接/Router, 数据库及观测性出口. 不接入持久存储时显式使用易失模式. 官方存储以 Diesel + SQLite 为主, 本阶段不实现其他后端; 当前 CLI 尚未完整支持这些可选接入方式.
 
-Agent Loop 可在获准的 Worker 上运行, 与 Authority 部署位置分离, 通过 [执行 Client](execution-client.md)提交和查询子执行. Agent, Authority, Worker 与存储可以分节点; 首版优先本地组合, 不要求另建远程存储服务. Agent 单写者和实例更替的规则见 [Agent 模型](agent-model.md)和 [恢复契约](persistence-recovery.md).
+Agent Loop 可在获准的 Worker 上运行, 与 Authority 部署位置分离, 通过 [执行 Client](execution-client.md)提交和查询子执行. Agent, Authority, Worker 与存储可以分节点; 首版优先本地组合, 不要求另建远程存储服务. Agent 创建关联与执行恢复的规则见 [Agent 模型](agent-model.md)和 [恢复契约](persistence-recovery.md).
 
 ## 身份与请求
 
@@ -22,7 +26,7 @@ Agent Loop 可在获准的 Worker 上运行, 与 Authority 部署位置分离, �
 
 配置模式必须提供稳定的 `node_id` 及每个角色的 `id`, 并单独提供角色运行 `instance`. Node 的运行 ID 每次启动随机生成, 启动日志记录 Node 与各角色的归属关系. 目前角色运行 ID 仍由启动方为本轮部署生成并通过静态配置交换, 不能复用旧值; 自动生成与公告驱动的实例解析尚未实现. `workers` 和 `authority` 引用仍是远端角色的运行实例 ID, Console 的 `--authority` 也仍指运行实例, 尚非稳定逻辑身份路由.
 
-目标由 Authority 在接纳提交时创建 OperationId. Client SDK 自动创建 SubmissionKey; 同一 Authority 内同键同定义返回原 Operation, 同键不同定义冲突. 去重映射和 Operation 必须作为一次本地接纳建立. 相同意图的新提交仍是新 Operation. Console 不组装底层授权和信封; SDK 暂时只提供 Zenoh, 未来可替换为 socket/HTTP. SDK 丢失提交键及 Operation 引用后, 本阶段不保证恢复请求.
+目标由 Authority 在接纳提交时创建 OperationId. Client SDK 自动创建 SubmissionKey; 同一 Authority 内同键同定义返回原 Operation, 同键不同定义冲突. 去重映射和 Operation 必须作为一次本地接纳建立. 相同意图的新提交仍是新 Operation. Console 不组装底层授权和信封; 当前 Console 原型只接 Zenoh, 目标 Client 接受应用显式选择的本地交付或消息 Adapter. SDK 丢失提交键及 Operation 引用后, 本阶段不保证恢复请求.
 
 多个独立 Authority 管理不同 Operation. Client 显式选择目标, 查询引用保留归属, 不广播提交. 共享连接不代表共享 Operation 命名所有权或允许自动接管. 当前每个 Worker 绑定一个 Authority, 多 Authority 信任列表另行实现.
 
