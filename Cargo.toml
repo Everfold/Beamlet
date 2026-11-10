@@ -58,7 +58,7 @@ rquickjs = { version = "0.14", features = ["full"] }
 rune = "0.14"
 
 config = "0.15"
-diesel = { version = "2.3", features = ["sqlite"] }
+kite_sql = { version = "0.7.0", features = ["orm", "spill"] }
 tempfile = "3.27"
 
 blake3 = { version = "1.8", features = ["rayon"] }
