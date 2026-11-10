@@ -79,7 +79,9 @@ beamlet-agent -> beamlet -> beamlet-kernel
 
 当前本地组合通过 `LocalExecution::from_parts(authority, worker)` 接管应用创建的角色, 保留已有状态与各自配置; `into_parts` 可取回角色继续独立驱动. 组合动作不启动任务或基础设施, 不补发已有授权, 实例绑定仍在每次交付时校验. `new` 是按显式身份和相同内存上限创建角色的便捷入口, 两种方式使用同一实现.
 
-`Authority::submit_keyed` 已提供通用提交键接纳: 在同一内存账本内保存 SubmissionKey 到 Operation/Attempt 的关联, 比较完整任务定义并返回原授权. 仅新提交通过检查后调用应用提供的 ID 生成函数. `check_submission` 可在接纳前校验已有定义和读取当前观察, 不预留资格. Node 只负责交付条件与协议适配, 不另建提交去重表; 通用 Client 仍待实现.
+`Authority::submit_keyed` 已提供通用提交键接纳: 在同一内存账本内保存 SubmissionKey 到 Operation/Attempt 的关联, 比较完整任务定义并返回原授权. 仅新提交通过检查后调用应用提供的 ID 生成函数. `check_submission` 可在接纳前校验已有定义和读取当前观察, 不预留资格. Node 只负责交付条件与协议适配, 不另建提交去重表.
+
+`LocalClient::new` 借用应用提供的 Authority, Worker 与 ID 生成函数, 提供提交, 原键查询, Operation/Report 查询及结构化错误; `LocalExecution::client` 提供同一绑定的便捷入口. Client 释放借用后由宿主推进执行, 重新绑定即可读取结果; 查询和绑定本身不启动任务. 本地示例已通过 Client 提交和查询, 远端 Client 与订阅尚未实现. 具体返回值及内存边界见 [Client 契约](execution-client.md).
 
 `beamlet-node` 与 `beamlet-console` 都是库接口的调用者. 通用执行, 提交去重, 回执与重投, 查询与观察合并, Agent 推进, 持久化和协议处理尽量实现在对应库中. 角色构造, 连接绑定和生命周期驱动通过公开接口分别提供, 应用显式选择配置, 组装依赖并把系统信号转换为库的停止请求. Node 组合辅助是可选能力, 不能成为使用独立 Client, Authority 或 Worker 的必经入口.
 

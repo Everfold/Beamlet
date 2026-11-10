@@ -1,8 +1,27 @@
 # 执行 Client 与结果观察
 
-状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, Console 已复用该实现, 仍只有固定 Hello 提交及重复提交读取原结果的能力; 通用 Client 查询/订阅 SDK 尚未实现. [回执契约](receipts.md)描述当前易失原型.
+状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, beamlet 已提供本地 LocalClient 提交及查询. Console 的远端入口仍只有固定 Hello 提交及重复提交读取原结果的能力; 通用远端查询/订阅 SDK 尚未实现. [回执契约](receipts.md)描述当前易失原型.
 
 当前库入口为 `Authority::submit_keyed(key, task, allocate)`: 定义按类型 P 的 Eq 比较, 传输信封和临时回复地址由 Adapter 处理. 只有新键通过记录容量检查后才调用 allocate 生成 OperationId/AttemptId; 同键同定义返回原授权, 冲突或容量不足不生成身份. 已用 ID 被拒绝, 不把新键关联到已有执行. `check_submission(key, &task)` 返回已接纳执行的当前观察或定义冲突, 未知键返回空值; 它不修改状态或预留后续接纳资格, 也不是远端查询 SDK.
+
+## 当前本地 Client
+
+`LocalClient::new(&mut authority, &mut worker, allocate)` 借用应用显式提供的角色和 ID 生成函数; `LocalExecution::client(allocate)` 是相同绑定的便捷入口. 两种方式不创建角色或基础设施. Client 只在首次接纳后将原授权交付 Worker 入队, 释放借用后由宿主继续驱动 Worker 并向 Authority 收录 Report. 重新绑定 Client 可以查询已有结果; 创建或丢弃 Client 不取消任务或丢弃角色状态.
+
+当前方法及返回值:
+
+| 方法 | 返回的事实 |
+| --- | --- |
+| `submit(key, task)` | SubmissionReceipt: 原提交键, New/Duplicate 接纳结论, 当前 OperationObservation |
+| `query_submission(key)` | 原执行的 OperationObservation, 无需重发任务定义或知道 OperationId |
+| `query_operation(id)` | 当前 OperationObservation, 含原执行绑定, 任务副本, 局部阶段, 等待观察及采用的 ReportId |
+| `query_report(id)` | ReportObservation, 含完整 Report 副本及原 Worker 到 Authority 的身份方向; 也可查询附加证据 |
+
+查询返回独立快照, 不创建执行, 不分配 ID, 不修改等待状态. 未知键, Operation 或 Report 分别返回对应 NotFound; 同键不同内容是 SubmissionConflict. Worker 拒绝交付时, `LocalClientError::Dispatch` 携带已接纳的 ExecutionBinding 与交付错误; 原提交键仍能查到 Accepted, 没有合成失败 Report. 再次提交同键只返回原接纳事实, 即使后来队列空闲也不自动重新交付.
+
+ExecutionBinding 当前包含 `authority_instance_id`, `worker_instance_id`, OperationId 和 AttemptId. 前两项是运行实例身份, 不冒充跨重启的稳定 AuthorityId. 当前绑定只访问可信同进程内存账本; NotFound 仅表示该账本未保留记录, 不能证明重启前从未执行. 本地同步查询不引入网络不可达或权限错误占位项, 远端绑定和持久恢复实现时再加入对应事实.
+
+Node/Console 的共享 `--demo` 已通过该 Client 提交 100 个任务, 由宿主驱动执行, 再按原键找回执行并查询报告. 固定任务协议仍用于独立进程演示, 没有混入本地 Client 接口.
 
 ## Agent 与 Authority 的联系
 

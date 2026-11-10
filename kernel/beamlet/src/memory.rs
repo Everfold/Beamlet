@@ -158,13 +158,9 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         key: SubmissionKey,
         task: &P,
     ) -> Result<Option<&OperationView<P, O, E>>, StateError> {
-        let Some(operation) = self.submission_keys.get(&key) else {
+        let Some(view) = self.submission(key) else {
             return Ok(None);
         };
-        let view = self
-            .operations
-            .get(operation)
-            .expect("提交键必须关联已接纳的 Operation");
         let Message::DispatchAttempt(attempt) = &view.dispatch.message else {
             unreachable!("Authority 只能保留 Attempt 信封");
         };
@@ -172,6 +168,18 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
             return Err(StateError::SubmissionConflict);
         }
         Ok(Some(view))
+    }
+
+    /// 按原提交键读取当前观察, 不要求重送定义或创建执行
+    ///
+    /// 空值只表示当前内存账本没有此键, 不证明其他实例或重启前未接纳.
+    pub fn submission(&self, key: SubmissionKey) -> Option<&OperationView<P, O, E>> {
+        let operation = self.submission_keys.get(&key)?;
+        Some(
+            self.operations
+                .get(operation)
+                .expect("提交键必须关联已接纳的 Operation"),
+        )
     }
 
     /// 在同一内存账本中同步接纳提交键, Operation 和一次授权

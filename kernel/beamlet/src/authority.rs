@@ -70,6 +70,13 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
         self.ledger.check_submission(key, task)
     }
 
+    /// 按原提交键读取当前观察, 不重送定义, 分配身份或派发
+    ///
+    /// 空值只表示当前内存账本没有此键, 不证明其他实例或重启前未接纳.
+    pub fn submission(&self, key: SubmissionKey) -> Option<&OperationView<P, O, E>> {
+        self.ledger.submission(key)
+    }
+
     /// 按提交键接纳完整定义, 仅在创建新执行时调用应用提供的身份生成函数
     ///
     /// 接纳成功前同步保存键映射, Operation 与 Attempt; 不执行或派发任务.

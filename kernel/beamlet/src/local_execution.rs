@@ -1,11 +1,11 @@
 //! 在调用方提供的 Authority 与 Worker 之间进行本地类型化交付
 
 use crate::{
-    Authority, Worker,
+    Authority, LocalClient, Worker,
     executor::ExecutorError,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId},
     memory::{Admission, Limits, OperationView, StateError, Submission},
-    model::{Delivery, DispatchAttempt, Operation, SubmitReport},
+    model::{Delivery, DispatchAttempt, Message, Operation, SubmitReport},
 };
 use std::future::Future;
 use thiserror::Error;
@@ -52,6 +52,14 @@ impl<P, O, E> LocalExecution<P, O, E> {
     pub fn into_parts(self) -> (Authority<P, O, E>, Worker<P, O, E>) {
         (self.authority, self.worker)
     }
+
+    /// 借用现有角色创建本地 Client, 不创建基础设施或启动执行
+    ///
+    /// allocate 仅在新提交通过容量检查后使用. Client 释放借用后, 宿主继续调用 next_report 推进;
+    /// Client 的创建与丢弃不会清空角色状态或取消运行中的任务.
+    pub fn client<F>(&mut self, allocate: F) -> LocalClient<'_, P, O, E, F> {
+        LocalClient::new(&mut self.authority, &mut self.worker, allocate)
+    }
 }
 
 impl<P, O, E> LocalExecution<P, O, E>
@@ -87,12 +95,8 @@ where
         operation: Operation<P>,
         attempt: AttemptId,
     ) -> Result<Submission<P, O, E>, LocalExecutionError> {
-        let id = operation.operation_id;
         let accepted = self.authority.submit(operation, attempt)?;
-        if accepted.admission == Admission::New {
-            self.worker.receive_dispatch(accepted.dispatch.clone())?;
-            self.authority.mark_dispatched(id)?;
-        }
+        deliver_new(&mut self.authority, &mut self.worker, &accepted)?;
         Ok(accepted)
     }
 
@@ -139,6 +143,27 @@ where
         self.authority.mark_wait_timeout(id)?;
         Ok(())
     }
+}
+
+// 两个本地入口共用交付规则: 仅首次接纳交付, 失败后保留账本事实.
+pub(crate) fn deliver_new<P, O, E>(
+    authority: &mut Authority<P, O, E>,
+    worker: &mut Worker<P, O, E>,
+    accepted: &Submission<P, O, E>,
+) -> Result<(), StateError>
+where
+    P: Clone + Eq + Send + 'static,
+    O: Clone + Eq + Send + 'static,
+    E: Clone + Eq + Send + 'static,
+{
+    if accepted.admission == Admission::New {
+        let Message::DispatchAttempt(attempt) = &accepted.dispatch.message else {
+            unreachable!("接纳结果必须包含 Attempt");
+        };
+        worker.receive_dispatch(accepted.dispatch.clone())?;
+        authority.mark_dispatched(attempt.operation.operation_id)?;
+    }
+    Ok(())
 }
 
 /// 应用用例错误, 独立于执行结果中的业务错误

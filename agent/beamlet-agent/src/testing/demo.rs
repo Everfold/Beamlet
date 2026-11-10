@@ -2,12 +2,12 @@
 
 use super::{
     executor::execute,
-    protocol::{Envelope, Limits, TestTask, Uuid, Value},
+    protocol::{Limits, TestTask, Uuid, Value},
 };
 use beamlet::{
-    Authority, LocalExecution, LocalExecutionError, Worker,
-    id::{OperationId, RoleInstanceId},
-    model::{ExecutionResult, Message, Operation},
+    Authority, LocalClientError, LocalExecution, LocalExecutionError, ReportObservation, Worker,
+    id::{RoleInstanceId, SubmissionKey},
+    model::{ExecutionResult, Message},
 };
 use thiserror::Error;
 
@@ -22,8 +22,8 @@ pub struct DemoResult {
     pub failed: usize,
     /// 两个静态 Worker 各完成多少请求
     pub worker_counts: [usize; 2],
-    /// 按原 OperationId 查询到的首份报告
-    pub sample: Envelope,
+    /// 按原提交键找回执行后查询到的首份报告
+    pub sample: ReportObservation<Value, String>,
 }
 
 /// 运行原有 100 请求演示, 使用真实 Tokio 计时器
@@ -43,27 +43,30 @@ pub async fn run() -> Result<DemoResult, DemoError> {
     let worker = Worker::new(authority_id, workers.to_vec(), limits.core())
         .map_err(LocalExecutionError::from)?;
     let mut execution = LocalExecution::from_parts(authority, worker);
-    let mut first: Option<OperationId> = None;
-    for index in 0..100 {
-        let id = Uuid::new_v4().as_u128().into();
-        let task = match index % 3 {
-            0 => TestTask::Echo(serde_json::json!({"request": index})),
-            1 => TestTask::Delay {
-                delay_ms: 10,
-                value: serde_json::json!({"request": index}),
-            },
-            _ => TestTask::Fail {
-                message: format!("预期测试失败 {index}"),
-            },
-        };
-        execution.submit(
-            Operation {
-                operation_id: id,
-                task,
-            },
+    let mut first: Option<SubmissionKey> = None;
+    let mut allocate = || {
+        (
             Uuid::new_v4().as_u128().into(),
-        )?;
-        first.get_or_insert(id);
+            Uuid::new_v4().as_u128().into(),
+        )
+    };
+    {
+        let mut client = execution.client(&mut allocate);
+        for index in 0..100 {
+            let key = Uuid::new_v4().as_u128().into();
+            let task = match index % 3 {
+                0 => TestTask::Echo(serde_json::json!({"request": index})),
+                1 => TestTask::Delay {
+                    delay_ms: 10,
+                    value: serde_json::json!({"request": index}),
+                },
+                _ => TestTask::Fail {
+                    message: format!("预期测试失败 {index}"),
+                },
+            };
+            client.submit(key, task)?;
+            first.get_or_insert(key);
+        }
     }
     let mut completed = 0;
     let mut succeeded = 0;
@@ -88,25 +91,23 @@ pub async fn run() -> Result<DemoResult, DemoError> {
     if completed != 100 {
         return Err(DemoError::Incomplete);
     }
-    let view = execution
-        .operation(first.ok_or(DemoError::Incomplete)?)
-        .ok_or(DemoError::Incomplete)?;
-    let retained = execution
-        .report(view.adopted_report.ok_or(DemoError::Incomplete)?)
-        .ok_or(DemoError::Incomplete)?;
+    let client = execution.client(&mut allocate);
+    let recovered = client.query_submission(first.ok_or(DemoError::Incomplete)?)?;
+    let view = client.query_operation(recovered.binding.operation_id)?;
+    let sample = client.query_report(view.adopted_report.ok_or(DemoError::Incomplete)?)?;
     Ok(DemoResult {
         completed,
         succeeded,
         failed,
         worker_counts,
-        sample: Envelope::from_core(retained),
+        sample,
     })
 }
 
 /// 两个应用共享的文本演示入口; 业务推进不位于应用 main 中
 ///
 /// # 错误
-/// 执行或结果编码失败时返回错误
+/// 执行或结果查询失败时返回错误
 pub async fn print() -> Result<(), DemoError> {
     let result = run().await?;
     println!("单进程内存演示: 1 个 Authority, 2 个 Worker; 无网络, 无持久化");
@@ -118,10 +119,7 @@ pub async fn print() -> Result<(), DemoError> {
         "两个 Worker 分别完成: {}, {}",
         result.worker_counts[0], result.worker_counts[1]
     );
-    println!(
-        "按首个 OperationId 查询结果:\n{}",
-        serde_json::to_string_pretty(&result.sample)?
-    );
+    println!("按首个提交键找回执行并查询报告:\n{:#?}", result.sample);
     Ok(())
 }
 
@@ -134,7 +132,7 @@ pub enum DemoError {
     /// 原型固定场景未获得完整关联结果
     #[error("演示未保留全部预期结果")]
     Incomplete,
-    /// 文本结果编码失败
+    /// Client 提交或结果查询失败
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    Client(#[from] LocalClientError),
 }
