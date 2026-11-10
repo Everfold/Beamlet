@@ -2,7 +2,7 @@
 
 历史里程碑说明: 本页保留早期内存模型与当时验证记录. 下文的提交方生成 OperationId, 尚未联网及测试数量是该里程碑的状态, 不代表当前 Console/Node. 当前接纳使用 SubmissionKey 并由 Authority 生成 OperationId, 见 [回执契约](receipts.md)和 [Hello Console](hello-console.md). 后续架构以 [设计入口](README.md)为准.
 
-状态: 内存原型已完成应用 -> Agent -> 执行驱动 -> 纯 Kernel 的分层, 并提供可独立驱动的 Authority/Worker 消息入口. 原有 40 项及新增 6 项消息流用例通过; 两个应用入口都通过兼容的本地 Agent 跑通了 100 个 Operation. 新消息流使用同进程有界通道验证, 三进程通信尚未实现; 这不是已发布协议, 也未经形式化验证.
+状态: 内存原型已完成应用 -> Agent -> 执行驱动 -> 纯 Kernel 的分层, 并提供可独立驱动的 Authority/Worker 消息入口. 原有 40 项及新增 6 项消息流用例通过; 两个应用入口都通过本地执行组合 跑通了 100 个 Operation. 新消息流使用同进程有界通道验证, 三进程通信尚未实现; 这不是已发布协议, 也未经形式化验证.
 
 ## 1. 范围与身份
 
@@ -112,11 +112,11 @@ app/beamlet-console, app/beamlet-node
 
 - 纯领域: [id.rs](../../kernel/beamlet-kernel/src/id.rs), [model.rs](../../kernel/beamlet-kernel/src/model.rs), [state.rs](../../kernel/beamlet-kernel/src/state.rs). 身份是调用方提供的 128 位值; 领域对象使用不透明的输入, 输出与错误类型; 拒绝效果和完成阶段规则不依赖 JSON, UUID 库, Tokio, 数据库或传输.
 - 底层实现: [memory.rs](../../kernel/beamlet/src/memory.rs) 提供有界内存 Authority/Worker, 静态轮询, 去重和证据保留; [executor.rs](../../kernel/beamlet/src/executor.rs) 提供通用 Tokio 驱动, 每个 Worker 有独立上限, 共享有界的在途完成集合. 执行函数由调用方直接传入, 不创建能力注册表.
-- 应用入口: [LocalExecution](../../kernel/beamlet/src/local_execution.rs) 及独立 [Authority](../../kernel/beamlet/src/authority.rs)/[Worker](../../kernel/beamlet/src/worker.rs) 驱动现已位于 beamlet, 可直接提交, 交付授权, 执行并收录证据. 原 [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 仅保留 Agent/AgentError 兼容导出, 不实现自主 Agent Loop.
+- 应用入口: [LocalExecution](../../kernel/beamlet/src/local_execution.rs) 及独立 [Authority](../../kernel/beamlet/src/authority.rs)/[Worker](../../kernel/beamlet/src/worker.rs) 驱动现已位于 beamlet, 可直接提交, 交付授权, 执行并收录证据. [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 预留 Agent 层并提供原型测试支持, 不转导出通用执行入口, 尚未实现自主 Agent Loop.
 - 测试 Adapter: 显式启用 test-support 后, [protocol.rs](../../agent/beamlet-agent/src/testing/protocol.rs) 提供严格 v0 JSON 与领域转换, [memory.rs](../../agent/beamlet-agent/src/testing/memory.rs) 提供协议校验和只读投影, [executor.rs](../../agent/beamlet-agent/src/testing/executor.rs) 提供固定 echo/delay/fail. 默认 Agent 构建不包含这些模块. UUID 字符串的传输表示不变, 纯领域身份通过 from_u128 构造.
 - 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 在本里程碑调用同一份 [本地演示用例](../../agent/beamlet-agent/src/testing/demo.rs), 该用例现已显式组装 LocalExecution. 原里程碑各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 当时尚未实现网络节点或交互式 Console.
 
-原有 app/beamlet-node/src/protocol.rs, memory.rs, executor.rs 只保留兼容导出, 不再持有实现. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 当时新增 4 项纯领域测试和 4 项组合入口测试. 组合入口测试现已迁入 [beamlet](../../kernel/beamlet/tests/local_execution.rs), 直接使用通用库, 不使用 JSON 或固定假任务类型, 并补充显式组装与状态保留验收. 不将重复测试入口计作新增覆盖.
+Node 的 protocol/memory/executor 转导出模块已移除, 集成测试直接使用 beamlet-agent::testing 的原型 Adapter. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 当时新增 4 项纯领域测试和 4 项组合入口测试. 组合入口测试现已迁入 [beamlet](../../kernel/beamlet/tests/local_execution.rs), 直接使用通用库, 不使用 JSON 或固定假任务类型, 并补充显式组装与状态保留验收. 不将重复测试入口计作新增覆盖.
 
 ### 独立消息入口
 
@@ -137,7 +137,6 @@ Authority 与 Worker 分别持有状态, 不相互引用, 也不直接修改对�
 ```bash
 cargo test -p beamlet-kernel --offline --test primitives
 cargo test -p beamlet --offline --test local_execution --test message_flow
-cargo test -p beamlet-agent --no-default-features --offline --test compatibility
 cargo test -p beamlet-node --offline --test volatile --test executor
 ```
 
@@ -149,7 +148,7 @@ cargo run -p beamlet-console --offline
 cargo run -p beamlet-node --offline --example volatile
 ```
 
-LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口, 旧 Agent 名称兼容同一实现. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
+LocalExecution 负责 submit, next_report, 查询和等待超时标记, 内部组合上述两个独立入口. next_report 会启动有空闲槽位的任务, 缓存完成证据, 再交给 Authority 收录. 取消等待不会取消已启动执行. 任务完成但 Worker 尚未缓存证据时仍占用并发槽位; 不要求等待 Authority 收录才释放槽位. 后台异常作为内部错误返回, 调用方应停止该执行器, 不伪装成普通失败或自动重跑.
 
 Authority 接纳与 Worker 入队不是同一事实. LocalExecution 提交时若 Authority 已接纳而 Worker 因队列已满拒绝, 请求仍保留为 accepted; 重复提交返回原授权, 不自动重投或生成新 Attempt. 该未决情况有独立测试, 不声称已经执行, 也没有持久交付保证.
 

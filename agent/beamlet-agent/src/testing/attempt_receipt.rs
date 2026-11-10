@@ -2,7 +2,7 @@
 
 use super::protocol::{PROTOCOL_VERSION, ProtocolError};
 use super::receipt::MAX_BYTES;
-use crate::{
+use beamlet::{
     id::RoleInstanceId,
     model::{Delivery, Message},
 };

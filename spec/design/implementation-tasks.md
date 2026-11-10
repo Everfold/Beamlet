@@ -8,32 +8,41 @@
 
 验证通过后只暂存本任务文件并提交, 记录 commit 与验证结果, 然后进入下一项. 已有不相关改动不夹带, 不默认 push. 测试迁移到拥有行为的库, 保留应用装配验收; 不复制整套测试作为分层证明.
 
+项目处于新建阶段, API, CLI 和原型协议直接随设计更新; 不保留旧名称重导出, 参数别名或旧编码映射.
+
 角色与基础设施通过公开接口由应用显式组装. 可复用实现归库, Node/Console 保留参数, 交互, 装配, 信号接入与展示. 独立角色无需统一 Node 容器, 本地内存执行无需 Zenoh 或数据库.
 
 ## 最近五个任务
 
 ### T1. 将独立 Authority/Worker 驱动迁入 beamlet
 
-状态: 已实现; 独立驱动与六项消息流程测试已迁入 beamlet, Agent crate 通过重导出兼容旧入口. 全工作区测试, Clippy 与相关库文档检查通过.
+状态: 已实现; 独立驱动与六项消息流程测试已迁入 beamlet, 调用方直接依赖 beamlet. 全工作区测试, Clippy 与相关库文档检查通过.
 
-- 范围: 将 `agent/beamlet-agent/src/authority.rs` 与 `worker.rs` 的既有实现迁入 `kernel/beamlet`, 通过 `beamlet::Authority` 与 `beamlet::Worker` 提供. 原 Agent crate 保留兼容导出, 不复制实现. 迁移独立角色消息流程测试.
-- 验收: 仅依赖 beamlet 的调用者可以显式构造两种角色, 交付授权并收录结果; 重复投递, 等待取消, 错误绑定和乱序返回维持既有语义; 原 Agent 组合入口仍可用.
+- 范围: 将 `agent/beamlet-agent/src/authority.rs` 与 `worker.rs` 的既有实现迁入 `kernel/beamlet`, 通过 `beamlet::Authority` 与 `beamlet::Worker` 提供. 原 Agent crate 不保留转导出. 迁移独立角色消息流程测试.
+- 验收: 仅依赖 beamlet 的调用者可以显式构造两种角色, 交付授权并收录结果; 重复投递, 等待取消, 错误绑定和乱序返回维持既有语义.
 - 提交: `beamlet: move authority and worker drivers into library`.
 
 ### T2. 整理本地组合入口
 
-状态: 已实现. LocalExecution 提供 from_parts/into_parts 显式组装与拆分, 保留旧 Agent/AgentError 重导出; 演示与组合行为测试已迁移. 全工作区测试与仓库 Clippy 检查通过, 覆盖组装前后状态保留, 错误绑定拒绝及旧入口兼容.
+状态: 已实现. LocalExecution 提供 from_parts/into_parts 显式组装与拆分, 调用方直接使用通用执行库; 演示与组合行为测试已迁移. 全工作区测试与仓库 Clippy 检查通过, 覆盖组装前后状态保留及错误绑定拒绝.
 
-- 范围: 将旧 `Agent` 的本地执行组合迁入 beamlet, 使用不会与领域 Agent 混淆的名称. 提供显式组装入口, 保留迁移所需的兼容入口并更新已有调用点.
+- 范围: 将旧 `Agent` 的本地执行组合迁入 beamlet, 使用不会与领域 Agent 混淆的名称. 提供显式组装入口, 直接更新已有调用点.
 - 验收: 独立角色与可选组合入口使用同一实现; 接纳后派发失败仍保留原接纳事实; 取消等待不会重跑或取消已开始执行; 新入口不隐式建立基础设施.
 - 提交: `beamlet: expose explicit local execution composition`.
+
+### T2a. 移除原型兼容入口
+
+状态: 已实现; 移除 Agent/AgentError 及通用类型转导出, Node 的测试模块包装与 --role local 别名; 应用和测试直接依赖所属库.
+
+- 验收: 工作区调用方使用当前接口; 组合行为测试保留在 beamlet, 不再维护旧入口测试.
+- 提交: `refactor: remove prototype compatibility entry points`.
 
 ### T3. 统一影响字段的领域命名
 
 状态: 待实现; 在 T2 后执行, 避免与移动文件混为一个 diff.
 
-- 范围: 按已确认设计将领域类型 `Effect` 调整为 `ImpactStatus`, 字段使用 `impact`, 更新库调用点. 当前 v0 JSON 的兼容映射在 Adapter 内明确保留, 不将 Rust 字段更名直接变成未声明的协议变化.
-- 验收: 无影响/已观察/未知与成功/失败独立; 旧 v0 消息仍按其既有编码往返; 拒绝与证据校验语义不变.
+- 范围: 按已确认设计将领域类型 `Effect` 调整为 `ImpactStatus`, 字段使用 `impact`, 更新库调用点. 原型 JSON 同步改为 impact, 不提供 Effect/effect 别名或旧字段映射.
+- 验收: 无影响/已观察/未知与成功/失败独立; 当前消息采用 impact 字段往返; 拒绝与证据校验语义不变.
 - 提交: `kernel: name external impact evidence explicitly`.
 
 ### T4. 下沉按提交键接纳的通用能力

@@ -14,6 +14,7 @@ name = "volatile"
 path = "examples/volatile.rs"
 
 [dependencies]
+beamlet.workspace = true
 beamlet-agent = { workspace = true, features = ["test-support"] }
 beamlet-message-zenoh.workspace = true
 

@@ -28,7 +28,7 @@ async fn run() -> Result<()> {
     }
     let mut listen = None;
     let mut connect = None;
-    let mut role = String::from("local");
+    let mut role = None;
     let mut instance = None;
     let mut authority = None;
     let mut workers = Vec::new();
@@ -37,11 +37,7 @@ async fn run() -> Result<()> {
         match arg.as_str() {
             "--listen" => listen = Some(args.next().context("--listen 需要监听地址")?),
             "--connect" => connect = Some(args.next().context("--connect 需要连接地址")?),
-            "--role" => {
-                role = args
-                    .next()
-                    .context("--role 需要 local, authority 或 worker")?
-            }
+            "--role" => role = Some(args.next().context("--role 需要 authority 或 worker")?),
             "--instance" => {
                 instance = Some(
                     args.next()
@@ -71,11 +67,11 @@ async fn run() -> Result<()> {
                 println!(
                     "用法:\n\
                      beamlet-node --config PATH.json\n\
-                     beamlet-node [--role local] [--listen ENDPOINT] [--demo]\n\
+                     beamlet-node [--listen ENDPOINT] [--demo]\n\
                      beamlet-node --role authority --instance UUID --worker UUID [--worker UUID ...] [--listen ENDPOINT]\n\
                      beamlet-node --role worker --instance UUID --authority UUID [--connect ENDPOINT]\n\
                      ENDPOINT 为连接或监听地址, 默认为 tcp/127.0.0.1:7447; PATH.json 为配置文件路径. 每轮部署必须使用新的实例 UUID\n\
-                     未指定配置或独立角色时使用默认配置: 1 个 Authority, 1 个 Worker; --role local 仅为兼容参数\n\
+                     未指定配置或独立角色时使用默认配置: 1 个 Authority, 1 个 Worker\n\
                      默认配置支持 --listen 和角色生命周期通知; 逻辑身份随机生成, 不跨启动保留"
                 );
                 return Ok(());
@@ -85,8 +81,8 @@ async fn run() -> Result<()> {
     }
 
     let default_endpoint = "tcp/127.0.0.1:7447";
-    match role.as_str() {
-        "local" => {
+    match role.as_deref() {
+        None => {
             ensure!(
                 connect.is_none()
                     && instance.is_none()
@@ -96,7 +92,7 @@ async fn run() -> Result<()> {
             );
             beamlet_node::node::run(None, listen.as_deref()).await
         }
-        "authority" => {
+        Some("authority") => {
             ensure!(
                 connect.is_none() && authority.is_none(),
                 "Authority 模式不接受 --connect 或 --authority"
@@ -113,7 +109,7 @@ async fn run() -> Result<()> {
             )
             .await
         }
-        "worker" => {
+        Some("worker") => {
             ensure!(
                 listen.is_none() && workers.is_empty(),
                 "Worker 模式不接受 --listen 或 --worker"
@@ -131,6 +127,6 @@ async fn run() -> Result<()> {
             )
             .await
         }
-        _ => bail!("未知角色: {role}"),
+        Some(role) => bail!("未知角色: {role}"),
     }
 }

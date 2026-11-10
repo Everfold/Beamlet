@@ -1,14 +1,10 @@
 //! 有界原授权交付, 回执与 Report 均可终止重投, 不重新授权
 use anyhow::{Result, ensure};
-use beamlet_agent::{
-    Limits,
-    id::OperationId,
-    model::Delivery,
-    testing::{
-        attempt_receipt::AttemptAccepted,
-        hello::{Dispatch, Task},
-        protocol::Limits as ProtocolLimits,
-    },
+use beamlet::{id::OperationId, memory::Limits, model::Delivery};
+use beamlet_agent::testing::{
+    attempt_receipt::AttemptAccepted,
+    hello::{Dispatch, Task},
+    protocol::Limits as ProtocolLimits,
 };
 use std::collections::HashMap;
 use tokio::time::{Duration, Instant};

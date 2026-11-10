@@ -42,7 +42,7 @@ Agent A
        -> Loop Report OR
 ```
 
-Report 的外部影响证据类型采用 `ImpactStatus`, 字段采用 `impact`, 不是独立计算原语, 也不表示编程语言的 Effect 系统. 确认无影响, 已观察影响与未知的语义继续保留. 当前代码仍使用 `Effect` 和 `effect`, API/编码迁移另行实现, 不能将旧格式未经版本处理直接更名. 执行失败不推导无影响, 执行成功不证明影响仅发生一次.
+Report 的外部影响证据类型采用 `ImpactStatus`, 字段采用 `impact`, 不是独立计算原语, 也不表示编程语言的 Effect 系统. 确认无影响, 已观察影响与未知的语义继续保留. 当前代码仍使用 `Effect` 和 `effect`, T3 将统一调整 API 与原型 JSON 字段; 项目处于新建阶段, 不保留旧名称或旧编码兼容层. 执行失败不推导无影响, 执行成功不证明影响仅发生一次.
 
 ## 执行底座的状态
 
@@ -75,7 +75,7 @@ beamlet-agent -> beamlet -> beamlet-kernel
 | beamlet-agent-tool | 工具及执行环境的集成位置; 不另建授权账本 |
 | beamlet-durable / 消息 Adapter | 执行持久化及消息交付的实现; Agent 存储映射由 Agent 层拥有 |
 
-这是目标职责, 不是要求每个 Interface 立刻新增 crate. 独立 Authority/Worker 驱动及可选本地组合 `LocalExecution` 已位于 beamlet, beamlet-agent 的 `Agent`/`AgentError` 仅作为旧名称重导出. 新领域 Agent Loop 尚未实现. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
+这是目标职责, 不是要求每个 Interface 立刻新增 crate. 独立 Authority/Worker 驱动及可选本地组合 `LocalExecution` 已位于 beamlet, 调用方直接依赖 beamlet, beamlet-agent 不再转导出通用执行入口. 新领域 Agent Loop 尚未实现. 底层不得为了执行 Agent capability 而反向依赖 Agent 模块; 由应用注册或传入执行逻辑.
 
 当前本地组合通过 `LocalExecution::from_parts(authority, worker)` 接管应用创建的角色, 保留已有状态与各自配置; `into_parts` 可取回角色继续独立驱动. 组合动作不启动任务或基础设施, 不补发已有授权, 实例绑定仍在每次交付时校验. `new` 是按显式身份和相同内存上限创建角色的便捷入口, 两种方式使用同一实现.
 

@@ -1,4 +1,4 @@
-use beamlet_node::{
+use beamlet_agent::testing::{
     memory::{
         Admission, Authority, OperationPhase, ReportDisposition, StateError, WaitStatus, Worker,
         WorkerPhase,

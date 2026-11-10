@@ -6,16 +6,16 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use beamlet_agent::{
+use beamlet::{
     Worker,
     id::{
         AuthorityId, AuthorityInstanceId, NodeId, NodeInstanceId, RoleInstanceId, WorkerId,
         WorkerInstanceId,
     },
-    testing::{
-        hello::Task,
-        lifecycle::{ExitOutcome, Role, RoleNotice},
-    },
+};
+use beamlet_agent::testing::{
+    hello::Task,
+    lifecycle::{ExitOutcome, Role, RoleNotice},
 };
 use beamlet_message_zenoh::{Limits, Transport};
 use serde::Deserialize;
@@ -275,7 +275,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
                 Worker::<Task, String, String>::new(
                     instance,
                     vec![worker_id],
-                    beamlet_agent::Limits::default(),
+                    beamlet::memory::Limits::default(),
                 )?,
             );
             let announcement = Announcement::started(

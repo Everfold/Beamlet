@@ -1,12 +1,9 @@
-//! 固定 Hello 应用角色入口与原型集成测试的兼容导出
+//! 固定 Hello 应用的角色与 Node 组装入口
 //!
-//! 应用角色复用 beamlet-agent 驱动; 其余模块只保留旧测试导入路径
+//! 应用显式组装 beamlet 驱动, 使用 beamlet-agent 的原型协议 Adapter
 mod attempt_delivery;
-pub mod executor;
 mod lifecycle;
-pub mod memory;
 pub mod node;
-pub mod protocol;
 mod report_delivery;
 pub mod roles;
 mod shutdown;

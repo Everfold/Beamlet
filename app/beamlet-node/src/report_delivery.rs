@@ -3,15 +3,11 @@
 use std::collections::HashMap;
 
 use anyhow::{Result, ensure};
-use beamlet_agent::{
-    Limits,
-    id::ReportId,
-    model::Delivery,
-    testing::{
-        hello::{self, Task},
-        protocol::Limits as ProtocolLimits,
-        receipt::ReportRetained,
-    },
+use beamlet::{id::ReportId, memory::Limits, model::Delivery};
+use beamlet_agent::testing::{
+    hello::{self, Task},
+    protocol::Limits as ProtocolLimits,
+    receipt::ReportRetained,
 };
 use tokio::time::{Duration, Instant};
 

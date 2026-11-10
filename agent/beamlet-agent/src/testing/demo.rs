@@ -128,9 +128,9 @@ pub async fn print() -> Result<(), DemoError> {
 /// 演示支持错误, 不属于通用 Agent 的领域契约
 #[derive(Debug, Error)]
 pub enum DemoError {
-    /// 本地执行驱动失败; 变体名称保留兼容
+    /// 本地执行驱动失败
     #[error(transparent)]
-    Agent(#[from] LocalExecutionError),
+    Execution(#[from] LocalExecutionError),
     /// 原型固定场景未获得完整关联结果
     #[error("演示未保留全部预期结果")]
     Incomplete,

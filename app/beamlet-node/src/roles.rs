@@ -3,17 +3,18 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
-use beamlet_agent::{
-    Admission, Authority, StateError, Worker,
+use beamlet::{
+    Authority, Worker,
     id::{OperationId, ReportId, RoleInstanceId},
+    memory::{Admission, StateError},
     model::{Delivery, DispatchAttempt, Effect, ExecutionResult, Message, SubmitReport},
-    testing::{
-        attempt_receipt::{self, AttemptAccepted},
-        hello::{self, Dispatch, Response, ResponseMessage, Task},
-        protocol::Limits as ProtocolLimits,
-        receipt::{self, ReportRetained},
-        submission::{Submission, SubmissionReply},
-    },
+};
+use beamlet_agent::testing::{
+    attempt_receipt::{self, AttemptAccepted},
+    hello::{self, Dispatch, Response, ResponseMessage, Task},
+    protocol::Limits as ProtocolLimits,
+    receipt::{self, ReportRetained},
+    submission::{Submission, SubmissionReply},
 };
 use beamlet_message_zenoh::{Limits, Transport};
 use tokio::{
@@ -129,7 +130,7 @@ pub(crate) async fn serve_authority_pair(
         mut local_workers,
         request_prefix,
     } = setup;
-    let limits = beamlet_agent::Limits::default();
+    let limits = beamlet::memory::Limits::default();
     let mut authority = HelloAuthority::new(instance, workers, limits)?;
     let protocol = ProtocolLimits::default();
     let reports = report_inbox(instance);
@@ -278,7 +279,7 @@ pub(crate) async fn serve_authority_pair(
                 }
                 let operation = existing.map(|(_,binding)| binding.operation_id.expect("接纳映射必须包含 Operation"))
                     .unwrap_or_else(Uuid::new_v4);
-                let operation = beamlet_agent::id::OperationId::from_u128(operation.as_u128());
+                let operation = beamlet::id::OperationId::from_u128(operation.as_u128());
                 let adopted = authority.operation(operation).and_then(|view| view.adopted_report);
                 let already_waiting = waiters.iter().any(|waiter| waiter.operation == operation && waiter.console == console);
                 if adopted.is_none() && !already_waiting && waiters.len() >= limits.queue_capacity {
@@ -513,7 +514,7 @@ pub(crate) async fn serve_worker(
     authority: RoleInstanceId,
     mut shutdown: Shutdown,
 ) -> Result<()> {
-    let limits = beamlet_agent::Limits::default();
+    let limits = beamlet::memory::Limits::default();
     let mut worker = Worker::<Task, String, String>::new(authority, vec![instance], limits)?;
     let transport = Arc::new(transport);
     let protocol = ProtocolLimits::default();

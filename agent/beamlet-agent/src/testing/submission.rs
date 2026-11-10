@@ -24,8 +24,8 @@ impl Submission {
         }
     }
     /// Authority 分配身份后还原内部不可变请求
-    pub fn operation(&self, id: Uuid) -> crate::model::Operation<Task> {
-        crate::model::Operation {
+    pub fn operation(&self, id: Uuid) -> beamlet::model::Operation<Task> {
+        beamlet::model::Operation {
             operation_id: id.as_u128().into(),
             task: self.task,
         }

@@ -1,8 +1,8 @@
 //! 固定假任务的 v0 JSON 测试 Adapter, 与领域对象显式转换
 
 /// 身份定义来自纯 Kernel; UUID 字符串编码仅由本 Adapter 实现
-pub use crate::id::{AttemptId, OperationId, ReportId, RoleInstanceId};
-use crate::model as domain;
+pub use beamlet::id::{AttemptId, OperationId, ReportId, RoleInstanceId};
+use beamlet::model as domain;
 use serde::{Deserialize, Serialize};
 /// 不透明 JSON 测试数据
 pub use serde_json::Value;

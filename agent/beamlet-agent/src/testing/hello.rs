@@ -3,7 +3,7 @@
 use super::protocol::{
     self, Envelope, ExecutionResult, Limits, Message, ProtocolError, SubmitReport, Uuid, Value,
 };
-use crate::{id::OperationId, model};
+use beamlet::{id::OperationId, model};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// 固定演示任务, 不建立能力声明或动态注册表
@@ -248,8 +248,8 @@ impl Response {
     /// 将已收录的领域 Report 转为现有的字节协议表示
     pub fn report(
         report: &model::SubmitReport<String, String>,
-        worker: crate::id::RoleInstanceId,
-        authority: crate::id::RoleInstanceId,
+        worker: beamlet::id::RoleInstanceId,
+        authority: beamlet::id::RoleInstanceId,
     ) -> Self {
         let report = SubmitReport {
             report_id: report.report_id,

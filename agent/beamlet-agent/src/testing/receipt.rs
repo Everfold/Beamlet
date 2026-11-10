@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::protocol::{PROTOCOL_VERSION, ProtocolError};
-use crate::{
+use beamlet::{
     id::RoleInstanceId,
     model::{Delivery, Message},
 };

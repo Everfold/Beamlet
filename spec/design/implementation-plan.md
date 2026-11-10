@@ -12,7 +12,7 @@
 | 执行路径 | 有界内存账本, beamlet 中的独立 Authority/Worker 与 LocalExecution 显式组合, 本地类型化交付, Zenoh 固定任务演示 | 通用 capability 接入与组合调用 Interface |
 | 回执 | Operation/Attempt/Report 三段回执与有限原消息重投 | 持久提交后确认, 重启恢复与旧实例隔离 |
 | Node | 角色组合, 稳定/运行身份配置, 生命周期, 心跳, Draining | 稳定身份解析, 基础设施独立接入与明确运行模式 |
-| Agent | `beamlet-agent::Agent`/`AgentError` 仅是 LocalExecution 及其错误的兼容导出 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |
+| Agent | 原型测试支持; 通用执行入口由 beamlet 提供 | 新 Agent 实体, preset/override, Loop, fork, 上下文投影 |
 | 存储与工具 | durable/tool crate 脚手架, workspace 已声明 kite_sql | Agent/执行存储, 事务与迁移, LLM/工具/Codemode 执行器; 存储阶段前对齐依赖与设计中的 Diesel + SQLite 选择 |
 
 逐项实现进度与验证结果见 [实现任务与提交](implementation-tasks.md). 本计划中的目标不等于已实现能力; 验证结果以对应任务的实际运行记录为准.
@@ -26,7 +26,7 @@
 | 完成与停止 | 子执行和结果处理全部完成后正常结束; 异步工具结果触发后续 LLM, 无交互型/任务型分类; 停止不再发起业务调用, 收取已有结果, 超时保留未确认 | stop 的请求/响应, 支持取消工具的显式取消请求, 异常终止和未确认责任的处置交接编码 |
 | UI 回答 | Agent 保存已发布回答并提供查询与通知, 最终 Report 表达整个 Loop 结束; 首版完整回答, 流式后续接入 | 回答稳定位置/引用编码, 查询与观察的方法签名 |
 | 配置与版本 | preset_id + 固定版本 + overrides; 按字段覆盖, 数组整体替换, 缺省与清空区分 | 版本和清空编码, 字段路径, schema 版本与迁移 |
-| Report 影响字段 | 类型 `ImpactStatus`, 字段 `impact`; 三种证据结论与执行结果独立 | 旧 `Effect` API/存储/消息的兼容迁移及影响范围说明 |
+| Report 影响字段 | 类型 `ImpactStatus`, 字段 `impact`; 三种证据结论与执行结果独立 | 统一调整 Rust API 与原型 JSON 字段, 补全影响范围说明 |
 
 恢复执行权的机制未明确前, 只允许实现可验证的恢复查询与记录保留, 不自动续行不确定执行. 不为解决这些问题提前增加共识系统或通用 Workflow 框架.
 
@@ -34,7 +34,7 @@
 
 ### 1. 整理通用执行入口与观察 Interface
 
-将通用 Authority/Worker 能力与新 Agent 实体解耦. 为当前本地组合入口选择不混淆领域 Agent 的名称并处理兼容入口. 实现 [Client 契约](execution-client.md)的最小提交, 原键查询, Operation/Report 查询和结果观察, 先用现有假执行器.
+将通用 Authority/Worker 能力与新 Agent 实体解耦. 为当前本地组合入口选择不混淆领域 Agent 的名称并直接迁移调用方. 实现 [Client 契约](execution-client.md)的最小提交, 原键查询, Operation/Report 查询和结果观察, 先用现有假执行器.
 
 Node/Console 作为公开库接口的调用者. 将相关的提交关联, 去重/重投, 查询与观察合并, 角色驱动及生命周期协调下沉到对应库; 应用保留参数/交互处理, 显式组装, 信号转换和展示. 独立提供角色构造, 依赖绑定和启动/停止接口, 基础设施由应用选择并传入; Node 组装辅助可选. 同时调整已有调用点, 使新增接口承担实际流程, 不只在原应用实现外加一层转发.
 

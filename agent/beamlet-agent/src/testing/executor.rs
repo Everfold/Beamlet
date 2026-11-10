@@ -4,7 +4,7 @@ use super::{
     memory::{StateError, WorkerPhase},
     protocol::*,
 };
-use crate::model as domain;
+use beamlet::model as domain;
 use beamlet::{executor::Executor, memory::Worker};
 use std::time::Duration;
 
