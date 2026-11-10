@@ -9,12 +9,12 @@ use beamlet::{
     lifecycle::{Completion, DEFAULT_DRAIN_TIMEOUT, Group, StopPolicy},
     worker_observation::{Observations, Source},
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{Limits, Transport};
+use beamlet_protocol_demo::{
     hello::Task,
     lifecycle::{ExitOutcome, Role, RoleNotice},
     worker_lifecycle::{self, Announcement},
 };
-use beamlet_message_zenoh::{Limits, Transport};
 use serde::Deserialize;
 use tokio::{fs, runtime::Handle, time::Duration};
 use uuid::Uuid;
@@ -224,7 +224,7 @@ pub async fn run(path: Option<&str>, listen: Option<&str>) -> Result<()> {
     }
     for worker in plan.remote_workers() {
         let inbox = roles::worker_inbox(worker.instance.as_u128().into());
-        let receipts = beamlet_agent::testing::receipt::inbox(worker.instance.as_u128().into());
+        let receipts = beamlet_protocol_demo::receipt::inbox(worker.instance.as_u128().into());
         workers.push((
             transport.subscribe(&inbox).await?,
             transport.subscribe(&receipts).await?,

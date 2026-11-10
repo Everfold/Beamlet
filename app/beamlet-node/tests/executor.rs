@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use beamlet_agent::testing::{
+use beamlet_protocol_demo::{
     executor::WorkerExecutor,
     memory::{Authority, OperationPhase, ReportDisposition, StateError, WaitStatus, WorkerPhase},
     protocol::{

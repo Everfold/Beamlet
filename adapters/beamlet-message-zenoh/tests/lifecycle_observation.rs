@@ -1,9 +1,9 @@
 use beamlet::{role_observation as roles, worker_observation as workers};
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{Limits, Transport};
+use beamlet_protocol_demo::{
     lifecycle::{ExitOutcome, Role, RoleNotice},
     worker_lifecycle::Announcement,
 };
-use beamlet_message_zenoh::{Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::timeout;
 
@@ -106,7 +106,7 @@ async fn listener() -> (Transport, String) {
         drop(socket);
         if let Ok(transport) = Transport::listen(
             &endpoint,
-            &beamlet_agent::testing::worker_lifecycle::inbox(
+            &beamlet_protocol_demo::worker_lifecycle::inbox(
                 "00000000-0000-0000-0000-000000000005".parse().unwrap(),
             ),
             Limits::default(),
@@ -123,7 +123,7 @@ async fn listener() -> (Transport, String) {
 async fn existing_session_delivers_heartbeats_and_terminal_public_notices_to_library_observers() {
     let (authority, endpoint) = listener().await;
     let client = authority
-        .subscribe(beamlet_agent::testing::lifecycle::SUBSCRIPTION)
+        .subscribe(beamlet_protocol_demo::lifecycle::SUBSCRIPTION)
         .await
         .unwrap();
     let worker = Transport::connect(&endpoint, "beamlet/test/unused", Limits::default())

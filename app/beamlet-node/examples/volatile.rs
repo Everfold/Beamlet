@@ -2,7 +2,7 @@
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    match beamlet_agent::testing::demo::print().await {
+    match beamlet_protocol_demo::demo::print().await {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("错误: {error:#}");

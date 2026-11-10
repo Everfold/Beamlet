@@ -100,23 +100,22 @@ Authority 的基本视图为 `accepted → dispatched → reported`. 等待超�
 
 ```text
 app/beamlet-console, app/beamlet-node
-                  ↓
-          agent/beamlet-agent
-                  ↓
-           kernel/beamlet
-                  ↓
-        kernel/beamlet-kernel
+    -> kernel/beamlet -> kernel/beamlet-kernel
+    -> adapters/beamlet-protocol-demo -> kernel/beamlet
+    -> adapters/beamlet-message-zenoh -> kernel/beamlet
+
+agent/beamlet-agent: 独立的 Agent 层预留入口
 ```
 
 当前职责:
 
 - 纯领域: [id.rs](../../kernel/beamlet-kernel/src/id.rs), [model.rs](../../kernel/beamlet-kernel/src/model.rs), [state.rs](../../kernel/beamlet-kernel/src/state.rs). 身份是调用方提供的 128 位值; 领域对象使用不透明的输入, 输出与错误类型; 拒绝效果和完成阶段规则不依赖 JSON, UUID 库, Tokio, 数据库或传输.
 - 底层实现: [memory.rs](../../kernel/beamlet/src/memory.rs) 提供有界内存 Authority/Worker, 静态轮询, 去重和证据保留; [executor.rs](../../kernel/beamlet/src/executor.rs) 提供通用 Tokio 驱动, 每个 Worker 有独立上限, 共享有界的在途完成集合. 执行函数由调用方直接传入, 不创建能力注册表.
-- 应用入口: [LocalExecution](../../kernel/beamlet/src/local_execution.rs) 及独立 [Authority](../../kernel/beamlet/src/authority.rs)/[Worker](../../kernel/beamlet/src/worker.rs) 驱动现已位于 beamlet, 可直接提交, 交付授权, 执行并收录证据. [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 预留 Agent 层并提供原型测试支持, 不转导出通用执行入口, 尚未实现自主 Agent Loop.
-- 测试 Adapter: 显式启用 test-support 后, [protocol.rs](../../agent/beamlet-agent/src/testing/protocol.rs) 提供严格 v0 JSON 与领域转换, [memory.rs](../../agent/beamlet-agent/src/testing/memory.rs) 提供协议校验和只读投影, [executor.rs](../../agent/beamlet-agent/src/testing/executor.rs) 提供固定 echo/delay/fail. 默认 Agent 构建不包含这些模块. UUID 字符串的传输表示不变, 纯领域身份通过 from_u128 构造.
-- 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 在本里程碑调用同一份 [本地演示用例](../../agent/beamlet-agent/src/testing/demo.rs), 该用例现已显式组装 LocalExecution. 原里程碑各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 当时尚未实现网络节点或交互式 Console.
+- 应用入口: [LocalExecution](../../kernel/beamlet/src/local_execution.rs) 及独立 [Authority](../../kernel/beamlet/src/authority.rs)/[Worker](../../kernel/beamlet/src/worker.rs) 驱动现已位于 beamlet, 可直接提交, 交付授权, 执行并收录证据. [beamlet-agent](../../agent/beamlet-agent/src/lib.rs) 仅预留 Agent 层, 不转导出通用执行入口, 尚未实现自主 Agent Loop.
+- 测试 Adapter: 应用显式依赖 beamlet-protocol-demo 后, [protocol.rs](../../adapters/beamlet-protocol-demo/src/protocol.rs) 提供严格 v0 JSON 与领域转换, [memory.rs](../../adapters/beamlet-protocol-demo/src/memory.rs) 提供协议校验和只读投影, [executor.rs](../../adapters/beamlet-protocol-demo/src/executor.rs) 提供固定 echo/delay/fail. Agent crate 不包含或转导出这些模块. UUID 字符串的传输表示不变, 纯领域身份通过 from_u128 构造.
+- 应用组装: [node](../../app/beamlet-node/src/main.rs), [console](../../app/beamlet-console/src/main.rs) 与原有 [volatile 示例](../../app/beamlet-node/examples/volatile.rs) 在本里程碑调用同一份 [本地演示用例](../../adapters/beamlet-protocol-demo/src/demo.rs), 该用例现已显式组装 LocalExecution. 原里程碑各入口均完成 100 个独立请求, 两个 Worker 各完成 50 个; 67 个成功, 33 个为预期失败. 当时尚未实现网络节点或交互式 Console.
 
-Node 的 protocol/memory/executor 转导出模块已移除, 集成测试直接使用 beamlet-agent::testing 的原型 Adapter. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 当时新增 4 项纯领域测试和 4 项组合入口测试. 组合入口测试现已迁入 [beamlet](../../kernel/beamlet/tests/local_execution.rs), 直接使用通用库, 不使用 JSON 或固定假任务类型, 并补充显式组装与状态保留验收. 不将重复测试入口计作新增覆盖.
+Node 的 protocol/memory/executor 转导出模块已移除, 集成测试直接使用 beamlet-protocol-demo 的原型 Adapter. 原有 21 项协议/内存测试和 11 项异步执行测试保留在应用集成测试入口; 当时新增 4 项纯领域测试和 4 项组合入口测试. 组合入口测试现已迁入 [beamlet](../../kernel/beamlet/tests/local_execution.rs), 直接使用通用库, 不使用 JSON 或固定假任务类型, 并补充显式组装与状态保留验收. 不将重复测试入口计作新增覆盖.
 
 ### 独立消息入口
 

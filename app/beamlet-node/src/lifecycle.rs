@@ -1,8 +1,8 @@
 //! 生命周期消息的应用 I/O, 时钟与展示, 观察规则由 beamlet 提供
 use anyhow::{Context, Result, ensure};
 use beamlet::worker_observation::{Observations, Source, Transition};
-use beamlet_agent::testing::worker_lifecycle::Announcement;
 use beamlet_message_zenoh::Transport;
+use beamlet_protocol_demo::worker_lifecycle::Announcement;
 use std::{collections::HashMap, time::Duration};
 use tokio::time::{MissedTickBehavior, interval, timeout};
 use uuid::Uuid;
@@ -154,7 +154,7 @@ async fn heartbeats(transport: &Transport, announcement: &Announcement) -> Resul
 
 pub(crate) async fn publish_starts(
     transport: &Transport,
-    notices: Vec<beamlet_agent::testing::lifecycle::RoleNotice>,
+    notices: Vec<beamlet_protocol_demo::lifecycle::RoleNotice>,
 ) -> Result<()> {
     let messages = notices
         .into_iter()
@@ -188,10 +188,10 @@ pub(crate) async fn publish_starts(
 
 pub(crate) async fn publish_exits(
     transport: &Transport,
-    notices: Vec<beamlet_agent::testing::lifecycle::RoleNotice>,
-    outcomes: &HashMap<Uuid, beamlet_agent::testing::lifecycle::ExitOutcome>,
+    notices: Vec<beamlet_protocol_demo::lifecycle::RoleNotice>,
+    outcomes: &HashMap<Uuid, beamlet_protocol_demo::lifecycle::ExitOutcome>,
 ) {
-    use beamlet_agent::testing::lifecycle::ExitOutcome;
+    use beamlet_protocol_demo::lifecycle::ExitOutcome;
 
     // 全 Node 共用两秒发布预算, 不等待 Client 匹配或收录, 不重试
     let result = timeout(Duration::from_secs(2), async {

@@ -16,4 +16,4 @@ tokio.workspace = true
 zenoh.workspace = true
 
 [dev-dependencies]
-beamlet-agent = { workspace = true, features = ["test-support"] }
+beamlet-protocol-demo.workspace = true

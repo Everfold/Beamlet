@@ -71,7 +71,7 @@ Node 文件 DTO 仅解析严格 JSON 并转换为库 Config, 64KiB 文件上限,
 
 观察规则现由 `beamlet::worker_observation::Observations` 提供. 应用显式传入 AuthorityInstanceId 及最多 64 个 Slot (WorkerInstanceId + Source::Local/Remote). 观察表校验完整 Binding, 非零心跳序号用 NonZeroU64 表达, 新实例无法通过公告增补配置. `record` 返回绑定新增及状态变化; `poll_expired` 每次返回一个刚变为可疑的实例, 宿主轮询至 None. 若在线状态已经超时但尚未轮询, 新的有效递增心跳返回 ExpiredThenOnline, 供宿主依序展示可疑和恢复; 不产生调度动作. 错误输入不修改归属, 序号或接收时间.
 
-`snapshot` 返回独立内存副本, 不推进时钟或刷新期限. 本地/远端输入来源由应用声明, 库阻止混用; 来源标记不构成认证. 库不持有网络连接或后台任务, Node 显式提供计时器及消息输入. Worker 公告的版本, JSON, 字节上限与地址规则位于 `beamlet_agent::testing::worker_lifecycle`, 与纯观察结构分开.
+`snapshot` 返回独立内存副本, 不推进时钟或刷新期限. 本地/远端输入来源由应用声明, 库阻止混用; 来源标记不构成认证. 库不持有网络连接或后台任务, Node 显式提供计时器及消息输入. Worker 公告的版本, JSON, 字节上限与地址规则位于 `beamlet_protocol_demo::worker_lifecycle`, 与纯观察结构分开.
 
 配置模式下, Authority 为 `beamlet/v0/authority/<authority-instance-simple>/lifecycle/worker/*` 声明独立有界订阅, 与业务收件箱共享同一 Zenoh 会话. Worker 向该前缀下的 `<worker-instance-simple>` 发布一次 `worker_started` 公告. 严格 JSON 包含 `protocol_version: 0`, `kind: "worker_started"`, `node_id`, `node_instance_id`, `worker_id`, `worker_instance_id`, `authority_instance_id`. 单条公告最多 4096 字节; 不接受未知字段或其他版本.
 
@@ -110,7 +110,7 @@ cargo run -p beamlet-console --offline -- \
 
 同一 Console 可输入 `hello` 提交并接收 Report, 同时显示公告. 输入 EOF 后保持订阅, Ctrl-C 退出. 加上 `--message hello` 则在一次提交完成后退出, 只接收该进程存活期间到达的通知, 不等待通知列表完整. 不开启订阅时保留原有提交行为.
 
-Client 严格检查消息版本, 种类, 字段和实际路由. 按运行实例保留最多 256 个生命周期记录, 启动和退出共用同一实例槽位. 相同通知重播不重复显示, 同运行实例的归属变化拒绝覆盖. 同一逻辑身份的新运行实例分别记录, 不推断哪一个是当前实例. 满后拒绝新增记录, 不静默淘汰旧身份. 非法通知不会被当作 Report 或改变提交目标. 当前公共编解码暂位于 Agent 的可选 `test-support` 原型 Adapter, 不是完整 Client SDK 或已承诺兼容的公共协议.
+Client 严格检查消息版本, 种类, 字段和实际路由. 按运行实例保留最多 256 个生命周期记录, 启动和退出共用同一实例槽位. 相同通知重播不重复显示, 同运行实例的归属变化拒绝覆盖. 同一逻辑身份的新运行实例分别记录, 不推断哪一个是当前实例. 满后拒绝新增记录, 不静默淘汰旧身份. 非法通知不会被当作 Report 或改变提交目标. 当前公共编解码位于独立 `beamlet-protocol-demo` 演示 Adapter, 不是完整 Client SDK 或已承诺兼容的公共协议.
 
 这两种入口在 Draining 结束并停止本地角色驱动之后, 释放共享消息会话之前尽力发布各个 Authority/Worker 的退出通知. `outcome: "drained"` 表示对应本地驱动正常完成排空; `outcome: "unconfirmed"` 表示其排空或交付未确认, 可能来自期限到达, 内部错误或任务异常. 一个 Node 中正常排空与未确认的独立角色可以获得不同结果, 不把 Node 的非零退出状态一概套给全部角色. 同 Node 的本地 Worker 随所属 Authority 组合驱动退出, 保守沿用该组合的排空结果. `drained` 不代表持久化或跨重启可恢复. 当前 Worker 正常排空要求全部已生成 Report 获得 Authority 收录回执; Authority 正常排空不保证 Worker 已收到回执. `unconfirmed` 也不是业务执行失败或外部效果停止的证明.
 
@@ -157,7 +157,7 @@ Worker 的正常 Draining 要求已接纳 Attempt 均缓存 Report, 全部生成
 
 - 角色运行 ID 的自动生成与公告驱动的实例解析, 稳定逻辑身份路由; 独立角色 CLI不提供完整的稳定身份配置.
 - 生命周期通知的收录确认, 历史查询及跨重启保留; 无暂停恢复保证.
-- 独立于传输的 Client SDK, 当前提交编解码仍在 test-support Adapter, Console 暂只接 Zenoh.
+- 独立于传输的 Client SDK, 当前提交编解码仍使用固定 Hello 演示 Adapter, Console 暂只接 Zenoh.
 - 跨重启持久化, 在线调度与动态信任注册.
 
 后续按 [实现顺序与验收](implementation-plan.md)推进通用 Client, 持久化, Agent 与组合执行. 不把未来目标混入当前交付保证.

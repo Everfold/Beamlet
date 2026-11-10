@@ -4,12 +4,12 @@ use beamlet::{
     model::{Delivery, ExecutionResult, ImpactStatus, Message, SubmitReport},
     remote::{Client, Outcome},
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
+use beamlet_protocol_demo::{
     hello::{Response, Task},
     protocol::{Limits as ProtocolLimits, Uuid},
     submission::{HelloClientCodec, Submission, SubmissionReply},
 };
-use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::timeout;
 

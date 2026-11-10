@@ -62,7 +62,7 @@ async fn run() -> Result<()> {
                         .context("UUID 格式无效")?,
                 );
             }
-            "--demo" => return Ok(beamlet_agent::testing::demo::print().await?),
+            "--demo" => return Ok(beamlet_protocol_demo::demo::print().await?),
             "--help" | "-h" => {
                 println!(
                     "用法:\n\

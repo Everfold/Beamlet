@@ -5,10 +5,10 @@ use beamlet::{
     query::{ClientError, Codec, Observation, Request, Selection},
     remote::Client,
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
+use beamlet_protocol_demo::{
     hello::Task, protocol::Limits as ProtocolLimits, query, submission::HelloClientCodec,
 };
-use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::timeout;
 

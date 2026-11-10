@@ -72,6 +72,7 @@ beamlet-agent -> beamlet -> beamlet-kernel
 | beamlet-kernel | 身份, 执行领域对象, 纯状态规则与证据绑定校验; 不依赖 Agent, 数据库或消息编码 |
 | beamlet | 通用执行账本与驱动, Authority/Worker, 提交和观察 Interface; 不理解 LLM Loop 策略 |
 | beamlet-agent | Agent 实体, preset/override, Loop 策略, 输入构造, 结果采用与 fork |
+| beamlet-protocol-demo | 当前 Hello 与固定测试任务的实验性 v0 JSON Adapter; 应用显式依赖, 不属于 Agent 契约 |
 | beamlet-agent-tool | 工具及执行环境的集成位置; 不另建授权账本 |
 | beamlet-durable / 消息 Adapter | 执行持久化及消息交付的实现; Agent 存储映射由 Agent 层拥有 |
 

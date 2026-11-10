@@ -11,7 +11,7 @@ use crate::{Error, Sender, Transport};
 ///
 /// ```no_run
 /// use beamlet::remote::Client;
-/// use beamlet_agent::testing::{hello::Task, submission::HelloClientCodec};
+/// use beamlet_protocol_demo::{hello::Task, submission::HelloClientCodec};
 /// use beamlet_message_zenoh::{Limits, ClientTransport, Transport};
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let mut connection = Transport::connect(

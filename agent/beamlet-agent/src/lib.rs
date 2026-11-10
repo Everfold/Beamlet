@@ -1,5 +1,3 @@
-//! Agent 层的预留入口与原型支持, 通用执行角色由 beamlet 提供
-
-/// 显式启用的固定假任务与 v0 JSON 测试支持, 不属于通用 Agent 契约
-#[cfg(feature = "test-support")]
-pub mod testing;
+//! Agent 实体与 Loop 策略的预留入口, 当前尚未实现
+//!
+//! 通用角色和执行驱动位于 beamlet; 演示协议与固定测试任务位于 beamlet-protocol-demo.

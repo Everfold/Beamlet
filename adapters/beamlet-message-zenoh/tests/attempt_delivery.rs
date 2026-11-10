@@ -4,12 +4,12 @@ use beamlet::{
     memory::Limits as LedgerLimits,
     model::{ExecutionResult, ImpactStatus, Message, SubmitReport},
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{Limits, Transport};
+use beamlet_protocol_demo::{
     attempt_receipt::{self, AttemptAccepted},
     hello::{Dispatch, Task},
     protocol::Limits as ProtocolLimits,
 };
-use beamlet_message_zenoh::{Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::{sleep, timeout};
 

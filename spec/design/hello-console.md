@@ -4,7 +4,7 @@ Node 组合模式已支持共享消息会话及多个 Authority/Worker, 见 [Nod
 
 当前里程碑: Console 经 Zenoh 提交 Operation, Authority 授权, Worker 实际调用 `hello()` 返回 `"World"`, Authority 收录 Report 后向提交方返回证据副本. Node 支持本地组合模式, 也支持独立 Authority/Worker 进程.
 
-这不是原样回显, 也不是 Durable 执行系统. 两种模式均只保留内存状态. 固定演示编码位于 Agent 的可选 `test-support` 下, 不属于通用 Agent 契约.
+这不是原样回显, 也不是 Durable 执行系统. 两种模式均只保留内存状态. 固定演示编码位于独立 `beamlet-protocol-demo` Adapter, 不属于通用 Agent 契约.
 
 ## 运行
 
@@ -126,7 +126,7 @@ cargo run -p beamlet-console --offline -- \
 
 ## 编码与边界
 
-共享编码实现: [提交与关联回复](../../agent/beamlet-agent/src/testing/submission.rs), [Dispatch 与 Report 演示编码](../../agent/beamlet-agent/src/testing/hello.rs).
+共享编码实现: [提交与关联回复](../../adapters/beamlet-protocol-demo/src/submission.rs), [Dispatch 与 Report 演示编码](../../adapters/beamlet-protocol-demo/src/hello.rs).
 
 Console 请求是当前 Node 连接上的固定演示包装:
 

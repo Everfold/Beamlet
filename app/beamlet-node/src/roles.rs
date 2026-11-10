@@ -14,7 +14,8 @@ use beamlet::{
     model::{Delivery, DispatchAttempt, ExecutionResult, ImpactStatus, Message, SubmitReport},
     report_delivery::{self, Event as ReportEvent, Outbox as ReportOutbox},
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{Limits, Transport};
+use beamlet_protocol_demo::{
     attempt_receipt::{self, AttemptAccepted},
     hello::{self, Dispatch, Response, ResponseMessage, Task},
     protocol::Limits as ProtocolLimits,
@@ -22,7 +23,6 @@ use beamlet_agent::testing::{
     receipt::{self, ReportRetained},
     submission::{Submission, SubmissionReply},
 };
-use beamlet_message_zenoh::{Limits, Transport};
 use tokio::{
     task::JoinSet,
     time::{Instant, MissedTickBehavior, interval, timeout},
@@ -948,8 +948,8 @@ mod local_progress_tests {
         memory::OperationPhase,
         remote::Client,
     };
-    use beamlet_agent::testing::submission::HelloClientCodec;
     use beamlet_message_zenoh::ClientTransport;
+    use beamlet_protocol_demo::submission::HelloClientCodec;
     use tokio::sync::Notify;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

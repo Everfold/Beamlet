@@ -1,4 +1,4 @@
-use beamlet_agent::testing::{
+use beamlet_protocol_demo::{
     memory::{
         Admission, Authority, OperationPhase, ReportDisposition, StateError, WaitStatus, Worker,
         WorkerPhase,

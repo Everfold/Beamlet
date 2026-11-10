@@ -11,8 +11,8 @@ use beamlet::{
     query::{Observation, Selection},
     remote::{Binding, Client, ClientError, Outcome},
 };
-use beamlet_agent::testing::{hello::Task, submission::HelloClientCodec};
 use beamlet_message_zenoh::{ClientTransport, Limits, Transport};
+use beamlet_protocol_demo::{hello::Task, submission::HelloClientCodec};
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncReadExt, BufReader},
     time::timeout,
@@ -86,7 +86,7 @@ async fn run() -> Result<()> {
                     _ => Selection::Report(id.into()),
                 });
             }
-            "--demo" => return Ok(beamlet_agent::testing::demo::print().await?),
+            "--demo" => return Ok(beamlet_protocol_demo::demo::print().await?),
             "--help" | "-h" => {
                 println!(
                     "用法: beamlet-console [--connect tcp/127.0.0.1:7447] [--authority UUID] [--subscribe] [--message hello [--submission-key UUID]] [--demo]\n只读查询: --authority UUID 配合 --query-submission UUID / --query-operation UUID / --query-report UUID\n结果观察: --authority UUID --observe-operation UUID; 合并结果通知并查询补齐, 最多等待 10 秒\n--subscribe 启用只读角色启动/退出通知; 输入结束后继续订阅, Ctrl-C 退出"
@@ -121,7 +121,7 @@ async fn run() -> Result<()> {
     let destination = match (query, authority) {
         (Some(_), Some(authority)) => format!(
             "{}{console_id}",
-            beamlet_agent::testing::query::prefix(authority.as_u128().into())
+            beamlet_protocol_demo::query::prefix(authority.as_u128().into())
         ),
         (_, Some(authority)) => format!(
             "beamlet/v0/authority/{}/submit/{console_id}",
@@ -139,7 +139,7 @@ async fn run() -> Result<()> {
     let subscription = if subscribe {
         Some(
             transport
-                .subscribe(beamlet_agent::testing::lifecycle::SUBSCRIPTION)
+                .subscribe(beamlet_protocol_demo::lifecycle::SUBSCRIPTION)
                 .await?,
         )
     } else {
@@ -148,7 +148,7 @@ async fn run() -> Result<()> {
     let result_notices = if observe {
         Some(
             transport
-                .subscribe(&beamlet_agent::testing::query::notice_topic(
+                .subscribe(&beamlet_protocol_demo::query::notice_topic(
                     authority
                         .context("结果观察需要 Authority")?
                         .as_u128()

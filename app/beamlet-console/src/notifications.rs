@@ -2,8 +2,8 @@
 
 use anyhow::{Context, Result, ensure};
 use beamlet::role_observation::Observations;
-use beamlet_agent::testing::lifecycle::RoleNotice;
 use beamlet_message_zenoh::Transport;
+use beamlet_protocol_demo::lifecycle::RoleNotice;
 
 const MAX_INSTANCES: usize = 256;
 

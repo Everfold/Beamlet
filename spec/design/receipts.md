@@ -76,7 +76,7 @@ Authority Draining 仍在原预算内发送已接纳授权并接收回执和 Rep
 
 发送至 `beamlet/v0/worker/<worker-instance-simple>/receipts`, 与 Attempt 收件箱分开, 共享同一 Zenoh Session. Worker 必须同时验证实际路由, 来源和目标运行实例, 以及本地待确认 Report 的全部身份; 未知或不匹配回执不新增记录, 不清除其他待确认项. 相同有效回执去重. 静态绑定校验不是发送方认证, 原型仍限定在受信测试网络.
 
-公共编解码位于 Agent 的可选 `test-support` Adapter, 不是新增纯 Kernel 执行授权消息或稳定 Client SDK. 旧 Report 和 Dispatch JSON 保持不变, Console 提交及回复迁移至 Submission/SubmissionReply.
+公共演示编解码位于独立 `beamlet-protocol-demo` Adapter, 不是新增纯 Kernel 执行授权消息或稳定 Client SDK. 旧 Report 和 Dispatch JSON 保持不变, Console 提交及回复迁移至 Submission/SubmissionReply.
 
 ## 有界 Report 交付
 

@@ -4,12 +4,12 @@ use beamlet::{
     model::{ExecutionResult, ImpactStatus, Message, SubmitReport},
     report_delivery::{Event, Limits as DeliveryLimits, Outbox, Status},
 };
-use beamlet_agent::testing::{
+use beamlet_message_zenoh::{Limits, Transport};
+use beamlet_protocol_demo::{
     hello::{self, Task},
     protocol::Limits as ProtocolLimits,
     receipt::{self, ReportRetained},
 };
-use beamlet_message_zenoh::{Limits, Transport};
 use std::{net::TcpListener, time::Duration};
 use tokio::time::{sleep, timeout};
 
