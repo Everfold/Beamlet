@@ -1,4 +1,4 @@
-//! 固定 Hello 任务的严格查询编码与只读 Authority 处理入口
+//! 固定 Hello 任务的严格查询与结果通知编码, 只读投影 Authority 事实
 
 use super::{
     hello::{self, Response, ResponseMessage, Task},
@@ -37,41 +37,7 @@ pub fn respond(
     let reply = authority
         .answer_query(wire.into_core())
         .map_err(|_| invalid("查询目标不是当前 Authority"))?;
-    let observation = match reply.observation {
-        Observation::Operation(view) => ObservationWire::Operation {
-            binding: Binding {
-                authority: Uuid::from_u128(view.binding.authority_instance_id.as_u128()),
-                worker: Uuid::from_u128(view.binding.worker_instance_id.as_u128()),
-                operation: Uuid::from_u128(view.binding.operation_id.as_u128()),
-                attempt: Uuid::from_u128(view.binding.attempt_id.as_u128()),
-            },
-            task: view.task,
-            phase: match view.phase {
-                OperationPhase::Accepted => Phase::Accepted,
-                OperationPhase::Dispatched => Phase::Dispatched,
-                OperationPhase::Reported => Phase::Reported,
-                _ => return Err(invalid("不支持的 Operation 观察阶段")),
-            },
-            wait_status: match view.wait_status {
-                WaitStatus::Waiting => Wait::Waiting,
-                WaitStatus::TimedOut => Wait::TimedOut,
-                _ => return Err(invalid("不支持的等待观察")),
-            },
-            adopted_report: view.adopted_report.map(|id| Uuid::from_u128(id.as_u128())),
-        },
-        Observation::Report(view) => {
-            let ResponseMessage::Report(envelope) = Response::report(
-                &view.report,
-                view.worker_instance_id,
-                view.authority_instance_id,
-            )
-            .into_message() else {
-                unreachable!("Report 包装只能返回证据");
-            };
-            ObservationWire::Report { envelope }
-        }
-        Observation::NotFound => ObservationWire::NotFound {},
-    };
+    let observation = ObservationWire::from_core(reply.observation)?;
     submission::encode(
         &ReplyWire {
             request: Request::from_core(reply.request),
@@ -95,46 +61,7 @@ impl Codec for HelloClientCodec {
         let wire: ReplyWire = submission::decode(bytes, &self.limits)?;
         submission::check(wire.request.protocol_version)?;
         let request = wire.request.into_core();
-        let observation = match wire.observation {
-            ObservationWire::Operation {
-                binding,
-                task,
-                phase,
-                wait_status,
-                adopted_report,
-            } => Observation::Operation(OperationObservation {
-                binding: ExecutionBinding {
-                    authority_instance_id: binding.authority.as_u128().into(),
-                    worker_instance_id: binding.worker.as_u128().into(),
-                    operation_id: binding.operation.as_u128().into(),
-                    attempt_id: binding.attempt.as_u128().into(),
-                },
-                task,
-                phase: match phase {
-                    Phase::Accepted => OperationPhase::Accepted,
-                    Phase::Dispatched => OperationPhase::Dispatched,
-                    Phase::Reported => OperationPhase::Reported,
-                },
-                wait_status: match wait_status {
-                    Wait::Waiting => WaitStatus::Waiting,
-                    Wait::TimedOut => WaitStatus::TimedOut,
-                },
-                adopted_report: adopted_report.map(|id| id.as_u128().into()),
-            }),
-            ObservationWire::Report { envelope } => {
-                envelope.validate(&self.limits)?;
-                let delivery = hello::report_from_envelope(envelope)?;
-                let Message::SubmitReport(report) = delivery.message else {
-                    unreachable!("证据解码只能返回 Report")
-                };
-                Observation::Report(ReportObservation::new(
-                    delivery.target_instance_id,
-                    delivery.source_instance_id,
-                    report,
-                ))
-            }
-            ObservationWire::NotFound {} => Observation::NotFound,
-        };
+        let observation = wire.observation.into_core(&self.limits)?;
         let reply = Reply {
             request,
             observation,
@@ -244,4 +171,143 @@ enum Wait {
 
 fn invalid(message: &str) -> ProtocolError {
     ProtocolError::Json(serde::de::Error::custom(message))
+}
+
+impl ObservationWire {
+    fn from_core(observation: Observation<Task, String, String>) -> Result<Self, ProtocolError> {
+        Ok(match observation {
+            Observation::Operation(view) => ObservationWire::Operation {
+                binding: Binding {
+                    authority: Uuid::from_u128(view.binding.authority_instance_id.as_u128()),
+                    worker: Uuid::from_u128(view.binding.worker_instance_id.as_u128()),
+                    operation: Uuid::from_u128(view.binding.operation_id.as_u128()),
+                    attempt: Uuid::from_u128(view.binding.attempt_id.as_u128()),
+                },
+                task: view.task,
+                phase: match view.phase {
+                    OperationPhase::Accepted => Phase::Accepted,
+                    OperationPhase::Dispatched => Phase::Dispatched,
+                    OperationPhase::Reported => Phase::Reported,
+                    _ => return Err(invalid("不支持的 Operation 观察阶段")),
+                },
+                wait_status: match view.wait_status {
+                    WaitStatus::Waiting => Wait::Waiting,
+                    WaitStatus::TimedOut => Wait::TimedOut,
+                    _ => return Err(invalid("不支持的等待观察")),
+                },
+                adopted_report: view.adopted_report.map(|id| Uuid::from_u128(id.as_u128())),
+            },
+            Observation::Report(view) => {
+                let ResponseMessage::Report(envelope) = Response::report(
+                    &view.report,
+                    view.worker_instance_id,
+                    view.authority_instance_id,
+                )
+                .into_message() else {
+                    unreachable!("Report 包装只能返回证据");
+                };
+                ObservationWire::Report { envelope }
+            }
+            Observation::NotFound => ObservationWire::NotFound {},
+        })
+    }
+    fn into_core(
+        self,
+        limits: &Limits,
+    ) -> Result<Observation<Task, String, String>, ProtocolError> {
+        Ok(match self {
+            ObservationWire::Operation {
+                binding,
+                task,
+                phase,
+                wait_status,
+                adopted_report,
+            } => Observation::Operation(OperationObservation {
+                binding: ExecutionBinding {
+                    authority_instance_id: binding.authority.as_u128().into(),
+                    worker_instance_id: binding.worker.as_u128().into(),
+                    operation_id: binding.operation.as_u128().into(),
+                    attempt_id: binding.attempt.as_u128().into(),
+                },
+                task,
+                phase: match phase {
+                    Phase::Accepted => OperationPhase::Accepted,
+                    Phase::Dispatched => OperationPhase::Dispatched,
+                    Phase::Reported => OperationPhase::Reported,
+                },
+                wait_status: match wait_status {
+                    Wait::Waiting => WaitStatus::Waiting,
+                    Wait::TimedOut => WaitStatus::TimedOut,
+                },
+                adopted_report: adopted_report.map(|id| id.as_u128().into()),
+            }),
+            ObservationWire::Report { envelope } => {
+                envelope.validate(limits)?;
+                let delivery = hello::report_from_envelope(envelope)?;
+                let Message::SubmitReport(report) = delivery.message else {
+                    unreachable!("证据解码只能返回 Report")
+                };
+                Observation::Report(ReportObservation::new(
+                    delivery.target_instance_id,
+                    delivery.source_instance_id,
+                    report,
+                ))
+            }
+            ObservationWire::NotFound {} => Observation::NotFound,
+        })
+    }
+}
+
+/// 一个 Authority 的共享结果通知路由, 由应用显式订阅
+pub fn notice_topic(authority: RoleInstanceId) -> String {
+    format!(
+        "beamlet/v0/authority/{}/observations",
+        Uuid::from_u128(authority.as_u128()).simple()
+    )
+}
+
+/// 编码 Authority 已保留的执行观察, 不声明订阅可靠性
+/// # 错误
+/// 非法通知, 格式或字节上限不满足时返回错误
+pub fn encode_notice(
+    notice: beamlet::observe::Notice<Task, String, String>,
+    limits: &Limits,
+) -> Result<Vec<u8>, ProtocolError> {
+    if !notice.is_valid() {
+        return Err(invalid("通知的执行绑定或证据无效"));
+    }
+    submission::encode(
+        &NoticeWire {
+            protocol_version: PROTOCOL_VERSION,
+            operation: ObservationWire::from_core(Observation::Operation(notice.operation))?,
+            report: ObservationWire::from_core(Observation::Report(notice.report))?,
+        },
+        limits,
+    )
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NoticeWire {
+    protocol_version: u16,
+    operation: ObservationWire,
+    report: ObservationWire,
+}
+
+impl beamlet::observe::Codec for HelloClientCodec {
+    fn decode_notice(&self, bytes: &[u8]) -> beamlet::observe::DecodeResult<Self> {
+        let wire: NoticeWire = submission::decode(bytes, &self.limits)?;
+        submission::check(wire.protocol_version)?;
+        let (Observation::Operation(operation), Observation::Report(report)) = (
+            wire.operation.into_core(&self.limits)?,
+            wire.report.into_core(&self.limits)?,
+        ) else {
+            return Err(invalid("通知必须包含执行快照和完整报告"));
+        };
+        let notice = beamlet::observe::Notice { operation, report };
+        if !notice.is_valid() {
+            return Err(invalid("通知的执行绑定或证据无效"));
+        }
+        Ok(notice)
+    }
 }

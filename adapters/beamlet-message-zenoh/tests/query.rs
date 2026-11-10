@@ -253,3 +253,128 @@ fn query_codec_rejects_unknown_versions_fields_bindings_and_invalid_evidence() {
     assert!(HelloClientCodec::new(tiny).decode_query(&response).is_err());
     assert!(query::respond(&authority, &bytes, &tiny).is_err());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn result_observation_uses_notices_or_queries_over_explicit_shared_sessions() {
+    use beamlet::observe::{Budget, State};
+    let authority = authority();
+    let expected = authority.report_notice(30.into()).unwrap().report;
+    let (server, endpoint) = listener().await;
+    timeout(Duration::from_secs(20), async {
+        for round in 0..2 {
+            let inbox = format!("beamlet/test/observed/{round}");
+            let mut connection = Transport::connect(&endpoint, &inbox, Limits::default())
+                .await
+                .unwrap();
+            let topic = query::notice_topic(2.into());
+            let notices = connection.subscribe(&topic).await.unwrap();
+            let to_client = server.sender(&inbox).await.unwrap();
+            let to_notices = server.sender(&topic).await.unwrap();
+            to_client.wait_for_receiver().await.unwrap();
+            to_notices.wait_for_receiver().await.unwrap();
+            let service = async {
+                let bytes = server.recv().await.unwrap();
+                if round == 0 {
+                    // Deliberately omit the query reply. Full retained evidence arrives as a notice.
+                    let bytes = query::encode_notice(
+                        authority.report_notice(30.into()).unwrap(),
+                        &ProtocolLimits::default(),
+                    )
+                    .unwrap();
+                    to_notices.send(bytes.clone()).await.unwrap();
+                    to_notices.send(bytes).await.unwrap();
+                } else {
+                    // No notifications at all: the result existed before this subscription.
+                    to_client
+                        .send(
+                            query::respond(&authority, &bytes, &ProtocolLimits::default()).unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                    let bytes = server.recv().await.unwrap();
+                    to_client
+                        .send(
+                            query::respond(&authority, &bytes, &ProtocolLimits::default()).unwrap(),
+                        )
+                        .await
+                        .unwrap();
+                }
+            };
+            let application = async {
+                let channel = ClientTransport::bind(&mut connection, "beamlet/test/queries")
+                    .await
+                    .unwrap();
+                let mut client = Client::new(channel, HelloClientCodec::default(), Some(2.into()));
+                let mut state = State::new(2.into(), 10.into(), 2).unwrap();
+                let mut id = 100_u128;
+                let mut allocate = || {
+                    id += 1;
+                    id.into()
+                };
+                assert_eq!(
+                    client
+                        .observe(&mut state, &notices, Budget::default(), &mut allocate)
+                        .await
+                        .unwrap(),
+                    Some(expected.clone())
+                );
+                assert_eq!(
+                    client
+                        .observe(&mut state, &notices, Budget::default(), &mut allocate)
+                        .await
+                        .unwrap(),
+                    None
+                );
+            };
+            tokio::join!(service, application);
+        }
+    })
+    .await
+    .expect("notice and fallback paths must complete with explicit subscriptions");
+}
+
+#[test]
+fn result_notice_codec_validates_both_snapshot_and_evidence() {
+    use beamlet::observe::Codec;
+    let authority = authority();
+    let codec = HelloClientCodec::default();
+    let notice = authority.report_notice(31.into()).unwrap();
+    let bytes = query::encode_notice(notice.clone(), &ProtocolLimits::default()).unwrap();
+    assert_eq!(codec.decode_notice(&bytes).unwrap(), notice);
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    for pointer in [
+        "/protocol_version",
+        "/operation/phase",
+        "/operation/binding/worker",
+        "/report/envelope/message/body/outcome",
+    ] {
+        let mut invalid = value.clone();
+        *invalid.pointer_mut(pointer).unwrap() = match pointer {
+            "/protocol_version" => 99.into(),
+            "/operation/phase" => "accepted".into(),
+            "/operation/binding/worker" => "00000000-0000-0000-0000-000000000099".into(),
+            _ => "rejected".into(),
+        };
+        assert!(
+            codec
+                .decode_notice(&serde_json::to_vec(&invalid).unwrap())
+                .is_err(),
+            "reject {pointer}"
+        );
+    }
+    let mut invalid = value;
+    invalid["extra"] = true.into();
+    assert!(
+        codec
+            .decode_notice(&serde_json::to_vec(&invalid).unwrap())
+            .is_err()
+    );
+    assert!(codec.decode_notice(b"{broken").is_err());
+    let mut invalid = notice.clone();
+    invalid.operation.adopted_report = None;
+    assert!(query::encode_notice(invalid, &ProtocolLimits::default()).is_err());
+    let mut tiny = ProtocolLimits::default();
+    tiny.max_message_bytes = 1;
+    assert!(query::encode_notice(notice, &tiny).is_err());
+    assert!(HelloClientCodec::new(tiny).decode_notice(&bytes).is_err());
+}

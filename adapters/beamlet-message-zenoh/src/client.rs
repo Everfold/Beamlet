@@ -64,3 +64,15 @@ impl beamlet::remote::Transport for ClientTransport<'_> {
         }
     }
 }
+
+impl beamlet::observe::Notifications for Transport {
+    type Error = Error;
+
+    async fn recv(&self) -> Result<Option<Vec<u8>>, Error> {
+        match Transport::recv(self).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(Error::UnexpectedDelete | Error::MessageTooLarge) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+}

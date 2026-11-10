@@ -46,6 +46,7 @@ struct Waiter {
 }
 
 enum SendPurpose {
+    Notice,
     Dispatch(OperationId),
     Reply,
     Receipt,
@@ -247,6 +248,7 @@ pub(crate) async fn serve_authority_pair(
                             } else {
                                 eprintln!("Report 已收录, 回执发送槽位已满: Report={}; 等待原证据重投, 不回滚收录", receipt.report_id);
                             }
+                            queue_notice(&authority, receipt.report_id.as_u128().into(), &mut sends, &transport, &protocol, limits.queue_capacity);
                         },
                         Err(error) => eprintln!("Report 未收录: {error}"),
                     }
@@ -359,6 +361,7 @@ pub(crate) async fn serve_authority_pair(
                         };
                         let receipt = ReportRetained::for_report(&report)?;
                         authority.receive_report(report)?;
+                        queue_notice(&authority, receipt.report_id.as_u128().into(), &mut sends, &transport, &protocol, limits.queue_capacity);
                         println!("本地 Report 收录已确认: Report={}; 类型化返回, 不走网络回执, 不表示持久化", receipt.report_id);
                         pending.remove(&operation);
                         println!("本地类型化交付: Operation={operation}");
@@ -370,6 +373,7 @@ pub(crate) async fn serve_authority_pair(
             completed = sends.join_next(), if !sends.is_empty() => {
                 let (purpose, result) = completed.context("发送完成记录缺失")?.context("发送任务失败")?;
                 match (purpose, result) {
+                    (SendPurpose::Notice, _) => {},
                     (SendPurpose::Dispatch(operation), Ok(())) => {
                         attempts.sent(operation);
                         authority.mark_dispatched(operation)?;
@@ -492,7 +496,8 @@ fn queue_send(sends: &mut Sends, transport: &Arc<Transport>, outgoing: Outgoing)
     let transport = Arc::clone(transport);
     sends.spawn(async move {
         let budget = match &outgoing.purpose {
-            SendPurpose::SubmissionReceipt
+            SendPurpose::Notice
+            | SendPurpose::SubmissionReceipt
             | SendPurpose::Receipt
             | SendPurpose::AttemptReceipt
             | SendPurpose::Dispatch(_)
@@ -502,6 +507,35 @@ fn queue_send(sends: &mut Sends, transport: &Arc<Transport>, outgoing: Outgoing)
         let result = send(&transport, &outgoing.destination, outgoing.bytes, budget).await;
         (outgoing.purpose, result)
     });
+}
+
+fn queue_notice(
+    authority: &HelloAuthority,
+    report: ReportId,
+    sends: &mut Sends,
+    transport: &Arc<Transport>,
+    protocol: &ProtocolLimits,
+    capacity: usize,
+) {
+    if sends.len() >= capacity {
+        return;
+    }
+    let Some(notice) = authority.report_notice(report) else {
+        return;
+    };
+    let destination = query::notice_topic(notice.operation.binding.authority_instance_id);
+    match query::encode_notice(notice, protocol) {
+        Ok(bytes) => queue_send(
+            sends,
+            transport,
+            Outgoing {
+                destination,
+                bytes,
+                purpose: SendPurpose::Notice,
+            },
+        ),
+        Err(error) => eprintln!("结果通知编码失败: {error}; 可通过查询读取已保留事实"),
+    }
 }
 
 async fn send(

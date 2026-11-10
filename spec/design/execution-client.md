@@ -1,6 +1,6 @@
 # 执行 Client 与结果观察
 
-状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, beamlet 已提供本地 LocalClient 提交及查询, 以及不依赖编码和连接实现的 remote::Client 提交与只读查询驱动. Console 已通过库调用远端 Hello 提交和查询; 订阅合并尚未实现. [回执契约](receipts.md)描述当前易失原型.
+状态: Interface 的语义契约, 2026-11-10. 通用 Authority 已实现按 SubmissionKey 的内存接纳, beamlet 已提供本地 LocalClient 提交及查询, 以及不依赖编码和连接实现的 remote::Client 提交, 只读查询与结果观察. Console 已通过库调用远端 Hello 提交, 查询和通知/查询合并. [回执契约](receipts.md)描述当前易失原型.
 
 当前库入口为 `Authority::submit_keyed(key, task, allocate)`: 定义按类型 P 的 Eq 比较, 传输信封和临时回复地址由 Adapter 处理. 只有新键通过记录容量检查后才调用 allocate 生成 OperationId/AttemptId; 同键同定义返回原授权, 冲突或容量不足不生成身份. 已用 ID 被拒绝, 不把新键关联到已有执行. `check_submission(key, &task)` 返回已接纳执行的当前观察或定义冲突, 未知键返回空值; 它不修改状态或预留后续接纳资格, 也不是远端查询 SDK.
 
@@ -33,7 +33,7 @@ Zenoh 的 `ClientTransport::bind(&mut transport, target)` 在已有会话上声�
 
 结果 `Submission` 包含原键, Binding 和 Outcome: Pending, 完整 Report, 或已关联请求的 SubmissionError. 业务失败和执行前拒绝保留在 Report 中. 编码失败, 未取得映射的提交拒绝, 接收连接错误及总期限到达分别返回 ClientError; 断线和超时携带原键, 已知映射及已发送次数, 不声称远端执行已停止. 取消等待 future 停止本地驱动, 不产生后台重投; 显式再次调用 submit 才开始新的调用预算.
 
-当前 Client 顺序处理调用并返回第一份匹配观察. Console 在收到该观察后展示关联及结果, 超时或断线也可展示已有映射. 并发请求分流, 通知合并和自动断线补齐属于后续任务.
+提交和单次查询返回第一份匹配观察. Console 在收到该观察后展示关联及结果, 超时或断线也可展示已有映射. 持续结果观察由下述 observe 方法承载; 同一回复队列仍顺序处理调用.
 
 ## 当前远端只读查询
 
@@ -55,6 +55,20 @@ remote::Client 在编码器实现 `query::Codec` 时提供以下方法:
 应用显式为查询绑定目标路由; Hello Adapter 使用 `beamlet/v0/authority/{instance}/query/{console}`. ClientTransport 和 HelloClientCodec 同时供提交与查询使用. Node 为每个 Authority 订阅查询入口, 将请求交给测试 Adapter 的 `query::respond(&authority, bytes, limits)`, 排队发送返回字节; 该入口在仍运行的 Draining 期间也可读取, 发送队列满只丢弃本次回复, 不修改记录. 查询路由与旧提交接入约定独立, 默认本地组合 Node 同样提供查询.
 
 Console 支持 `--authority UUID --query-submission UUID`, `--query-operation UUID` 或 `--query-report UUID`; 查询选项互斥, 不与提交参数混用. 每次连接使用独立回复地址, 每次查询生成独立查询 ID. 原 Console 退出后, 新 Console 可以只带原键和原 Authority 找回全部执行关联, 再按 ReportId 读取证据. 这要求原 Authority 仍保留内存账本; 重启丢失记录, 旧实例不可达或查询失败都不能自动转为新提交. 当前没有认证/权限服务或跨重启持久恢复.
+
+## 当前结果观察与补齐
+
+`observe::State::new(authority, operation, max_reports)` 由应用持有, 跟踪一个原执行. 它保存单调的 Operation 快照及按 ReportId 去重的完整证据; 不包含连接, future 或执行权. `merge_operation`, `merge_report`, `merge_notice` 可直接用于类型化调用. 较旧的 Accepted/Dispatched 或 Waiting 不覆盖已知的 Reported/TimedOut; 任务, 四项执行绑定, 已采用 ReportId 和同 ID 证据内容不能改变. 违反约束或报告容量不足时返回错误并保持原状态, 不删除去重记录.
+
+`observe::Notice` 携带执行快照和一份完整已收录 Report. `Authority::report_notice(report_id)` 从账本只读构造它. 报告可以是附加证据, 不能仅因它先到就认定它被采用; 采用决定来自快照. 两部分先联合校验再原子合并. Change 标明新报告 ID 与快照是否增加事实, 重复消息不产生重复变化. `take_adopted_report` 仅在采用决定和正文均已知时返回报告, 同一个 State 至多返回一次; 这不是 Agent 的持久消费事务.
+
+`remote::Client::observe(&mut state, &notices, budget, allocate_query_id)` 接受应用已建立的独立通知通道, 使用原查询通道对账. 编码器实现 `observe::Codec`, 通知通道实现 `observe::Notifications`. 默认总等待 10 秒, 单次查询含发送就绪最多 500ms, 未满足结果条件时每隔 1 秒再次查询; 所有期限由 Budget 显式配置, 通知和旧回复均不刷新总期限. 开始调用立即查询, 得到采用的 ReportId 后立即补齐缺失正文; 等待查询期间同时合并通知, 完整通知可以直接满足等待. 查询每次使用新的关联 ID, 只读方法不创建新提交键/执行或重投授权.
+
+返回 Some(ReportObservation) 表示本 State 首次交付采用结果, None 表示此前已交付. 业务失败的 Report 同样是有效观察结果. 明确的 NotFound, 传输故障, 通知通道错误, 冲突/容量错误以及总观察超时分别返回结构化错误. 单次查询超时可在剩余总预算内继续对账. 取消 future 停止本次 I/O, 已合并 State 保留; 应用重建连接与订阅后把同一 State 绑定新 Client, 会查询尚缺的原事实. 不自动解析新 Authority 实例或隐式连接基础设施. 进程重启后恢复消费位置仍需后续持久化实现.
+
+Hello Adapter 的共享通知主题是 `beamlet/v0/authority/{instance}/observations`. Node 仅在成功收录后排队发送库生成的通知, 与其他发送共用有界队列, 每次最多等待 500ms; 队列满或无人接收时可以遗漏通知, 保留事实仍可查询. 本批采用尽力广播和周期查询, 不声称本地订阅建立就是 Authority 确认注册, 也不依赖一次订阅加一次查询保证结果不遗漏. 通知通道必须在 observe 调用前由应用建立, 查询回复使用另一队列; 应用可让两者共享已有 Zenoh Session.
+
+Console 的 `--authority UUID --observe-operation UUID` 在库中等待已采用结果并展示一次, 与三种单次查询/提交选项互斥. `--subscribe` 仍独立表示角色生命周期通知. 当前驱动一次跟踪一个 Operation, 一个通知队列只由一个驱动消费; 并行观察可显式建立共享 Session 的独立订阅. 附加报告可合并和查询, 但本方法的完成条件是已采用报告, 不承诺枚举后来所有附加证据.
 
 ## Agent 与 Authority 的联系
 

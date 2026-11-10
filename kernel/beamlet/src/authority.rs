@@ -1,11 +1,13 @@
 //! 独立 Authority 入口, 只接纳请求与收录证据, 不持有执行器
 
 use crate::{
+    OperationObservation, ReportObservation,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
     memory::{
         Authority as Ledger, Limits, OperationView, ReportDisposition, StateError, Submission,
     },
     model::{Delivery, Message, Operation},
+    observe::Notice,
     query,
 };
 
@@ -140,6 +142,14 @@ impl<P: Clone + Eq, O: Clone + Eq, E: Clone + Eq> Authority<P, O, E> {
     /// 查询已保留的证据, 包括未被采用为结果的 Report
     pub fn report(&self, report: ReportId) -> Option<&Delivery<P, O, E>> {
         self.ledger.report(report)
+    }
+
+    /// 从已保留证据构造通知, 不改变账本或承诺通知交付
+    pub fn report_notice(&self, id: ReportId) -> Option<Notice<P, O, E>> {
+        let report = ReportObservation::from_delivery(self.report(id)?);
+        let operation =
+            OperationObservation::from_view(self.operation(report.report.operation_id)?);
+        Some(Notice { operation, report })
     }
 
     /// 只读回答明确指向本实例的查询, 不分配身份, 派发, 修改等待状态或接触 Worker

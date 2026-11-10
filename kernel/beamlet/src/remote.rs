@@ -1,5 +1,7 @@
 //! 远端提交的有界交付与只读查询, 编码和连接由应用显式提供
 
+mod observation;
+
 use crate::{
     OperationObservation, ReportObservation,
     id::{AttemptId, OperationId, ReportId, RoleInstanceId, SubmissionKey},
@@ -158,14 +160,15 @@ pub enum ClientError<C, T> {
     },
 }
 
-/// 在显式通道上顺序提交或查询, 复用连接和回复订阅
+/// 在显式通道上提交, 查询或观察结果, 复用连接和回复订阅
 ///
-/// 每次调用只编码一次, 最多发送三次原字节; 每次匹配及发送共用 500ms,
+/// 每次提交只编码一次, 最多发送三次原字节; 每次匹配及发送共用 500ms,
 /// 发送结束后间隔 1s, 总观察期限为 10s. 合法接纳或结果停止重投.
 /// 创建 Client 不建立连接或启动后台任务. 丢弃等待 future 不取消远端执行,
 /// 调用方仍须保留原键; 再次调用 submit 是用户显式发起的新观察预算.
 /// 查询需要明确的 expected_authority 及实现 query::Codec 的编码器.
-/// 当前只返回本次调用的第一份匹配观察, 订阅合并和持久恢复另行提供.
+/// observe 通过独立通知通道和有界查询合并结果, State 与连接均由应用持有.
+/// 提交与单次查询返回本次调用的第一份匹配观察, 不提供持久恢复.
 #[derive(Debug)]
 pub struct Client<T, C> {
     transport: T,
@@ -277,30 +280,13 @@ impl<T: Transport, C: query::Codec> Client<T, C> {
                 .ok_or(query::ClientError::AuthorityRequired)?,
             selection,
         };
-        let bytes = self
-            .codec
-            .encode_query(request)
-            .map_err(query::ClientError::Encode)?;
-        let deadline = Instant::now() + OBSERVATION_TIMEOUT;
-        timeout_at(deadline, self.transport.send(&bytes))
-            .await
-            .map_err(|_| query::ClientError::TimedOut { request })?
-            .map_err(|source| query::ClientError::Transport { request, source })?;
-        loop {
-            tokio::select! {
-                biased;
-                _ = sleep_until(deadline) => return Err(query::ClientError::TimedOut { request }),
-                received = self.transport.recv() => {
-                    let Some(bytes) = received.map_err(|source| query::ClientError::Transport { request, source })? else { continue };
-                    let Ok(reply) = self.codec.decode_query(&bytes) else { continue };
-                    if !reply.matches(request) { continue; }
-                    return match reply.observation {
-                        query::Observation::NotFound => Err(query::ClientError::NotFound { request }),
-                        observation => Ok(observation),
-                    };
-                }
-            }
-        }
+        query_on(
+            &self.transport,
+            &self.codec,
+            request,
+            Instant::now() + OBSERVATION_TIMEOUT,
+        )
+        .await
     }
 
     /// 按原提交键读取执行快照, 不要求重送任务定义
@@ -352,5 +338,40 @@ impl<T: Transport, C: query::Codec> Client<T, C> {
             unreachable!("已验证的证据查询只能返回 Report");
         };
         Ok(view)
+    }
+}
+
+async fn query_on<T: Transport, C: query::Codec>(
+    transport: &T,
+    codec: &C,
+    request: query::Request,
+    deadline: Instant,
+) -> Result<
+    query::Observation<C::Task, C::Output, C::Failure>,
+    query::ClientError<C::Error, T::Error>,
+> {
+    let bytes = codec
+        .encode_query(request)
+        .map_err(query::ClientError::Encode)?;
+    timeout_at(deadline, transport.send(&bytes))
+        .await
+        .map_err(|_| query::ClientError::TimedOut { request })?
+        .map_err(|source| query::ClientError::Transport { request, source })?;
+    loop {
+        // A constantly ready stream of invalid replies must not starve the deadline or other I/O.
+        tokio::task::yield_now().await;
+        tokio::select! {
+            biased;
+            _ = sleep_until(deadline) => return Err(query::ClientError::TimedOut { request }),
+            received = transport.recv() => {
+                let Some(bytes) = received.map_err(|source| query::ClientError::Transport { request, source })? else { continue };
+                let Ok(reply) = codec.decode_query(&bytes) else { continue };
+                if !reply.matches(request) { continue; }
+                return match reply.observation {
+                    query::Observation::NotFound => Err(query::ClientError::NotFound { request }),
+                    observation => Ok(observation),
+                };
+            }
+        }
     }
 }

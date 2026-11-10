@@ -38,6 +38,8 @@ Console 通过 `beamlet::remote::Client` 提交, 每次调用编码一次, 最�
 
 Draining 拒绝未保留的新 key, 仍回复已有映射及证据. Authority 重启会丢失提交映射及 Operation; 旧 key 不保证跨重启去重. 显式旧运行实例不会自动解析到新实例. 当前远端 Client 提供独立的只读查询: 指定原 Authority 与原键/OperationId/ReportId, 每次使用独立查询关联 ID, 只发送一次并共用 10 秒期限; 查询不刷新提交或交付预算, 网络失败不等于 NotFound. 详见 [Client 契约](execution-client.md). 持久提交箱及跨重启恢复尚未提供.
 
+Authority 收录后可发送携带执行快照及完整证据的尽力结果通知, 与 Worker 的收录回执分别处理. 通知发送最多等待 500 毫秒, 队列满或无人接收可丢弃, 不影响已保留事实和原交付预算. Client 的 observe 驱动单调合并查询与通知, 按已采用 ReportId 补齐正文并避免同一内存 State 重复交付; 默认总观察 10 秒, 单次查询 500 毫秒, 对账间隔 1 秒. 通知不代替查询或 Agent 的持久消费确认.
+
 ## Attempt 回执与有界授权交付
 
 严格 JSON `protocol_version: 0`, `kind: "attempt_accepted"`, 字段为 `source_instance_id` (Worker), `target_instance_id` (Authority), `operation_id`, `attempt_id`. 单条最多 4096 字节, 拒绝未知字段, 种类或版本. 发送至 `beamlet/v0/authority/<authority-instance-simple>/receipts`, 使用同 Session 的独立有界订阅. Authority 校验实际路由及原授权的完整身份绑定, 未知或冲突回执不改变状态. 静态绑定不是网络认证.

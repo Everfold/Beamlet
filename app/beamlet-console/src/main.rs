@@ -1,4 +1,4 @@
-//! Console 提交固定 Hello 请求, 按 Operation 身份显示已收录的执行证据
+//! Console 提交, 查询与观察固定 Hello 请求, 显示库返回的执行证据
 
 use std::{env, time::Duration};
 
@@ -7,6 +7,7 @@ use beamlet::{
     ReportObservation,
     id::SubmissionKey,
     model::ExecutionResult,
+    observe::{Budget, State},
     query::{Observation, Selection},
     remote::{Binding, Client, ClientError, Outcome},
 };
@@ -22,6 +23,8 @@ mod notifications;
 const NODE_INBOX: &str = "beamlet/v0/node/inbox";
 const ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_LINE_BYTES: usize = 64 * 1024;
+// 原型观察的证据数量上限, 达到后保留原去重事实并返回错误.
+const MAX_OBSERVED_REPORTS: usize = 1024;
 type HelloClient<'a> = Client<ClientTransport<'a>, HelloClientCodec>;
 
 #[tokio::main(worker_threads = 2)]
@@ -41,6 +44,7 @@ async fn run() -> Result<()> {
     let mut message = None;
     let mut submission_key = None;
     let mut query = None;
+    let mut observe = false;
     let mut subscribe = false;
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -64,8 +68,12 @@ async fn run() -> Result<()> {
                 );
             }
             "--subscribe" => subscribe = true,
-            "--query-submission" | "--query-operation" | "--query-report" => {
+            "--query-submission"
+            | "--query-operation"
+            | "--query-report"
+            | "--observe-operation" => {
                 ensure!(query.is_none(), "一次只能选择一种查询");
+                observe = arg == "--observe-operation";
                 let id = args
                     .next()
                     .with_context(|| format!("{arg} 需要 UUID"))?
@@ -74,14 +82,14 @@ async fn run() -> Result<()> {
                     .as_u128();
                 query = Some(match arg.as_str() {
                     "--query-submission" => Selection::Submission(id.into()),
-                    "--query-operation" => Selection::Operation(id.into()),
+                    "--query-operation" | "--observe-operation" => Selection::Operation(id.into()),
                     _ => Selection::Report(id.into()),
                 });
             }
             "--demo" => return Ok(beamlet_agent::testing::demo::print().await?),
             "--help" | "-h" => {
                 println!(
-                    "用法: beamlet-console [--connect tcp/127.0.0.1:7447] [--authority UUID] [--subscribe] [--message hello [--submission-key UUID]] [--demo]\n只读查询: --authority UUID 配合 --query-submission UUID / --query-operation UUID / --query-report UUID\n--subscribe 启用只读角色启动/退出通知; 输入结束后继续订阅, Ctrl-C 退出"
+                    "用法: beamlet-console [--connect tcp/127.0.0.1:7447] [--authority UUID] [--subscribe] [--message hello [--submission-key UUID]] [--demo]\n只读查询: --authority UUID 配合 --query-submission UUID / --query-operation UUID / --query-report UUID\n结果观察: --authority UUID --observe-operation UUID; 合并结果通知并查询补齐, 最多等待 10 秒\n--subscribe 启用只读角色启动/退出通知; 输入结束后继续订阅, Ctrl-C 退出"
                 );
                 return Ok(());
             }
@@ -137,6 +145,20 @@ async fn run() -> Result<()> {
     } else {
         None
     };
+    let result_notices = if observe {
+        Some(
+            transport
+                .subscribe(&beamlet_agent::testing::query::notice_topic(
+                    authority
+                        .context("结果观察需要 Authority")?
+                        .as_u128()
+                        .into(),
+                ))
+                .await?,
+        )
+    } else {
+        None
+    };
     let channel = ClientTransport::bind(&mut transport, &destination).await?;
     if !subscribe {
         timeout(ROUND_TRIP_TIMEOUT, channel.wait_for_receiver())
@@ -150,6 +172,32 @@ async fn run() -> Result<()> {
     );
     println!("Console 已连接: {endpoint} (会话 {console_id})");
     let business = async {
+        if let Some(notices) = result_notices {
+            let Some(Selection::Operation(operation)) = query else {
+                bail!("结果观察需要 Operation")
+            };
+            let mut state = State::new(
+                authority
+                    .context("结果观察需要 Authority")?
+                    .as_u128()
+                    .into(),
+                operation,
+                MAX_OBSERVED_REPORTS,
+            )?;
+            if let Some(report) = client
+                .observe(&mut state, &notices, Budget::default(), || {
+                    Uuid::new_v4().as_u128().into()
+                })
+                .await?
+            {
+                println!("Authority: {}", report.authority_instance_id);
+                println!("Worker: {}", report.worker_instance_id);
+                println!("Operation: {}", report.report.operation_id);
+                println!("Attempt: {}", report.report.attempt_id);
+                display_report(report)?;
+            }
+            return Ok(());
+        }
         if let Some(selection) = query {
             return query_and_display(&mut client, selection).await;
         }

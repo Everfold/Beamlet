@@ -84,13 +84,7 @@ impl<P, O, E> Reply<P, O, E> {
                         Selection::Operation(id) => id == view.binding.operation_id,
                         _ => true,
                     }
-                    && match view.phase {
-                        OperationPhase::Accepted | OperationPhase::Dispatched => {
-                            view.adopted_report.is_none()
-                        }
-                        OperationPhase::Reported => view.adopted_report.is_some(),
-                        _ => false,
-                    }
+                    && valid_operation(view)
             }
             (Observation::Report(view), Selection::Report(id)) => {
                 view.authority_instance_id == request.authority_instance_id
@@ -100,6 +94,19 @@ impl<P, O, E> Reply<P, O, E> {
             _ => false,
         }
     }
+}
+
+pub(crate) fn valid_operation<P>(view: &OperationObservation<P>) -> bool {
+    let valid_phase = match view.phase {
+        OperationPhase::Accepted | OperationPhase::Dispatched => view.adopted_report.is_none(),
+        OperationPhase::Reported => view.adopted_report.is_some(),
+        _ => false,
+    };
+    valid_phase
+        && matches!(
+            view.wait_status,
+            crate::state::WaitStatus::Waiting | crate::state::WaitStatus::TimedOut
+        )
 }
 
 /// 请求目标与当前账本实例不符, 不能回答该 Authority 的 NotFound
