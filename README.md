@@ -2,6 +2,11 @@
 
 **WIP**, with broken changes before the first release.
 
+## Specification
+
+- [Specification and review guide](spec/README.md) — proposed structure; specification drafting is pending.
+- [Historical design archive](archive/README.md)
+
 ## Usage
 
 ### Nix
