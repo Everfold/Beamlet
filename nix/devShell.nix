@@ -15,6 +15,8 @@ pkgs: rec {
 
     temurin-bin
     quint
+    buf
+    wasm-tools
   ];
 
   env = with pkgs; rec {

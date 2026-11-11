@@ -34,6 +34,9 @@ release-node *args:
 
 check:
     cargo check --workspace
+    buf build
+    buf lint
+    wasm-tools component wit spec/**/**.wit
 
 fmt:
     cargo fmt --all
