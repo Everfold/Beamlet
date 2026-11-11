@@ -32,7 +32,7 @@ apt install rustup \
   just
 ```
 
-#### Nix
+#### Nix Env
 
 ```bash
 # Nix Shell

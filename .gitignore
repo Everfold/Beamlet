@@ -113,3 +113,4 @@ rust-project.json
 # End of https://www.toptal.com/developers/gitignore/api/rust,emacs,linux,direnv,rust-analyzer,visualstudiocode
 
 licenses.html
+session.md

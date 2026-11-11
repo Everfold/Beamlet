@@ -9,11 +9,8 @@ pkgs: rec {
     just
     just-lsp
 
-    samply
-    heaptrack
-    minica
-
     temurin-bin
+    minica
     quint
     buf
     wasm-tools
