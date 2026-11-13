@@ -14,6 +14,16 @@ pub enum OperationState<A> {
 }
 
 impl<A> OperationState<A> {
+    /// 结束 Operation, 返回 Closed, 原状态不变.
+    ///
+    /// 等待最终 Report 时拒绝关闭, 已关闭时允许重复调用.
+    pub fn close(&self) -> Result<Self, CloseOperationError> {
+        match self {
+            Self::Ready | Self::Closed => Ok(Self::Closed),
+            Self::AwaitingReport(_) => Err(CloseOperationError::AttemptPending),
+        }
+    }
+
     /// 创建 Attempt, 返回该 Attempt 和等待报告的新状态, 原状态不变.
     ///
     /// 外层提供当前 Operation 身份和新的 Attempt 身份, 并保存两个返回值.
@@ -79,6 +89,23 @@ impl<A> OperationState<A> {
         Ok(Self::Ready)
     }
 }
+
+/// 结束 Operation 失败的原因.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CloseOperationError {
+    /// 当前 Attempt 尚未收到最终 Report.
+    AttemptPending,
+}
+
+impl fmt::Display for CloseOperationError {
+    /// 输出错误原因, 写入失败时返回错误.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("an attempt is still awaiting a final report")
+    }
+}
+
+impl std::error::Error for CloseOperationError {}
 
 /// 创建 Attempt 失败的原因, 包含本次传入的身份.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

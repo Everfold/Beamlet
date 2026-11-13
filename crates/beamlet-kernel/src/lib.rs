@@ -7,5 +7,5 @@ mod operation;
 mod report;
 
 pub use attempt::Attempt;
-pub use operation::{AcceptReportError, CreateAttemptError, OperationState};
+pub use operation::{AcceptReportError, CloseOperationError, CreateAttemptError, OperationState};
 pub use report::ReportAssociation;
