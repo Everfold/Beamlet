@@ -11,10 +11,14 @@ module tests {
   pure val states: Set[State[int]] =
     Set(Ready, Closed).union(attemptIds.map(id => AwaitingReport(id)))
 
+  // 仅供检查器记录本次输入, 不属于内核状态.
+  type ReportInput = NoReport | SubmittedReport({ operation_id: int, attempt_id: int })
+
   var state: State[int]
   var previous: State[int]
   var outcome: Outcome[int, int]
   var used: Set[int]
+  var reportInput: ReportInput
 
   /// 初始化一个 Operation 的外部状态及检查记录.
   action init = all {
@@ -22,13 +26,15 @@ module tests {
     previous' = Ready,
     outcome' = Updated(Ready),
     used' = Set(),
+    reportInput' = NoReport,
   }
 
   /// 外层应用转换结果, used 仅用于模拟新身份约束.
-  action apply(result: Outcome[int, int]): bool = all {
+  action apply(result: Outcome[int, int], input: ReportInput): bool = all {
     previous' = state,
     state' = nextState(state, result),
     outcome' = result,
+    reportInput' = input,
     used' = match result {
       | Created(created) => used.union(Set(created.attempt.id))
       | _ => used
@@ -38,14 +44,15 @@ module tests {
   /// 尝试创建 Attempt, Ready 时由外层提供未使用的身份.
   action create(id: int): bool = all {
     state != Ready or not(used.contains(id)),
-    apply(createAttempt(state, currentOperation.id, id)),
+    apply(createAttempt(state, currentOperation.id, id), NoReport),
   }
 
   /// 提交报告, 内容不参与关联校验.
   action accept(operationId: int, attemptId: int): bool =
-    apply(acceptReport(
-      state, currentOperation.id, makeReport(1, operationId, attemptId, "result")
-    ))
+    apply(
+      acceptReport(state, currentOperation.id, makeReport(1, operationId, attemptId, "result")),
+      SubmittedReport({ operation_id: operationId, attempt_id: attemptId })
+    )
 
   /// 在有限身份集合中探索三个动作及其拒绝结果.
   action step = {
@@ -54,7 +61,7 @@ module tests {
     any {
       create(id),
       accept(operationId, id),
-      apply(close(state)),
+      apply(close(state), NoReport),
     }
   }
 
@@ -77,8 +84,31 @@ module tests {
     | _ => true
   }
 
+  /// 接受报告必须关联匹配的等待状态, 并返回 Ready.
+  val reportAcceptanceIsValid = match reportInput {
+    | NoReport => true
+    | SubmittedReport(evidence) => match outcome {
+        | Rejected(_) => true
+        | Created(_) => false
+        | Updated(newState) => match previous {
+            | AwaitingReport(pending) => and {
+                evidence.operation_id == currentOperation.id,
+                evidence.attempt_id == pending,
+                newState == Ready,
+                state == Ready,
+              }
+            | _ => false
+          }
+      }
+  }
+
   /// 汇总模拟与模型检查使用的性质.
-  val invariants = rejectionKeepsState and closedStaysClosed and creationIsConsistent
+  val invariants = and {
+    rejectionKeepsState,
+    closedStaysClosed,
+    creationIsConsistent,
+    reportAcceptanceIsValid,
+  }
 
   /// 同内容的不同身份仍然是不同请求.
   run distinctOperationsTest = assert(
@@ -126,8 +156,8 @@ module tests {
       .then(accept(1, 1))
       .expect(state == AwaitingReport(2) and outcome == Rejected(AttemptMismatch))
       .then(accept(1, 2))
-      .then(apply(close(state)))
-      .then(apply(close(state)))
-      .then(apply(createAttempt(state, 1, 3)))
+      .then(apply(close(state), NoReport))
+      .then(apply(close(state), NoReport))
+      .then(apply(createAttempt(state, 1, 3), NoReport))
       .expect(state == Closed and outcome == Rejected(OperationClosed))
 }

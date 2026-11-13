@@ -167,7 +167,7 @@ ReportAssociation 只包含转换所需的两个关联身份, 不代表完整 Re
 
 原语构造函数只描述数据形状, 状态机判断动作是否合法. Report 身份与结果内容不参与当前转换判断. Rust 的 ReportAssociation 对应模型中 Report 的两个关联字段.
 
-状态机使用纯函数返回转换结果. 测试中的状态变量模拟外层保存结果, `used` 只记录外层已使用的 Attempt 身份, 不代表内核持有历史.
+状态机使用纯函数返回转换结果. 测试中的状态变量模拟外层保存结果. `used` 记录外层已使用的 Attempt 身份, `reportInput` 记录本次提交的报告关联, 两者仅用于检查, 不属于内核状态.
 
 ### 运行检查
 
@@ -178,7 +178,7 @@ quint run spec/kernel/tests.qnt --invariant=invariants --max-samples=1000 --max-
 quint verify spec/kernel/tests.qnt --backend=tlc --invariant=invariants --max-steps=10 --verbosity=1
 ```
 
-测试枚举三个生命周期状态形式, 两个 Operation 关联值和三个 Attempt 身份. 模拟器探索随机轨迹, TLC 检查有限模型. 检查性质为拒绝时状态不变, 关闭后不再打开, 创建输出与等待状态一致. 测试另外覆盖报告关联错误的优先级与完整生命周期.
+测试枚举三个生命周期状态形式, 两个 Operation 关联值和三个 Attempt 身份. 模拟器探索随机轨迹, TLC 检查有限模型. 检查性质为拒绝时状态不变, 关闭后不再打开, 创建输出与等待状态一致, 接受 Report 时必须匹配当前 Operation 和等待中的 Attempt 并返回 Ready. 测试另外覆盖报告关联错误的优先级与完整生命周期.
 
 当前检查环境为 Quint 0.33.1. 默认 Apalache 后端报告类型替换错误, 上述验证命令使用已通过检查的 TLC 后端.
 
