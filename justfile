@@ -1,42 +1,28 @@
 set positional-arguments
 
-console_package := "beamlet-console"
-node_package := "beamlet-node"
+beamletl_package := "beamletl"
 default:
     @just --list
 
 install-dev:
-    cargo binstall prek cargo-deny cargo-nextest cargo-update cargo-about diesel_cli -y --force
+    cargo binstall prek cargo-deny cargo-nextest cargo-update cargo-about -y --force
     cargo deny fetch
 
-console *args:
-    cargo run --package "{{console_package}}" -- "$@"
+beamletl *args:
+    cargo run --package "{{beamletl_package}}" -- "$@"
 
-node *args:
-    cargo run --package "{{node_package}}" -- "$@"
+build: build-beamletl
 
-build: build-console build-node
+build-beamletl *args:
+    cargo build --package "{{beamletl_package}}" "$@"
 
-build-console *args:
-    cargo build --package "{{console_package}}" "$@"
+release: release-beamletl
 
-build-node *args:
-    cargo build --package "{{node_package}}" "$@"
-
-
-release: release-console release-node
-
-release-console *args:
-    cargo build --release --package "{{console_package}}" "$@"
-
-release-node *args:
-    cargo build --release --package "{{node_package}}" "$@"
+release-beamletl *args:
+    cargo build --release --package "{{beamletl_package}}" "$@"
 
 check:
     cargo check --workspace
-    buf build
-    buf lint
-    wasm-tools component wit spec/**/**.wit
 
 fmt:
     cargo fmt --all

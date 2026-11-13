@@ -10,10 +10,10 @@ pkgs: rec {
     just-lsp
 
     temurin-bin
-    minica
-    quint
-    buf
-    wasm-tools
+
+    nats-server
+    nats-top
+    natscli
   ];
 
   env = with pkgs; rec {

@@ -1,20 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-  "kernel/beamlet",
-  "kernel/beamlet-durable",
-  "kernel/beamlet-kernel",
-
-  "adapters/beamlet-message-nats",
-  "adapters/beamlet-message-zenoh",
-  "adapters/beamlet-protocol-demo",
-
-  "agent/beamlet-agent",
-  "agent/beamlet-agent-tool",
-
-  "app/beamlet-console",
-  "app/beamlet-node",
-]
+members = []
 
 [workspace.package]
 version = "0.1.0"
@@ -25,17 +11,6 @@ repository = "https://github.com/Everfold/Beamlet"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-beamlet = { path = "kernel/beamlet" }
-beamlet-durable = { path = "kernel/beamlet-durable" }
-beamlet-kernel = { path = "kernel/beamlet-kernel" }
-
-beamlet-agent = { path = "agent/beamlet-agent" }
-beamlet-agent-tool = { path = "agent/beamlet-agent-tool" }
-
-beamlet-message-nats = { path = "adapters/beamlet-message-nats" }
-beamlet-message-zenoh = { path = "adapters/beamlet-message-zenoh" }
-beamlet-protocol-demo = { path = "adapters/beamlet-protocol-demo" }
-
 futures = "0.3"
 rayon = "1.12"
 tokio = { version = "1.54", features = ["full"] }
@@ -50,13 +25,12 @@ tower = "0.5"
 tower-http = "0.7"
 
 genai = "0.7"
-
-wasmtime = "50"
-wasmtime-wasi = "50"
-
 reqwest = { version = "0.13", features = ["brotli", "cookies", "deflate", "gzip", "json", "socks", "stream", "zstd"] }
+
 rquickjs = { version = "0.14", features = ["full"] }
 rune = "0.14"
+wasmtime = "50"
+wasmtime-wasi = "50"
 
 config = "0.15"
 kite_sql = { version = "0.7.0", features = ["orm", "spill"] }
@@ -78,6 +52,7 @@ opentelemetry = "0.33"
 opentelemetry-appender-tracing = "0.33"
 opentelemetry-otlp = "0.33"
 opentelemetry-stdout = "0.33"
+
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-error = "0.2"

@@ -17,11 +17,8 @@ final: prev: {
           "rust-analyzer"
           "clippy"
           "cargo"
-          "llvm-tools"
         ];
 
-        targets = [
-          "wasm32-wasip2"
-        ];
+        targets = [ ];
       };
 }

@@ -2,11 +2,6 @@
 
 **WIP**, with broken changes before the first release.
 
-## Specification
-
-- [Specification and review guide](spec/README.md) — Chinese outlines are in place; detailed specifications are pending.
-- [Historical design archive](archive/README.md)
-
 ## Usage
 
 ### Nix
@@ -15,50 +10,25 @@
 # List
 nix flake show github:Everfold/Beamlet
 
-# Node
-nix run github:Everfold/Beamlet#beamlet-node -- --version
-nix run github:Everfold/Beamlet#beamlet-console -- --version
+nix run github:Everfold/Beamlet#beamletl -- --version
 ```
 
 ## Build
 
-### Development Environment
-
-#### Linux
-
 ```bash
+# Linux
 apt install rustup \
   cargo-binstall \
   just
-```
 
-#### Nix Env
-
-```bash
-# Nix Shell
+# Nix
 nix develop
 
-# OR Direnv
-apt install -y direnv
-echo 'use flake' > .envrc
-direnv allow
-```
-
-#### Quint (Optional)
-
-```bash
-npm i @informalsystems/quint -g
-```
-
-### Project
-
-```bash
 # Dev Tools
 just install-dev
 
 # Run
-just console
-just node
+just beamletl
 
 # Build
 just build
