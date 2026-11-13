@@ -1,9 +1,11 @@
-//! 不可变的 Operation 请求及其生命周期记录.
+//! Operation 请求, 报告及生命周期记录.
 //!
-//! 记录将请求与当前状态绑定, 调用内核后保存成功返回的新状态.
+//! 记录绑定请求与状态, 报告保留 Attempt 的关联与结果.
 
 mod operation;
 mod operation_record;
+mod report;
 
 pub use operation::Operation;
 pub use operation_record::OperationRecord;
+pub use report::Report;
