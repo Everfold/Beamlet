@@ -9,6 +9,7 @@ pkgs: rec {
     just
     just-lsp
 
+    quint
     temurin-bin
 
     nats-server
