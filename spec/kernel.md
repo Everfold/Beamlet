@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Operation | 有独立身份的不可变执行请求, 内容相同不代表同一请求 | 自身身份 |
 | Attempt | 针对一个 Operation 的一次执行授权 | 自身身份, Operation 身份 |
-| Report | 一次授权执行的结果证据 | 自身身份, Operation 身份, Attempt 身份 |
+| Report | 一次 Attempt 执行结束后的结果证据 | 自身身份, Operation 身份, Attempt 身份 |
 
 创建 Attempt 就是创建一次执行授权, 没有独立的授权阶段. 重复交付同一个 Attempt 不会创建新授权.
 
@@ -20,11 +20,11 @@ Authority 与 Worker 的身份, 执行位置及 Attempt 的交付由外层管理
 
 | 状态 | 含义 |
 | --- | --- |
-| Ready | Operation 尚未结束, 当前没有等待最终 Report 的 Attempt |
-| AwaitingReport(attempt_id) | 正在等待指定 Attempt 的最终 Report |
+| Ready | Operation 尚未结束, 当前没有等待Report 的 Attempt |
+| AwaitingReport(attempt_id) | 正在等待指定 Attempt 的Report |
 | Closed | Operation 已结束 |
 
-Ready 既可以表示尚未创建 Attempt, 也可以表示此前的最终 Report 已被接受. 同一 Operation 最多等待一个 Attempt 的最终 Report.
+Ready 既可以表示尚未创建 Attempt, 也可以表示此前的Report 已被接受. 同一 Operation 最多等待一个 Attempt 的Report.
 
 ```mermaid
 stateDiagram-v2
@@ -32,7 +32,7 @@ stateDiagram-v2
 
     [*] --> Ready: 外层创建 Operation 并初始化状态
     Ready --> AwaitingReport: 创建 Attempt(a), 等待身份为 a
-    AwaitingReport --> Ready: 接受关联匹配的最终 Report
+    AwaitingReport --> Ready: 接受关联匹配的Report
     Ready --> Closed: 结束 Operation
     Closed --> Closed: 重复结束 Operation
 
@@ -71,9 +71,9 @@ stateDiagram-v2
 
 外层保证 Operation 身份与当前状态对应, 并为每次新创建的 Attempt 提供新身份. 内核不保存身份历史, 不检查身份是否曾被使用.
 
-### 接受最终 Report
+### 接受Report
 
-输入为当前状态, Operation 身份和从最终 Report 提取的 Operation, Attempt 关联.
+输入为当前状态, Operation 身份和从Report 提取的 Operation, Attempt 关联.
 
 | 当前状态 | 结果 |
 | --- | --- |
@@ -90,7 +90,7 @@ stateDiagram-v2
 
 旧 Attempt 的 Report 不能解除对当前 Attempt 的等待. 保存 Ready 后再次提交同一 Report, 将返回 NoPendingAttempt.
 
-外层保证提交的是最终 Report, 且 Operation 身份与当前状态对应. 内核不检查报告结果内容, 接受报告不表示请求已经完成. 是否再次创建 Attempt 或结束 Operation, 由外层决定.
+外层保证 Report 对应一次已结束的 Attempt, 且 Operation 身份与当前状态对应. 内核只校验关联. 结果是否满足请求由外层判断, 不满足时仍可接受 Report 并再次创建 Attempt.
 
 ### 结束 Operation
 
@@ -120,7 +120,7 @@ sequenceDiagram
         K-->>A: Attempt, AwaitingReport(attempt_id)
         A->>A: 保存 Attempt 与新状态
         A->>W: 交付 Attempt 及执行所需的请求数据
-        W->>W: 执行并创建最终 Report
+        W->>W: 执行并创建Report
         W-->>A: 返回 Report
         A->>K: 当前状态, Operation 身份, Report 关联
         K-->>A: Ready
@@ -132,7 +132,7 @@ sequenceDiagram
     A->>A: 保存 Closed
 ```
 
-Kernel 返回数据与新状态, 保存由外层完成. 接受最终 Report 后仍可再次创建 Attempt, 结束 Operation 由 Authority 显式决定.
+Kernel 返回数据与新状态, 保存由外层完成. 接受Report 后仍可再次创建 Attempt, 结束 Operation 由 Authority 显式决定.
 
 ## 内核与外层的职责
 
@@ -151,7 +151,7 @@ Kernel 返回数据与新状态, 保存由外层完成. 接受最终 Report 后�
 
 ReportAssociation 只包含转换所需的两个关联身份, 不代表完整 Report. 完整的 Operation 请求, Report 身份与结果内容均由外层持有, 当前接口不定义其数据结构.
 
-当前 Rust 实现中, 创建 Attempt 需要克隆 Attempt 身份, 以同时构造 Attempt 和新状态. 接受最终 Report 只需要身份相等比较, 结束 Operation 不要求身份支持克隆或比较. 其他语言可以使用适合自身的数据表示实现相同规则.
+当前 Rust 实现中, 创建 Attempt 需要克隆 Attempt 身份, 以同时构造 Attempt 和新状态. 接受Report 只需要身份相等比较, 结束 Operation 不要求身份支持克隆或比较. 其他语言可以使用适合自身的数据表示实现相同规则.
 
 ## Quint 模型
 

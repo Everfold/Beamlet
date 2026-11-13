@@ -26,8 +26,8 @@ module state_machine {
       | Closed => Rejected(OperationClosed)
     }
 
-  /// 接受最终报告, 依次校验状态, Operation 和 Attempt.
-  pure def acceptFinalReport(
+  /// 接受报告, 依次校验状态, Operation 和 Attempt.
+  pure def acceptReport(
     state: State[a], operationId: o, evidence: Report[o, a, r, v]
   ): Outcome[o, a] =
     match state {

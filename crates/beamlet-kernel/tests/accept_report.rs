@@ -16,7 +16,7 @@ fn accepts_matching_report_without_uuid_or_cloning() {
         attempt_id: AttemptId("attempt-1"),
     };
 
-    let next = state.accept_final_report(&operation_id, &report);
+    let next = state.accept_report(&operation_id, &report);
 
     assert_eq!(next, Ok(OperationState::Ready));
     assert_eq!(
@@ -65,7 +65,7 @@ fn rejects_invalid_state_or_association() {
         let before = format!("{state:?}");
 
         assert_eq!(
-            state.accept_final_report(&operation_id, &report),
+            state.accept_report(&operation_id, &report),
             Err(expected),
             "状态或关联错误应被拒绝: {state:?}, {report:?}",
         );
@@ -83,11 +83,11 @@ fn rejects_report_after_pending_attempt_is_cleared() {
         attempt_id: AttemptId("attempt-1"),
     };
     let state = state
-        .accept_final_report(&operation_id, &report)
-        .expect("匹配的最终报告应被接受");
+        .accept_report(&operation_id, &report)
+        .expect("匹配的报告应被接受");
 
     assert_eq!(
-        state.accept_final_report(&operation_id, &report),
+        state.accept_report(&operation_id, &report),
         Err(AcceptReportError::NoPendingAttempt),
     );
 }

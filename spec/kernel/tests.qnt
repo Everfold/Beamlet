@@ -43,7 +43,7 @@ module tests {
 
   /// 提交报告, 内容不参与关联校验.
   action accept(operationId: int, attemptId: int): bool =
-    apply(acceptFinalReport(
+    apply(acceptReport(
       state, currentOperation.id, makeReport(1, operationId, attemptId, "result")
     ))
 
@@ -97,7 +97,7 @@ module tests {
   /// 枚举报告关联, 检查错误优先级与接受条件.
   run reportRulesTest = assert(states.forall(s =>
     operationIds.forall(o => attemptIds.forall(a =>
-      acceptFinalReport(s, 1, makeReport(1, o, a, "result")) == match s {
+      acceptReport(s, 1, makeReport(1, o, a, "result")) == match s {
         | Ready => Rejected(NoPendingAttempt)
         | Closed => Rejected(OperationClosed)
         | AwaitingReport(pending) =>

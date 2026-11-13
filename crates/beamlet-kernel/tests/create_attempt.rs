@@ -59,7 +59,7 @@ fn rejects_creation_after_close() {
     assert_eq!(state, OperationState::Closed);
 }
 
-/// 接受最终报告后可以创建新 Attempt, 旧报告不能解除新的等待.
+/// 接受报告后可以创建新 Attempt, 旧报告不能解除新的等待.
 #[test]
 fn accepts_report_and_creates_next_attempt() {
     let (first_attempt, state) = OperationState::Ready
@@ -70,14 +70,14 @@ fn accepts_report_and_creates_next_attempt() {
         attempt_id: first_attempt.id().clone(),
     };
     let state = state
-        .accept_final_report(first_attempt.operation_id(), &first_report)
+        .accept_report(first_attempt.operation_id(), &first_report)
         .expect("当前 Attempt 的报告应被接受");
     let (second_attempt, state) = state
         .create_attempt("operation-1", AttemptId("attempt-2"))
-        .expect("接受最终报告后应允许创建新 Attempt");
+        .expect("接受报告后应允许创建新 Attempt");
 
     assert_eq!(
-        state.accept_final_report(second_attempt.operation_id(), &first_report),
+        state.accept_report(second_attempt.operation_id(), &first_report),
         Err(AcceptReportError::AttemptMismatch),
     );
 
@@ -86,7 +86,7 @@ fn accepts_report_and_creates_next_attempt() {
         attempt_id: second_attempt.id().clone(),
     };
     assert_eq!(
-        state.accept_final_report(second_attempt.operation_id(), &second_report),
+        state.accept_report(second_attempt.operation_id(), &second_report),
         Ok(OperationState::Ready),
     );
 }

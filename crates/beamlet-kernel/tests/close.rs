@@ -37,9 +37,9 @@ fn rejects_close_while_awaiting_report() {
     );
 }
 
-/// 接受最终报告后可以关闭, 关闭后拒绝创建 Attempt 和接受报告.
+/// 接受报告后可以关闭, 关闭后拒绝创建 Attempt 和接受报告.
 #[test]
-fn closes_after_accepting_final_report() {
+fn closes_after_accepting_report() {
     let (attempt, state) = OperationState::Ready
         .create_attempt("operation-1", "attempt-1")
         .expect("Ready 应允许创建 Attempt");
@@ -48,9 +48,9 @@ fn closes_after_accepting_final_report() {
         attempt_id: *attempt.id(),
     };
     let state = state
-        .accept_final_report(attempt.operation_id(), &report)
+        .accept_report(attempt.operation_id(), &report)
         .expect("当前 Attempt 的报告应被接受");
-    let state = state.close().expect("接受最终报告后应允许关闭");
+    let state = state.close().expect("接受报告后应允许关闭");
 
     assert_eq!(state, OperationState::Closed);
     assert!(matches!(
@@ -58,7 +58,7 @@ fn closes_after_accepting_final_report() {
         Err(CreateAttemptError::OperationClosed { .. }),
     ));
     assert_eq!(
-        state.accept_final_report(attempt.operation_id(), &report),
+        state.accept_report(attempt.operation_id(), &report),
         Err(AcceptReportError::OperationClosed),
     );
 }

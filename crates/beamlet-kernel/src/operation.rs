@@ -5,9 +5,9 @@ use crate::{Attempt, ReportAssociation};
 /// Operation 的生命周期状态, A 为外层定义的 Attempt 身份类型.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationState<A> {
-    /// 尚未结束, 当前没有等待最终 Report 的 Attempt.
+    /// 尚未结束, 当前没有等待Report 的 Attempt.
     Ready,
-    /// 正在等待指定 Attempt 的最终 Report.
+    /// 正在等待指定 Attempt 的Report.
     AwaitingReport(A),
     /// Operation 已结束.
     Closed,
@@ -16,7 +16,7 @@ pub enum OperationState<A> {
 impl<A> OperationState<A> {
     /// 结束 Operation, 返回 Closed, 原状态不变.
     ///
-    /// 等待最终 Report 时拒绝关闭, 已关闭时允许重复调用.
+    /// 等待Report 时拒绝关闭, 已关闭时允许重复调用.
     pub fn close(&self) -> Result<Self, CloseOperationError> {
         match self {
             Self::Ready | Self::Closed => Ok(Self::Closed),
@@ -58,13 +58,13 @@ impl<A> OperationState<A> {
         }
     }
 
-    /// 接受匹配的最终 Report, 返回 Ready, 不自动结束 Operation.
+    /// 接受匹配的Report, 返回 Ready, 不自动结束 Operation.
     ///
     /// 外层须保证 operation_id 与当前状态属于同一个 Operation, 并保存返回的新状态.
     /// 此函数不修改输入, 不检查报告结果内容.
     ///
     /// 依次校验当前状态, Operation 关联和 Attempt 关联, 返回首个错误.
-    pub fn accept_final_report<O: Eq>(
+    pub fn accept_report<O: Eq>(
         &self,
         operation_id: &O,
         report: &ReportAssociation<O, A>,
@@ -94,14 +94,14 @@ impl<A> OperationState<A> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CloseOperationError {
-    /// 当前 Attempt 尚未收到最终 Report.
+    /// 当前 Attempt 尚未收到Report.
     AttemptPending,
 }
 
 impl fmt::Display for CloseOperationError {
     /// 输出错误原因, 写入失败时返回错误.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("an attempt is still awaiting a final report")
+        formatter.write_str("an attempt is still awaiting a report")
     }
 }
 
@@ -111,7 +111,7 @@ impl std::error::Error for CloseOperationError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CreateAttemptError<O, A> {
-    /// 已有 Attempt 正在等待最终 Report.
+    /// 已有 Attempt 正在等待Report.
     AttemptPending {
         /// 本次传入的 Operation 身份.
         operation_id: O,
@@ -150,7 +150,7 @@ impl<O, A> fmt::Display for CreateAttemptError<O, A> {
     /// 底层格式化写入失败时返回错误.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
-            Self::AttemptPending { .. } => "an attempt is already awaiting a final report",
+            Self::AttemptPending { .. } => "an attempt is already awaiting a report",
             Self::OperationClosed { .. } => "operation is closed",
         };
         formatter.write_str(message)
@@ -159,11 +159,11 @@ impl<O, A> fmt::Display for CreateAttemptError<O, A> {
 
 impl<O: fmt::Debug, A: fmt::Debug> std::error::Error for CreateAttemptError<O, A> {}
 
-/// 接受最终 Report 失败的原因.
+/// 接受Report 失败的原因.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AcceptReportError {
-    /// 当前没有等待最终 Report 的 Attempt.
+    /// 当前没有等待Report 的 Attempt.
     NoPendingAttempt,
     /// Operation 已结束.
     OperationClosed,
@@ -179,7 +179,7 @@ impl fmt::Display for AcceptReportError {
     /// 底层格式化写入失败时返回错误.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
-            Self::NoPendingAttempt => "no attempt is awaiting a final report",
+            Self::NoPendingAttempt => "no attempt is awaiting a report",
             Self::OperationClosed => "operation is closed",
             Self::OperationMismatch => "report belongs to a different operation",
             Self::AttemptMismatch => "report belongs to a different attempt",
