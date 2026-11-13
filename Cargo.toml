@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
   "crates/beamlet-kernel",
+  "crates/beamlet-operation",
 ]
 
 [workspace.package]
@@ -13,6 +14,9 @@ repository = "https://github.com/Everfold/Beamlet"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+beamlet-kernel = { path = "crates/beamlet-kernel" }
+beamlet-operation = { path = "crates/beamlet-operation" }
+
 futures = "0.3"
 rayon = "1.12"
 tokio = { version = "1.54", features = ["full"] }

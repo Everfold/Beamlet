@@ -1,0 +1,11 @@
+[package]
+name = "beamlet-operation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+beamlet-kernel.workspace = true
