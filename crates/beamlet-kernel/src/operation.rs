@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::ReportAssociation;
+use crate::{Attempt, ReportAssociation};
 
 /// Operation 的生命周期状态, A 为外层定义的 Attempt 身份类型.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +14,40 @@ pub enum OperationState<A> {
 }
 
 impl<A> OperationState<A> {
+    /// 创建 Attempt, 返回该 Attempt 和等待报告的新状态, 原状态不变.
+    ///
+    /// 外层提供当前 Operation 身份和新的 Attempt 身份, 并保存两个返回值.
+    /// 成功时克隆 Attempt 身份供状态记录, Operation 身份无需克隆.
+    ///
+    /// 已有等待报告的 Attempt 或 Operation 已结束时拒绝创建, 错误保留传入的身份.
+    pub fn create_attempt<O>(
+        &self,
+        operation_id: O,
+        attempt_id: A,
+    ) -> Result<(Attempt<O, A>, Self), CreateAttemptError<O, A>>
+    where
+        A: Clone,
+    {
+        match self {
+            Self::Ready => {
+                let state = Self::AwaitingReport(attempt_id.clone());
+                let attempt = Attempt {
+                    id: attempt_id,
+                    operation_id,
+                };
+                Ok((attempt, state))
+            }
+            Self::AwaitingReport(_) => Err(CreateAttemptError::AttemptPending {
+                operation_id,
+                attempt_id,
+            }),
+            Self::Closed => Err(CreateAttemptError::OperationClosed {
+                operation_id,
+                attempt_id,
+            }),
+        }
+    }
+
     /// 接受匹配的最终 Report, 返回 Ready, 不自动结束 Operation.
     ///
     /// 外层须保证 operation_id 与当前状态属于同一个 Operation, 并保存返回的新状态.
@@ -46,6 +80,58 @@ impl<A> OperationState<A> {
     }
 }
 
+/// 创建 Attempt 失败的原因, 包含本次传入的身份.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CreateAttemptError<O, A> {
+    /// 已有 Attempt 正在等待最终 Report.
+    AttemptPending {
+        /// 本次传入的 Operation 身份.
+        operation_id: O,
+        /// 本次传入的 Attempt 身份.
+        attempt_id: A,
+    },
+    /// Operation 已结束.
+    OperationClosed {
+        /// 本次传入的 Operation 身份.
+        operation_id: O,
+        /// 本次传入的 Attempt 身份.
+        attempt_id: A,
+    },
+}
+
+impl<O, A> CreateAttemptError<O, A> {
+    /// 按 Operation, Attempt 的顺序取回传入的身份.
+    #[must_use]
+    pub fn into_ids(self) -> (O, A) {
+        match self {
+            Self::AttemptPending {
+                operation_id,
+                attempt_id,
+            }
+            | Self::OperationClosed {
+                operation_id,
+                attempt_id,
+            } => (operation_id, attempt_id),
+        }
+    }
+}
+
+impl<O, A> fmt::Display for CreateAttemptError<O, A> {
+    /// 输出错误原因.
+    ///
+    /// 底层格式化写入失败时返回错误.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::AttemptPending { .. } => "an attempt is already awaiting a final report",
+            Self::OperationClosed { .. } => "operation is closed",
+        };
+        formatter.write_str(message)
+    }
+}
+
+impl<O: fmt::Debug, A: fmt::Debug> std::error::Error for CreateAttemptError<O, A> {}
+
 /// 接受最终 Report 失败的原因.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -62,8 +148,6 @@ pub enum AcceptReportError {
 
 impl fmt::Display for AcceptReportError {
     /// 输出错误原因.
-    ///
-    /// # 错误
     ///
     /// 底层格式化写入失败时返回错误.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
