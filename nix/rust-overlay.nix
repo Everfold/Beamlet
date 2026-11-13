@@ -10,7 +10,7 @@ final: prev: {
       rust.fromRustupToolchainFile ../rust-toolchain
 
     else
-      rust.stable."1.99.1".default.override {
+      rust.stable."1.100.0".default.override {
         extensions = [
           "rust-src"
           "rustfmt"
