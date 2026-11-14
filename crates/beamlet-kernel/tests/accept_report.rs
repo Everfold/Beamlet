@@ -1,93 +1,80 @@
-use beamlet_kernel::{AcceptReportError, OperationState, ReportAssociation};
+use beamlet_kernel::{AcceptReportError, Operation, Report};
+
+#[derive(Debug)]
+struct Request(String);
+
+#[derive(Debug)]
+struct ReportId(&'static str);
 
 #[derive(Debug, PartialEq, Eq)]
-struct OperationId(&'static str);
+struct Failure(&'static str);
 
-#[derive(Debug, PartialEq, Eq)]
-struct AttemptId(&'static str);
-
-/// 匹配的报告返回 Ready, 原输入不变.
+/// 接受完整报告后返回 Ready, 原始请求与报告内容保持不变.
 #[test]
-fn accepts_matching_report_without_uuid_or_cloning() {
-    let operation_id = OperationId("operation-1");
-    let state = OperationState::AwaitingReport(AttemptId("attempt-1"));
-    let report = ReportAssociation {
-        operation_id: OperationId("operation-1"),
-        attempt_id: AttemptId("attempt-1"),
-    };
+fn accepts_complete_report_without_cloning_request_or_result() {
+    let operation = Operation::new("operation-1", Request(String::from("request")));
+    let (operation, attempt) = operation.create_attempt("attempt-1");
+    let report = Report::new(ReportId("report-1"), attempt, Failure("result"));
 
-    let next = state.accept_report(&operation_id, &report);
-
-    assert_eq!(next, Ok(OperationState::Ready));
-    assert_eq!(
-        state,
-        OperationState::AwaitingReport(AttemptId("attempt-1"))
-    );
-    assert_eq!(report.attempt_id, AttemptId("attempt-1"));
+    let operation = operation.accept_report(&report).expect("匹配报告应被接受");
+    assert_eq!(operation.request().0, "request");
+    assert_eq!(report.id().0, "report-1");
+    assert_eq!(report.result(), &Failure("result"));
+    let (operation, _) = operation.create_attempt(2);
+    assert_eq!(operation.pending_attempt_id(), &2);
 }
 
-/// 状态或关联不合法时拒绝报告, 原状态不变.
+/// 两个关联都错误时先拒绝 Operation, 并允许取回原对象继续接受正确报告.
 #[test]
-fn rejects_invalid_state_or_association() {
-    let cases = [
-        (
-            OperationState::Ready,
-            OperationId("operation-1"),
-            AttemptId("attempt-1"),
-            AcceptReportError::NoPendingAttempt,
-        ),
-        (
-            OperationState::Closed,
-            OperationId("operation-1"),
-            AttemptId("attempt-1"),
-            AcceptReportError::OperationClosed,
-        ),
-        (
-            OperationState::AwaitingReport(AttemptId("attempt-1")),
-            OperationId("operation-2"),
-            AttemptId("attempt-1"),
-            AcceptReportError::OperationMismatch,
-        ),
-        (
-            OperationState::AwaitingReport(AttemptId("attempt-1")),
-            OperationId("operation-1"),
-            AttemptId("attempt-2"),
-            AcceptReportError::AttemptMismatch,
-        ),
-    ];
+fn operation_mismatch_returns_original_operation() {
+    let (operation, attempt) = Operation::new("operation-1", "request").create_attempt(1);
+    let (_, other_attempt) = Operation::new("operation-2", "other").create_attempt(2);
+    let wrong_report = Report::new(2, other_attempt, "wrong");
+    let error = operation
+        .accept_report(&wrong_report)
+        .expect_err("其他 Operation 的报告应被拒绝");
+    assert!(matches!(
+        &error,
+        AcceptReportError::OperationMismatch { .. }
+    ));
+    assert_eq!(error.to_string(), "report belongs to a different operation");
 
-    for (state, report_operation, report_attempt, expected) in cases {
-        let operation_id = OperationId("operation-1");
-        let report = ReportAssociation {
-            operation_id: report_operation,
-            attempt_id: report_attempt,
-        };
-        let before = format!("{state:?}");
-
-        assert_eq!(
-            state.accept_report(&operation_id, &report),
-            Err(expected),
-            "状态或关联错误应被拒绝: {state:?}, {report:?}",
-        );
-        assert_eq!(format!("{state:?}"), before, "拒绝报告不应改变原状态");
-    }
+    let operation = error.into_operation();
+    assert_eq!(operation.id(), &"operation-1");
+    assert_eq!(operation.request(), &"request");
+    assert_eq!(operation.pending_attempt_id(), &1);
+    let report = Report::new(1, attempt, "correct");
+    let operation = operation
+        .accept_report(&report)
+        .expect("原 Operation 应仍能接受正确报告");
+    let _closed = operation.close();
 }
 
-/// 更新状态后, 再次提交同一报告会被拒绝.
+/// 失败结果仍可接受并重试, 旧报告不能解除新的等待.
 #[test]
-fn rejects_report_after_pending_attempt_is_cleared() {
-    let operation_id = OperationId("operation-1");
-    let state = OperationState::AwaitingReport(AttemptId("attempt-1"));
-    let report = ReportAssociation {
-        operation_id: OperationId("operation-1"),
-        attempt_id: AttemptId("attempt-1"),
-    };
-    let state = state
-        .accept_report(&operation_id, &report)
-        .expect("匹配的报告应被接受");
+fn retries_after_failure_and_rejects_old_report() {
+    let (operation, first) = Operation::new("operation-1", "request").create_attempt(1);
+    let failed = Report::new(1, first, Err::<u32, _>(Failure("failed")));
+    let operation = operation
+        .accept_report(&failed)
+        .expect("业务失败不影响报告被接受");
+    assert_eq!(failed.result(), &Err(Failure("failed")));
 
-    assert_eq!(
-        state.accept_report(&operation_id, &report),
-        Err(AcceptReportError::NoPendingAttempt),
-    );
+    let (operation, second) = operation.create_attempt(2);
+    let error = operation
+        .accept_report(&failed)
+        .expect_err("旧报告应被拒绝");
+    assert!(matches!(&error, AcceptReportError::AttemptMismatch { .. }));
+    assert_eq!(error.to_string(), "report belongs to a different attempt");
+    let operation = error.into_operation();
+    assert_eq!(operation.pending_attempt_id(), &2);
+    assert_eq!(operation.request(), &"request");
+
+    let completed = Report::new(2, second, Ok::<_, Failure>(42));
+    let operation = operation
+        .accept_report(&completed)
+        .expect("本次报告应被接受");
+    let closed = operation.close();
+    assert_eq!(closed.id(), &"operation-1");
+    assert_eq!(completed.into_result(), Ok(42));
 }

@@ -1,187 +1,147 @@
-# Beamlet 最小内核规范
+# Beamlet 内核规范
 
-本文描述当前最小内核的语义与转换规则, 不限定实现语言.
+本文定义 Operation, Attempt, Report 的语义与生命周期, 不限定实现语言.
 
 ## 原语
 
-| 原语 | 含义 | 关联 |
+| 原语 | 含义 | 数据 |
 | --- | --- | --- |
-| Operation | 有独立身份的不可变执行请求, 内容相同不代表同一请求 | 自身身份 |
+| Operation | 有独立身份的执行请求及其当前生命周期 | 自身身份, 原始请求, 当前状态 |
 | Attempt | 针对一个 Operation 的一次执行授权 | 自身身份, Operation 身份 |
-| Report | 一次 Attempt 执行结束后的结果证据 | 自身身份, Operation 身份, Attempt 身份 |
+| Report | 一次 Attempt 执行结束后的结果证据 | 自身身份, Operation 身份, Attempt 身份, 结果 |
 
-创建 Attempt 就是创建一次执行授权, 没有独立的授权阶段. 重复交付同一个 Attempt 不会创建新授权.
+Operation 的身份与原始请求不随生命周期变化. 内容相同而身份不同的 Operation 是不同请求. 请求与结果的业务结构均由调用者定义.
 
-Authority 与 Worker 的身份, 执行位置及 Attempt 的交付由外层管理.
+创建 Attempt 就是创建一次执行授权. 重复交付同一个 Attempt 不会创建新授权. 执行结束后使用该 Attempt 生成 Report, 报告保留它的两个引用身份.
 
-## 状态
+## 生命周期
 
-每个 Operation 对应一个由外层保存的生命周期状态. 状态变化不修改 Operation 的原始请求.
+| 状态 | 含义 | 允许的动作 |
+| --- | --- | --- |
+| Ready | 尚未结束, 没有等待报告的 Attempt | 创建 Attempt, 关闭 |
+| AwaitingReport(attempt_id) | 等待指定 Attempt 的报告 | 接受 Report |
+| Closed | Operation 已结束 | 重复关闭 |
 
-| 状态 | 含义 |
-| --- | --- |
-| Ready | Operation 尚未结束, 当前没有等待Report 的 Attempt |
-| AwaitingReport(attempt_id) | 正在等待指定 Attempt 的Report |
-| Closed | Operation 已结束 |
-
-Ready 既可以表示尚未创建 Attempt, 也可以表示此前的Report 已被接受. 同一 Operation 最多等待一个 Attempt 的Report.
+Ready 可以表示从未尝试, 也可以表示上一份 Report 已被接受. 一个 Operation 同时最多等待一个 Attempt 的 Report.
 
 ```mermaid
 stateDiagram-v2
-    state "AwaitingReport(attempt_id)" as AwaitingReport
-
-    [*] --> Ready: 外层创建 Operation 并初始化状态
-    Ready --> AwaitingReport: 创建 Attempt(a), 等待身份为 a
-    AwaitingReport --> Ready: 接受关联匹配的Report
-    Ready --> Closed: 结束 Operation
-    Closed --> Closed: 重复结束 Operation
-
-    note left of Ready
-        接受 Report 返回 NoPendingAttempt
-    end note
-
-    note right of AwaitingReport
-        创建 Attempt 或结束 Operation 返回 AttemptPending
-        Report 的 Operation 不匹配返回 OperationMismatch
-        Report 的 Attempt 不匹配返回 AttemptMismatch
-    end note
-
-    note right of Closed
-        创建 Attempt 或接受 Report 返回 OperationClosed
-    end note
+    [*] --> Ready: 创建 Operation
+    Ready --> AwaitingReport: 创建 Attempt(a)
+    AwaitingReport --> Ready: 接受关联匹配的 Report
+    Ready --> Closed: 显式关闭
+    Closed --> Closed: 重复关闭
 ```
 
-箭头表示成功转换. 注释框表示拒绝情况, 返回错误并保持原状态. 外层负责保存成功返回的新状态.
+没有箭头的动作不允许发生. 实现可以在编译期阻止调用, 也可以在运行时拒绝并保留原 Operation.
 
 ## 转换规则
 
-所有转换读取外部提供的当前状态, 返回新状态或错误. 转换不修改输入, 不写入存储. 外层保存成功返回的数据与状态, 并将新状态用于后续转换.
+每个成功动作返回后续使用的 Operation. 动作不修改它的身份与原始请求, 不执行业务任务或写入存储. 调用者持有并继续使用返回值.
 
 ### 创建 Attempt
 
-输入为当前状态, Operation 身份和新的 Attempt 身份.
+输入为 Ready Operation 与新的 Attempt 身份. 返回等待该 Attempt 的 Operation 以及 Attempt. Attempt 关联当前 Operation 身份.
 
-| 当前状态 | 结果 |
+调用者保证 Operation 身份唯一, 并为每次新 Attempt 提供未使用的身份. 内核不保存身份历史, 不检查历史重复.
+
+等待报告和已关闭时都不允许创建新的 Attempt.
+
+### 接受 Report
+
+输入为等待报告的 Operation 与完整 Report. 依次校验以下字段, 返回首个不匹配原因:
+
+| 条件 | 拒绝原因 |
 | --- | --- |
-| Ready | 返回新的 Attempt 和 AwaitingReport(attempt_id) |
-| AwaitingReport(_) | 拒绝, AttemptPending |
-| Closed | 拒绝, OperationClosed |
+| Report 的 Operation 身份不同 | OperationMismatch |
+| Report 的 Attempt 身份不同于当前等待身份 | AttemptMismatch |
 
-返回的 Attempt 包含传入的自身身份与 Operation 身份. 失败时保留传入的身份, 供调用者取回.
+关联匹配时返回 Ready Operation. 不匹配时保留原 Operation, 允许调用者继续等待正确报告. 报告身份与结果内容不参与转换判断, 报告本身不因接受或拒绝而改变.
 
-外层保证 Operation 身份与当前状态对应, 并为每次新创建的 Attempt 提供新身份. 内核不保存身份历史, 不检查身份是否曾被使用.
+Ready 和 Closed 不允许接受 Report. 因此同一份报告被接受后, 不能再次解除已经结束的等待. 创建新 Attempt 后, 旧 Report 也不能解除新的等待.
 
-### 接受Report
+调用者保证报告对应一次已结束的 Attempt. 业务失败的结果仍可被接受. 是否重试或关闭由外层策略决定.
 
-输入为当前状态, Operation 身份和从Report 提取的 Operation, Attempt 关联.
+### 关闭
 
-| 当前状态 | 结果 |
-| --- | --- |
-| Ready | 拒绝, NoPendingAttempt |
-| AwaitingReport(attempt_id) | 校验关联, 匹配时返回 Ready |
-| Closed | 拒绝, OperationClosed |
+Ready 返回 Closed. Closed 重复关闭仍返回 Closed. AwaitingReport 不允许关闭.
 
-先校验当前状态, 再校验 Operation 关联, 最后校验 Attempt 关联. 返回首个错误.
+关闭表示显式结束 Operation, 不等同于接受 Report 或判断业务成功.
 
-| 关联不匹配 | 错误 |
-| --- | --- |
-| Report 的 Operation 身份与当前 Operation 不同 | OperationMismatch |
-| Report 的 Attempt 身份与当前等待的 Attempt 不同 | AttemptMismatch |
+## Authority 与 Worker 流程
 
-旧 Attempt 的 Report 不能解除对当前 Attempt 的等待. 保存 Ready 后再次提交同一 Report, 将返回 NoPendingAttempt.
-
-外层保证 Report 对应一次已结束的 Attempt, 且 Operation 身份与当前状态对应. 内核只校验关联. 结果是否满足请求由外层判断, 不满足时仍可接受 Report 并再次创建 Attempt.
-
-### 结束 Operation
-
-输入为当前状态.
-
-| 当前状态 | 结果 |
-| --- | --- |
-| Ready | 返回 Closed |
-| AwaitingReport(_) | 拒绝, AttemptPending |
-| Closed | 返回 Closed |
-
-结束操作允许重复调用. Closed 状态拒绝创建 Attempt 和接受 Report.
-
-## 执行流程
-
-以下展示转换成功时的逻辑交互. Authority 与 Worker 表示职责, 不限定部署位置或传输方式.
+Authority 与 Worker 表示职责, 不限定执行位置, 部署方式或传输机制.
 
 ```mermaid
 sequenceDiagram
-    participant A as Authority / 外层
+    participant A as Authority
     participant K as Kernel
-    participant W as Worker / 外层
+    participant W as Worker
 
-    A->>A: 创建不可变 Operation, 初始化 Ready
-    loop Authority 决定继续尝试
-        A->>K: 当前状态, Operation 身份, 新 Attempt 身份
-        K-->>A: Attempt, AwaitingReport(attempt_id)
-        A->>A: 保存 Attempt 与新状态
-        A->>W: 交付 Attempt 及执行所需的请求数据
-        W->>W: 执行并创建Report
+    A->>K: Operation 身份与原始请求
+    K-->>A: Ready Operation
+    loop Authority 决定尝试
+        A->>K: Ready Operation 与新 Attempt 身份
+        K-->>A: 等待报告的 Operation 与 Attempt
+        A->>A: 保存当前 Operation 与 Attempt
+        A->>W: 原始请求所需数据与 Attempt
+        W->>W: 执行请求并得到结果
+        W->>K: 新 Report 身份, Attempt, 结果
+        K-->>W: 完整 Report
         W-->>A: 返回 Report
-        A->>K: 当前状态, Operation 身份, Report 关联
-        K-->>A: Ready
-        A->>A: 保存新状态与所需的报告数据
-        Note right of A: 根据策略决定再次尝试或结束
+        A->>K: 等待报告的 Operation 与 Report
+        K-->>A: Ready Operation, 或原 Operation 与关联错误
+        A->>A: 保存返回对象与报告, 根据结果决定后续动作
     end
-    A->>K: 结束 Operation
-    K-->>A: Closed
-    A->>A: 保存 Closed
+    A->>K: Ready Operation
+    K-->>A: Closed Operation
 ```
 
-Kernel 返回数据与新状态, 保存由外层完成. 接受Report 后仍可再次创建 Attempt, 结束 Operation 由 Authority 显式决定.
+创建报告不自动解除 Authority 的等待. Authority 必须显式接受报告, 接受成功后才能再次创建 Attempt 或关闭.
 
-## 内核与外层的职责
+## 内核与外层职责
 
 | 内核 | 外层 |
 | --- | --- |
-| 校验状态转换是否合法 | 定义身份类型, 保证唯一性 |
-| 校验 Report 的身份关联 | 保存原语数据, 状态及其所属 Operation |
-| 返回新状态与创建的 Attempt | 决定何时创建 Attempt, 采用结果或结束 Operation |
-| 保持输入不变 | 管理执行位置, 调度, 执行, 传输, 超时与恢复 |
+| 定义三种原语及合法转换 | 定义身份, 请求与结果类型 |
+| 关联 Attempt 与 Operation | 生成唯一身份并保存原语 |
+| 校验 Report 的两个引用身份 | 保证报告对应已结束的 Attempt |
+| 返回后续可用的 Operation | 决定执行, 重试与关闭策略 |
 
-外层负责将状态校验与保存衔接起来. 本规范中的单个等待 Attempt 约束以当前输入状态为依据, 内核本身不提供存储或并发更新机制.
+交付, 执行位置, 调度, 持久化, 超时, 恢复与并发更新协调均由外层负责. 内核不保存隐藏历史, 不提供 exactly-once 执行保证.
 
-## 当前实现范围
+## 当前 Rust 实现
 
-当前内核提供 Attempt, OperationState 和 ReportAssociation, 以及上述三个转换.
+三个原语统一由 beamlet-kernel 提供. Operation 的形式为 `Operation<O, P, S = Ready>`, O 为身份, P 为请求, S 为类型状态. 等待状态是 `AwaitingReport<A>`, A 为当前 Attempt 身份类型.
 
-ReportAssociation 只包含转换所需的两个关联身份, 不代表完整 Report. 完整的 Operation 请求, Report 身份与结果内容均由外层持有, 当前接口不定义其数据结构.
+固定转换图由 state-machines 的同步 typestate 实现, 私有状态机不对外开放. 不合法状态没有对应动作方法.
 
-当前 Rust 实现中, 创建 Attempt 需要克隆 Attempt 身份, 以同时构造 Attempt 和新状态. 接受Report 只需要身份相等比较, 结束 Operation 不要求身份支持克隆或比较. 其他语言可以使用适合自身的数据表示实现相同规则.
+| 调用 | 返回 |
+| --- | --- |
+| `Operation::new(operation_id, request)` | `Operation<O, P, Ready>` |
+| `operation.create_attempt(attempt_id)` | 等待状态的 Operation 与 Attempt |
+| `operation.accept_report(&report)` | Ready Operation; 失败时为持有原 Operation 的 AcceptReportError |
+| `operation.close()` | Closed Operation, 支持重复关闭 |
+| `Report::new(report_id, attempt, result)` | 保留 Attempt 关联的完整 Report |
+
+转换消费旧 Operation, 调用者接收新对象. 报告不匹配时用 `error.into_operation()` 取回原对象. Operation 不实现 Clone, 状态对象不能由调用者自行构造.
+
+创建 Attempt 要求两个身份支持 Clone, 各克隆一次以供 Operation 与 Attempt 独立持有. 接受报告仅要求身份支持 Eq, 不要求请求, 报告身份或结果支持克隆. 关闭不要求身份支持克隆或比较.
 
 ## Quint 模型
 
-模型位于 `spec/kernel/`, 原语数据与生命周期状态分开定义.
+模型位于 `spec/kernel/`, 独立于 Rust 库与类型状态表示.
 
 | 文件 | 职责 |
 | --- | --- |
-| `operation.qnt` | Operation 身份与不透明请求内容 |
-| `attempt.qnt` | Attempt 身份与 Operation 关联 |
-| `report.qnt` | Report 身份, 关联与不透明结果内容 |
-| `state_machine.qnt` | 三种状态, 三个转换与显式成功或拒绝结果 |
-| `tests.qnt` | 场景测试, 有限状态枚举与不变量检查 |
+| `operation.qnt` | Operation 身份与不可变请求的投影 |
+| `attempt.qnt` | Attempt 身份及 Operation 引用 |
+| `report.qnt` | Report 身份, 两个引用与结果 |
+| `state_machine.qnt` | 三态转换及非法动作的抽象拒绝结果 |
+| `tests.qnt` | 有限枚举, 场景测试与不变量 |
 
-原语构造函数只描述数据形状, 状态机判断动作是否合法. Report 身份与结果内容不参与当前转换判断. Rust 的 ReportAssociation 对应模型中 Report 的两个关联字段.
+模型将 Operation 的不可变数据与生命周期投影分开表示. 这不要求实现暴露独立状态枚举或记录类型. 模型用 Rejected 表示非法动作; Rust 可用方法不可调用来阻止同一动作. 模型的拒绝名称不要求在每种语言中存在对应的运行时错误类型.
 
-状态机使用纯函数返回转换结果. 测试中的状态变量模拟外层保存结果. `used` 记录外层已使用的 Attempt 身份, `reportInput` 记录本次提交的报告关联, 两者仅用于检查, 不属于内核状态.
+核心性质是拒绝时状态不变, 关闭后不再打开, 创建输出与等待状态一致, 接受 Report 时两个引用均匹配且返回 Ready. 测试中的 used 与 reportInput 仅用于检查, 不代表内核持有历史.
 
-### 运行检查
-
-```bash
-quint typecheck spec/kernel/tests.qnt
-quint test spec/kernel/tests.qnt
-quint run spec/kernel/tests.qnt --invariant=invariants --max-samples=1000 --max-steps=30 --seed=42 --verbosity=1
-quint verify spec/kernel/tests.qnt --backend=tlc --invariant=invariants --max-steps=10 --verbosity=1
-```
-
-测试枚举三个生命周期状态形式, 两个 Operation 关联值和三个 Attempt 身份. 模拟器探索随机轨迹, TLC 检查有限模型. 检查性质为拒绝时状态不变, 关闭后不再打开, 创建输出与等待状态一致, 接受 Report 时必须匹配当前 Operation 和等待中的 Attempt 并返回 Ready. 测试另外覆盖报告关联错误的优先级与完整生命周期.
-
-当前检查环境为 Quint 0.33.1. 默认 Apalache 后端报告类型替换错误, 上述验证命令使用已通过检查的 TLC 后端.
-
-规范与 Quint 模型独立于具体实现语言. 检查结果针对模型及其身份取值范围, 各语言实现维护自己的测试.
-
-通过`just check-kernel-model`运行上述全部模型检查
+运行 `nix develop --command just check-kernel-model` 执行类型检查, 5 个测试, 随机模拟与 TLC 检查. 当前环境使用 Quint 0.33.1, TLC 有限检查范围为两个 Operation 关联值与三个 Attempt 身份; 检查结果不等于所有具体实现自动正确.

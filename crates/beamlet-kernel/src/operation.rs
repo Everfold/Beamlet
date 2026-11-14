@@ -1,191 +1,141 @@
-use std::fmt;
+use crate::{Attempt, Report, lifecycle};
 
-use crate::{Attempt, ReportAssociation};
-
-/// Operation 的生命周期状态, A 为外层定义的 Attempt 身份类型.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperationState<A> {
-    /// 尚未结束, 当前没有等待Report 的 Attempt.
-    Ready,
-    /// 正在等待指定 Attempt 的Report.
-    AwaitingReport(A),
-    /// Operation 已结束.
-    Closed,
+/// 没有等待报告的 Attempt, 可以创建授权或结束 Operation.
+#[derive(Debug)]
+pub struct Ready {
+    machine: lifecycle::Lifecycle<(), lifecycle::Ready>,
 }
 
-impl<A> OperationState<A> {
-    /// 结束 Operation, 返回 Closed, 原状态不变.
-    ///
-    /// 等待Report 时拒绝关闭, 已关闭时允许重复调用.
-    pub fn close(&self) -> Result<Self, CloseOperationError> {
-        match self {
-            Self::Ready | Self::Closed => Ok(Self::Closed),
-            Self::AwaitingReport(_) => Err(CloseOperationError::AttemptPending),
+/// 等待指定 Attempt 的报告, 只能接受报告后继续推进.
+#[derive(Debug)]
+pub struct AwaitingReport<A> {
+    machine: lifecycle::Lifecycle<(), lifecycle::AwaitingReport>,
+    attempt_id: A,
+}
+
+/// Operation 已结束, 允许重复关闭.
+#[derive(Debug)]
+pub struct Closed {
+    machine: lifecycle::Lifecycle<(), lifecycle::Closed>,
+}
+
+/// 身份与请求保持不变的 Operation, S 表达当前生命周期状态.
+#[derive(Debug)]
+#[must_use]
+pub struct Operation<O, P, S = Ready> {
+    id: O,
+    request: P,
+    state: S,
+}
+
+impl<O, P, S> Operation<O, P, S> {
+    /// 借用 Operation 身份.
+    pub fn id(&self) -> &O {
+        &self.id
+    }
+
+    /// 借用原始请求, 生命周期转换不会修改它.
+    pub fn request(&self) -> &P {
+        &self.request
+    }
+}
+
+impl<O, P> Operation<O, P> {
+    /// 接收调用者生成的唯一身份与请求, 从 Ready 开始.
+    pub fn new(id: O, request: P) -> Self {
+        Self {
+            id,
+            request,
+            state: Ready {
+                machine: lifecycle::Lifecycle::new(()),
+            },
         }
     }
 
-    /// 创建 Attempt, 返回该 Attempt 和等待报告的新状态, 原状态不变.
+    /// 消费当前 Operation, 返回等待状态的 Operation 与新的执行授权.
     ///
-    /// 外层提供当前 Operation 身份和新的 Attempt 身份, 并保存两个返回值.
-    /// 成功时克隆 Attempt 身份供状态记录, Operation 身份无需克隆.
-    ///
-    /// 已有等待报告的 Attempt 或 Operation 已结束时拒绝创建, 错误保留传入的身份.
-    pub fn create_attempt<O>(
-        &self,
-        operation_id: O,
+    /// 调用者提供未使用的 Attempt 身份. 两个身份各克隆一次供授权独立持有.
+    pub fn create_attempt<A: Clone>(
+        self,
         attempt_id: A,
-    ) -> Result<(Attempt<O, A>, Self), CreateAttemptError<O, A>>
+    ) -> (Operation<O, P, AwaitingReport<A>>, Attempt<O, A>)
     where
-        A: Clone,
+        O: Clone,
     {
-        match self {
-            Self::Ready => {
-                let state = Self::AwaitingReport(attempt_id.clone());
-                let attempt = Attempt {
-                    id: attempt_id,
-                    operation_id,
-                };
-                Ok((attempt, state))
-            }
-            Self::AwaitingReport(_) => Err(CreateAttemptError::AttemptPending {
-                operation_id,
+        let attempt = Attempt {
+            operation_id: self.id.clone(),
+            id: attempt_id.clone(),
+        };
+        let operation = Operation {
+            id: self.id,
+            request: self.request,
+            state: AwaitingReport {
+                machine: lifecycle::transition(self.state.machine.create_attempt()),
                 attempt_id,
-            }),
-            Self::Closed => Err(CreateAttemptError::OperationClosed {
-                operation_id,
-                attempt_id,
-            }),
-        }
+            },
+        };
+        (operation, attempt)
     }
 
-    /// 接受匹配的Report, 返回 Ready, 不自动结束 Operation.
+    /// 消费 Ready Operation, 返回 Closed Operation.
+    pub fn close(self) -> Operation<O, P, Closed> {
+        Operation {
+            id: self.id,
+            request: self.request,
+            state: Closed {
+                machine: lifecycle::transition(self.state.machine.close()),
+            },
+        }
+    }
+}
+
+impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
+    /// 借用当前等待的 Attempt 身份.
+    pub fn pending_attempt_id(&self) -> &A {
+        &self.state.attempt_id
+    }
+
+    /// 借用完整报告进行校验, 成功时消费当前 Operation 并返回 Ready.
     ///
-    /// 外层须保证 operation_id 与当前状态属于同一个 Operation, 并保存返回的新状态.
-    /// 此函数不修改输入, 不检查报告结果内容.
+    /// 调用者保证报告对应已结束的 Attempt, 结果是否满足请求由外层判断.
     ///
-    /// 依次校验当前状态, Operation 关联和 Attempt 关联, 返回首个错误.
-    pub fn accept_report<O: Eq>(
-        &self,
-        operation_id: &O,
-        report: &ReportAssociation<O, A>,
-    ) -> Result<Self, AcceptReportError>
+    /// # Errors
+    ///
+    /// 依次检查 Operation 与 Attempt 身份, 拒绝时错误保留原 Operation.
+    pub fn accept_report<R, V>(
+        self,
+        report: &Report<O, A, R, V>,
+    ) -> Result<Operation<O, P>, crate::AcceptReportError<Self>>
     where
+        O: Eq,
         A: Eq,
     {
-        let pending_attempt = match self {
-            Self::Ready => return Err(AcceptReportError::NoPendingAttempt),
-            Self::Closed => return Err(AcceptReportError::OperationClosed),
-            Self::AwaitingReport(attempt_id) => attempt_id,
-        };
-
-        if &report.operation_id != operation_id {
-            return Err(AcceptReportError::OperationMismatch);
+        if &self.id != report.operation_id() {
+            return Err(crate::AcceptReportError::OperationMismatch { operation: self });
         }
-        // 旧 Attempt 的报告不能解除对当前 Attempt 的等待.
-        if &report.attempt_id != pending_attempt {
-            return Err(AcceptReportError::AttemptMismatch);
+        if &self.state.attempt_id != report.attempt_id() {
+            return Err(crate::AcceptReportError::AttemptMismatch { operation: self });
         }
 
-        Ok(Self::Ready)
+        Ok(Operation {
+            id: self.id,
+            request: self.request,
+            state: Ready {
+                machine: lifecycle::transition(self.state.machine.accept_report()),
+            },
+        })
     }
 }
 
-/// 结束 Operation 失败的原因.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum CloseOperationError {
-    /// 当前 Attempt 尚未收到Report.
-    AttemptPending,
-}
-
-impl fmt::Display for CloseOperationError {
-    /// 输出错误原因, 写入失败时返回错误.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("an attempt is still awaiting a report")
-    }
-}
-
-impl std::error::Error for CloseOperationError {}
-
-/// 创建 Attempt 失败的原因, 包含本次传入的身份.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum CreateAttemptError<O, A> {
-    /// 已有 Attempt 正在等待Report.
-    AttemptPending {
-        /// 本次传入的 Operation 身份.
-        operation_id: O,
-        /// 本次传入的 Attempt 身份.
-        attempt_id: A,
-    },
-    /// Operation 已结束.
-    OperationClosed {
-        /// 本次传入的 Operation 身份.
-        operation_id: O,
-        /// 本次传入的 Attempt 身份.
-        attempt_id: A,
-    },
-}
-
-impl<O, A> CreateAttemptError<O, A> {
-    /// 按 Operation, Attempt 的顺序取回传入的身份.
-    #[must_use]
-    pub fn into_ids(self) -> (O, A) {
-        match self {
-            Self::AttemptPending {
-                operation_id,
-                attempt_id,
-            }
-            | Self::OperationClosed {
-                operation_id,
-                attempt_id,
-            } => (operation_id, attempt_id),
+impl<O, P> Operation<O, P, Closed> {
+    /// 消费已关闭的 Operation, 幂等返回 Closed.
+    pub fn close(self) -> Self {
+        Self {
+            id: self.id,
+            request: self.request,
+            state: Closed {
+                machine: lifecycle::transition(self.state.machine.close()),
+            },
         }
     }
 }
-
-impl<O, A> fmt::Display for CreateAttemptError<O, A> {
-    /// 输出错误原因.
-    ///
-    /// 底层格式化写入失败时返回错误.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self {
-            Self::AttemptPending { .. } => "an attempt is already awaiting a report",
-            Self::OperationClosed { .. } => "operation is closed",
-        };
-        formatter.write_str(message)
-    }
-}
-
-impl<O: fmt::Debug, A: fmt::Debug> std::error::Error for CreateAttemptError<O, A> {}
-
-/// 接受Report 失败的原因.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum AcceptReportError {
-    /// 当前没有等待Report 的 Attempt.
-    NoPendingAttempt,
-    /// Operation 已结束.
-    OperationClosed,
-    /// Report 引用的 Operation 与当前 Operation 不一致.
-    OperationMismatch,
-    /// Report 引用的 Attempt 与当前等待的 Attempt 不一致.
-    AttemptMismatch,
-}
-
-impl fmt::Display for AcceptReportError {
-    /// 输出错误原因.
-    ///
-    /// 底层格式化写入失败时返回错误.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = match self {
-            Self::NoPendingAttempt => "no attempt is awaiting a report",
-            Self::OperationClosed => "operation is closed",
-            Self::OperationMismatch => "report belongs to a different operation",
-            Self::AttemptMismatch => "report belongs to a different attempt",
-        };
-        formatter.write_str(message)
-    }
-}
-
-impl std::error::Error for AcceptReportError {}

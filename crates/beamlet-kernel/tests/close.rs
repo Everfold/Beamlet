@@ -1,64 +1,29 @@
-use beamlet_kernel::{
-    AcceptReportError, CloseOperationError, CreateAttemptError, OperationState, ReportAssociation,
-};
+use beamlet_kernel::{Closed, Operation, Report};
 
-#[derive(Debug, PartialEq, Eq)]
-struct AttemptId(&'static str);
+#[derive(Debug)]
+struct Identity;
 
-/// Ready 可以关闭, 原状态不变, 身份无需克隆.
+#[derive(Debug)]
+struct Request(String);
+
+/// 从未执行的 Operation 可以关闭, 身份和请求无需克隆或比较.
 #[test]
-fn closes_ready() {
-    let state = OperationState::<AttemptId>::Ready;
+fn closes_without_identity_trait_bounds() {
+    let operation = Operation::new(Identity, Request(String::from("request")));
+    let closed: Operation<_, _, Closed> = operation.close();
+    let closed = closed.close();
 
-    assert_eq!(state.close(), Ok(OperationState::Closed));
-    assert_eq!(state, OperationState::Ready);
+    assert_eq!(closed.request().0, "request");
 }
 
-/// 重复关闭仍返回 Closed.
+/// 接受报告后可显式关闭, 重复关闭保留身份与请求.
 #[test]
-fn closes_already_closed_operation() {
-    let state = OperationState::<AttemptId>::Closed;
+fn closes_after_report_and_is_idempotent() {
+    let (operation, attempt) = Operation::new("operation-1", "request").create_attempt(1);
+    let report = Report::new(1, attempt, "result");
+    let operation = operation.accept_report(&report).expect("当前报告应被接受");
+    let closed = operation.close().close().close();
 
-    let next = state.close().expect("已关闭的 Operation 应允许重复关闭");
-
-    assert_eq!(next, OperationState::Closed);
-    assert_eq!(next.close(), Ok(OperationState::Closed));
-}
-
-/// 等待报告时拒绝关闭, 保留当前 Attempt.
-#[test]
-fn rejects_close_while_awaiting_report() {
-    let state = OperationState::AwaitingReport(AttemptId("attempt-1"));
-
-    assert_eq!(state.close(), Err(CloseOperationError::AttemptPending));
-    assert_eq!(
-        state,
-        OperationState::AwaitingReport(AttemptId("attempt-1"))
-    );
-}
-
-/// 接受报告后可以关闭, 关闭后拒绝创建 Attempt 和接受报告.
-#[test]
-fn closes_after_accepting_report() {
-    let (attempt, state) = OperationState::Ready
-        .create_attempt("operation-1", "attempt-1")
-        .expect("Ready 应允许创建 Attempt");
-    let report = ReportAssociation {
-        operation_id: *attempt.operation_id(),
-        attempt_id: *attempt.id(),
-    };
-    let state = state
-        .accept_report(attempt.operation_id(), &report)
-        .expect("当前 Attempt 的报告应被接受");
-    let state = state.close().expect("接受报告后应允许关闭");
-
-    assert_eq!(state, OperationState::Closed);
-    assert!(matches!(
-        state.create_attempt("operation-1", "attempt-2"),
-        Err(CreateAttemptError::OperationClosed { .. }),
-    ));
-    assert_eq!(
-        state.accept_report(attempt.operation_id(), &report),
-        Err(AcceptReportError::OperationClosed),
-    );
+    assert_eq!(closed.id(), &"operation-1");
+    assert_eq!(closed.request(), &"request");
 }

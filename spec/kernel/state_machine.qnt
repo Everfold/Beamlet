@@ -5,7 +5,7 @@ module state_machine {
   /// 生命周期状态与原语数据分开.
   type State[a] = Ready | AwaitingReport(a) | Closed
 
-  /// 与当前 Rust 接口一致的拒绝原因.
+  /// 非法动作的抽象拒绝原因, 不限定实现的错误表示.
   type Error = AttemptPending | OperationClosed | NoPendingAttempt
     | OperationMismatch | AttemptMismatch
 

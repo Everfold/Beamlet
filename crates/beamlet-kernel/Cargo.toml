@@ -6,3 +6,6 @@ rust-version.workspace = true
 readme.workspace = true
 repository.workspace = true
 license.workspace = true
+
+[dependencies]
+state-machines.workspace = true
