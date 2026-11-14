@@ -6,6 +6,7 @@ members = [
 
   "crates/beamlet-kernel",
   "crates/beamlet-primitives",
+  "crates/beamlet-runtime",
 ]
 
 [workspace.package]

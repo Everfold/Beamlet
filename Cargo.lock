@@ -23,6 +23,14 @@ name = "beamlet-primitives"
 version = "0.1.0"
 
 [[package]]
+name = "beamlet-runtime"
+version = "0.1.0"
+dependencies = [
+ "beamlet-kernel",
+ "beamlet-primitives",
+]
+
+[[package]]
 name = "harel-machines"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
