@@ -8,3 +8,8 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tokio.workspace = true
+
+async-nats.workspace = true
+
+anyhow.workspace = true

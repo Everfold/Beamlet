@@ -11,9 +11,9 @@ license.workspace = true
 beamlet-primitives.workspace = true
 beamlet-runtime.workspace = true
 
+futures.workspace = true
 tokio.workspace = true
 
-serde.workspace = true
-serde_json.workspace = true
+async-nats.workspace = true
 
 anyhow.workspace = true
