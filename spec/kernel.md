@@ -110,6 +110,8 @@ sequenceDiagram
 
 交付, 执行位置, 调度, 持久化, 超时, 恢复与并发更新协调均由外层负责. 内核不保存隐藏历史, 不提供 exactly-once 执行保证.
 
+持久化记录, 原子提交及恢复入口的扩展设计见 [持久化方案](persistence.md). 该方案尚未实现, 不改变以下当前 Rust 接口的说明; kernel 不执行存储 IO.
+
 ## 当前 Rust 实现
 
 三个原语统一由 beamlet-kernel 提供. Operation 的形式为 `Operation<O, P, S = Ready>`, O 为身份, P 为请求, S 为类型状态. 等待状态是 `AwaitingReport<A>`, A 为当前 Attempt 身份类型.
