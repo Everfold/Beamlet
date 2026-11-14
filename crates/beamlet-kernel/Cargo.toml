@@ -9,4 +9,8 @@ license.workspace = true
 
 [dependencies]
 beamlet-primitives.workspace = true
+
 state-machines.workspace = true
+
+[dev-dependencies]
+state-machines = { workspace = true, features = ["inspect"] }

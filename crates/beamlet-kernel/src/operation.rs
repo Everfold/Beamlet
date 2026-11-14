@@ -191,14 +191,9 @@ impl<O, P> Operation<O, P, Closed> {
         OperationStatus::Closed
     }
 
-    /// 消费已关闭的 Operation, 幂等返回 Closed.
+    /// 已关闭对象直接返回自身, 不再次触发转换或终态进入行为.
     pub fn close(self) -> Self {
-        Self {
-            id: self.id,
-            request: self.request,
-            state: Closed {
-                machine: lifecycle::transition(self.state.machine.close()),
-            },
-        }
+        debug_assert!(self.state.machine.is_finished());
+        self
     }
 }
