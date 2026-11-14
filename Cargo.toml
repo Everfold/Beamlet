@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
+  "apps/beamlet-console",
+  "apps/beamlet-node",
+
   "crates/beamlet-kernel",
   "crates/beamlet-operation",
 ]

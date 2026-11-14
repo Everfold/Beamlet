@@ -1,6 +1,7 @@
 set positional-arguments
 
-beamletl_package := "beamletl"
+console_package := "beamlet-console"
+node_package := "beamlet-node"
 default:
     @just --list
 
@@ -8,18 +9,28 @@ install-dev:
     cargo binstall prek cargo-deny cargo-nextest cargo-update cargo-about -y --force
     cargo deny fetch
 
-beamletl *args:
-    cargo run --package "{{beamletl_package}}" -- "$@"
+console *args:
+    cargo run --package "{{console_package}}" -- "$@"
 
-build: build-beamletl
+node *args:
+    cargo run --package "{{node_package}}" -- "$@"
 
-build-beamletl *args:
-    cargo build --package "{{beamletl_package}}" "$@"
+build: build-console build-node
 
-release: release-beamletl
+build-console *args:
+    cargo build --package "{{console_package}}" "$@"
 
-release-beamletl *args:
-    cargo build --release --package "{{beamletl_package}}" "$@"
+build-node *args:
+    cargo build --package "{{node_package}}" "$@"
+
+
+release: release-console release-node
+
+release-console *args:
+    cargo build --release --package "{{console_package}}" "$@"
+
+release-node *args:
+    cargo build --release --package "{{node_package}}" "$@"
 
 check:
     cargo check --workspace
