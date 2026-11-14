@@ -41,7 +41,7 @@ wasmtime = "50"
 wasmtime-wasi = "50"
 
 config = "0.15"
-kite_sql = { version = "0.7", features = ["orm", "spill"] }
+diesel = { version = "2.4", features = ["sqlite"] }
 tempfile = "3.27"
 
 blake3 = { version = "1.8", features = ["rayon"] }
