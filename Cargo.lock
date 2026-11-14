@@ -10,11 +10,16 @@ version = "0.1.0"
 name = "beamlet-kernel"
 version = "0.1.0"
 dependencies = [
+ "beamlet-primitives",
  "state-machines",
 ]
 
 [[package]]
 name = "beamlet-node"
+version = "0.1.0"
+
+[[package]]
+name = "beamlet-primitives"
 version = "0.1.0"
 
 [[package]]

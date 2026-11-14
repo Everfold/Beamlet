@@ -39,6 +39,11 @@ impl<O, A, R, V> Report<O, A, R, V> {
         &self.result
     }
 
+    /// 消费报告并取回身份, 授权和结果, 供外层编码.
+    pub fn into_parts(self) -> (R, Attempt<O, A>, V) {
+        (self.id, self.attempt, self.result)
+    }
+
     /// 消费报告并取回结果所有权.
     pub fn into_result(self) -> V {
         self.result

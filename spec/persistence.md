@@ -1,6 +1,6 @@
 # 数据库无关的持久化方案
 
-状态: 设计方案, 尚未实现存储接口或恢复入口. 原语与流程以 [内核规范](kernel.md) 为准.
+状态: 记录类型, 数据库无关的存储 trait 与 kernel 恢复构造入口已实现. 适配器, 统一日志重放与应用层编排尚未实现. 原语与流程以 [内核规范](kernel.md) 为准.
 
 ## 1. 目标与范围
 
@@ -161,9 +161,9 @@ AlreadyApplied 的 applied_revision 可能早于现在的 head. 它证明旧提�
 
 ## 5. 数据库无关的能力接口
 
-以下是逻辑方法, 不是已实现的 Rust trait. 方法名不规定同步或异步, 不包含 SQL, 连接, 事务句柄或驱动类型. 实现阶段可以组合为小接口, 不要求每张物理表对应一个接口.
+记录类型与 Rust trait 位于 beamlet-persistence. ReportStore 提供报告保存与读取, PrimitiveReader 提供原语查询, OperationStore 提供生命周期提交与读取. 方法返回 Send Future, 不绑定 executor, SQL, 连接, 事务句柄或驱动. 这些接口是实现者必须兑现的契约, 自身不执行 IO.
 
-变化校验与重放由可复用的纯逻辑模块提供, 按内核规则推进并派生快照. 适配器在自己的原子提交判定中使用这份逻辑, 无需各自维护另一套生命周期规则. 适配器负责持久化, 一致可见性和耐久性, 业务结果不参与状态转换判断.
+应用层未来按 kernel 规则校验和重放; 目前不实现统一重放模块. 适配器的最终提交判定仍须验证预期版本, 当前状态和引用, 原子派生日志与快照. 适配器负责一致可见性和耐久性, 业务结果不参与状态转换判断.
 
 ### 5.1 共享原语数据能力
 
@@ -195,7 +195,7 @@ AlreadyApplied 的 applied_revision 可能早于现在的 head. 它证明旧提�
 
 当前 kernel 的 Operation 消费自身并返回新类型, 而持久化格式必须使用可读取的状态标记. 这两种表示不能直接等同.
 
-计划为 kernel 补充只读状态导出与显式恢复入口. 恢复加载方按状态标记分派到对应的类型状态, 不恢复库的内存结构.
+kernel 已提供 status 与现有字段访问器用于只读导出. Ready 使用 Operation::new 重建; Closed 使用 restore_closed; 等待状态使用 restore_awaiting_report, 并校验传入 Attempt 所属身份. 恢复加载方未来按存储状态分派到这些入口, 不恢复库的内存结构. 历史完整性与快照一致性由外层验证, 恢复构造入口不会替代这些检查.
 
 | 持久化状态 | 恢复所需校验 | 目标 |
 | --- | --- | --- |
@@ -285,7 +285,21 @@ Worker 的本地 Report 保存和 Authority 的接受提交可以位于不同存
 
 仅内存实现可以验证逻辑语义, 不能据此宣称崩溃持久化成立. 每个真实适配器还需在其承诺的进程/存储故障范围内执行故障注入, 并定义成功响应对应的耐久性保证.
 
-## 9. 实现顺序
+## 9. 代码组织与后续工作
+
+| 位置 | 当前职责 |
+| --- | --- |
+| crates/beamlet-primitives | Attempt, Report 及字段拆解/重建, 无外部依赖 |
+| crates/beamlet-kernel | Operation 类型状态, 转换, 状态标签与恢复构造 |
+| crates/beamlet-persistence | 编码内容, 原语记录, 日志, 快照, 提交结果, 错误与存储 trait |
+| apps 下的 authority 模块 | 预留, 暂不实现提交与恢复编排 |
+| apps 下的 storage 模块 | 预留, 暂不实现具体存储适配器 |
+
+kernel 与 persistence 分别依赖 primitives, persistence 不依赖 kernel. Worker 只需共享原语; 若使用报告存储能力可再依赖 persistence, 不会引入 state-machines.
+
+原语结构的持久化封套与身份稳定编码由适配器负责. EncodedPayload 的版本属于业务请求/结果, 日志与快照的 format_version 属于结构版本; 不向 Attempt/Report 添加数据库字段.
+
+后续实现顺序:
 
 1. 在数据库无关的模块中定义记录与提交结果, 为 kernel 添加状态导出及校验恢复入口.
 2. 实现确定性的重放与引用校验, 用内存适配器验证状态和提交契约.

@@ -1,5 +1,16 @@
 use crate::{Attempt, Report, lifecycle};
 
+/// 生命周期的只读标签, 等待身份通过 pending_attempt_id 单独读取.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationStatus {
+    /// 可以创建 Attempt 或关闭.
+    Ready,
+    /// 正在等待指定 Attempt 的报告.
+    AwaitingReport,
+    /// 已结束.
+    Closed,
+}
+
 /// 没有等待报告的 Attempt, 可以创建授权或结束 Operation.
 #[derive(Debug)]
 pub struct Ready {
@@ -41,7 +52,19 @@ impl<O, P, S> Operation<O, P, S> {
 }
 
 impl<O, P> Operation<O, P> {
-    /// 接收调用者生成的唯一身份与请求, 从 Ready 开始.
+    /// 导出 Ready 标签, 不生成持久化记录.
+    pub fn status(&self) -> OperationStatus {
+        OperationStatus::Ready
+    }
+
+    /// 从已校验的 Closed 持久化状态重建对象, 不提交关闭事实.
+    ///
+    /// 调用者负责确认日志与快照的一致性.
+    pub fn restore_closed(id: O, request: P) -> Operation<O, P, Closed> {
+        Self::new(id, request).close()
+    }
+
+    /// 创建 Ready 对象或从已校验的 Ready 快照重建, 不执行 IO.
     pub fn new(id: O, request: P) -> Self {
         Self {
             id,
@@ -62,10 +85,7 @@ impl<O, P> Operation<O, P> {
     where
         O: Clone,
     {
-        let attempt = Attempt {
-            operation_id: self.id.clone(),
-            id: attempt_id.clone(),
-        };
+        let attempt = Attempt::from_parts(self.id.clone(), attempt_id.clone());
         let operation = Operation {
             id: self.id,
             request: self.request,
@@ -90,6 +110,44 @@ impl<O, P> Operation<O, P> {
 }
 
 impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
+    /// 从已校验的等待状态重建对象, 不创建或交付新授权.
+    ///
+    /// 调用者负责确认快照与历史一致; 此处只验证授权所属身份.
+    ///
+    /// # Errors
+    ///
+    /// 授权所属 Operation 不匹配时, 错误归还所有输入数据.
+    pub fn restore_awaiting_report(
+        id: O,
+        request: P,
+        attempt: Attempt<O, A>,
+    ) -> Result<Self, crate::RestoreOperationError<O, P, A>>
+    where
+        O: Eq,
+    {
+        if &id != attempt.operation_id() {
+            return Err(crate::RestoreOperationError {
+                id,
+                request,
+                attempt,
+            });
+        }
+        let (_, attempt_id) = attempt.into_parts();
+        Ok(Operation {
+            id,
+            request,
+            state: AwaitingReport {
+                machine: lifecycle::transition(lifecycle::Lifecycle::new(()).create_attempt()),
+                attempt_id,
+            },
+        })
+    }
+
+    /// 导出等待标签, 等待身份通过 pending_attempt_id 读取.
+    pub fn status(&self) -> OperationStatus {
+        OperationStatus::AwaitingReport
+    }
+
     /// 借用当前等待的 Attempt 身份.
     pub fn pending_attempt_id(&self) -> &A {
         &self.state.attempt_id
@@ -128,6 +186,11 @@ impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
 }
 
 impl<O, P> Operation<O, P, Closed> {
+    /// 导出 Closed 标签, 不产生重复关闭记录.
+    pub fn status(&self) -> OperationStatus {
+        OperationStatus::Closed
+    }
+
     /// 消费已关闭的 Operation, 幂等返回 Closed.
     pub fn close(self) -> Self {
         Self {

@@ -8,4 +8,5 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+beamlet-primitives.workspace = true
 state-machines.workspace = true

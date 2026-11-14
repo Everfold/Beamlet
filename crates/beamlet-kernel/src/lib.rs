@@ -42,12 +42,11 @@
 //! ```
 
 mod accept_report_error;
-mod attempt;
 mod lifecycle;
 mod operation;
-mod report;
+mod restore_operation_error;
 
 pub use accept_report_error::AcceptReportError;
-pub use attempt::Attempt;
-pub use operation::{AwaitingReport, Closed, Operation, Ready};
-pub use report::Report;
+pub use beamlet_primitives::{Attempt, Report};
+pub use operation::{AwaitingReport, Closed, Operation, OperationStatus, Ready};
+pub use restore_operation_error::RestoreOperationError;

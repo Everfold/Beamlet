@@ -110,11 +110,11 @@ sequenceDiagram
 
 交付, 执行位置, 调度, 持久化, 超时, 恢复与并发更新协调均由外层负责. 内核不保存隐藏历史, 不提供 exactly-once 执行保证.
 
-持久化记录, 原子提交及恢复入口的扩展设计见 [持久化方案](persistence.md). 该方案尚未实现, 不改变以下当前 Rust 接口的说明; kernel 不执行存储 IO.
+持久化记录与提交契约见 [持久化方案](persistence.md). 记录类型, 存储接口及以下恢复构造入口已实现; 适配器与应用层恢复编排尚未实现. kernel 不执行存储 IO.
 
 ## 当前 Rust 实现
 
-三个原语统一由 beamlet-kernel 提供. Operation 的形式为 `Operation<O, P, S = Ready>`, O 为身份, P 为请求, S 为类型状态. 等待状态是 `AwaitingReport<A>`, A 为当前 Attempt 身份类型.
+Attempt 与 Report 由无外部依赖的 beamlet-primitives 提供. beamlet-kernel 提供 Operation 并重导出这两个共享原语, 保留原导入方式. Operation 的形式为 `Operation<O, P, S = Ready>`, O 为身份, P 为请求, S 为类型状态. 等待状态是 `AwaitingReport<A>`, A 为当前 Attempt 身份类型.
 
 固定转换图由 state-machines 的同步 typestate 实现, 私有状态机不对外开放. 不合法状态没有对应动作方法.
 
@@ -129,6 +129,14 @@ sequenceDiagram
 转换消费旧 Operation, 调用者接收新对象. 报告不匹配时用 `error.into_operation()` 取回原对象. Operation 不实现 Clone, 状态对象不能由调用者自行构造.
 
 创建 Attempt 要求两个身份支持 Clone, 各克隆一次以供 Operation 与 Attempt 独立持有. 接受报告仅要求身份支持 Eq, 不要求请求, 报告身份或结果支持克隆. 关闭不要求身份支持克隆或比较.
+
+只读导出使用 id(), request(), status(); 等待状态额外读取 pending_attempt_id(). status 只是标签, 不是可任意设置的生命周期状态.
+
+恢复 Ready 使用 Operation::new; 恢复 Closed 使用 Operation::restore_closed; 恢复等待使用 Operation::restore_awaiting_report(id, request, attempt). 等待恢复只校验授权所属 Operation, 不要求 Clone; 关联失败通过 error.into_parts() 归还全部输入.
+
+这些入口不证明持久化历史正确. 日志连续性, 快照一致性和格式版本由外层加载/重放逻辑验证. 恢复不签发新授权或写入新事实.
+
+Attempt::from_parts 用于还原已签发授权数据, 不代表新增授权, 也不证明来源真实性. Attempt 和 Report 均可通过 into_parts 取回字段供外层编码, 不绑定序列化库.
 
 ## Quint 模型
 
