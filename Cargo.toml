@@ -5,7 +5,6 @@ members = [
   "apps/beamlet-node",
 
   "crates/beamlet-kernel",
-  "crates/beamlet-operation",
 ]
 
 [workspace.package]
@@ -18,7 +17,6 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 beamlet-kernel = { path = "crates/beamlet-kernel" }
-beamlet-operation = { path = "crates/beamlet-operation" }
 
 futures = "0.3"
 rayon = "1.12"
