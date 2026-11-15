@@ -30,7 +30,9 @@ nix develop
 just install-dev
 
 # Run
-just node
+nats-server
+just node --role worker
+just node --role authority
 just console
 just app
 
