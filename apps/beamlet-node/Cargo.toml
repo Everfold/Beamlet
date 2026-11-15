@@ -16,4 +16,9 @@ tokio.workspace = true
 
 async-nats.workspace = true
 
+uuid.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+
 anyhow.workspace = true

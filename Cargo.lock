@@ -620,7 +620,10 @@ dependencies = [
  "beamlet-primitives",
  "beamlet-runtime",
  "futures",
+ "serde",
+ "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
