@@ -26,7 +26,6 @@ in
       ];
     };
     cargoLock.lockFile = ../../Cargo.lock;
-
     cargoBuildFlags = [ "--package=beamlet-console" ];
     cargoTestFlags = [ "--package=beamlet-console" ];
 

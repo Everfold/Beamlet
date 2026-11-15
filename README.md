@@ -10,8 +10,9 @@
 # List
 nix flake show github:Everfold/Beamlet
 
-nix run github:Everfold/Beamlet#console -- --version
 nix run github:Everfold/Beamlet#node -- --version
+nix run github:Everfold/Beamlet#console -- --version
+nix run github:Everfold/Beamlet#app -- --version
 ```
 
 ## Build
@@ -31,6 +32,7 @@ just install-dev
 # Run
 just node
 just console
+just app
 
 # Build
 just build

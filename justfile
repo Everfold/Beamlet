@@ -2,6 +2,8 @@ set positional-arguments
 
 console_package := "beamlet-console"
 node_package := "beamlet-node"
+app_package := "beamlet-app"
+
 default:
     @just --list
 
@@ -15,7 +17,10 @@ console *args:
 node *args:
     cargo run --package "{{node_package}}" -- "$@"
 
-build: build-console build-node
+app *args:
+    cargo run --package "{{app_package}}" -- "$@"
+
+build: build-console build-node build-app
 
 build-console *args:
     cargo build --package "{{console_package}}" "$@"
@@ -23,14 +28,20 @@ build-console *args:
 build-node *args:
     cargo build --package "{{node_package}}" "$@"
 
+build-app *args:
+    cargo build --package "{{app_package}}" "$@"
 
-release: release-console release-node
+
+release: release-console release-node release-app
 
 release-console *args:
     cargo build --release --package "{{console_package}}" "$@"
 
 release-node *args:
     cargo build --release --package "{{node_package}}" "$@"
+
+release-app *args:
+    cargo build --release --package "{{app_package}}" "$@"
 
 check:
     cargo check --workspace

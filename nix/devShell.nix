@@ -1,6 +1,17 @@
-pkgs: rec {
-  packages = with pkgs; [
+pkgs:
+pkgs.mkShell rec {
+  buildInputs = with pkgs; [
     pkg-config
+    fontconfig
+    libxcb
+    libxkbcommon
+
+    wayland
+    vulkan-loader
+    libglvnd
+  ];
+
+  packages = with pkgs; [
     mold
 
     rustToolchain
@@ -18,7 +29,7 @@ pkgs: rec {
   ];
 
   env = with pkgs; rec {
-    LD_LIBRARY_PATH = lib.makeLibraryPath packages;
+    LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
     RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
   };
 
