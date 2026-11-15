@@ -1,6 +1,9 @@
 //! Worker 只接收授权、执行业务并回报, 不持有 runtime.
-use crate::delivery::{Call, Inbox, REVERSE, WorkerReport};
-use anyhow::{Context, Result, ensure};
+use crate::{
+    delivery::{Call, Inbox, WorkerReport},
+    text_reverse::{self, CAPABILITY},
+};
+use anyhow::{Context, Result};
 use beamlet_primitives::Report;
 use std::future::Future;
 
@@ -13,7 +16,7 @@ pub(crate) async fn run(
     tokio::pin!(shutdown);
     let mut stopping = false;
     let mut next_id = 0_u64;
-    println!("[Worker] 已就绪, 实例={instance}, 能力={REVERSE}");
+    println!("[Worker] 已就绪, 实例={instance}, 能力={CAPABILITY}");
     loop {
         let incoming = tokio::select! {
             result = &mut shutdown, if !stopping => {
@@ -47,15 +50,9 @@ pub(crate) async fn run(
     Ok(())
 }
 
-/// 能力标识与实现必须一致, 不让错误路由触发不支持的业务.
+/// 业务模块校验并执行; Worker 将结果与原授权封装为完整 Report.
 pub(crate) fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
-    ensure!(
-        call.capability == REVERSE,
-        "不支持的能力: {}",
-        call.capability
-    );
-    // 按 Unicode 标量值倒写, 不承诺保持组合字形或复合 emoji.
-    let result: String = call.text.chars().rev().collect();
+    let result = text_reverse::execute(&call.capability, &call.text)?;
     Ok(Report::new(report_id, call.attempt, result))
 }
 
@@ -69,7 +66,7 @@ mod tests {
     fn validates_capability_and_preserves_identity() {
         let call = Call {
             attempt: Attempt::from_parts("o".into(), "a".into()),
-            capability: REVERSE.into(),
+            capability: CAPABILITY.into(),
             text: "Hello 世界
 🙂"
             .into(),

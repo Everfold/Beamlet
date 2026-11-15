@@ -1,7 +1,8 @@
 //! Authority 管理生命周期, 通过交付接口将任务发给一个匹配的 Worker.
 use crate::{
-    delivery::{Call, Delivery, DeliveryError, MAX_IN_FLIGHT, REVERSE, WorkerReport},
+    delivery::{Call, Delivery, DeliveryError, MAX_IN_FLIGHT, WorkerReport},
     ingress::{Ingress, Reply, Request},
+    text_reverse::CAPABILITY,
 };
 use anyhow::{Context, Result, ensure};
 use beamlet_runtime::Runtime;
@@ -22,7 +23,7 @@ pub(crate) async fn run(
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
-    println!("[Authority] 已就绪, 实例={instance}, 能力={REVERSE}; 输入文本后回车");
+    println!("[Authority] 已就绪, 实例={instance}, 能力={CAPABILITY}; 输入文本后回车");
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -67,7 +68,7 @@ pub(crate) async fn run(
             let attempt = runtime.create_attempt(&id, format!("{instance}:attempt:{next_id}"))?;
             let call = Call {
                 attempt,
-                capability: REVERSE.into(),
+                capability: CAPABILITY.into(),
                 text,
             };
             replies.insert(id.clone(), reply);

@@ -24,6 +24,8 @@ node 内部的 ingress 模块负责外部请求接收和最终文本回复, 与�
 
 第一版每个请求需要一个带版本的能力标识, 例如 `text.reverse/v1`; Worker 可以声明多个能力. 标识精确匹配, 版本约定输入、输出与业务行为, 不使用隐式兼容或通配匹配.
 
+倒写业务由 node 内部的 [text_reverse 模块](../apps/beamlet-node/src/text_reverse.rs)集中定义能力标识、版本校验与执行规则. 输入、输出均为 UTF-8 文本; v1 按 Unicode 标量值倒写, 不修剪空白, 不保持组合字形或复合 emoji. Authority 选择和 Worker 声明均引用该标识; Worker 调用业务函数后使用原 Attempt 生成 Report. delivery 只运输既有的文本载荷与关联信息, 不定义倒写算法或支持哪些业务. 当前不引入通用执行框架, 不改消息格式或生命周期规则.
+
 - A、B 支持倒写, C 只支持图片缩放: 倒写调用只交给 A 或 B 中的一个.
 - 一次交付只选择一个接收者, 不广播任务让 Worker 自行过滤. 不承诺轮询、公平性或完成顺序.
 - 交付模块不自动重发或换人. Authority 也不得因等待超时重复交付同一 Attempt.

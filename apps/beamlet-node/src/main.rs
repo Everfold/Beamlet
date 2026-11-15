@@ -4,6 +4,7 @@ mod delivery;
 mod ingress;
 #[cfg(test)]
 mod test_support;
+mod text_reverse;
 mod worker;
 
 use anyhow::{Context, Result, bail};
@@ -51,7 +52,8 @@ NATS_URL 默认 nats://127.0.0.1:4222"
         }
         Role::Worker => {
             let inbox =
-                delivery::nats::Inbox::subscribe(client.clone(), &[delivery::REVERSE]).await?;
+                delivery::nats::Inbox::subscribe(client.clone(), &[text_reverse::CAPABILITY])
+                    .await?;
             worker::run(inbox, instance, tokio::signal::ctrl_c()).await?;
         }
     }

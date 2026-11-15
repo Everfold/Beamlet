@@ -1,8 +1,8 @@
 //! 两种适配器共用行为场景, 测试不依赖队列组的选择顺序.
 use super::{
-    Call, Delivery as _, DeliveryError, Inbox as _, Incoming, REVERSE, WorkerReport, channel, nats,
+    Call, Delivery as _, DeliveryError, Inbox as _, Incoming, WorkerReport, channel, nats,
 };
-use crate::{test_support::Broker, worker};
+use crate::{test_support::Broker, text_reverse::CAPABILITY as REVERSE, worker};
 use beamlet_primitives::{Attempt, Report};
 use std::time::Duration;
 use tokio::time::timeout;
