@@ -79,6 +79,16 @@ thiserror = "2"
 criterion = { version = "0.8", features = ["html_reports"] }
 proptest = "1.12"
 
+[profile.dev.package]
+gpui-component = { opt-level = 3 }
+gpui-kit = { opt-level = 3 }
+gpui-kit-assets = { opt-level = 3 }
+gpui-pre = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+
 [profile.release]
 opt-level = 3
 strip = "debuginfo"
