@@ -1,6 +1,9 @@
 //! 同一个程序按角色独立启动 Authority 或 Worker, 内部经 NATS 交付.
 mod authority;
 mod delivery;
+mod ingress;
+#[cfg(test)]
+mod test_support;
 mod worker;
 
 use anyhow::{Context, Result, bail};
@@ -43,7 +46,8 @@ NATS_URL 默认 nats://127.0.0.1:4222"
     match role {
         Role::Authority => {
             let sender = delivery::nats::Delivery::new(client.clone(), delivery::REPORT_TIMEOUT);
-            authority::run(client.clone(), sender, instance).await?;
+            let input = ingress::live::Inputs::connect(client.clone()).await?;
+            authority::run(input, sender, instance, tokio::signal::ctrl_c()).await?;
         }
         Role::Worker => {
             let inbox =

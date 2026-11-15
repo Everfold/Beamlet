@@ -10,6 +10,16 @@ Authority 管理 Operation, 签发 Attempt, 接受 Report 并决定后续动作.
 
 交付模块先放在 node 内部, 不新建 crate. 第二个应用需要复用, 或 channel 与 NATS 实现验证出稳定接口后再考虑提取. kernel / runtime 不依赖交付模块; 模块通过已有原语与它们协作.
 
+### 请求入口与回复
+
+node 内部的 ingress 模块负责外部请求接收和最终文本回复, 与面向 Worker 的 delivery 分开. Authority 只取得有效文本及一次性、不透明的回复入口, 不接触终端、NATS 连接、主题、编码或回复地址. ingress 不创建 Operation / Attempt, 最终文本回复也不是 Worker 的 Report.
+
+线上入口合并本地终端与 Core NATS: 外部主题仍为 `beamlet.reverse`, Authority 队列组仍为 `beamlet-nodes`. 空行与空白原样保留; 非 UTF-8 请求由入口回复输入错误, 无回复地址的消息被忽略. 本地 EOF 只结束本地输入, 读取错误仍向上传播.
+
+接收等待被取消后可继续, 不能因此丢失有效请求或重建已开始的拒绝回复. 入口不额外建立后台请求队列; Authority 仍最多同时等待 16 次交付. 停止接收后不再交出缓冲请求, 但已交出的回复入口仍有效. Authority 等待已签发交付结束后刷新回复缓冲; 刷新不证明原调用者已收到. 全部输入结束也走这个退出流程, 但线上 NATS 订阅意外关闭仍是错误.
+
+有界内存入口只用于测试真实 Authority 循环, 不替代线上 NATS, 不增加运行时回退. CLI、消息格式、交付失败不重试及等待报告状态的语义保持不变.
+
 ## 2. 能力匹配与单个接收者
 
 第一版每个请求需要一个带版本的能力标识, 例如 `text.reverse/v1`; Worker 可以声明多个能力. 标识精确匹配, 版本约定输入、输出与业务行为, 不使用隐式兼容或通配匹配.
@@ -56,6 +66,8 @@ NATS 映射必须避免能力名称碰撞. 受控任务主题下不能出现额�
 需要按负载、地区、组合能力选人或展示 Worker 清单时, 再引入交付模块内部的 Worker 登记表. 最小信息为 Worker 实例身份、能力、到达信息和可用性期限. 登记过期只影响后续选择, 不证明已有任务停止, 不允许把在途 Attempt 自动转交他人. Worker 登记表不保存或代管 Operation 生命周期.
 
 ## 5. 验收
+
+请求入口重构另由[内存入口与 Authority 测试](../apps/beamlet-node/src/ingress/tests.rs)及[真实 NATS 入口测试](../apps/beamlet-node/src/ingress/nats_tests.rs)覆盖: 并发乱序回复、交付错误及无效报告、满载后释放容量、停止接收与在途等待、回复失败、终端 EOF、输入校验及队列组单选. `cargo test -p beamlet-node` 运行内存测试; 安装 `nats-server` 后运行 `cargo test -p beamlet-node -- --include-ignored` 可一并执行全部真实 NATS 测试.
 
 仓库保留了[共用契约测试](../apps/beamlet-node/src/delivery/tests.rs)与[Authority 生命周期测试](../apps/beamlet-node/src/authority.rs). 共用场景在 channel 和隔离 NATS Server 上运行; 队列满载的确定性检查由 channel 完成. 本轮还通过真实进程验收检查了多 Authority / Worker、超大负载的发送前拒绝及接收后失联, 但该验收脚本未保留在仓库中. 这些检查不是任意故障下的恰好一次证明.
 
