@@ -1,17 +1,41 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{env, path::Path};
+use std::{env, io::IsTerminal, path::Path};
+
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Color {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl Color {
+    pub(crate) fn enabled(self) -> bool {
+        match self {
+            Self::Auto => {
+                std::io::stderr().is_terminal()
+                    && env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
+            }
+            Self::Always => true,
+            Self::Never => false,
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Settings {
     pub nats_url: String,
+    pub color: Color,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             nats_url: "nats://127.0.0.1:4222".into(),
+            color: Color::Auto,
         }
     }
 }
@@ -38,16 +62,20 @@ mod tests {
     fn loads_existing_config_without_overwriting_it() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("console.ron");
-        for (source, url) in [
+        for (source, url, color) in [
             (
-                r#"(nats_url: "nats://localhost:4333")"#,
+                r#"(nats_url: "nats://localhost:4333", color: always)"#,
                 "nats://localhost:4333",
+                Color::Always,
             ),
-            ("()", "nats://127.0.0.1:4222"),
+            ("(color: never)", "nats://127.0.0.1:4222", Color::Never),
+            ("(color: auto)", "nats://127.0.0.1:4222", Color::Auto),
+            ("()", "nats://127.0.0.1:4222", Color::Auto),
         ] {
             fs::write(&path, source).unwrap();
             let settings = Settings::from_file(&path).unwrap();
             assert_eq!(settings.nats_url, url, "配置: {source}");
+            assert_eq!(settings.color, color, "配置: {source}");
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
         }
     }
@@ -59,6 +87,7 @@ mod tests {
         for source in [
             r#"(nats_ur1: "nats://localhost:4333")"#,
             r#"(nats_url: "nats://localhost:4333""#,
+            "(color: invalid)",
         ] {
             fs::write(&path, source).unwrap();
             let error = Settings::from_file(&path).unwrap_err();
@@ -73,11 +102,13 @@ mod tests {
         let path = directory.path().join("console.ron");
         let settings = Settings::from_file(&path).unwrap();
         assert_eq!(settings.nats_url, "nats://127.0.0.1:4222");
+        assert_eq!(settings.color, Color::Auto);
 
         let content = fs::read_to_string(&path).unwrap();
         assert!(!content.is_empty(), "首次启动应创建配置文件");
         let reloaded = Settings::from_file(&path).unwrap();
         assert_eq!(reloaded.nats_url, settings.nats_url);
+        assert_eq!(reloaded.color, settings.color);
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
     }
 

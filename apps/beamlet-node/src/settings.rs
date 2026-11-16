@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{env, fs::OpenOptions, path::Path};
+use std::{env, fs::OpenOptions, io::IsTerminal, path::Path};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -10,6 +10,28 @@ pub(crate) enum Role {
     Worker,
 }
 
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Color {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl Color {
+    pub(crate) fn enabled(self) -> bool {
+        match self {
+            Self::Auto => {
+                std::io::stderr().is_terminal()
+                    && env::var_os("NO_COLOR").is_none_or(|value| value.is_empty())
+            }
+            Self::Always => true,
+            Self::Never => false,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
@@ -17,6 +39,7 @@ pub(crate) struct Settings {
     pub label: Option<String>,
     pub role: Role,
     pub nats_url: String,
+    pub color: Color,
 }
 
 impl Default for Settings {
@@ -26,6 +49,7 @@ impl Default for Settings {
             label: None,
             role: Role::Authority,
             nats_url: "nats://127.0.0.1:4222".into(),
+            color: Color::Auto,
         }
     }
 }
@@ -69,10 +93,14 @@ mod tests {
     fn loads_existing_config_without_overwriting_it() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("node.ron");
-        for (role_name, role) in [("authority", Role::Authority), ("worker", Role::Worker)] {
+        for (role_name, role, color_name, color) in [
+            ("authority", Role::Authority, "auto", Color::Auto),
+            ("worker", Role::Worker, "always", Color::Always),
+            ("worker", Role::Worker, "never", Color::Never),
+        ] {
             let node_id = Uuid::new_v4();
             let source = format!(
-                r#"(node_id: "{node_id}", role: {role_name}, label: Some("华东节点"), nats_url: "nats://localhost:4333")"#
+                r#"(node_id: "{node_id}", role: {role_name}, label: Some("华东节点"), nats_url: "nats://localhost:4333", color: {color_name})"#
             );
             fs::write(&path, &source).unwrap();
             let settings = Settings::from_file(&path).unwrap();
@@ -80,6 +108,7 @@ mod tests {
             assert_eq!(settings.label.as_deref(), Some("华东节点"));
             assert_eq!(settings.role, role);
             assert_eq!(settings.nats_url, "nats://localhost:4333");
+            assert_eq!(settings.color, color);
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
         }
     }
@@ -90,13 +119,14 @@ mod tests {
         let path = directory.path().join("node.ron");
         let node_id = Uuid::new_v4();
         let valid = format!(
-            r#"(node_id: "{node_id}", role: worker, label: None, nats_url: "nats://localhost:4333")"#
+            r#"(node_id: "{node_id}", role: worker, label: None, nats_url: "nats://localhost:4333", color: auto)"#
         );
         for source in [
             valid.replace(&format!("node_id: \"{node_id}\", "), ""),
             valid.replace("role: worker, ", ""),
             valid.replace("role: worker", "role: other"),
             valid.replace("nats_url", "nats_ur1"),
+            valid.replace("color: auto", "color: invalid"),
             valid.replace(&node_id.to_string(), "not-a-uuid"),
             valid.replace(&node_id.to_string(), &Uuid::nil().to_string()),
             valid.replace("label: None", "label: \"unsupported string\""),
@@ -117,6 +147,7 @@ mod tests {
         let settings = Settings::from_file(&path).unwrap();
         assert_eq!(settings.role, Role::Authority);
         assert_eq!(settings.nats_url, "nats://127.0.0.1:4222");
+        assert_eq!(settings.color, Color::Auto);
         assert!(!settings.node_id.is_nil());
         assert_eq!(settings.label, None);
 
@@ -126,6 +157,7 @@ mod tests {
         assert_eq!(reloaded.node_id, settings.node_id);
         assert_eq!(reloaded.role, settings.role);
         assert_eq!(reloaded.nats_url, settings.nats_url);
+        assert_eq!(reloaded.color, settings.color);
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
     }
 
