@@ -90,7 +90,11 @@ async fn channel_contract() {
 
     second_call
         .reply
-        .send(worker::execute(second_call.call, "report-b".into()).unwrap())
+        .send(
+            worker::execute(second_call.call, "report-b".into())
+                .await
+                .unwrap(),
+        )
         .await
         .unwrap();
     let report = second.await.unwrap().unwrap();
@@ -101,7 +105,11 @@ async fn channel_contract() {
 
     first_call
         .reply
-        .send(worker::execute(first_call.call, "report-a".into()).unwrap())
+        .send(
+            worker::execute(first_call.call, "report-a".into())
+                .await
+                .unwrap(),
+        )
         .await
         .unwrap();
     let report = first.await.unwrap().unwrap();
@@ -121,7 +129,7 @@ async fn channel_contract() {
     // 超时不撤销已接收的调用, 迟到报告可以丢失, 但不能触发再次交付.
     let _ = late
         .reply
-        .send(worker::execute(late.call, "late".into()).unwrap())
+        .send(worker::execute(late.call, "late".into()).await.unwrap())
         .await;
     assert_empty(&mut a, &mut b, &mut c).await;
 
@@ -243,7 +251,7 @@ async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
     assert_eq!(received.call.worker, second);
     received
         .reply
-        .send(worker::execute(received.call, "r".into()).unwrap())
+        .send(worker::execute(received.call, "r".into()).await.unwrap())
         .await
         .unwrap();
     assert_eq!(pending.await.unwrap().unwrap().result(), "cba");

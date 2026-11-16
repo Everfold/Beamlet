@@ -1,4 +1,4 @@
-//! 以可控执行阻塞验证真实 Worker 循环, 不靠文本大小或执行耗时猜测并发.
+//! 以可控异步挂起验证真实 Worker 循环, 不靠文本大小或执行耗时猜测并发.
 use super::*;
 use crate::{
     delivery::{self, Delivery as _, DeliveryError, Incoming, channel},
@@ -11,7 +11,6 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
-        mpsc as blocking,
     },
     time::Duration,
 };
@@ -75,7 +74,7 @@ enum Action {
 }
 struct Started {
     index: usize,
-    release: blocking::Sender<Action>,
+    release: oneshot::Sender<Action>,
 }
 struct Harness {
     delivery: channel::Delivery,
@@ -100,22 +99,24 @@ fn start(limit: usize, count: usize) -> Harness {
     let peak = Arc::new(AtomicUsize::new(0));
     let highest = peak.clone();
     let executor = move |call: Call, report_id| {
-        let concurrent = active.fetch_add(1, Ordering::SeqCst) + 1;
-        let _active = Active(active.clone());
-        highest.fetch_max(concurrent, Ordering::SeqCst);
-        let (release, wait) = blocking::channel();
-        send.send(Started {
-            index: call.attempt.operation_id().parse().unwrap(),
-            release,
-        })
-        .map_err(|_| anyhow::anyhow!("test observer closed"))?;
-        match wait
-            .recv_timeout(DEADLINE)
-            .context("test did not release execution")?
-        {
-            Action::Execute => execute(call, report_id),
-            Action::Reject => anyhow::bail!("simulated capability rejection"),
-            Action::Panic => panic!("simulated execution panic"),
+        let active = active.clone();
+        let highest = highest.clone();
+        let send = send.clone();
+        async move {
+            let concurrent = active.fetch_add(1, Ordering::SeqCst) + 1;
+            let _active = Active(active);
+            highest.fetch_max(concurrent, Ordering::SeqCst);
+            let (release, wait) = oneshot::channel();
+            send.send(Started {
+                index: call.attempt.operation_id().parse().unwrap(),
+                release,
+            })
+            .map_err(|_| anyhow::anyhow!("test observer closed"))?;
+            match wait.await.context("test did not release execution")? {
+                Action::Execute => execute(call, report_id).await,
+                Action::Reject => anyhow::bail!("simulated capability rejection"),
+                Action::Panic => panic!("simulated execution panic"),
+            }
         }
     };
     let running = tokio::spawn(run_with(
@@ -289,7 +290,7 @@ async fn execution_panic_is_propagated_to_role_supervision() {
             .send(Action::Panic)
             .unwrap();
         let error = h.running.await.unwrap().unwrap_err();
-        assert!(format!("{error:#}").contains("能力执行任务异常退出"));
+        assert!(format!("{error:#}").contains("Worker 执行任务异常退出"));
         for response in h.responses.into_values() {
             assert!(response.await.unwrap().is_err());
         }

@@ -24,10 +24,10 @@ struct Work {
 }
 
 impl Work {
-    fn succeed(self) {
+    async fn succeed(self) {
         let report_id = format!("report:{}", self.call.attempt.id());
         self.reply
-            .send(Ok(worker::execute(self.call, report_id).unwrap()))
+            .send(Ok(worker::execute(self.call, report_id).await.unwrap()))
             .unwrap();
     }
 }
@@ -80,18 +80,18 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             second.call.attempt.operation_id()
         );
 
-        second.succeed();
+        second.succeed().await;
         assert_eq!(fast.await.unwrap(), " dnoces ");
         assert!(matches!(
             slow.try_recv(),
             Err(oneshot::error::TryRecvError::Empty)
         ));
 
-        first.succeed();
+        first.succeed().await;
         assert_eq!(slow.await.unwrap(), "界世 olleH");
 
         let empty = sender.submit(String::new()).await.unwrap();
-        work.recv().await.unwrap().succeed();
+        work.recv().await.unwrap().succeed().await;
         assert_eq!(empty.await.unwrap(), "");
 
         drop(sender);
@@ -154,7 +154,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
 
         // 失败不阻塞其他新请求, 但不会为原 Operation 签发替代 Attempt.
         let response = sender.submit("next".into()).await.unwrap();
-        work.recv().await.unwrap().succeed();
+        work.recv().await.unwrap().succeed().await;
         assert_eq!(response.await.unwrap(), "txen");
 
         drop(sender);
@@ -198,7 +198,7 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
             assert!(sender.submit("after stop".into()).await.is_err());
 
             for current in issued.into_iter().rev() {
-                current.succeed();
+                current.succeed().await;
             }
             for (index, response) in responses.into_iter().enumerate() {
                 assert_eq!(
@@ -251,9 +251,9 @@ async fn delivery_completion_releases_admission_capacity() {
                 "错误: 当前没有匹配能力的接收者; 操作保持等待报告, 未重试"
             );
 
-            work.recv().await.unwrap().succeed();
+            work.recv().await.unwrap().succeed().await;
             for current in issued {
-                current.succeed();
+                current.succeed().await;
             }
             for response in responses {
                 assert_eq!(response.await.unwrap(), "cba");
@@ -322,7 +322,7 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
 
         let abandoned = sender.submit("abc".into()).await.unwrap();
         drop(abandoned);
-        work.recv().await.unwrap().succeed();
+        work.recv().await.unwrap().succeed().await;
 
         assert!(
             authority
@@ -397,7 +397,7 @@ async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associat
         tokio::task::yield_now().await;
         assert!(!authority.is_finished());
         for current in issued.into_iter().rev() {
-            current.succeed();
+            current.succeed().await;
         }
         for (index, response) in responses.into_iter().enumerate() {
             assert_eq!(
@@ -448,7 +448,7 @@ async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() 
             other.push(current);
         }
         for current in other.into_iter().rev() {
-            current.succeed();
+            current.succeed().await;
         }
         assert_eq!(second_response.await.unwrap(), "dnoces");
         assert_eq!(third_response.await.unwrap(), "driht");
@@ -458,9 +458,9 @@ async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() 
                 .is_err(),
             "second Authority released the first Authority's capacity"
         );
-        first.succeed();
+        first.succeed().await;
         assert_eq!(first_response.await.unwrap(), "tsrif");
-        work.recv().await.unwrap().succeed();
+        work.recv().await.unwrap().succeed().await;
         assert_eq!(queued_response.await.unwrap(), "deueuq");
         drop((one_sender, two_sender));
         one.await.unwrap().unwrap();

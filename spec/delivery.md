@@ -21,7 +21,7 @@ Worker 配置的 `capabilities` 同时决定公告内容和执行许可, 空列�
 - `text.reverse/v1`: 按 Unicode 标量值倒写, 保留空白, 不保持组合字形或复合 emoji.
 - `text.uppercase/v1`: Rust Unicode 大写转换, 保留空白, 允许 `ß → SS` 这样的字符展开.
 
-能力精确匹配, 没有隐式版本兼容或组合条件. CPU 执行放在阻塞任务中, 不阻塞异步心跳循环.
+能力精确匹配, 没有隐式版本兼容或组合条件. 能力执行返回 Future, 可以使用异步 I/O; 现有文本能力将 CPU 计算放在阻塞任务中, 不阻塞异步心跳循环. 等待中的 Future 仍计入 Worker 并发上限.
 
 ## 3. Worker 登记与存活
 

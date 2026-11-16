@@ -19,12 +19,12 @@ pub(crate) async fn run(
     run_with(inbox, session_id, max_concurrent_tasks, shutdown, execute).await
 }
 
-async fn run_with(
+async fn run_with<F: Future<Output = Result<WorkerReport>> + Send + 'static>(
     mut inbox: impl Inbox,
     session_id: String,
     max_concurrent_tasks: usize,
     shutdown: impl Future<Output = std::io::Result<()>>,
-    execute: impl Fn(Call, String) -> Result<WorkerReport> + Clone + Send + 'static,
+    execute: impl Fn(Call, String) -> F + Clone + Send + 'static,
 ) -> Result<()> {
     tokio::pin!(shutdown);
     let mut stopping = false;
@@ -76,11 +76,7 @@ async fn run_with(
         tasks.spawn(async move {
             info!(event = "operation.received", "收到 Operation 请求数据");
             info!(event = "attempt.received", "收到 Attempt");
-            let span = tracing::Span::current();
-            let result = tokio::task::spawn_blocking(move || {
-                let _entered = span.enter();
-                execute(incoming.call, report_id)
-            }).await.context("能力执行任务异常退出")?;
+            let result = execute(incoming.call, report_id).await;
             match result {
                 Ok(report) => {
                     let span = info_span!("report", report_id = %report.id());
@@ -103,8 +99,8 @@ async fn run_with(
     Ok(())
 }
 
-pub(crate) fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
-    let result = capabilities::execute(&call.capability, &call.text)?;
+pub(crate) async fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
+    let result = capabilities::execute(call.capability, call.text).await?;
 
     let report = Report::new(report_id, call.attempt, result);
     info!(
@@ -125,8 +121,8 @@ mod tests {
     use super::*;
     use beamlet_primitives::Attempt;
 
-    #[test]
-    fn rejects_unsupported_capability() {
+    #[tokio::test]
+    async fn rejects_unsupported_capability() {
         let unsupported = Call {
             pool: beamlet_protocol::Pool::default(),
             authority: beamlet_protocol::RoleInstance {
@@ -141,6 +137,6 @@ mod tests {
             capability: "text.reverse/v2".into(),
             text: "abc".into(),
         };
-        assert!(execute(unsupported, "r".into()).is_err());
+        assert!(execute(unsupported, "r".into()).await.is_err());
     }
 }
