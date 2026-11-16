@@ -170,9 +170,9 @@ fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
 fn authority(pools: &str, timeout: u64) -> String {
     format!("authority((pools: [{pools}], worker_timeout_secs: {timeout}))")
 }
-fn worker(capability: &str, interval: u64) -> String {
+fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
     format!(
-        r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: 4))"#
+        r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency}))"#
     )
 }
 fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {
@@ -323,10 +323,14 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     let roles = vec![
         role(ids[0], "primary", &authority(r#""blue", "red", "blue""#, 3)),
         role(ids[1], "primary", &authority(r#""blue""#, 5)),
-        role(ids[2], "primary", &worker("text.uppercase/v1", 1)),
-        role(ids[3], "worker-connection", &worker("text.reverse/v1", 2)),
+        role(ids[2], "primary", &worker("text.uppercase/v1", 1, 4)),
+        role(
+            ids[3],
+            "worker-connection",
+            &worker("text.reverse/v1", 2, 1),
+        ),
         role(ids[4], "secondary", &authority(r#""blue""#, 3)),
-        role(ids[5], "secondary", &worker("text.reverse/v1", 1)),
+        role(ids[5], "secondary", &worker("text.reverse/v1", 1, 0)),
     ];
     let source = config(node_id, &infrastructure, &roles);
     let (first_process, first) = cluster.node("composed", &source, 6).await?;

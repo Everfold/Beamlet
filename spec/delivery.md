@@ -59,7 +59,7 @@ Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能�
 
 ## 5. 容量和失败语义
 
-Authority 最多同时等待 16 次交付, ingress 最多缓冲 16 个创建请求. 队列已满的请求明确拒绝, 控制查询仍可处理. 每个 Worker 角色串行执行, 一个角色实例订阅共用 16 条缓冲, 多个 Authority 共享该角色的容量; 同一 Node 内其他 Worker 有独立队列. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
+Authority 最多同时等待 16 次交付, ingress 最多缓冲 16 个创建请求. 队列已满的请求明确拒绝, 控制查询仍可处理. 每个 Worker 角色通过 `max_concurrent_tasks` 配置并发上限, 首次生成配置默认为 `1`, `0` 表示 Worker 不限制并发. 从取出调用到执行和报告发送完成或失败期间占用一个名额, 满载时暂停取出新调用. 一个角色实例订阅共用 16 条接收缓冲, 多个 Authority 共享该角色的并发容量; 同一 Node 内其他 Worker 有独立名额和队列. `0` 不改变线程池、硬件、Authority 在途数和接收缓冲的独立限制. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
 
 | 时机 / 结果 | 行为 |
 | --- | --- |
@@ -67,6 +67,8 @@ Authority 最多同时等待 16 次交付, ingress 最多缓冲 16 个创建请�
 | 已签发, 无接收者或明确拒收 | `Unresolved`, Operation 保持 AwaitingReport |
 | 已签发, 等待报告超时或报告关联错误 | `Unresolved`, Operation 保持 AwaitingReport |
 | 有效完整 Report | Authority 接受并关闭 Operation, 返回 `Completed` 及全部关联身份、执行 Worker 和结果 |
+
+Report 身份按接收顺序分配, 有效报告按完成顺序返回, 无需等待较早的慢任务. 执行拒绝和回复失败释放 Worker 名额, 不重试. 退出时停止新接收, 按配置并发排空队列并等待运行中任务, 受 Node 退出期限约束.
 
 Report 等待期限为 3 秒; Console 请求期限为 10 秒, 包含正常排队和回复开销. 校验与发送之间仍可能失联. 无论拒收、断线或超时, 均不取消已签发 Attempt、不换人重发、不伪造 Report、不强制关闭 Operation. 超时不取消 Worker 执行; 本版 request 超时后可能丢失迟到 Report, 不提供持续监听或恢复.
 

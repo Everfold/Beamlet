@@ -69,6 +69,7 @@ cargo run -p beamlet-console
                 pool: "blue",
                 capabilities: ["text.uppercase/v1"],
                 heartbeat_interval_secs: 5,
+                max_concurrent_tasks: 4,
             )),
         ),
         (
@@ -79,6 +80,7 @@ cargo run -p beamlet-console
                 pool: "blue",
                 capabilities: ["text.reverse/v1"],
                 heartbeat_interval_secs: 3,
+                max_concurrent_tasks: 0,
             )),
         ),
     ],
@@ -105,9 +107,27 @@ Hello Beamlet
 
 Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
 
+## Worker 并发
+
+每个 Worker 角色通过 `max_concurrent_tasks` 独立配置:
+
+| 值 | 行为 |
+| --- | --- |
+| `1` | 串行执行, 首次生成配置的默认值 |
+| 大于 `1` | 最多同时处理指定数量的任务 |
+| `0` | Worker 不设置并发上限 |
+
+名额从取出调用开始占用, 到执行结束且报告发送完成或失败后释放. 达到正数上限时暂停取出下一条调用, 不额外创建大量等待名额的执行任务. 所有 Authority 发给该 Worker 的调用共用此上限; 其他 Worker 角色有自己的名额.
+
+能力在阻塞线程池中运行, 因此单个 Worker 可以并行处理计算任务, 心跳与控制循环也能继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 的 16 个在途名额和传输接收缓冲仍独立生效. Worker 接收缓冲保持 16 条, 与执行并发数是不同设置.
+
+Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早的慢任务. 执行拒绝、报告发送失败都会释放名额, 不触发重新执行. 收到退出信号后停止新接收, 按当前并发上限排空已接收队列并等待运行中任务; 仍受 Node 的统一退出期限约束.
+
+已有配置需要手动在各 Worker 的 `kind: worker((...))` 中添加 `max_concurrent_tasks`, 修改后重启生效. 加载器不会补字段或改写文件.
+
 ## 运行管理和退出
 
-Node 先校验整个配置、生成各角色会话并连接基础设施, 再启动角色. 每个 Authority 独立管理 Operation、登记表和在途上限; 每个 Worker 有自己的串行执行和有界队列. 基础设施共享不共享角色业务状态.
+Node 先校验整个配置、生成各角色会话并连接基础设施, 再启动角色. 每个 Authority 独立管理 Operation、登记表和在途上限; 每个 Worker 有自己的并发上限和有界接收队列. 基础设施共享不共享角色业务状态.
 
 连接中断由对应 NATS 实例重连, 不终止其他基础设施的角色. 某个角色不可恢复地退出或启动失败时, Node 通知所有角色停止新接收并排空, 然后返回失败; 不在进程内偷偷重启角色. Ctrl+C 同样广播一次退出请求, 每个 Worker 独立公告 draining / offline. 默认最多等待角色排空 6 秒, 超时返回失败并停止等待; 已开始的阻塞执行不能强行取消, 任务也不会自动重试. 退出时对每个连接最多等待 1 秒刷新, 刷新不保证远端已收到.
 
@@ -124,4 +144,4 @@ cargo doc --workspace --no-deps
 cargo test -p beamlet-node --test composition -- --ignored --nocapture
 ```
 
-组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. 普通测试不需要 NATS 服务端.
+组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控执行阻塞验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. 普通测试不需要 NATS 服务端.
