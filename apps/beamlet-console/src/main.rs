@@ -2,16 +2,23 @@ mod settings;
 
 use anyhow::{Context, Result};
 use settings::Settings;
-use std::{io::BufRead, process::ExitCode, time::Duration};
+use std::{
+    io::{BufRead, IsTerminal},
+    process::ExitCode,
+    time::Duration,
+};
 use tokio::sync::mpsc;
 use tracing::{Instrument, error, info, info_span, warn};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    let ansi = std::io::stderr().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty());
     tracing_subscriber::fmt()
+        .compact()
         .with_env_filter("beamlet_console=info")
         .with_target(false)
-        .with_ansi(false)
+        .with_ansi(ansi)
         .with_writer(std::io::stderr)
         .init();
 

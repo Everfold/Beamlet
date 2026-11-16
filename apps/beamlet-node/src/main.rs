@@ -7,16 +7,19 @@ mod worker;
 
 use anyhow::{Context, Result};
 use settings::{Role, Settings};
-use std::process::ExitCode;
+use std::{io::IsTerminal, process::ExitCode};
 use tracing::{Instrument, error, info, info_span};
 use uuid::Uuid;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    let ansi = std::io::stderr().is_terminal()
+        && std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty());
     tracing_subscriber::fmt()
+        .compact()
         .with_env_filter("beamlet_node=info")
         .with_target(false)
-        .with_ansi(false)
+        .with_ansi(ansi)
         .with_writer(std::io::stderr)
         .init();
 
@@ -36,7 +39,7 @@ async fn main() -> ExitCode {
             Role::Authority => "authority",
             Role::Worker => "worker",
         },
-        label = ?settings.label,
+        label = settings.label.as_deref(),
     );
 
     async {
