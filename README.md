@@ -10,8 +10,7 @@
 # List
 nix flake show github:Everfold/Beamlet
 
-nix run github:Everfold/Beamlet#node -- --role worker
-nix run github:Everfold/Beamlet#node -- --role authority
+nix run github:Everfold/Beamlet#node
 nix run github:Everfold/Beamlet#console
 ```
 
@@ -30,9 +29,7 @@ nix develop
 just install-dev
 
 # Run
-nats-server
-just node --role worker
-just node --role authority
+just node
 just console
 
 # Build

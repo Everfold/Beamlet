@@ -44,7 +44,7 @@ rune = "0.14"
 wasmtime = "50"
 wasmtime-wasi = "50"
 
-config = "0.15"
+config = { version = "0.15", default-features = false, features = ["ron"] }
 diesel = { version = "2.4", features = ["sqlite"] }
 tempfile = "3.27"
 
@@ -76,16 +76,6 @@ thiserror = "2"
 
 criterion = { version = "0.8", features = ["html_reports"] }
 proptest = "1.12"
-
-[profile.dev.package]
-gpui-component = { opt-level = 3 }
-gpui-kit = { opt-level = 3 }
-gpui-kit-assets = { opt-level = 3 }
-gpui-pre = { opt-level = 3 }
-gpui-pre-platform = { opt-level = 3 }
-rustybuzz = { opt-level = 3 }
-taffy = { opt-level = 3 }
-ttf-parser = { opt-level = 3 }
 
 [profile.release]
 opt-level = 3

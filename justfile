@@ -10,11 +10,11 @@ install-dev:
     cargo binstall prek cargo-deny cargo-nextest cargo-update cargo-about diesel_cli -y --force
     cargo deny fetch
 
-console *args:
-    cargo run --package "{{console_package}}" -- "$@"
+console:
+    cargo run --package "{{console_package}}"
 
-node *args:
-    cargo run --package "{{node_package}}" -- "$@"
+node:
+    cargo run --package "{{node_package}}"
 
 build: build-console build-node
 

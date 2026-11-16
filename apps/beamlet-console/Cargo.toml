@@ -12,4 +12,11 @@ tokio.workspace = true
 
 async-nats.workspace = true
 
+config.workspace = true
+
+serde.workspace = true
+
 anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,14 +1,17 @@
+mod settings;
+
 use anyhow::{Context, Result};
-use std::{env, io::BufRead, time::Duration};
+use settings::Settings;
+use std::{io::BufRead, time::Duration};
 use tokio::sync::mpsc;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let url = env::var("NATS_URL").unwrap_or_else(|_| "nats://127.0.0.1:4222".into());
+    let settings = Settings::load()?;
 
     let client = async_nats::ConnectOptions::new()
         .request_timeout(Some(Duration::from_secs(5)))
-        .connect(url)
+        .connect(settings.nats_url)
         .await
         .context("连接 NATS 失败")?;
 
