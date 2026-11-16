@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
-/// 持久节点身份与本次运行会话, 不根据 UUID 排序判断新旧.
+/// 持久角色身份与本次运行会话, 不根据 UUID 排序判断新旧.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Instance {
-    /// 持久节点 UUID.
-    pub node_id: Uuid,
+pub struct RoleInstance {
+    /// 持久角色 UUID.
+    pub role_id: Uuid,
     /// 本次运行的 UUID.
     pub session_id: Uuid,
 }
@@ -18,7 +18,7 @@ pub struct Instance {
 #[serde(deny_unknown_fields)]
 pub struct AuthorityInfo {
     /// 实例身份.
-    pub instance: Instance,
+    pub instance: RoleInstance,
     /// 人类可读名称.
     pub label: Option<String>,
     /// Authority 已加入的 pool 集合.
@@ -62,7 +62,7 @@ pub struct Presence {
     /// Worker 所属的唯一 pool.
     pub pool: Pool,
     /// Worker 实例.
-    pub instance: Instance,
+    pub instance: RoleInstance,
     /// 显示名称.
     pub label: Option<String>,
     /// 本次运行实际启用的能力.
@@ -101,8 +101,8 @@ pub struct Task {
 pub enum Selection {
     /// 从指定 pool 的有效候选中选择一个.
     Any,
-    /// 锁定节点与会话.
-    Exact(Instance),
+    /// 锁定角色与会话.
+    Exact(RoleInstance),
 }
 
 /// Console 提交创建请求, 自身不创建 Operation.
@@ -124,14 +124,14 @@ pub enum Command {
     /// 查询指定 pool 的 Worker, 可按能力过滤.
     Workers {
         request_id: Uuid,
-        authority: Instance,
+        authority: RoleInstance,
         pool: Pool,
         capability: Option<String>,
     },
     /// 请求 Authority 创建并执行 Operation.
     Submit {
         request_id: Uuid,
-        authority: Instance,
+        authority: RoleInstance,
         submission: Submission,
     },
 }
@@ -144,7 +144,7 @@ impl Command {
         }
     }
     /// 指定的 Authority 实例.
-    pub fn authority(&self) -> Instance {
+    pub fn authority(&self) -> RoleInstance {
         match self {
             Self::Workers { authority, .. } | Self::Submit { authority, .. } => *authority,
         }
@@ -171,14 +171,14 @@ pub enum Outcome {
         operation_id: String,
         attempt_id: String,
         report_id: String,
-        worker: Instance,
+        worker: RoleInstance,
         result: String,
     },
     /// 已签发但未取得有效 Report, Operation 仍等待原授权.
     Unresolved {
         operation_id: String,
         attempt_id: String,
-        worker: Instance,
+        worker: RoleInstance,
         reason: String,
     },
 }
@@ -190,7 +190,7 @@ pub struct Reply {
     /// 原请求 ID.
     pub request_id: Uuid,
     /// 实际处理请求的 Authority.
-    pub authority: Instance,
+    pub authority: RoleInstance,
     /// 查询或提交结果.
     pub outcome: Outcome,
 }
@@ -202,9 +202,9 @@ pub struct WorkerCall {
     /// 路由 pool.
     pub pool: Pool,
     /// 签发方实例.
-    pub authority: Instance,
+    pub authority: RoleInstance,
     /// 执行方实例.
-    pub worker: Instance,
+    pub worker: RoleInstance,
     /// Operation 身份.
     pub operation_id: String,
     /// 已签发 Attempt 身份.
@@ -234,13 +234,13 @@ pub enum WorkerReply {
     /// 执行已结束的证据.
     Report {
         pool: Pool,
-        worker: Instance,
+        worker: RoleInstance,
         report: ReportData,
     },
     /// 执行前拒绝, 不构造假的 Report.
     Rejected {
         pool: Pool,
-        worker: Instance,
+        worker: RoleInstance,
         operation_id: String,
         attempt_id: String,
         reason: String,

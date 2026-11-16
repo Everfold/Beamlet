@@ -1,7 +1,7 @@
 //! 基础设施连接及其存活状态, 可由同一 Node 内的多个角色共享.
 use anyhow::{Context, Result};
 use tokio::sync::watch;
-use tracing::info;
+use tracing::{Instrument, info};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Connection {
@@ -23,11 +23,13 @@ impl Nats {
         });
 
         let events = connection.clone();
+        let span = tracing::Span::current();
 
         let client = async_nats::ConnectOptions::new()
             .subscription_capacity(crate::delivery::MAX_IN_FLIGHT)
             .event_callback(move |event| {
                 let events = events.clone();
+                let span = span.clone();
                 async move {
                     let connected = match event {
                         async_nats::Event::Connected => Some(true),
@@ -45,6 +47,7 @@ impl Nats {
                         );
                     }
                 }
+                .instrument(span)
             })
             .connect(url)
             .await

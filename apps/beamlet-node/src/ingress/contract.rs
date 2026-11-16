@@ -1,5 +1,5 @@
 use anyhow::Result;
-use beamlet_protocol::{Instance, Outcome, Reply as WireReply, Submission, encode};
+use beamlet_protocol::{Outcome, Reply as WireReply, RoleInstance, Submission, encode};
 use std::future::Future;
 use uuid::Uuid;
 
@@ -21,7 +21,7 @@ enum ReplyKind {
         client: Box<async_nats::Client>,
         subject: async_nats::Subject,
         request_id: Uuid,
-        authority: Instance,
+        authority: RoleInstance,
     },
     #[cfg(test)]
     Channel(tokio::sync::oneshot::Sender<String>),
@@ -34,7 +34,7 @@ impl Reply {
         client: async_nats::Client,
         subject: async_nats::Subject,
         request_id: Uuid,
-        authority: Instance,
+        authority: RoleInstance,
     ) -> Self {
         Self(ReplyKind::Nats {
             client: Box::new(client),

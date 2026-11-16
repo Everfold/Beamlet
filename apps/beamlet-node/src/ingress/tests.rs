@@ -7,7 +7,7 @@ use crate::{
     worker,
 };
 use beamlet_primitives::{Attempt, Report};
-use beamlet_protocol::{Instance, Outcome, Pool, Selection};
+use beamlet_protocol::{Outcome, Pool, RoleInstance, Selection};
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
@@ -36,7 +36,7 @@ impl Work {
 struct ControlledDelivery(mpsc::Sender<Work>);
 
 impl Delivery for ControlledDelivery {
-    fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<Instance, DeliveryError> {
+    fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<RoleInstance, DeliveryError> {
         Ok(instance())
     }
 
@@ -330,9 +330,9 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
     .await;
 }
 
-fn instance() -> Instance {
-    Instance {
-        node_id: uuid::Uuid::from_u128(1),
+fn instance() -> RoleInstance {
+    RoleInstance {
+        role_id: uuid::Uuid::from_u128(1),
         session_id: uuid::Uuid::from_u128(2),
     }
 }

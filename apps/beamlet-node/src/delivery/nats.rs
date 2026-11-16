@@ -4,7 +4,7 @@ use crate::registry::Registry;
 use anyhow::{Context, Result};
 use async_nats::{Client, RequestErrorKind};
 use beamlet_protocol::{
-    Instance, Pool, PresenceState, Selection, WorkerCall, WorkerReply, decode, encode, subject,
+    Pool, PresenceState, RoleInstance, Selection, WorkerCall, WorkerReply, decode, encode, subject,
 };
 use futures::StreamExt;
 use std::{
@@ -35,7 +35,7 @@ impl super::Delivery for Delivery {
         pool: &Pool,
         selection: Selection,
         capability: &str,
-    ) -> Result<Instance, DeliveryError> {
+    ) -> Result<RoleInstance, DeliveryError> {
         self.registry
             .select(pool, selection, capability, Instant::now())
             .ok_or(DeliveryError::NoReceiver)
@@ -103,7 +103,7 @@ impl super::Delivery for Delivery {
 pub(crate) struct Inbox {
     client: Client,
     pool: Pool,
-    instance: Instance,
+    instance: RoleInstance,
     capabilities: BTreeSet<String>,
     subscription: async_nats::Subscriber,
     state: watch::Sender<PresenceState>,
@@ -112,7 +112,7 @@ impl Inbox {
     pub(crate) async fn subscribe(
         client: Client,
         pool: Pool,
-        instance: Instance,
+        instance: RoleInstance,
         capabilities: BTreeSet<String>,
         state: watch::Sender<PresenceState>,
     ) -> Result<Self> {
@@ -145,7 +145,7 @@ impl super::Inbox for Inbox {
             if wire.pool != self.pool
                 || wire.worker != self.instance
                 || message.subject.as_str() != subject::worker(&self.pool, self.instance)
-                || wire.authority.node_id.is_nil()
+                || wire.authority.role_id.is_nil()
                 || wire.authority.session_id.is_nil()
                 || wire.operation_id.is_empty()
                 || wire.attempt_id.is_empty()
@@ -190,7 +190,7 @@ pub(crate) struct Reply {
     client: Client,
     subject: async_nats::Subject,
     pool: Pool,
-    worker: Instance,
+    worker: RoleInstance,
 }
 impl Reply {
     pub(super) async fn send(self, report: WorkerReport) -> Result<()> {

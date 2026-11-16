@@ -1,16 +1,14 @@
 use anyhow::{Context, Result, ensure};
 use beamlet_protocol::Pool;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
-use std::{env, fs::OpenOptions, io::IsTerminal, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+    fs::OpenOptions,
+    io::IsTerminal,
+    path::Path,
+};
 use uuid::Uuid;
-
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum Role {
-    Authority,
-    Worker,
-}
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -20,7 +18,6 @@ pub(crate) enum Color {
     Always,
     Never,
 }
-
 impl Color {
     pub(crate) fn enabled(self) -> bool {
         match self {
@@ -34,38 +31,106 @@ impl Color {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct Settings {
-    pub node_id: Uuid,
-    pub label: Option<String>,
-    pub role: Role,
-    pub nats_url: String,
-    pub color: Color,
-    pub pools: BTreeSet<Pool>,
-    pub pool: Pool,
-    pub capabilities: BTreeSet<String>,
-    pub heartbeat_interval_secs: u64,
-    pub worker_timeout_secs: u64,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum Infrastructure {
+    Nats { url: String },
 }
 
-impl Default for Settings {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Authority {
+    pub pools: BTreeSet<Pool>,
+    pub worker_timeout_secs: u64,
+}
+impl Default for Authority {
     fn default() -> Self {
         Self {
-            node_id: Uuid::new_v4(),
-            label: None,
-            role: Role::Authority,
-            nats_url: "nats://127.0.0.1:4222".into(),
-            color: Color::Auto,
             pools: BTreeSet::from([Pool::default()]),
-            pool: Pool::default(),
-            capabilities: BTreeSet::from([crate::text_reverse::CAPABILITY.into()]),
-            heartbeat_interval_secs: 5,
             worker_timeout_secs: 15,
         }
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Worker {
+    pub pool: Pool,
+    pub capabilities: BTreeSet<String>,
+    pub heartbeat_interval_secs: u64,
+}
+impl Default for Worker {
+    fn default() -> Self {
+        Self {
+            pool: Pool::default(),
+            capabilities: BTreeSet::from([crate::text_reverse::CAPABILITY.into()]),
+            heartbeat_interval_secs: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Role {
+    Authority(Authority),
+    Worker(Worker),
+}
+impl Role {
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Self::Authority(_) => "authority",
+            Self::Worker(_) => "worker",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoleSettings {
+    pub role_id: Uuid,
+    pub label: Option<String>,
+    pub infrastructure: String,
+    pub kind: Role,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Settings {
+    pub node_id: Uuid,
+    pub label: Option<String>,
+    pub color: Color,
+    pub infrastructures: BTreeMap<String, Infrastructure>,
+    pub roles: Vec<RoleSettings>,
+}
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            node_id: Uuid::new_v4(),
+            label: None,
+            color: Color::Auto,
+            infrastructures: BTreeMap::from([(
+                "local".into(),
+                Infrastructure::Nats {
+                    url: "nats://127.0.0.1:4222".into(),
+                },
+            )]),
+            roles: vec![
+                RoleSettings {
+                    role_id: Uuid::new_v4(),
+                    label: Some("authority".into()),
+                    infrastructure: "local".into(),
+                    kind: Role::Authority(Authority::default()),
+                },
+                RoleSettings {
+                    role_id: Uuid::new_v4(),
+                    label: Some("worker".into()),
+                    infrastructure: "local".into(),
+                    kind: Role::Worker(Worker::default()),
+                },
+            ],
+        }
+    }
+}
 impl Settings {
     pub(crate) fn load(file_name: &Path) -> Result<Self> {
         ensure!(
@@ -78,9 +143,8 @@ impl Settings {
             .with_file_name(file_name);
         Self::from_file(&path)
     }
-
     fn from_file(path: &Path) -> Result<Self> {
-        // 串行化首次创建, 防止并发启动生成并覆盖不同的 UUID.
+        // 串行化首次创建, 防止并发启动覆盖不同的 Node / 角色身份.
         let lock = OpenOptions::new()
             .write(true)
             .create(true)
@@ -89,38 +153,59 @@ impl Settings {
             .with_context(|| format!("打开节点配置锁失败: {}", path.display()))?;
         lock.lock()
             .with_context(|| format!("锁定节点配置失败: {}", path.display()))?;
-
         let settings: Self = confy::load_path(path)
             .with_context(|| format!("加载节点配置失败: {}", path.display()))?;
-        ensure!(
-            !settings.node_id.is_nil(),
-            "node_id 不能是 nil UUID: {}",
-            path.display()
-        );
-        match settings.role {
-            Role::Authority => {
-                ensure!(
-                    !settings.pools.is_empty(),
-                    "Authority 至少需要一个 pool: {}",
-                    path.display()
-                );
-                ensure!(
-                    settings.worker_timeout_secs > 0,
-                    "worker_timeout_secs 必须大于 0: {}",
-                    path.display()
-                );
-            }
-            Role::Worker => {
-                ensure!(
-                    settings.heartbeat_interval_secs > 0,
-                    "heartbeat_interval_secs 必须大于 0: {}",
-                    path.display()
-                );
-                crate::capabilities::validate(&settings.capabilities)
-                    .with_context(|| format!("Worker 能力配置无效: {}", path.display()))?;
+        settings
+            .validate()
+            .with_context(|| format!("节点配置无效: {}", path.display()))?;
+        Ok(settings)
+    }
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(!self.node_id.is_nil(), "node_id 不能是 nil UUID");
+        ensure!(!self.infrastructures.is_empty(), "至少需要一个基础设施实例");
+        for (name, infrastructure) in &self.infrastructures {
+            ensure!(!name.trim().is_empty(), "基础设施名称不能为空");
+            match infrastructure {
+                Infrastructure::Nats { url } => ensure!(
+                    !url.trim().is_empty(),
+                    "基础设施 {name} 的 NATS 地址不能为空"
+                ),
             }
         }
-        Ok(settings)
+        // 允许只配置基础设施的 Node, 为后续基础设施类型保留相同装配方式.
+        let mut ids = BTreeSet::new();
+        for role in &self.roles {
+            ensure!(!role.role_id.is_nil(), "role_id 不能是 nil UUID");
+            ensure!(ids.insert(role.role_id), "重复的 role_id: {}", role.role_id);
+            ensure!(
+                self.infrastructures.contains_key(&role.infrastructure),
+                "角色 {} 引用了不存在的基础设施: {}",
+                role.role_id,
+                role.infrastructure
+            );
+            match &role.kind {
+                Role::Authority(config) => {
+                    ensure!(
+                        !config.pools.is_empty(),
+                        "Authority {} 至少需要一个 pool",
+                        role.role_id
+                    );
+                    ensure!(
+                        config.worker_timeout_secs > 0,
+                        "worker_timeout_secs 必须大于 0"
+                    );
+                }
+                Role::Worker(config) => {
+                    ensure!(
+                        config.heartbeat_interval_secs > 0,
+                        "heartbeat_interval_secs 必须大于 0"
+                    );
+                    crate::capabilities::validate(&config.capabilities)
+                        .with_context(|| format!("Worker {} 能力配置无效", role.role_id))?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -130,93 +215,125 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn loads_existing_config_without_overwriting_it() {
+    fn first_start_creates_distinct_persistent_ids_and_reload_does_not_write() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("node.ron");
-        for (role_name, role, color_name, color) in [
-            ("authority", Role::Authority, "auto", Color::Auto),
-            ("worker", Role::Worker, "always", Color::Always),
-            ("worker", Role::Worker, "never", Color::Never),
-        ] {
-            let node_id = Uuid::new_v4();
-            let source = format!(
-                r#"(node_id: "{node_id}", role: {role_name}, label: Some("华东节点"), nats_url: "nats://localhost:4333", color: {color_name}, pools: ["default", "default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
-            );
-            fs::write(&path, &source).unwrap();
-            let settings = Settings::from_file(&path).unwrap();
-            assert_eq!(settings.node_id, node_id);
-            assert_eq!(settings.label.as_deref(), Some("华东节点"));
-            assert_eq!(settings.role, role);
-            assert_eq!(settings.pools.len(), 1);
-            assert_eq!(settings.nats_url, "nats://localhost:4333");
-            assert_eq!(settings.color, color);
-            assert_eq!(fs::read_to_string(&path).unwrap(), source);
-        }
-    }
-
-    #[test]
-    fn rejects_incomplete_or_invalid_config_without_rewriting_it() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("node.ron");
-        let node_id = Uuid::new_v4();
-        let valid = format!(
-            r#"(node_id: "{node_id}", role: worker, label: None, nats_url: "nats://localhost:4333", color: auto, pools: ["default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
-        );
-        for source in [
-            valid.replace(&format!("node_id: \"{node_id}\", "), ""),
-            valid.replace("role: worker, ", ""),
-            valid.replace("role: worker", "role: other"),
-            valid.replace("nats_url", "nats_ur1"),
-            valid.replace("color: auto", "color: invalid"),
-            valid.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
-            valid.replace("text.reverse/v1", "text.reverse/v2"),
-            valid.replace("capabilities: [\"text.reverse/v1\"]", "capabilities: []"),
-            valid.replace("pool: \"default\"", "pool: \"bad.pool\""),
-            valid.replace(&node_id.to_string(), "not-a-uuid"),
-            valid.replace(&node_id.to_string(), &Uuid::nil().to_string()),
-            valid.replace("label: None", "label: \"unsupported string\""),
-            valid.replace(")", ", session_id: \"unexpected\")"),
-            valid.trim_end_matches(')').to_owned(),
-        ] {
-            fs::write(&path, &source).unwrap();
-            let error = Settings::from_file(&path).unwrap_err();
-            assert!(error.to_string().contains(&path.display().to_string()));
-            assert_eq!(fs::read_to_string(&path).unwrap(), source);
-        }
-    }
-
-    #[test]
-    fn creates_and_loads_config_on_first_start() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("node.ron");
-        let settings = Settings::from_file(&path).unwrap();
-        assert_eq!(settings.role, Role::Authority);
-        assert_eq!(settings.nats_url, "nats://127.0.0.1:4222");
-        assert_eq!(settings.color, Color::Auto);
-        assert!(!settings.node_id.is_nil());
-        assert_eq!(settings.label, None);
-
+        let first = Settings::from_file(&path).unwrap();
+        assert_eq!(first.color, Color::Auto);
+        assert_eq!(first.roles.len(), 2);
+        let ids: BTreeSet<_> = std::iter::once(first.node_id)
+            .chain(first.roles.iter().map(|role| role.role_id))
+            .collect();
+        assert_eq!(ids.len(), 3);
+        assert!(!ids.contains(&Uuid::nil()));
         let content = fs::read_to_string(&path).unwrap();
-        assert!(!content.is_empty(), "首次启动应创建配置文件");
-        let reloaded = Settings::from_file(&path).unwrap();
-        assert_eq!(reloaded.node_id, settings.node_id);
-        assert_eq!(reloaded.role, settings.role);
-        assert_eq!(reloaded.nats_url, settings.nats_url);
-        assert_eq!(reloaded.color, settings.color);
+        assert!(!content.contains("session_id"));
+        let again = Settings::from_file(&path).unwrap();
+        assert_eq!(again.node_id, first.node_id);
+        assert_eq!(
+            again
+                .roles
+                .iter()
+                .map(|role| role.role_id)
+                .collect::<Vec<_>>(),
+            first
+                .roles
+                .iter()
+                .map(|role| role.role_id)
+                .collect::<Vec<_>>()
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
     }
 
     #[test]
-    fn independent_nodes_have_distinct_ids() {
-        let first = tempfile::tempdir().unwrap();
-        let second = tempfile::tempdir().unwrap();
-        let first = Settings::from_file(&first.path().join("node.ron")).unwrap();
-        let second = Settings::from_file(&second.path().join("node.ron")).unwrap();
-        assert_ne!(first.node_id, second.node_id);
+    fn independently_configures_repeated_role_and_infrastructure_types() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let mut settings = Settings::default();
+        settings.infrastructures.insert(
+            "secondary".into(),
+            Infrastructure::Nats {
+                url: "nats://localhost:4333".into(),
+            },
+        );
+        let mut extra = settings.roles[1].clone();
+        extra.role_id = Uuid::new_v4();
+        extra.infrastructure = "secondary".into();
+        extra.kind = Role::Worker(Worker {
+            pool: "other".parse().unwrap(),
+            capabilities: BTreeSet::from([crate::capabilities::UPPERCASE.into()]),
+            heartbeat_interval_secs: 1,
+        });
+        settings.roles.push(extra);
+        confy::store_path(&path, &settings).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        let loaded = Settings::from_file(&path).unwrap();
+        assert_eq!(loaded.roles.len(), 3);
+        assert_eq!(loaded.infrastructures.len(), 2);
+        let Role::Worker(worker) = &loaded.roles[2].kind else {
+            panic!("expected worker")
+        };
+        assert_eq!(worker.heartbeat_interval_secs, 1);
+        assert_eq!(worker.pool.to_string(), "other");
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
     }
 
     #[test]
-    fn concurrent_first_starts_reuse_one_persisted_id() {
+    fn invalid_or_missing_role_ids_are_not_generated_or_written_back() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let mut settings = Settings::default();
+        settings.roles[1].role_id = settings.roles[0].role_id;
+        confy::store_path(&path, &settings).unwrap();
+        let duplicate = fs::read_to_string(&path).unwrap();
+        let distinct = duplicate.replacen(
+            &settings.roles[0].role_id.to_string(),
+            &Uuid::new_v4().to_string(),
+            1,
+        );
+        for source in [
+            duplicate,
+            distinct.replace(&format!("role_id: \"{}\",", settings.roles[1].role_id), ""),
+            distinct.replace(
+                &settings.roles[1].role_id.to_string(),
+                &Uuid::nil().to_string(),
+            ),
+            distinct.replace("infrastructure: \"local\"", "infrastructure: \"missing\""),
+            distinct.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
+            distinct.replace("worker_timeout_secs: 15", "worker_timeout_secs: 0"),
+            distinct.replace("text.reverse/v1", "text.reverse/v2"),
+            distinct.replace("color: auto", "color: other"),
+            distinct.replace("role_id:", "session_id:"),
+            "invalid RON".into(),
+        ] {
+            assert_ne!(source, distinct, "invalid fixture must alter the source");
+            fs::write(&path, &source).unwrap();
+            let error = Settings::from_file(&path).unwrap_err();
+            assert!(format!("{error:#}").contains(&path.display().to_string()));
+            assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        }
+    }
+
+    #[test]
+    fn pool_duplicates_are_deduplicated_without_rewriting() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let settings = Settings::default();
+        confy::store_path(&path, &settings).unwrap();
+        let source = fs::read_to_string(&path)
+            .unwrap()
+            .replace("pools: [", "pools: [\"default\", ");
+        fs::write(&path, &source).unwrap();
+        let loaded = Settings::from_file(&path).unwrap();
+        let Role::Authority(authority) = &loaded.roles[0].kind else {
+            panic!("expected authority")
+        };
+        assert_eq!(authority.pools.len(), 1);
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+    }
+
+    #[test]
+    fn concurrent_first_starts_reuse_all_persisted_ids() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("node.ron");
         let barrier = std::sync::Barrier::new(8);
@@ -225,7 +342,15 @@ mod tests {
                 .map(|_| {
                     scope.spawn(|| {
                         barrier.wait();
-                        Settings::from_file(&path).unwrap().node_id
+                        let settings = Settings::from_file(&path).unwrap();
+                        (
+                            settings.node_id,
+                            settings
+                                .roles
+                                .iter()
+                                .map(|role| role.role_id)
+                                .collect::<Vec<_>>(),
+                        )
                     })
                 })
                 .collect();
@@ -234,8 +359,7 @@ mod tests {
                 .map(|handle| handle.join().unwrap())
                 .collect::<Vec<_>>()
         });
-        let persisted = Settings::from_file(&path).unwrap().node_id;
-        assert!(ids.iter().all(|id| *id == persisted));
+        assert!(ids.iter().all(|id| *id == ids[0]));
     }
 
     #[test]

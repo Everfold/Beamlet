@@ -5,7 +5,7 @@ use crate::{
     ingress::{Ingress, Reply, Request},
 };
 use anyhow::{Context, Result, ensure};
-use beamlet_protocol::{Instance, Outcome, Submission};
+use beamlet_protocol::{Outcome, RoleInstance, Submission};
 use beamlet_runtime::Runtime;
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
@@ -15,19 +15,19 @@ use tracing::{Instrument, info, info_span, warn};
 pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
-    instance: Instance,
+    instance: RoleInstance,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
     let session_id = instance.session_id;
     let mut stopping = false;
     let mut runtime = Runtime::new();
-    let mut replies: HashMap<String, (Reply, Instance, String)> = HashMap::new();
+    let mut replies: HashMap<String, (Reply, RoleInstance, String)> = HashMap::new();
     let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
 
-    info!(event = "node.ready", "Authority 已就绪; 输入文本后回车");
+    info!(event = "role.ready", "Authority 已就绪; 输入文本后回车");
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -40,7 +40,7 @@ pub(crate) async fn run(
                 stopping = true;
                 // 停止接收新请求, 只等待已经签发 Attempt 的调用.
                 ingress.stop().await?;
-                info!(event = "node.stopping", "停止接收新请求, 等待在途交付结束");
+                info!(event = "role.stopping", "停止接收新请求, 等待在途交付结束");
                 None
             }
 

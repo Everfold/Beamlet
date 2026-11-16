@@ -2,7 +2,7 @@
 use crate::{client, settings::Settings};
 use anyhow::{Context, Result, bail, ensure};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Instance, Outcome, Pool, PresenceState, REQUEST_TIMEOUT, Selection,
+    AuthorityInfo, Command, Outcome, Pool, PresenceState, REQUEST_TIMEOUT, RoleInstance, Selection,
     Submission, Task, WorkerView,
 };
 use std::{collections::BTreeSet, io::BufRead};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 #[derive(Default)]
 struct Choice {
-    authority: Option<Instance>,
+    authority: Option<RoleInstance>,
     pool: Option<Pool>,
     capability: Option<String>,
     worker: Option<Selection>,
@@ -30,10 +30,10 @@ impl Session {
         println!("Authority 列表:");
         for (index, info) in self.authorities.iter().enumerate() {
             println!(
-                "  {}. {}  node={}  session={}  pools={:?}",
+                "  {}. {}  role={}  session={}  pools={:?}",
                 index + 1,
                 info.label.as_deref().unwrap_or("未命名"),
-                info.instance.node_id,
+                info.instance.role_id,
                 info.instance.session_id,
                 info.pools
             );
@@ -144,10 +144,10 @@ impl Session {
                 }
             };
             println!(
-                "  {}. {}  node={}  session={}  pool={}  {status}  心跳={}ms  {:?}",
+                "  {}. {}  role={}  session={}  pool={}  {status}  心跳={}ms  {:?}",
                 index + 1,
                 presence.label.as_deref().unwrap_or("未命名"),
-                presence.instance.node_id,
+                presence.instance.role_id,
                 presence.instance.session_id,
                 presence.pool,
                 worker.last_seen_ms,
@@ -275,7 +275,7 @@ impl Session {
                 worker,
                 result,
             } => {
-                tracing::info!(event = "response.received", %operation_id, %attempt_id, %report_id, node_id = %worker.node_id, session_id = %worker.session_id, "Operation 已完成");
+                tracing::info!(event = "response.received", %operation_id, %attempt_id, %report_id, role_id = %worker.role_id, session_id = %worker.session_id, "Operation 已完成");
                 println!("{result}");
             }
             Outcome::Rejected { reason } => {
@@ -288,7 +288,7 @@ impl Session {
                 worker,
                 reason,
             } => {
-                tracing::warn!(event = "operation.unresolved", %operation_id, %attempt_id, node_id = %worker.node_id, session_id = %worker.session_id, %reason, "操作保持等待报告, 未重试");
+                tracing::warn!(event = "operation.unresolved", %operation_id, %attempt_id, role_id = %worker.role_id, session_id = %worker.session_id, %reason, "操作保持等待报告, 未重试");
             }
             Outcome::Workers { .. } => bail!("提交收到了不匹配的回复类型"),
         }

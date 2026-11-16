@@ -1,6 +1,6 @@
 //! Authority 的本地租约视图; 不参与 Operation/Attempt 生命周期.
 
-use beamlet_protocol::{Instance, Pool, Presence, PresenceState, Selection, WorkerView};
+use beamlet_protocol::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
@@ -19,7 +19,7 @@ struct Entry {
 
 #[derive(Clone)]
 pub(crate) struct Registry {
-    entries: Arc<Mutex<BTreeMap<(Pool, Instance), Entry>>>,
+    entries: Arc<Mutex<BTreeMap<(Pool, RoleInstance), Entry>>>,
     pools: BTreeSet<Pool>,
     timeout: Duration,
     connection: watch::Receiver<Connection>,
@@ -44,7 +44,7 @@ impl Registry {
         if !link.connected
             || link.epoch != epoch
             || !self.pools.contains(&presence.pool)
-            || presence.instance.node_id.is_nil()
+            || presence.instance.role_id.is_nil()
             || presence.instance.session_id.is_nil()
             || presence.sequence == 0
             || presence.capabilities.is_empty()
@@ -70,7 +70,7 @@ impl Registry {
         });
         if changed {
             tracing::info!(event = "worker.presence", pool = %presence.pool,
-                node_id = %presence.instance.node_id, session_id = %presence.instance.session_id,
+                role_id = %presence.instance.role_id, session_id = %presence.instance.session_id,
                 label = presence.label.as_deref(), state = ?presence.state, "Worker 登记状态更新");
         }
         entries.insert(
@@ -92,7 +92,7 @@ impl Registry {
             let age = now.saturating_duration_since(entry.received);
             if !entry.stale_logged && (age >= self.timeout || entry.epoch != link.epoch || !link.connected) {
                 tracing::info!(event = "worker.stale", pool = %entry.presence.pool,
-                    node_id = %entry.presence.instance.node_id, session_id = %entry.presence.instance.session_id,
+                    role_id = %entry.presence.instance.role_id, session_id = %entry.presence.instance.session_id,
                     "Worker 登记已失效, 等待新心跳");
                 entry.stale_logged = true;
             }
@@ -134,7 +134,7 @@ impl Registry {
         selection: Selection,
         capability: &str,
         now: Instant,
-    ) -> Option<Instance> {
+    ) -> Option<RoleInstance> {
         self.workers(pool, Some(capability), now)
             .into_iter()
             .find(|worker| {
@@ -169,8 +169,8 @@ mod tests {
         let now = Instant::now();
         let mut heartbeat = Presence {
             pool: pool.clone(),
-            instance: Instance {
-                node_id: Uuid::new_v4(),
+            instance: RoleInstance {
+                role_id: Uuid::new_v4(),
                 session_id: Uuid::new_v4(),
             },
             label: None,

@@ -1,19 +1,19 @@
-//! Console 与节点共用的 v2 消息与主题, 不持有连接或管理 Operation 生命周期.
+//! Console 与节点共用的 v3 消息与主题, 不持有连接或管理 Operation 生命周期.
 
 mod message;
 mod pool;
 pub mod subject;
 
 pub use message::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Instance, Outcome, Presence, PresenceState,
-    Reply, ReportData, Selection, Submission, Task, WorkerCall, WorkerReply, WorkerView,
+    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Presence, PresenceState, Reply,
+    ReportData, RoleInstance, Selection, Submission, Task, WorkerCall, WorkerReply, WorkerView,
 };
 pub use pool::{InvalidPool, Pool};
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// 线上消息的结构版本, 与业务能力版本独立.
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 /// Authority 等待 Worker 报告的上限.
 pub const REPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 /// Console 等待最终回复的上限, 包含入口排队与交付开销.

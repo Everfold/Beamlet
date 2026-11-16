@@ -9,12 +9,12 @@ const DEADLINE: Duration = Duration::from_millis(300);
 fn call(operation: &str, capability: &str, text: &str) -> Call {
     Call {
         pool: beamlet_protocol::Pool::default(),
-        authority: beamlet_protocol::Instance {
-            node_id: uuid::Uuid::from_u128(1),
+        authority: beamlet_protocol::RoleInstance {
+            role_id: uuid::Uuid::from_u128(1),
             session_id: uuid::Uuid::from_u128(2),
         },
-        worker: beamlet_protocol::Instance {
-            node_id: uuid::Uuid::from_u128(3),
+        worker: beamlet_protocol::RoleInstance {
+            role_id: uuid::Uuid::from_u128(3),
             session_id: uuid::Uuid::from_u128(4),
         },
         attempt: Attempt::from_parts(operation.into(), format!("{operation}:attempt")),
@@ -207,14 +207,14 @@ async fn channel_backpressure_and_worker_drain() {
 
 #[tokio::test]
 async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
-    use beamlet_protocol::{Instance, Pool, Selection};
+    use beamlet_protocol::{Pool, RoleInstance, Selection};
     use uuid::Uuid;
     let mut sender = channel::Delivery::new(DEADLINE);
-    let first = Instance {
-        node_id: Uuid::new_v4(),
+    let first = RoleInstance {
+        role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     };
-    let second = Instance {
+    let second = RoleInstance {
         session_id: Uuid::new_v4(),
         ..first
     };

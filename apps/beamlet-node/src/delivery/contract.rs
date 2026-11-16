@@ -1,14 +1,14 @@
 use anyhow::Result;
 use beamlet_primitives::{Attempt, Report};
-use beamlet_protocol::{Instance, Pool, Selection};
+use beamlet_protocol::{Pool, RoleInstance, Selection};
 use std::{fmt, future::Future};
 
 /// 交付元数据与既有授权同行, 不额外签发授权.
 #[derive(Debug)]
 pub(crate) struct Call {
     pub pool: Pool,
-    pub authority: Instance,
-    pub worker: Instance,
+    pub authority: RoleInstance,
+    pub worker: RoleInstance,
     pub attempt: Attempt<String, String>,
     pub capability: String,
     pub text: String,
@@ -44,7 +44,7 @@ pub(crate) trait Delivery: Clone + Send + Sync + 'static {
         pool: &Pool,
         selection: Selection,
         capability: &str,
-    ) -> Result<Instance, DeliveryError>;
+    ) -> Result<RoleInstance, DeliveryError>;
 
     fn deliver(
         &self,

@@ -1,12 +1,12 @@
 use beamlet_protocol::{
-    self as protocol, Command, Instance, Pool, Selection, Submission, Task, subject,
+    self as protocol, Command, Pool, RoleInstance, Selection, Submission, Task, subject,
 };
 use uuid::Uuid;
 
 #[test]
 fn messages_preserve_identity_and_text_and_reject_unknown_versions() {
-    let authority = Instance {
-        node_id: Uuid::new_v4(),
+    let authority = RoleInstance {
+        role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     };
     let request = Command::Submit {
@@ -22,6 +22,12 @@ fn messages_preserve_identity_and_text_and_reject_unknown_versions() {
         },
     };
     let encoded = protocol::encode(&request).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(
+        value["body"]["authority"]["role_id"],
+        authority.role_id.to_string()
+    );
+    assert!(value["body"]["authority"].get("node_id").is_none());
     let decoded: Command = protocol::decode(&encoded).unwrap();
     assert_eq!(decoded.request_id(), request.request_id());
     assert_eq!(decoded.authority(), authority);
@@ -32,7 +38,7 @@ fn messages_preserve_identity_and_text_and_reject_unknown_versions() {
     assert_eq!(submission.worker, Selection::Exact(authority));
     let bad = String::from_utf8(encoded)
         .unwrap()
-        .replace("\"version\":2", "\"version\":99");
+        .replace("\"version\":3", "\"version\":99");
     assert!(matches!(
         protocol::decode::<Command>(bad.as_bytes()),
         Err(protocol::Error::Version(99))
@@ -47,11 +53,11 @@ fn pools_cannot_escape_subject_tokens_and_sessions_route_separately() {
     let a: Pool = "A_1-test".parse().unwrap();
     let b: Pool = "a_1-test".parse().unwrap();
     assert_ne!(a, b);
-    let instance = Instance {
-        node_id: Uuid::new_v4(),
+    let instance = RoleInstance {
+        role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     };
-    let restarted = Instance {
+    let restarted = RoleInstance {
         session_id: Uuid::new_v4(),
         ..instance
     };

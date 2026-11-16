@@ -1,48 +1,50 @@
-//! 通过真实启动入口验证持久节点身份与一次性会话的边界.
-
-use serde::{Deserialize, Serialize};
-use std::{fs, path::Path, process::Command};
+//! 真实启动入口验证 Node 与各角色的持久身份和独立运行会话.
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+    process::Command,
+};
 use uuid::Uuid;
 
-#[derive(Default, Deserialize, Serialize)]
-struct StoredIdentity {
-    node_id: Uuid,
+fn field(line: &str, name: &str) -> Uuid {
+    line.split_whitespace()
+        .find_map(|field| field.strip_prefix(&format!("{name}=")))
+        .unwrap_or_else(|| panic!("missing {name}: {line}"))
+        .trim_end_matches('}')
+        .parse()
+        .unwrap()
 }
-
-fn start(binary: &Path, working_directory: &Path, args: &[&str]) -> (String, Uuid) {
+fn start(binary: &Path, cwd: &Path, args: &[&str]) -> (String, Uuid, BTreeMap<Uuid, Uuid>) {
     let output = Command::new(binary)
         .args(args)
-        .current_dir(working_directory)
+        .current_dir(cwd)
         .output()
         .unwrap();
-    // 配置使用不可解析的地址, 在连接网络前退出; 身份初始化必须已完成.
+    // 无效 URL 让测试在网络连接前退出, 但所有角色会话已经分配并输出.
     assert!(!output.status.success());
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(stderr.contains("连接 NATS 失败"), "{stderr}");
-    assert!(output.stdout.is_empty(), "日志统一输出至 stderr");
-    assert!(stderr.contains("ERROR"), "{stderr}");
-    assert!(stderr.contains("event=\"node.failed\""), "{stderr}");
-    let startup = stderr
+    assert!(output.stdout.is_empty());
+    let log = String::from_utf8(output.stderr).unwrap();
+    assert!(log.contains("连接 NATS 失败"), "{log}");
+    let startup = log
         .lines()
         .find(|line| line.contains("event=\"node.starting\""))
-        .expect("必须输出节点启动事件");
-    assert!(startup.contains("INFO"), "{startup}");
-    let session = startup
-        .split_whitespace()
-        .find_map(|field| field.strip_prefix("session_id="))
-        .expect("启动日志必须包含会话 UUID")
-        .parse::<Uuid>()
-        .unwrap();
-    assert!(!session.is_nil());
-    (startup.to_owned(), session)
+        .expect("node startup log");
+    let node_session = field(startup, "node_session_id");
+    let roles = log
+        .lines()
+        .filter(|line| line.contains("event=\"role.prepared\""))
+        .map(|line| (field(line, "role_id"), field(line, "role_session_id")))
+        .collect();
+    (log, node_session, roles)
 }
 
 #[test]
-fn restart_preserves_node_id_and_label_but_renews_session() {
-    for (role, file_name, args) in [
-        ("authority", "node.ron", &[][..]),
-        ("worker", "worker-1.ron", &["--config", "worker-1.ron"][..]),
-        ("authority", "主节点.ron", &["-c", "主节点.ron"][..]),
+fn restarts_preserve_each_role_id_and_renew_separate_sessions_without_writing_config() {
+    for (file_name, args) in [
+        ("node.ron", &[][..]),
+        ("multi.ron", &["--config", "multi.ron"][..]),
+        ("组合节点.ron", &["-c", "组合节点.ron"][..]),
     ] {
         let directory = tempfile::tempdir().unwrap();
         let cwd = tempfile::tempdir().unwrap();
@@ -53,49 +55,54 @@ fn restart_preserves_node_id_and_label_but_renews_session() {
         fs::copy(env!("CARGO_BIN_EXE_beamlet-node"), &binary).unwrap();
         let path = directory.path().join(file_name);
         if file_name != "node.ron" {
-            fs::write(
-                directory.path().join("node.ron"),
-                "unselected default config",
-            )
-            .unwrap();
+            fs::write(directory.path().join("node.ron"), "unselected").unwrap();
         }
-        let expected_node_id = Uuid::new_v4();
-        fs::write(
-            &path,
-            format!(
-                r#"(node_id: "{expected_node_id}", role: {role}, label: Some("节点甲"), nats_url: "nats://[invalid", color: auto, pools: ["default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
-            ),
-        )
-        .unwrap();
-
-        let (first_log, first_session) = start(&binary, cwd.path(), args);
-        let content = fs::read_to_string(&path).unwrap();
-        let config: StoredIdentity = confy::load_path(&path).unwrap();
-        let node_id = config.node_id;
-        assert_eq!(node_id, expected_node_id);
-        assert!(
-            first_log.contains(&format!("node_id={node_id}")),
-            "{first_log}"
+        let node_id = Uuid::new_v4();
+        let role_ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+        let roles: Vec<_> = role_ids.iter().enumerate().map(|(i, id)| {
+            let kind = if i == 0 { "authority((pools: [\"default\"], worker_timeout_secs: 15))" } else { "worker((pool: \"default\", capabilities: [\"text.reverse/v1\"], heartbeat_interval_secs: 5))" };
+            format!(r#"(role_id: "{id}", label: Some("角色{i}"), infrastructure: "local", kind: {kind})"#)
+        }).collect();
+        let source = format!(
+            r#"(node_id: "{node_id}", label: Some("节点甲"), color: never, infrastructures: {{"local": nats(url: "nats://[invalid")}}, roles: [{}])"#,
+            roles.join(",")
         );
-        assert!(
-            first_log.contains(&format!("role=\"{role}\"")),
-            "{first_log}"
+        fs::write(&path, &source).unwrap();
+        let (first_log, first_node_session, first_roles) = start(&binary, cwd.path(), args);
+        assert_eq!(
+            first_roles.keys().copied().collect::<BTreeSet<_>>(),
+            role_ids.into_iter().collect()
         );
-        assert!(first_log.contains("节点甲"));
-        assert_ne!(node_id, first_session);
-        assert!(!content.contains("session_id"));
-        assert!(!content.contains(&first_session.to_string()));
-
-        let (second_log, second_session) = start(&binary, cwd.path(), args);
-        assert!(second_log.contains(&node_id.to_string()));
+        assert_eq!(
+            first_roles
+                .values()
+                .copied()
+                .chain([first_node_session])
+                .collect::<BTreeSet<_>>()
+                .len(),
+            4
+        );
+        assert!(first_log.contains(&node_id.to_string()));
+        assert!(!source.contains("session_id"));
+        let (second_log, second_node_session, second_roles) = start(&binary, cwd.path(), args);
+        assert_ne!(first_node_session, second_node_session);
         assert!(second_log.contains("节点甲"));
-        assert_ne!(first_session, second_session);
-        assert_eq!(fs::read_to_string(&path).unwrap(), content);
-
-        fs::write(&path, content.replace("节点甲", "节点乙")).unwrap();
-        let (renamed_log, renamed_session) = start(&binary, cwd.path(), args);
-        assert!(renamed_log.contains("节点乙"));
-        assert!(renamed_log.contains(&node_id.to_string()));
-        assert_ne!(second_session, renamed_session);
+        for role in role_ids {
+            assert_ne!(first_roles[&role], second_roles[&role]);
+            assert_ne!(role, second_roles[&role]);
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        // Moving the role to another Node leaves its persistent target identity intact.
+        let moved = source
+            .replace(&node_id.to_string(), &Uuid::new_v4().to_string())
+            .replace("节点甲", "节点乙");
+        fs::write(&path, &moved).unwrap();
+        let (log, _, roles) = start(&binary, cwd.path(), args);
+        assert!(log.contains("节点乙"));
+        assert_eq!(
+            roles.keys().copied().collect::<BTreeSet<_>>(),
+            role_ids.into_iter().collect()
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), moved);
     }
 }

@@ -9,12 +9,12 @@ use beamlet_protocol::{
     Submission, Task, decode, encode, subject,
 };
 use futures::{FutureExt, StreamExt, stream::SelectAll};
-use std::{collections::BTreeMap, io::BufRead, time::Instant};
+use std::{collections::BTreeMap, time::Instant};
 use tokio::{
     sync::{mpsc, watch},
     task::JoinHandle,
 };
-use tracing::{info, warn};
+use tracing::{Instrument, info, warn};
 
 pub(crate) struct Inputs {
     client: async_nats::Client,
@@ -34,6 +34,7 @@ impl Inputs {
         info: AuthorityInfo,
         registry: Registry,
         connection: watch::Receiver<Connection>,
+        local: crate::terminal::Input,
     ) -> Result<Self> {
         let mut subscriptions = SelectAll::new();
         let mut routes = BTreeMap::new();
@@ -50,15 +51,18 @@ impl Inputs {
         client.flush().await?;
         probe(&client, &info).await?;
         let (send, remote) = mpsc::channel(MAX_IN_FLIGHT);
-        let control = tokio::spawn(control(
-            client.clone(),
-            info.clone(),
-            registry.clone(),
-            connection,
-            subscriptions,
-            routes,
-            send,
-        ));
+        let control = tokio::spawn(
+            control(
+                client.clone(),
+                info.clone(),
+                registry.clone(),
+                connection,
+                subscriptions,
+                routes,
+                send,
+            )
+            .in_current_span(),
+        );
         let pool = if info.pools.contains(&Pool::default()) {
             Pool::default()
         } else {
@@ -67,7 +71,7 @@ impl Inputs {
         Ok(Self {
             client,
             remote,
-            local: terminal_input(),
+            local,
             local_closed: false,
             stopped: false,
             control,
@@ -247,15 +251,4 @@ async fn control(
             }
         }
     }
-}
-fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
-    let (send, recv) = mpsc::channel(MAX_IN_FLIGHT);
-    std::thread::spawn(move || {
-        for line in std::io::stdin().lock().lines() {
-            if send.blocking_send(line).is_err() {
-                break;
-            }
-        }
-    });
-    recv
 }

@@ -1,8 +1,8 @@
 //! 发现收集多份回复; 提交只发送一次, 并校验回复关联.
 use anyhow::{Context, Result, ensure};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Instance, Outcome, Pool, REQUEST_TIMEOUT,
-    Reply, decode, encode, subject,
+    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, REQUEST_TIMEOUT, Reply,
+    RoleInstance, decode, encode, subject,
 };
 use futures::StreamExt;
 use std::{
@@ -33,13 +33,13 @@ pub(crate) async fn discover(
             .await?;
     }
     let deadline = Instant::now() + Duration::from_secs(1);
-    let mut authorities: BTreeMap<Instance, AuthorityInfo> = BTreeMap::new();
+    let mut authorities: BTreeMap<RoleInstance, AuthorityInfo> = BTreeMap::new();
     while let Ok(Some(message)) = timeout_at(deadline, replies.next()).await {
         let Ok(reply) = decode::<DiscoveryReply>(&message.payload) else {
             continue;
         };
         if reply.request_id != request.request_id
-            || reply.authority.instance.node_id.is_nil()
+            || reply.authority.instance.role_id.is_nil()
             || reply.authority.instance.session_id.is_nil()
             || reply.authority.pools.is_disjoint(pools)
         {

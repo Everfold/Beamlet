@@ -1,7 +1,7 @@
 //! 测试用本地定向适配器, 与 NATS 共用交付及接收接口.
 use super::{Call, DeliveryError, Incoming, WorkerReport, contract};
 use anyhow::Result;
-use beamlet_protocol::{Instance, Pool, Selection};
+use beamlet_protocol::{Pool, RoleInstance, Selection};
 use std::time::Duration;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -11,7 +11,7 @@ use tokio::{
 #[derive(Clone)]
 struct Worker {
     pool: Pool,
-    instance: Instance,
+    instance: RoleInstance,
     capabilities: Vec<String>,
     sender: mpsc::Sender<Incoming>,
 }
@@ -31,8 +31,8 @@ impl Delivery {
         let base = 3 + 2 * self.workers.len() as u128;
         self.register_in(
             Pool::default(),
-            Instance {
-                node_id: uuid::Uuid::from_u128(base),
+            RoleInstance {
+                role_id: uuid::Uuid::from_u128(base),
                 session_id: uuid::Uuid::from_u128(base + 1),
             },
             capabilities,
@@ -42,7 +42,7 @@ impl Delivery {
     pub(super) fn register_in(
         &mut self,
         pool: Pool,
-        instance: Instance,
+        instance: RoleInstance,
         capabilities: &[&str],
         capacity: usize,
     ) -> Inbox {
@@ -62,7 +62,7 @@ impl super::Delivery for Delivery {
         pool: &Pool,
         selection: Selection,
         capability: &str,
-    ) -> Result<Instance, DeliveryError> {
+    ) -> Result<RoleInstance, DeliveryError> {
         self.workers
             .iter()
             .find(|worker| {

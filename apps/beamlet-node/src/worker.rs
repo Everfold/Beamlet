@@ -19,7 +19,7 @@ pub(crate) async fn run(
     let mut stopping = false;
     let mut next_id = 0_u64;
 
-    info!(event = "node.ready", "Worker 已就绪");
+    info!(event = "role.ready", "Worker 已就绪");
 
     loop {
         let incoming = tokio::select! {
@@ -27,7 +27,7 @@ pub(crate) async fn run(
                 result?;
                 stopping = true;
                 inbox.stop().await?;
-                info!(event = "node.stopping", "停止接收新调用, 排空已接收队列");
+                info!(event = "role.stopping", "停止接收新调用, 排空已接收队列");
                 continue;
             }
             incoming = inbox.receive() => incoming?,
@@ -43,7 +43,7 @@ pub(crate) async fn run(
             attempt_id = %incoming.call.attempt.id(),
             capability = %incoming.call.capability,
             pool = %incoming.call.pool,
-            worker_node_id = %incoming.call.worker.node_id,
+            worker_role_id = %incoming.call.worker.role_id,
             worker_session_id = %incoming.call.worker.session_id,
         );
 
@@ -60,7 +60,7 @@ pub(crate) async fn run(
                     result?;
                     stopping = true;
                     inbox.stop().await?;
-                    info!(event = "node.stopping", "停止接收新调用, 等待当前执行和队列排空");
+                    info!(event = "role.stopping", "停止接收新调用, 等待当前执行和队列排空");
                     execution.await
                 }
                 result = &mut execution => result,
@@ -115,12 +115,12 @@ mod tests {
     fn rejects_unsupported_capability() {
         let unsupported = Call {
             pool: beamlet_protocol::Pool::default(),
-            authority: beamlet_protocol::Instance {
-                node_id: uuid::Uuid::from_u128(1),
+            authority: beamlet_protocol::RoleInstance {
+                role_id: uuid::Uuid::from_u128(1),
                 session_id: uuid::Uuid::from_u128(2),
             },
-            worker: beamlet_protocol::Instance {
-                node_id: uuid::Uuid::from_u128(3),
+            worker: beamlet_protocol::RoleInstance {
+                role_id: uuid::Uuid::from_u128(3),
                 session_id: uuid::Uuid::from_u128(4),
             },
             attempt: Attempt::from_parts("o".into(), "a".into()),
