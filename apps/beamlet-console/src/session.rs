@@ -5,8 +5,9 @@ use beamlet_protocol::{
     AuthorityInfo, Command, Outcome, Pool, PresenceState, REQUEST_TIMEOUT, RoleInstance, Selection,
     Submission, Task, WorkerView,
 };
-use std::{collections::BTreeSet, io::BufRead};
-use tokio::sync::mpsc;
+use std::{collections::BTreeSet, future::Future, io::BufRead};
+use tokio::{sync::mpsc, task::JoinSet};
+use tracing::Instrument;
 use uuid::Uuid;
 
 #[derive(Default)]
@@ -17,16 +18,126 @@ struct Choice {
     worker: Option<Selection>,
 }
 struct Session {
-    client: async_nats::Client,
     pools: BTreeSet<Pool>,
     authorities: Vec<AuthorityInfo>,
     workers: Vec<WorkerView>,
     capabilities: Vec<String>,
     choice: Choice,
+    choice_revision: Uuid,
+    discovery_request: Option<Uuid>,
+    workers_request: Option<Uuid>,
 }
+
+/// 限制 Console 自身的在途请求, 满载仍可处理本地命令和退出.
+const MAX_REQUESTS: usize = 16;
+
+enum Action {
+    Discover {
+        request_id: Uuid,
+        pools: BTreeSet<Pool>,
+    },
+    Request {
+        command: Command,
+        choice_revision: Uuid,
+    },
+}
+enum Completion {
+    Discovered {
+        request_id: Uuid,
+        result: Result<Vec<AuthorityInfo>>,
+    },
+    Workers {
+        request_id: Uuid,
+        authority: RoleInstance,
+        pool: Pool,
+        choice_revision: Uuid,
+        result: Result<Vec<WorkerView>>,
+    },
+    Submitted {
+        request_id: Uuid,
+        choice_revision: Uuid,
+        result: Result<Outcome>,
+    },
+}
+impl Completion {
+    fn reply(command: Command, choice_revision: Uuid, result: Result<Outcome>) -> Self {
+        match command {
+            Command::Workers {
+                request_id,
+                authority,
+                pool,
+                ..
+            } => Self::Workers {
+                request_id,
+                authority,
+                pool,
+                choice_revision,
+                result: result.and_then(|outcome| match outcome {
+                    Outcome::Workers { workers } => Ok(workers),
+                    outcome => bail!("Worker 查询被拒绝: {outcome:?}"),
+                }),
+            },
+            Command::Submit { request_id, .. } => Self::Submitted {
+                request_id,
+                choice_revision,
+                result,
+            },
+        }
+    }
+}
+impl Action {
+    fn request_id(&self) -> Uuid {
+        match self {
+            Self::Discover { request_id, .. } => *request_id,
+            Self::Request { command, .. } => command.request_id(),
+        }
+    }
+    async fn execute(self, client: async_nats::Client) -> Completion {
+        match self {
+            Self::Discover { request_id, pools } => Completion::Discovered {
+                request_id,
+                result: match tokio::time::timeout(
+                    REQUEST_TIMEOUT,
+                    client::discover(&client, &pools, request_id),
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(error) => Err(error).context("发现 Authority 超时"),
+                },
+            },
+            Self::Request {
+                command,
+                choice_revision,
+            } => {
+                let result = client::request(&client, &command).await;
+                Completion::reply(command, choice_revision, result)
+            }
+        }
+    }
+}
+
 impl Session {
-    async fn refresh(&mut self) -> Result<()> {
-        self.authorities = client::discover(&self.client, &self.pools).await?;
+    fn new(pools: BTreeSet<Pool>) -> Self {
+        Self {
+            pools,
+            authorities: Vec::new(),
+            workers: Vec::new(),
+            capabilities: Vec::new(),
+            choice: Choice::default(),
+            choice_revision: Uuid::new_v4(),
+            discovery_request: None,
+            workers_request: None,
+        }
+    }
+    fn refresh(&self) -> Action {
+        Action::Discover {
+            request_id: Uuid::new_v4(),
+            pools: self.pools.clone(),
+        }
+    }
+    fn discovered(&mut self, authorities: Vec<AuthorityInfo>) {
+        self.authorities = authorities;
         println!("Authority 列表:");
         for (index, info) in self.authorities.iter().enumerate() {
             println!(
@@ -48,6 +159,8 @@ impl Session {
                 .any(|info| info.instance == selected)
         }) {
             self.choice = Choice::default();
+            self.choice_revision = Uuid::new_v4();
+            self.workers_request = None;
             self.workers.clear();
             self.capabilities.clear();
             println!("原 Authority 会话已不可见, 请重新选择");
@@ -55,7 +168,6 @@ impl Session {
         println!(
             "/authority <编号> → /pool <编号或名称> → /capability <编号或标识> → /worker <编号或 any>"
         );
-        Ok(())
     }
     fn authority(&self) -> Result<&AuthorityInfo> {
         self.authorities
@@ -71,26 +183,23 @@ impl Session {
             .cloned()
             .collect())
     }
-    async fn workers(&mut self) -> Result<()> {
-        let authority = self.authority()?.instance;
-        let pool = self
-            .choice
-            .pool
-            .clone()
-            .context("请先 /pool <编号或名称>")?;
-        let outcome = client::request(
-            &self.client,
-            Command::Workers {
+    fn workers(&self) -> Result<Action> {
+        Ok(Action::Request {
+            command: Command::Workers {
                 request_id: Uuid::new_v4(),
-                authority,
-                pool,
+                authority: self.authority()?.instance,
+                pool: self
+                    .choice
+                    .pool
+                    .clone()
+                    .context("请先 /pool <编号或名称>")?,
                 capability: None,
             },
-        )
-        .await?;
-        let Outcome::Workers { workers } = outcome else {
-            bail!("Worker 查询被拒绝: {outcome:?}");
-        };
+            choice_revision: self.choice_revision,
+        })
+    }
+    fn update_workers(&mut self, workers: Vec<WorkerView>) {
+        let previous = (self.choice.capability.clone(), self.choice.worker);
         self.workers = workers;
         self.capabilities = self
             .workers
@@ -123,12 +232,14 @@ impl Session {
             self.choice.worker = None;
             println!("原 Worker 会话不可用, 请刷新并重新选择");
         }
+        if previous != (self.choice.capability.clone(), self.choice.worker) {
+            self.choice_revision = Uuid::new_v4();
+        }
         self.show_workers();
         println!("能力列表:");
         for (index, capability) in self.capabilities.iter().enumerate() {
             println!("  {}. {capability}", index + 1);
         }
-        Ok(())
     }
     fn show_workers(&self) {
         println!("Worker 列表:");
@@ -158,18 +269,18 @@ impl Session {
             println!("  暂无 Worker; /workers 刷新");
         }
     }
-    async fn line(&mut self, line: String) -> Result<()> {
+    fn line(&mut self, line: String) -> Result<Option<Action>> {
         if line == "/refresh" {
-            return self.refresh().await;
+            return Ok(Some(self.refresh()));
         }
         if line == "/workers" {
-            return self.workers().await;
+            return self.workers().map(Some);
         }
         if line == "/help" {
             println!(
                 "/refresh 发现 Authority; /workers 刷新 Worker; /authority N; /pool N或名称; /capability N或标识; /worker N或any; /text 文本; /quit"
             );
-            return Ok(());
+            return Ok(None);
         }
         if let Some(arg) = line.strip_prefix("/authority ") {
             let instance = self
@@ -181,13 +292,15 @@ impl Session {
                 authority: Some(instance),
                 ..Choice::default()
             };
+            self.choice_revision = Uuid::new_v4();
+            self.workers_request = None;
             self.workers.clear();
             self.capabilities.clear();
             println!("Pool 列表:");
             for (index, pool) in self.available_pools()?.iter().enumerate() {
                 println!("  {}. {pool}", index + 1);
             }
-            return Ok(());
+            return Ok(None);
         }
         if let Some(arg) = line.strip_prefix("/pool ") {
             let pools = self.available_pools()?;
@@ -202,7 +315,11 @@ impl Session {
             self.choice.pool = Some(pool);
             self.choice.capability = None;
             self.choice.worker = None;
-            return self.workers().await;
+            self.choice_revision = Uuid::new_v4();
+            self.workers_request = None;
+            self.workers.clear();
+            self.capabilities.clear();
+            return self.workers().map(Some);
         }
         if let Some(arg) = line.strip_prefix("/capability ") {
             let capability = match arg.parse::<usize>() {
@@ -219,9 +336,10 @@ impl Session {
             );
             self.choice.capability = Some(capability);
             self.choice.worker = None;
+            self.choice_revision = Uuid::new_v4();
             self.show_workers();
             println!("/worker <编号或 any> 选择目标");
-            return Ok(());
+            return Ok(None);
         }
         if let Some(arg) = line.strip_prefix("/worker ") {
             let capability = self
@@ -240,8 +358,9 @@ impl Session {
                 Selection::Exact(worker.presence.instance)
             };
             self.choice.worker = Some(selection);
+            self.choice_revision = Uuid::new_v4();
             println!("已选择 {selection:?}; 输入文本后回车提交, /text 可输入以 / 开头的文本");
-            return Ok(());
+            return Ok(None);
         }
         let text = if let Some(text) = line.strip_prefix("/text ") {
             text.to_owned()
@@ -258,15 +377,21 @@ impl Session {
                 text,
             },
         };
-        let outcome = client::request(
-            &self.client,
-            Command::Submit {
+        Ok(Some(Action::Request {
+            command: Command::Submit {
                 request_id: Uuid::new_v4(),
                 authority,
                 submission,
             },
-        )
-        .await?;
+            choice_revision: self.choice_revision,
+        }))
+    }
+    fn submitted(
+        &mut self,
+        request_id: Uuid,
+        choice_revision: Uuid,
+        outcome: Outcome,
+    ) -> Result<()> {
         match outcome {
             Outcome::Completed {
                 operation_id,
@@ -276,11 +401,14 @@ impl Session {
                 result,
             } => {
                 tracing::info!(event = "response.received", %operation_id, %attempt_id, %report_id, role_id = %worker.role_id, session_id = %worker.session_id, "Operation 已完成");
-                println!("{result}");
+                println!("[{request_id}] {result}");
             }
             Outcome::Rejected { reason } => {
-                self.choice.worker = None;
-                println!("未创建 Operation: {reason}; /workers 刷新后重新选择");
+                if self.choice_revision == choice_revision {
+                    self.choice.worker = None;
+                    self.choice_revision = Uuid::new_v4();
+                }
+                println!("[{request_id}] 未创建 Operation: {reason}; /workers 可刷新列表");
             }
             Outcome::Unresolved {
                 operation_id,
@@ -292,6 +420,65 @@ impl Session {
             }
             Outcome::Workers { .. } => bail!("提交收到了不匹配的回复类型"),
         }
+        Ok(())
+    }
+    fn complete(&mut self, completion: Completion) -> Result<()> {
+        match completion {
+            Completion::Discovered { request_id, result } => {
+                if self.discovery_request == Some(request_id) {
+                    self.discovery_request = None;
+                    self.discovered(result?);
+                }
+            }
+            Completion::Workers {
+                request_id,
+                authority,
+                pool,
+                choice_revision,
+                result,
+            } => {
+                if self.workers_request == Some(request_id) {
+                    self.workers_request = None;
+                    if self.choice.authority == Some(authority)
+                        && self.choice.pool.as_ref() == Some(&pool)
+                        && self.choice_revision == choice_revision
+                    {
+                        self.update_workers(result?);
+                    }
+                }
+            }
+            Completion::Submitted {
+                request_id,
+                choice_revision,
+                result,
+            } => {
+                self.submitted(request_id, choice_revision, result?)?;
+            }
+        }
+        Ok(())
+    }
+    fn start<F: Future<Output = Completion> + Send + 'static>(
+        &mut self,
+        action: Action,
+        tasks: &mut JoinSet<(Uuid, Completion)>,
+        execute: &impl Fn(Action) -> F,
+    ) -> Result<()> {
+        ensure!(
+            tasks.len() < MAX_REQUESTS,
+            "已有 {MAX_REQUESTS} 个在途请求, 本次请求未发送, 请稍后再试"
+        );
+        let request_id = action.request_id();
+        match &action {
+            Action::Discover { .. } => self.discovery_request = Some(request_id),
+            Action::Request {
+                command: Command::Workers { .. },
+                ..
+            } => self.workers_request = Some(request_id),
+            _ => {}
+        }
+        let future = execute(action);
+        tasks.spawn(async move { (request_id, future.await) }.in_current_span());
+        tracing::info!(event = "request.started", %request_id, "请求已开始等待");
         Ok(())
     }
 }
@@ -312,33 +499,67 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
         .connect(settings.nats_url)
         .await
         .context("连接 NATS 失败")?;
-    let mut session = Session {
-        client,
-        pools: settings.pools,
-        authorities: Vec::new(),
-        workers: Vec::new(),
-        capabilities: Vec::new(),
-        choice: Choice::default(),
-    };
-    let mut input = terminal_input();
-    let work = async {
-        session.refresh().await?;
-        tracing::info!(event = "console.ready", "Console 已连接; /help 查看命令");
-        while let Some(line) = input.recv().await {
-            let line = line.context("读取输入失败")?;
-            if line == "/quit" {
-                break;
-            }
-            if let Err(error) = session.line(line).await {
-                tracing::warn!(event = "request.failed", error = %format!("{error:#}"), "请求未完成");
-            }
+    let mut session = Session::new(settings.pools);
+    let work = drive(&mut session, terminal_input(), move |action| {
+        action.execute(client.clone())
+    });
+    tokio::select! {
+        result = work => result?,
+        signal = tokio::signal::ctrl_c() => {
+            signal?;
+            tracing::info!(event = "console.interrupted", "停止等待回复; 已发送请求可能继续执行, 不会自动重发");
         }
-        Ok::<_, anyhow::Error>(())
-    };
-    tokio::select! { result = work => result?, signal = tokio::signal::ctrl_c() => signal? }
+    }
     tracing::info!(event = "console.stopped", "Console 已退出");
     Ok(())
 }
+
+async fn drive<F: Future<Output = Completion> + Send + 'static>(
+    session: &mut Session,
+    mut input: mpsc::Receiver<std::io::Result<String>>,
+    execute: impl Fn(Action) -> F,
+) -> Result<()> {
+    let mut tasks = JoinSet::new();
+    session.start(session.refresh(), &mut tasks, &execute)?;
+    tracing::info!(event = "console.ready", "Console 已连接; /help 查看命令");
+    let mut stopping = false;
+    while !stopping || !tasks.is_empty() {
+        tokio::select! {
+            // 先回收完成的请求, 满载也始终读取本地输入和退出命令.
+            biased;
+            completed = tasks.join_next(), if !tasks.is_empty() => {
+                let (request_id, completion) = completed.context("缺少 Console 请求任务")?.context("Console 请求任务异常退出")?;
+                let span = tracing::info_span!("request", %request_id);
+                span.in_scope(|| {
+                    if let Err(error) = session.complete(completion) {
+                        tracing::warn!(event = "request.failed", error = %format!("{error:#}"), "请求未完成");
+                    }
+                });
+            }
+            line = input.recv(), if !stopping => {
+                let line = line.transpose().context("读取输入失败")?;
+                if line.as_deref().is_none_or(|line| line == "/quit") {
+                    stopping = true;
+                    input.close();
+                    tracing::info!(event = "console.draining", pending = tasks.len(), "停止新请求, 等待在途回复; Ctrl+C 可停止等待");
+                    continue;
+                }
+                let result = session.line(line.context("缺少输入行")?).and_then(|action| {
+                    if let Some(action) = action { session.start(action, &mut tasks, &execute)?; }
+                    Ok(())
+                });
+                if let Err(error) = result {
+                    tracing::warn!(event = "request.failed", error = %format!("{error:#}"), "输入未完成");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
+
 fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
     let (send, recv) = mpsc::channel(16);
     std::thread::spawn(move || {

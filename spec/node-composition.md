@@ -109,6 +109,10 @@ Hello Beamlet
 
 Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
 
+Console 将输入、发现、查询和提交结果作为独立事件处理, 等待执行结果时仍可提交新任务、查询或切换目标. 每次提交固定当时的 Authority、pool、能力和 Worker 选择, 结果按完成顺序展示并带 request_id. 旧提交的拒绝不会撤销后来的选择; 查询乱序完成时只采用当前目标的最新查询结果. Console 自身最多保留 16 个在途请求 (包括发现和查询), 满载时明确拒绝新的网络请求, 本地选择、帮助和退出仍可使用. 此上限独立于 Authority / Worker 配置.
+
+`/quit` 和 EOF 停止新输入并等待在途请求完成或达到已有期限. Ctrl+C 停止本地等待, 已发送请求仍可能在远端执行; 不会自动重发或宣称撤销 Attempt.
+
 ## Authority 并发
 
 每个 Authority 角色也通过 `max_concurrent_tasks` 独立配置, 默认 `16`, 正数限制同时交付并等待报告的任务数, `0` 不设该上限. 例如:
@@ -162,6 +166,9 @@ cargo test --workspace
 cargo doc --workspace --no-deps
 # Unix, 需要 PATH 中的 nats-server; 普通测试默认忽略:
 cargo test -p beamlet-node --test composition -- --ignored --nocapture
+cargo test -p beamlet-console --test concurrency -- --ignored --nocapture
 ```
 
 组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端.
+
+Console 并发测试验证等待中的提交不阻止查询、目标快照、迟到结果隔离、容量拒绝、退出排空与中止等待. 真实 NATS 验收使用 Console 二进制和可控 Authority 回复, 验证多个提交和查询同时在途、乱序结果关联和配置不变. Authority 回复测试通过有界通道制造发送背压, 验证其他任务可继续、回复容量有限和停机排空.

@@ -72,7 +72,7 @@ Report 身份按接收顺序分配, 有效报告按完成顺序返回, 无需等
 
 Report 等待期限为 3 秒; Console 请求期限为 10 秒, 包含正常排队和回复开销. 校验与发送之间仍可能失联. 无论拒收、断线或超时, 均不取消已签发 Attempt、不换人重发、不伪造 Report、不强制关闭 Operation. 超时不取消 Worker 执行; 本版 request 超时后可能丢失迟到 Report, 不提供持续监听或恢复.
 
-`request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
+`request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 支持多个在途请求, 每次提交保存目标快照, 按完成顺序展示结果并标识 request_id. 发现和查询也独立等待, 迟到结果不能覆盖较新的选择或查询. Console 自身最多保留 16 个网络请求, 满载的新请求明确拒绝; `/quit` / EOF 排空在途请求, Ctrl+C 停止本地等待. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
 
 Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
 
@@ -81,3 +81,5 @@ Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚
 普通 `cargo test --workspace` 不需要 NATS. [登记测试](../apps/beamlet-node/src/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [channel 交付测试](../apps/beamlet-node/src/delivery/tests.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../apps/beamlet-node/src/ingress/tests.rs)验证并发、满载、退出与失败语义. 共享协议测试验证版本和主题隔离.
 
 显式运行 `cargo test -p beamlet-node --test composition -- --ignored --nocapture` 可进行真实 NATS 组合验收. 测试要求 Unix 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程并自动回收. 覆盖一个进程内多个同类型角色、多连接共享/隔离、精确角色定向、同角色不同会话、跨 Node 运行、正常退出、重连和配置不变. 普通 Cargo 测试默认忽略该验收, 不依赖服务端. 这些检查不构成任意网络故障下的恰好一次证明.
+
+Console 的真实 NATS 并发验收使用 `cargo test -p beamlet-console --test concurrency -- --ignored --nocapture`, 同样需要 PATH 中的 `nats-server`. 普通 Console 测试通过可控 Future 验证多个请求、迟到回复隔离、容量限制、EOF / 退出排空和中止时释放 Future.

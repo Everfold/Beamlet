@@ -15,13 +15,12 @@ use uuid::Uuid;
 pub(crate) async fn discover(
     client: &async_nats::Client,
     pools: &BTreeSet<Pool>,
+    request_id: Uuid,
 ) -> Result<Vec<AuthorityInfo>> {
     let inbox = client.new_inbox();
     let mut replies = client.subscribe(inbox.clone()).await?;
     client.flush().await?;
-    let request = Discovery {
-        request_id: Uuid::new_v4(),
-    };
+    let request = Discovery { request_id };
     let bytes = encode(&request)?;
     for pool in pools {
         client
@@ -53,13 +52,13 @@ pub(crate) async fn discover(
     Ok(authorities.into_values().collect())
 }
 
-pub(crate) async fn request(client: &async_nats::Client, command: Command) -> Result<Outcome> {
+pub(crate) async fn request(client: &async_nats::Client, command: &Command) -> Result<Outcome> {
     let target = subject::authority(command.pool(), command.authority());
     let request_id = command.request_id();
     tracing::info!(event = "request.send_started", %request_id, "发送请求");
     let message = timeout(
         REQUEST_TIMEOUT,
-        client.request(target, encode(&command)?.into()),
+        client.request(target, encode(command)?.into()),
     )
     .await
     .context("等待 Authority 超时; 请求可能已执行, 不会自动重发")?
