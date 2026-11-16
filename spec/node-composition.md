@@ -50,6 +50,7 @@ cargo run -p beamlet-console
             kind: authority((
                 pools: ["blue", "green"],
                 worker_timeout_secs: 15,
+                max_concurrent_tasks: 16,
             )),
         ),
         (
@@ -59,6 +60,7 @@ cargo run -p beamlet-console
             kind: authority((
                 pools: ["blue"],
                 worker_timeout_secs: 20,
+                max_concurrent_tasks: 0,
             )),
         ),
         (
@@ -107,6 +109,24 @@ Hello Beamlet
 
 Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
 
+## Authority 并发
+
+每个 Authority 角色也通过 `max_concurrent_tasks` 独立配置, 默认 `16`, 正数限制同时交付并等待报告的任务数, `0` 不设该上限. 例如:
+
+```ron
+kind: authority((
+    pools: ["default"],
+    worker_timeout_secs: 15,
+    max_concurrent_tasks: 32,
+)),
+```
+
+该上限跨当前 Authority 的所有 pools 和 Worker 共享, 其他 Authority 有自己的名额. 满载时暂停从业务入口取出请求, 发现、心跳与 Worker 查询继续由独立控制循环处理. 报告可以乱序完成; 交付完成或失败后释放名额. 超时释放并发名额不表示取消 Attempt 或关闭 Operation: 原操作仍保持等待报告, 不自动重试.
+
+Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付结束.
+
+业务入口和 NATS 订阅的接收缓冲仍各为 16, 与此设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
+
 ## Worker 并发
 
 每个 Worker 角色通过 `max_concurrent_tasks` 独立配置:
@@ -119,7 +139,7 @@ Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名�
 
 名额从取出调用开始占用, 到执行结束且报告发送完成或失败后释放. 达到正数上限时暂停取出下一条调用, 不额外创建大量等待名额的执行任务. 所有 Authority 发给该 Worker 的调用共用此上限; 其他 Worker 角色有自己的名额.
 
-能力在阻塞线程池中运行, 因此单个 Worker 可以并行处理计算任务, 心跳与控制循环也能继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 的 16 个在途名额和传输接收缓冲仍独立生效. Worker 接收缓冲保持 16 条, 与执行并发数是不同设置.
+能力在阻塞线程池中运行, 因此单个 Worker 可以并行处理计算任务, 心跳与控制循环也能继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 配置的在途上限和传输接收缓冲仍独立生效. Worker 接收缓冲保持 16 条, 与执行并发数是不同设置.
 
 Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早的慢任务. 执行拒绝、报告发送失败都会释放名额, 不触发重新执行. 收到退出信号后停止新接收, 按当前并发上限排空已接收队列并等待运行中任务; 仍受 Node 的统一退出期限约束.
 
@@ -144,4 +164,4 @@ cargo doc --workspace --no-deps
 cargo test -p beamlet-node --test composition -- --ignored --nocapture
 ```
 
-组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控执行阻塞验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. 普通测试不需要 NATS 服务端.
+组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控执行阻塞验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端.
