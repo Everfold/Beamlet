@@ -8,11 +8,16 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+beamlet-protocol.workspace = true
+
+futures.workspace = true
 tokio.workspace = true
 
 async-nats.workspace = true
 
 confy.workspace = true
+
+uuid.workspace = true
 
 serde.workspace = true
 
