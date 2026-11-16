@@ -11,6 +11,12 @@ use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
+/// 最多同时等待 16 次回复发送; 满载后反压业务入口和报告收取.
+const REPLY_CAPACITY: usize = 16;
+
+#[cfg(test)]
+mod response_tests;
+
 /// 入口与交付分别注入; 每份交付独立等待, 不阻塞其他输入和报告.
 pub(crate) async fn run(
     mut ingress: impl Ingress,
@@ -24,6 +30,7 @@ pub(crate) async fn run(
     let mut runtime = Runtime::new();
     let mut replies: HashMap<String, (Reply, RoleInstance, String)> = HashMap::new();
     let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
+    let mut sends: JoinSet<Result<()>> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
@@ -34,7 +41,7 @@ pub(crate) async fn run(
     );
 
     loop {
-        if stopping && deliveries.is_empty() {
+        if stopping && deliveries.is_empty() && sends.is_empty() {
             break;
         }
 
@@ -50,7 +57,12 @@ pub(crate) async fn run(
                 None
             }
 
-            completed = deliveries.join_next(), if !deliveries.is_empty() => {
+            sent = sends.join_next(), if !sends.is_empty() => {
+                sent.context("缺少回复任务")?.context("回复任务异常退出")??;
+                None
+            }
+
+            completed = deliveries.join_next(), if !deliveries.is_empty() && sends.len() < REPLY_CAPACITY => {
                 let (id, outcome) = completed.context("缺少交付任务")?.context("交付任务异常退出")?;
                 let (reply, worker, attempt_id) = replies.remove(&id).context("缺少回复来源")?;
                 let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
@@ -63,11 +75,11 @@ pub(crate) async fn run(
                     }
                 };
 
-                reply.send(result).await?;
+                sends.spawn(reply.send(result).in_current_span());
                 None
             }
 
-            request = ingress.receive(), if !stopping && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
+            request = ingress.receive(), if !stopping && sends.len() < REPLY_CAPACITY && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
                 let request = request?;
                 if request.is_none() {
                     stopping = true;
@@ -84,11 +96,13 @@ pub(crate) async fn run(
                 Ok(worker) => worker,
                 Err(error) => {
                     warn!(event = "request.rejected", %pool, capability = %task.capability, %error, "创建 Operation 前拒绝请求");
-                    reply
-                        .send(Outcome::Rejected {
-                            reason: error.to_string(),
-                        })
-                        .await?;
+                    sends.spawn(
+                        reply
+                            .send(Outcome::Rejected {
+                                reason: error.to_string(),
+                            })
+                            .in_current_span(),
+                    );
                     continue;
                 }
             };

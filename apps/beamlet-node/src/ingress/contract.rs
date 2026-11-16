@@ -25,6 +25,8 @@ enum ReplyKind {
     },
     #[cfg(test)]
     Channel(tokio::sync::oneshot::Sender<String>),
+    #[cfg(test)]
+    Buffered(tokio::sync::mpsc::Sender<Outcome>),
 }
 impl Reply {
     pub(super) fn terminal() -> Self {
@@ -48,8 +50,18 @@ impl Reply {
         Self(ReplyKind::Channel(sender))
     }
 
+    #[cfg(test)]
+    pub(crate) fn buffered(sender: tokio::sync::mpsc::Sender<Outcome>) -> Self {
+        Self(ReplyKind::Buffered(sender))
+    }
+
     pub(crate) async fn send(self, outcome: Outcome) -> Result<()> {
         match self.0 {
+            #[cfg(test)]
+            ReplyKind::Buffered(sender) => sender
+                .send(outcome)
+                .await
+                .map_err(|_| anyhow::anyhow!("请求回复端已关闭"))?,
             ReplyKind::Terminal => {
                 tracing::info!(event = "response.local", response = ?outcome, "本地结果")
             }
