@@ -9,7 +9,6 @@ struct ReportId(&'static str);
 #[derive(Debug, PartialEq, Eq)]
 struct Failure(&'static str);
 
-/// 接受完整报告后返回 Ready, 原始请求与报告内容保持不变.
 #[test]
 fn accepts_complete_report_without_cloning_request_or_result() {
     let operation = Operation::new("operation-1", Request(String::from("request")));
@@ -17,11 +16,20 @@ fn accepts_complete_report_without_cloning_request_or_result() {
     let report = Report::new(ReportId("report-1"), attempt, Failure("result"));
 
     let operation = operation.accept_report(&report).expect("匹配报告应被接受");
+
     assert_eq!(operation.request().0, "request");
-    assert_eq!(report.id().0, "report-1");
-    assert_eq!(report.result(), &Failure("result"));
-    let (operation, _) = operation.create_attempt(2);
+
+    // 接受报告后可以改用另一种 Attempt 身份类型.
+    let (operation, _) = operation.create_attempt(2_u64);
     assert_eq!(operation.pending_attempt_id(), &2);
+    drop(operation);
+
+    // Report 独立持有身份和结果, 不借用 Authority 的 Operation.
+    assert_eq!(report.id().0, "report-1");
+    assert_eq!(report.operation_id(), &"operation-1");
+    assert_eq!(report.attempt_id(), &"attempt-1");
+    assert_eq!(report.result(), &Failure("result"));
+    assert_eq!(report.into_result(), Failure("result"));
 }
 
 /// 两个关联都错误时先拒绝 Operation, 并允许取回原对象继续接受正确报告.
@@ -30,9 +38,11 @@ fn operation_mismatch_returns_original_operation() {
     let (operation, attempt) = Operation::new("operation-1", "request").create_attempt(1);
     let (_, other_attempt) = Operation::new("operation-2", "other").create_attempt(2);
     let wrong_report = Report::new(2, other_attempt, "wrong");
+
     let error = operation
         .accept_report(&wrong_report)
         .expect_err("其他 Operation 的报告应被拒绝");
+
     assert!(matches!(
         &error,
         AcceptReportError::OperationMismatch { .. }
@@ -43,6 +53,7 @@ fn operation_mismatch_returns_original_operation() {
     assert_eq!(operation.id(), &"operation-1");
     assert_eq!(operation.request(), &"request");
     assert_eq!(operation.pending_attempt_id(), &1);
+
     let report = Report::new(1, attempt, "correct");
     let operation = operation
         .accept_report(&report)
@@ -50,7 +61,6 @@ fn operation_mismatch_returns_original_operation() {
     let _closed = operation.close();
 }
 
-/// 失败结果仍可接受并重试, 旧报告不能解除新的等待.
 #[test]
 fn retries_after_failure_and_rejects_old_report() {
     let (operation, first) = Operation::new("operation-1", "request").create_attempt(1);
@@ -74,7 +84,10 @@ fn retries_after_failure_and_rejects_old_report() {
     let operation = operation
         .accept_report(&completed)
         .expect("本次报告应被接受");
-    let closed = operation.close();
+    let closed = operation.close().close();
     assert_eq!(closed.id(), &"operation-1");
+    assert_eq!(closed.request(), &"request");
+    drop(closed);
+
     assert_eq!(completed.into_result(), Ok(42));
 }

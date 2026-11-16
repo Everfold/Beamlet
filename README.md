@@ -10,9 +10,9 @@
 # List
 nix flake show github:Everfold/Beamlet
 
-nix run github:Everfold/Beamlet#node -- --version
-nix run github:Everfold/Beamlet#console -- --version
-nix run github:Everfold/Beamlet#app -- --version
+nix run github:Everfold/Beamlet#node -- --role worker
+nix run github:Everfold/Beamlet#node -- --role authority
+nix run github:Everfold/Beamlet#console
 ```
 
 ## Build
@@ -34,7 +34,6 @@ nats-server
 just node --role worker
 just node --role authority
 just console
-just app
 
 # Build
 just build

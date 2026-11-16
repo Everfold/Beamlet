@@ -94,6 +94,7 @@ impl<O, P> Operation<O, P> {
                 attempt_id,
             },
         };
+
         (operation, attempt)
     }
 
@@ -132,6 +133,7 @@ impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
                 attempt,
             });
         }
+
         let (_, attempt_id) = attempt.into_parts();
         Ok(Operation {
             id,

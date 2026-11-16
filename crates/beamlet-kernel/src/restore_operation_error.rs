@@ -17,7 +17,6 @@ impl<O, P, A> RestoreOperationError<O, P, A> {
 }
 
 impl<O, P, A> fmt::Display for RestoreOperationError<O, P, A> {
-    /// 描述恢复时的关联不匹配.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Attempt does not belong to the restored Operation")
     }

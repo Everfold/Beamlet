@@ -1,4 +1,5 @@
 //! Core NATS 适配器: 每个能力一个主题, 所有 Worker 使用同一队列组.
+
 use super::{
     Call, DeliveryError, Incoming, WorkerReport, contract,
     protocol::{WireCall, WireReport},
@@ -28,10 +29,12 @@ impl super::Delivery for Delivery {
     /// 不重试发送; 收到超时或不可信回复时保守返回未知.
     async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
         contract::check_call(&call)?;
+
         let subject = subject(&call.capability);
         let wire = WireCall::from(call);
         let bytes =
             serde_json::to_vec(&wire).map_err(|e| DeliveryError::NotDelivered(e.to_string()))?;
+
         let request = async_nats::Request::new()
             .payload(bytes.into())
             .timeout(Some(self.deadline));
@@ -45,6 +48,7 @@ impl super::Delivery for Delivery {
                 }
                 _ => DeliveryError::Unknown(error.to_string()),
             })?;
+
         let report: WireReport = serde_json::from_slice(&response.payload)
             .map_err(|e| DeliveryError::Unknown(format!("无法解析报告: {e}")))?;
         contract::check_report(report.into(), &wire.operation_id, &wire.attempt_id)
@@ -61,6 +65,7 @@ impl Inbox {
     /// 启动时声明实际支持的能力, flush 后才对外报告就绪.
     pub(crate) async fn subscribe(client: Client, capabilities: &[&str]) -> Result<Self> {
         anyhow::ensure!(!capabilities.is_empty(), "Worker 必须声明至少一种能力");
+
         let mut names = Vec::new();
         let mut subscriptions = SelectAll::new();
         for capability in capabilities {
@@ -68,6 +73,7 @@ impl Inbox {
                 !capability.is_empty() && capability.len() <= 256,
                 "能力标识长度无效"
             );
+
             if !names.iter().any(|name| name == capability) {
                 subscriptions.push(
                     client
@@ -77,7 +83,9 @@ impl Inbox {
                 names.push((*capability).to_owned());
             }
         }
+
         client.flush().await?;
+
         Ok(Self {
             client,
             capabilities: names,
@@ -91,22 +99,25 @@ impl super::Inbox for Inbox {
     async fn receive(&mut self) -> Result<Option<Incoming>> {
         while let Some(message) = self.subscriptions.next().await {
             let Some(reply) = message.reply else {
-                eprintln!("[Worker] 忽略没有回复地址的调用");
+                eprintln!("[Worker节点] 忽略没有回复地址的调用");
                 continue;
             };
+
             let wire: WireCall = match serde_json::from_slice(&message.payload) {
                 Ok(wire) => wire,
                 Err(error) => {
-                    eprintln!("[Worker] 忽略无效调用: {error}");
+                    eprintln!("[Worker节点] 忽略无效调用: {error}");
                     continue;
                 }
             };
+
             if !self.capabilities.contains(&wire.capability)
                 || message.subject.as_str() != subject(&wire.capability)
             {
-                eprintln!("[Worker] 拒绝与声明不匹配的能力: {}", wire.capability);
+                eprintln!("[Worker节点] 拒绝与声明不匹配的能力: {}", wire.capability);
                 continue;
             }
+
             return Ok(Some(Incoming {
                 call: wire.into(),
                 reply: contract::Reply::nats(Reply {
@@ -115,6 +126,7 @@ impl super::Inbox for Inbox {
                 }),
             }));
         }
+
         Ok(None)
     }
 
@@ -123,7 +135,9 @@ impl super::Inbox for Inbox {
         for subscription in self.subscriptions.iter_mut() {
             subscription.drain().await?;
         }
+
         self.client.flush().await?;
+
         Ok(())
     }
 }
@@ -137,6 +151,7 @@ impl Reply {
     /// 报告只发到当前调用的回复地址, 不广播到共享报告主题.
     pub(super) async fn send(self, report: WorkerReport) -> Result<()> {
         let bytes = serde_json::to_vec(&WireReport::from(report))?;
+
         self.client
             .publish(self.subject, bytes.into())
             .await
@@ -151,5 +166,6 @@ fn subject(capability: &str) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect();
+
     format!("beamlet.work.v1.{encoded}")
 }

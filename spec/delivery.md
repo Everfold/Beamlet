@@ -1,6 +1,6 @@
 # 能力交付契约
 
-状态: 首版已实现并验收. node 可独立启动 Authority / Worker, 通过 Core NATS 按能力单选交付; channel 实现用于共用契约测试, 不作为运行时回退. 本文约束行为, 不限定实现语言; 启动命令见[仓库说明](../README.md).
+状态: 首版已实现并验收. node 可独立启动 Authority / Worker, 通过 Core NATS 按能力单选交付; channel 实现用于内存契约测试, 不作为运行时回退. 本文约束行为, 不限定实现语言; 启动命令见[仓库说明](../README.md).
 
 ## 1. 职责与范围
 
@@ -69,9 +69,9 @@ NATS 映射必须避免能力名称碰撞. 受控任务主题下不能出现额�
 
 ## 5. 验收
 
-请求入口重构另由[内存入口与 Authority 测试](../apps/beamlet-node/src/ingress/tests.rs)及[真实 NATS 入口测试](../apps/beamlet-node/src/ingress/nats_tests.rs)覆盖: 并发乱序回复、交付错误及无效报告、满载后释放容量、停止接收与在途等待、回复失败、终端 EOF、输入校验及队列组单选. `cargo test -p beamlet-node` 运行内存测试; 安装 `nats-server` 后运行 `cargo test -p beamlet-node -- --include-ignored` 可一并执行全部真实 NATS 测试.
+[内存入口与 Authority 测试](../apps/beamlet-node/src/ingress/tests.rs)覆盖并发乱序回复、交付错误及无效报告、满载后释放容量、停止接收与在途等待、回复失败. 仓库另保留了[channel 交付契约测试](../apps/beamlet-node/src/delivery/tests.rs)与[Authority 生命周期测试](../apps/beamlet-node/src/authority.rs). `cargo test -p beamlet-node` 无需 NATS 服务端.
 
-仓库保留了[共用契约测试](../apps/beamlet-node/src/delivery/tests.rs)与[Authority 生命周期测试](../apps/beamlet-node/src/authority.rs). 共用场景在 channel 和隔离 NATS Server 上运行; 队列满载的确定性检查由 channel 完成. 本轮还通过真实进程验收检查了多 Authority / Worker、超大负载的发送前拒绝及接收后失联, 但该验收脚本未保留在仓库中. 这些检查不是任意故障下的恰好一次证明.
+依赖 NATS 服务端的自动化测试已移除; 内存测试不验证真实 NATS 路由、协议编码或线上入口的 EOF、输入校验和队列组行为. 历史真实进程验收曾检查多 Authority / Worker、超大负载的发送前拒绝及接收后失联, 但验收脚本未保留在仓库中, 不能视为当前回归覆盖. 这些检查不是任意故障下的恰好一次证明.
 
 1. A、B 能倒写, C 只能缩放: 一次倒写调用恰有一个匹配 Worker 收到, C 收不到.
 2. 能力版本不匹配或没有接收者: 不执行不支持的工作; 只在有证据时报告无接收者.

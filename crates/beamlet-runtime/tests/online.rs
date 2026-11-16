@@ -17,6 +17,7 @@ fn routes_interleaved_reports_and_preserves_requests() {
         .unwrap();
     let first = runtime.create_attempt(&"one", 1).unwrap();
     let second = runtime.create_attempt(&"two", 2).unwrap();
+
     let report = Report::new(10, second, Err::<(), _>("business failure"));
     runtime.accept_report(&report).unwrap();
     assert_eq!(
@@ -27,11 +28,13 @@ fn routes_interleaved_reports_and_preserves_requests() {
         runtime.operation(&"one").unwrap().pending_attempt_id(),
         Some(&1)
     );
+
     runtime
         .accept_report(&Report::new(11, first, "ok"))
         .unwrap();
     runtime.close(&"one").unwrap();
     runtime.close(&"one").unwrap();
+
     let view = runtime.operation(&"one").unwrap();
     assert_eq!(view.id(), &"one");
     assert_eq!(view.status(), OperationStatus::Closed);
@@ -41,12 +44,12 @@ fn routes_interleaved_reports_and_preserves_requests() {
     assert_eq!(report.result(), &Err("business failure"));
 }
 
-/// 旧报告和不存在的 Operation 被拒绝, 正确报告仍可继续推进.
 #[test]
 fn rejected_reports_preserve_waiting_operation() {
     let mut runtime = Runtime::new();
     runtime.create_operation(1, "request").unwrap();
     let first = runtime.create_attempt(&1, 7).unwrap();
+
     let old = Report::new(1, first, "old");
     runtime.accept_report(&old).unwrap();
     assert_eq!(
@@ -57,11 +60,13 @@ fn rejected_reports_preserve_waiting_operation() {
         runtime.create_attempt(&1, 7),
         Err(RuntimeError::AttemptIdReused)
     );
+
     let second = runtime.create_attempt(&1, 8).unwrap();
     assert_eq!(
         runtime.accept_report(&old),
         Err(RuntimeError::ReportMismatch)
     );
+
     let foreign = Report::new(2, Attempt::from_parts(99, 8), "unknown");
     assert_eq!(
         runtime.accept_report(&foreign),
@@ -71,6 +76,7 @@ fn rejected_reports_preserve_waiting_operation() {
         runtime.operation(&1).unwrap().pending_attempt_id(),
         Some(&8)
     );
+
     runtime
         .accept_report(&Report::new(3, second, "current"))
         .unwrap();
@@ -81,17 +87,18 @@ fn rejected_reports_preserve_waiting_operation() {
     );
 }
 
-/// 注册重复身份归还原始输入, 不覆盖在线请求.
 #[test]
 fn duplicate_operation_returns_owned_request() {
     let mut runtime: Runtime<String, u64, Request> = Runtime::new();
     runtime
         .create_operation("one".into(), Request("original".into()))
         .unwrap();
+
     let error = runtime
         .create_operation("one".into(), Request("rejected".into()))
         .unwrap_err();
     let (id, request) = error.into_parts();
+
     assert_eq!(id, "one");
     assert_eq!(request.0, "rejected");
     assert_eq!(runtime.operation(&id).unwrap().request().0, "original");
@@ -107,6 +114,7 @@ fn enforces_states_and_attempt_identity_uniqueness() {
         runtime.create_attempt(&1, 7),
         Err(RuntimeError::OperationNotFound)
     );
+
     runtime.create_operation(1, ()).unwrap();
     runtime.create_operation(2, ()).unwrap();
     let first = runtime.create_attempt(&1, 7).unwrap();
@@ -119,9 +127,11 @@ fn enforces_states_and_attempt_identity_uniqueness() {
         runtime.create_attempt(&2, 7),
         Err(RuntimeError::AttemptIdReused)
     );
+
     let second = runtime.create_attempt(&2, 8).unwrap();
     runtime.accept_report(&Report::new(1, first, ())).unwrap();
     runtime.accept_report(&Report::new(2, second, ())).unwrap();
+
     runtime.close(&1).unwrap();
     assert_eq!(
         runtime.create_attempt(&1, 9),

@@ -22,7 +22,6 @@ pub(crate) enum DeliveryError {
 }
 
 impl fmt::Display for DeliveryError {
-    /// 人类可读错误不把未知状态误报为执行失败.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoReceiver => write!(f, "当前没有匹配能力的接收者"),
@@ -31,6 +30,7 @@ impl fmt::Display for DeliveryError {
         }
     }
 }
+
 impl std::error::Error for DeliveryError {}
 
 /// 一次交付只发送一次, 返回关联匹配的 Report 或交付错误.
@@ -44,6 +44,7 @@ pub(crate) trait Delivery: Clone + Send + Sync + 'static {
 /// Worker 接收入口; stop 停止新接收, receive 继续排空已接收队列.
 pub(crate) trait Inbox: Send {
     fn receive(&mut self) -> impl Future<Output = Result<Option<Incoming>>> + Send;
+
     fn stop(&mut self) -> impl Future<Output = Result<()>> + Send;
 }
 
@@ -63,12 +64,10 @@ enum ReplyKind {
 }
 
 impl Reply {
-    /// 仅供 NATS 适配器包装回复入口.
     pub(super) fn nats(reply: super::nats::Reply) -> Self {
         Self(ReplyKind::Nats(reply))
     }
 
-    /// 仅供本地测试适配器包装回复入口.
     #[cfg(test)]
     pub(super) fn channel(reply: tokio::sync::oneshot::Sender<WorkerReport>) -> Self {
         Self(ReplyKind::Channel(reply))
@@ -95,6 +94,7 @@ pub(super) fn check_report(
     if report.operation_id() != operation_id || report.attempt_id() != attempt_id {
         return Err(DeliveryError::Unknown("报告关联不匹配".into()));
     }
+
     Ok(report)
 }
 
@@ -105,5 +105,6 @@ pub(super) fn check_call(call: &Call) -> Result<(), DeliveryError> {
             "能力标识长度必须为 1..=256 字节".into(),
         ));
     }
+
     Ok(())
 }

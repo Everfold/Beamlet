@@ -9,9 +9,11 @@ state_machine! {
         create_attempt {
             transition: { from: Ready, to: AwaitingReport }
         }
+
         accept_report {
             transition: { from: AwaitingReport, to: Ready }
         }
+
         close {
             transition: { from: Ready, to: Closed }
         }

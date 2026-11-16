@@ -19,8 +19,8 @@ pub enum RuntimeError {
     /// 报告关联不匹配.
     ReportMismatch,
 }
+
 impl fmt::Display for RuntimeError {
-    /// 输出无需业务数据的错误描述.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::OperationExists => "operation already exists",
@@ -33,6 +33,7 @@ impl fmt::Display for RuntimeError {
         })
     }
 }
+
 impl Error for RuntimeError {}
 
 /// 注册失败时保留调用者的非 Clone 请求与身份.
@@ -41,16 +42,18 @@ pub struct CreateOperationError<O, P> {
     pub(crate) id: O,
     pub(crate) request: P,
 }
+
 impl<O, P> CreateOperationError<O, P> {
     /// 取回被拒绝的身份和原始请求.
     pub fn into_parts(self) -> (O, P) {
         (self.id, self.request)
     }
 }
+
 impl<O, P> fmt::Display for CreateOperationError<O, P> {
-    /// 重复身份是注册的唯一拒绝原因.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         RuntimeError::OperationExists.fmt(f)
     }
 }
+
 impl<O: fmt::Debug, P: fmt::Debug> Error for CreateOperationError<O, P> {}

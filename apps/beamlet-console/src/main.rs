@@ -17,7 +17,8 @@ async fn main() -> Result<()> {
     let signal = tokio::signal::ctrl_c();
 
     tokio::pin!(signal);
-    println!("[控制台] 已连接");
+
+    println!("[Console] 已连接");
 
     loop {
         let line = tokio::select! {
@@ -35,22 +36,24 @@ async fn main() -> Result<()> {
 
         match response {
             Ok(message) => println!(
-                "[控制台] 返回: {}",
+                "[Console] 返回: {}",
                 std::str::from_utf8(&message.payload).context("回复不是 UTF-8 文本")?
             ),
 
-            Err(error) => eprintln!("[控制台] 请求失败, 请检查节点是否在线: {error}"),
+            Err(error) => eprintln!("[Console] 请求失败, 请检查节点是否在线: {error}"),
         }
     }
 
     client.flush().await?;
-    println!("[控制台] 已退出");
+    println!("[Console] 已退出");
+
     Ok(())
 }
 
 /// 阻塞终端读取独立于 Tokio, Ctrl+C 不必等待下一次回车.
 fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
     let (send, recv) = mpsc::channel(16);
+
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
             if send.blocking_send(line).is_err() {
@@ -58,5 +61,6 @@ fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
             }
         }
     });
+
     recv
 }

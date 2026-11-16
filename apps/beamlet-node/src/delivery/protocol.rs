@@ -1,4 +1,5 @@
 //! 只在通信适配器处展开原语字段, kernel 不依赖 serde.
+
 use super::{Call, WorkerReport};
 use beamlet_primitives::{Attempt, Report};
 use serde::{Deserialize, Serialize};
@@ -13,9 +14,9 @@ pub(super) struct WireCall {
 }
 
 impl From<Call> for WireCall {
-    /// 转移请求与授权字段的所有权, 不复制或重签 Attempt.
     fn from(call: Call) -> Self {
         let (operation_id, attempt_id) = call.attempt.into_parts();
+
         Self {
             operation_id,
             attempt_id,
@@ -46,10 +47,10 @@ pub(super) struct WireReport {
 }
 
 impl From<WorkerReport> for WireReport {
-    /// 保留所有身份与结果, 不把报告缩减为裸结果.
     fn from(report: WorkerReport) -> Self {
         let (report_id, attempt, result) = report.into_parts();
         let (operation_id, attempt_id) = attempt.into_parts();
+
         Self {
             report_id,
             operation_id,

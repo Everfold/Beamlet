@@ -29,7 +29,6 @@ impl<T> AcceptReportError<T> {
 }
 
 impl<T> fmt::Display for AcceptReportError<T> {
-    /// 输出简短错误原因, 底层写入失败时返回错误.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::OperationMismatch { .. } => "report belongs to a different operation",

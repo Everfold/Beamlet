@@ -1,4 +1,5 @@
 //! 有界内存入口, 仅用于通过同一接口测试 Authority.
+
 use super::{Ingress, Reply, Request};
 use anyhow::{Context, Result};
 use tokio::sync::{mpsc, oneshot};
@@ -24,6 +25,7 @@ impl Sender {
             })
             .await
             .context("请求入口已关闭")?;
+
         Ok(recv)
     }
 }

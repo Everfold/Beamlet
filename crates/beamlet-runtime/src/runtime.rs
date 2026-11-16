@@ -8,8 +8,8 @@ enum Managed<O, A, P> {
     AwaitingReport(Operation<O, P, AwaitingReport<A>>),
     Closed(Operation<O, P, Closed>),
 }
+
 impl<O, A, P> Managed<O, A, P> {
-    /// 统一借用各类型状态的不可变身份.
     fn id(&self) -> &O {
         match self {
             Self::Ready(o) => o.id(),
@@ -24,11 +24,13 @@ impl<O, A, P> Managed<O, A, P> {
 pub struct OperationView<'a, O, A, P> {
     operation: &'a Managed<O, A, P>,
 }
+
 impl<O, A, P> OperationView<'_, O, A, P> {
     /// 读取 Operation 身份.
     pub fn id(&self) -> &O {
         self.operation.id()
     }
+
     /// 借用原始请求, 不复制业务数据.
     pub fn request(&self) -> &P {
         match self.operation {
@@ -37,6 +39,7 @@ impl<O, A, P> OperationView<'_, O, A, P> {
             Managed::Closed(o) => o.request(),
         }
     }
+
     /// 读取当前状态标签.
     pub fn status(&self) -> OperationStatus {
         match self.operation {
@@ -45,6 +48,7 @@ impl<O, A, P> OperationView<'_, O, A, P> {
             Managed::Closed(o) => o.status(),
         }
     }
+
     /// 仅等待状态返回当前授权身份.
     pub fn pending_attempt_id(&self) -> Option<&A> {
         match self.operation {
@@ -63,12 +67,13 @@ pub struct Runtime<O, A, P> {
     operations: Vec<Managed<O, A, P>>,
     used_attempts: Vec<A>,
 }
+
 impl<O, A, P> Default for Runtime<O, A, P> {
-    /// 创建空的在线管理器.
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl<O, A, P> Runtime<O, A, P> {
     /// 创建独立运行实例, 不执行 IO.
     pub fn new() -> Self {
@@ -78,6 +83,7 @@ impl<O, A, P> Runtime<O, A, P> {
         }
     }
 }
+
 impl<O: Eq, A, P> Runtime<O, A, P> {
     /// 注册请求, 由 kernel 创建 Ready Operation.
     ///
@@ -92,8 +98,10 @@ impl<O: Eq, A, P> Runtime<O, A, P> {
         if self.operations.iter().any(|o| o.id() == &id) {
             return Err(CreateOperationError { id, request });
         }
+
         self.operations
             .push(Managed::Ready(Operation::new(id, request)));
+
         Ok(())
     }
 
@@ -105,7 +113,6 @@ impl<O: Eq, A, P> Runtime<O, A, P> {
             .map(|operation| OperationView { operation })
     }
 
-    /// 找到对应对象的位置, 保持身份比较集中.
     fn position(&self, id: &O) -> Result<usize, RuntimeError> {
         self.operations
             .iter()
@@ -123,15 +130,18 @@ impl<O: Eq, A, P> Runtime<O, A, P> {
         if matches!(&self.operations[index], Managed::AwaitingReport(_)) {
             return Err(RuntimeError::AttemptPending);
         }
+
         let closed = match self.operations.remove(index) {
             Managed::Ready(operation) => operation.close(),
             Managed::Closed(operation) => operation.close(),
             Managed::AwaitingReport(_) => unreachable!("等待状态已在移出前拒绝"),
         };
         self.operations.insert(index, Managed::Closed(closed));
+
         Ok(())
     }
 }
+
 impl<O: Eq + Clone, A: Eq + Clone, P> Runtime<O, A, P> {
     /// 在 Ready 上签发一次授权并保存等待状态, 交付由外部负责.
     ///
@@ -148,6 +158,7 @@ impl<O: Eq + Clone, A: Eq + Clone, P> Runtime<O, A, P> {
         if self.used_attempts.contains(&attempt_id) {
             return Err(RuntimeError::AttemptIdReused);
         }
+
         let used_id = attempt_id.clone();
         let Managed::Ready(operation) = self.operations.remove(index) else {
             unreachable!("只有 Ready 能进入授权创建")
@@ -156,9 +167,11 @@ impl<O: Eq + Clone, A: Eq + Clone, P> Runtime<O, A, P> {
         self.operations
             .insert(index, Managed::AwaitingReport(operation));
         self.used_attempts.push(used_id);
+
         Ok(attempt)
     }
 }
+
 impl<O: Eq, A: Eq, P> Runtime<O, A, P> {
     /// 根据 Report 的 Operation 身份路由, 由 kernel 校验当前授权.
     ///
@@ -174,9 +187,11 @@ impl<O: Eq, A: Eq, P> Runtime<O, A, P> {
             Managed::Closed(_) => return Err(RuntimeError::OperationClosed),
             Managed::AwaitingReport(_) => {}
         }
+
         let Managed::AwaitingReport(operation) = self.operations.remove(index) else {
             unreachable!("只有等待状态能进入报告接受")
         };
+
         match operation.accept_report(report) {
             Ok(operation) => {
                 self.operations.insert(index, Managed::Ready(operation));

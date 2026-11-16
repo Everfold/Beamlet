@@ -1,4 +1,5 @@
 //! 通过入口与交付接口驱动真实 Authority 循环, 不启动 NATS 或读取 stdin.
+
 use super::{Ingress as _, channel};
 use crate::{
     authority,
@@ -57,8 +58,10 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             "authority".into(),
             std::future::pending(),
         ));
+
         let mut slow = sender.submit("Hello 世界".into()).await.unwrap();
         let fast = sender.clone().submit(" second ".into()).await.unwrap();
+
         let mut first = work.recv().await.unwrap();
         let mut second = work.recv().await.unwrap();
         if first.call.text != "Hello 世界" {
@@ -70,17 +73,21 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             first.call.attempt.operation_id(),
             second.call.attempt.operation_id()
         );
+
         second.succeed();
         assert_eq!(fast.await.unwrap(), " dnoces ");
         assert!(matches!(
             slow.try_recv(),
             Err(oneshot::error::TryRecvError::Empty)
         ));
+
         first.succeed();
         assert_eq!(slow.await.unwrap(), "界世 olleH");
+
         let empty = sender.submit(String::new()).await.unwrap();
         work.recv().await.unwrap().succeed();
         assert_eq!(empty.await.unwrap(), "");
+
         drop(sender);
         authority.await.unwrap().unwrap();
         assert!(work.recv().await.is_none());
@@ -99,6 +106,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
             "authority".into(),
             std::future::pending(),
         ));
+
         for error in [
             DeliveryError::NoReceiver,
             DeliveryError::NotDelivered("full".into()),
@@ -114,6 +122,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
                 Err(mpsc::error::TryRecvError::Empty)
             ));
         }
+
         for wrong_operation in [true, false] {
             let response = sender.submit("abc".into()).await.unwrap();
             let current = work.recv().await.unwrap();
@@ -135,10 +144,12 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
                 Err(mpsc::error::TryRecvError::Empty)
             ));
         }
+
         // 失败不阻塞其他新请求, 但不会为原 Operation 签发替代 Attempt.
         let response = sender.submit("next".into()).await.unwrap();
         work.recv().await.unwrap().succeed();
         assert_eq!(response.await.unwrap(), "txen");
+
         drop(sender);
         authority.await.unwrap().unwrap();
         assert!(work.recv().await.is_none());
@@ -156,11 +167,13 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
             signal.await.unwrap();
             Ok(())
         }));
+
         let mut responses = Vec::new();
         for index in 0..MAX_IN_FLIGHT {
             responses.push(sender.submit(format!("request-{index}")).await.unwrap());
         }
         let unissued = sender.submit("not admitted".into()).await.unwrap();
+
         let mut issued = Vec::new();
         for _ in 0..MAX_IN_FLIGHT {
             issued.push(work.recv().await.unwrap());
@@ -169,10 +182,12 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
             work.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+
         stop.send(()).unwrap();
         assert!(unissued.await.is_err());
         assert!(!authority.is_finished(), "退出必须等待已经签发的交付");
         assert!(sender.submit("after stop".into()).await.is_err());
+
         for current in issued.into_iter().rev() {
             current.succeed();
         }
@@ -182,6 +197,7 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
                 format!("request-{index}").chars().rev().collect::<String>()
             );
         }
+
         authority.await.unwrap().unwrap();
         assert!(work.recv().await.is_none(), "停止后不能签发新任务");
     })
@@ -199,6 +215,7 @@ async fn delivery_completion_releases_admission_capacity() {
             "authority".into(),
             std::future::pending(),
         ));
+
         // 先取得这一调用, 不假定并发交付任务的启动顺序.
         let mut responses = vec![sender.submit("abc".into()).await.unwrap()];
         let mut issued = vec![work.recv().await.unwrap()];
@@ -212,6 +229,7 @@ async fn delivery_completion_releases_admission_capacity() {
             work.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+
         issued
             .remove(0)
             .reply
@@ -221,6 +239,7 @@ async fn delivery_completion_releases_admission_capacity() {
             responses.remove(0).await.unwrap(),
             "错误: 当前没有匹配能力的接收者; 操作保持等待报告, 未重试"
         );
+
         work.recv().await.unwrap().succeed();
         for current in issued {
             current.succeed();
@@ -228,6 +247,7 @@ async fn delivery_completion_releases_admission_capacity() {
         for response in responses {
             assert_eq!(response.await.unwrap(), "cba");
         }
+
         drop(sender);
         authority.await.unwrap().unwrap();
     })
@@ -238,11 +258,13 @@ async fn delivery_completion_releases_admission_capacity() {
 async fn channel_backpressure_cancellation_and_stopped_replies() {
     within(async {
         let (sender, mut input) = channel::pair(1);
+
         {
             let receive = input.receive();
             tokio::pin!(receive);
             assert!(futures::poll!(&mut receive).is_pending());
         }
+
         let accepted_response = sender.submit("first".into()).await.unwrap();
         let second = sender.submit("queued".into());
         tokio::pin!(second);
@@ -250,11 +272,13 @@ async fn channel_backpressure_cancellation_and_stopped_replies() {
         let accepted = input.receive().await.unwrap().unwrap();
         assert_eq!(accepted.text, "first");
         let queued_response = second.await.unwrap();
+
         input.stop().await.unwrap();
         input.stop().await.unwrap();
         assert!(input.receive().await.unwrap().is_none());
         assert!(queued_response.await.is_err());
         assert!(sender.submit("new".into()).await.is_err());
+
         accepted
             .reply
             .send("operation", "result".into())
@@ -277,9 +301,11 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
             "authority".into(),
             std::future::pending(),
         ));
+
         let abandoned = sender.submit("abc".into()).await.unwrap();
         drop(abandoned);
         work.recv().await.unwrap().succeed();
+
         assert!(
             authority
                 .await

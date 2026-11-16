@@ -1,4 +1,5 @@
 //! 运行时入口: 合并本地终端与 NATS 请求, 不另建后台请求队列.
+
 use super::{Ingress, Reply, Request};
 use crate::delivery::MAX_IN_FLIGHT;
 use anyhow::{Context, Result};
@@ -30,6 +31,7 @@ impl Inputs {
             .queue_subscribe("beamlet.reverse", "beamlet-nodes".into())
             .await?;
         client.flush().await?;
+
         Ok(Self {
             client,
             subscription,
@@ -51,6 +53,7 @@ impl Ingress for Inputs {
                     self.rejection = None;
                     result?;
                 }
+
                 line = self.local.recv(), if !self.local_closed => {
                     match line {
                         Some(line) => return Ok(Some(Request {
@@ -60,12 +63,14 @@ impl Ingress for Inputs {
                         None => self.local_closed = true,
                     }
                 }
+
                 message = self.subscription.next(), if self.rejection.is_none() => {
                     let message = message.context("NATS 订阅已关闭")?;
                     let Some(subject) = message.reply else {
-                        eprintln!("[Authority] 忽略没有回复地址的消息");
+                        eprintln!("[Authority节点] 忽略没有回复地址的消息");
                         continue;
                     };
+
                     match String::from_utf8(message.payload.to_vec()) {
                         Ok(text) => return Ok(Some(Request {
                             text,
@@ -83,6 +88,7 @@ impl Ingress for Inputs {
                 }
             }
         }
+
         Ok(None)
     }
 
@@ -91,9 +97,11 @@ impl Ingress for Inputs {
             self.subscription.unsubscribe().await?;
             self.stopped = true;
             self.local.close();
+
             // 与未签发的缓冲请求一样, 停止时不承诺完成输入拒绝回复.
             self.rejection = None;
         }
+
         Ok(())
     }
 
@@ -106,6 +114,7 @@ impl Ingress for Inputs {
 /// 阻塞读取独立于 Tokio; 本地 EOF 只关闭本地入口, 不结束 NATS 服务.
 fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
     let (send, recv) = mpsc::channel(MAX_IN_FLIGHT);
+
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
             if send.blocking_send(line).is_err() {
@@ -113,5 +122,6 @@ fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {
             }
         }
     });
+
     recv
 }

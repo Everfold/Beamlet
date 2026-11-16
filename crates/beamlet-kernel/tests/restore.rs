@@ -19,6 +19,7 @@ fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
         Attempt::from_parts(Identity(1), Identity(7)),
     )
     .expect("匹配身份应恢复成功");
+
     assert_eq!(operation.status(), OperationStatus::AwaitingReport);
     assert_eq!(operation.pending_attempt_id().0, 7);
     assert_eq!(operation.request().0, "original request");
@@ -31,6 +32,7 @@ fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
     let ready = operation
         .accept_report(&report)
         .expect("失败结果也是已结束报告");
+
     assert_eq!(ready.status(), OperationStatus::Ready);
     assert_eq!(ready.id().0, 1);
     assert_eq!(ready.request().0, "original request");
@@ -47,6 +49,7 @@ fn restore_mismatch_returns_all_owned_inputs() {
     )
     .expect_err("跨 Operation 授权必须拒绝");
     let (id, request, attempt) = error.into_parts();
+
     assert_eq!(id.0, 1);
     assert_eq!(request.0, "request");
     assert_eq!(attempt.operation_id().0, 2);
@@ -61,13 +64,13 @@ fn restores_closed_with_opaque_identity() {
         Request("request".into()),
     );
     assert_eq!(operation.status(), OperationStatus::Closed);
+
     let closed = operation.close();
     assert_eq!(closed.status(), OperationStatus::Closed);
     assert_eq!(closed.id().0, "opaque id");
     assert_eq!(closed.request().0, "request");
 }
 
-/// 恢复后的对象仍拒绝旧报告, 拒绝后可继续接受正确报告.
 #[test]
 fn restored_waiting_rejects_stale_report_and_remains_usable() {
     let operation = Operation::restore_awaiting_report(1, "request", Attempt::from_parts(1, 7))
@@ -79,10 +82,12 @@ fn restored_waiting_rejects_stale_report_and_remains_usable() {
     assert!(matches!(&error, AcceptReportError::AttemptMismatch { .. }));
     let operation = error.into_operation();
     assert_eq!(operation.pending_attempt_id(), &7);
+
     let report = Report::new(11, Attempt::from_parts(1, 7), "current result");
     let ready = operation
         .accept_report(&report)
         .expect("当前授权报告应被接受");
+
     assert_eq!(ready.status(), OperationStatus::Ready);
     assert_eq!(report.into_result(), "current result");
 }
