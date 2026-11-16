@@ -126,8 +126,9 @@ async fn console_submits_concurrently_and_drains_correlated_results() -> Result<
     client.flush().await?;
     let binary = directory.path().join("beamlet-console");
     fs::copy(env!("CARGO_BIN_EXE_beamlet-console"), &binary)?;
-    let config =
-        format!(r#"(nats_url: "nats://127.0.0.1:{port}", pools: ["default"], color: never)"#);
+    let config = format!(
+        r#"(nats_url: "nats://127.0.0.1:{port}", pools: ["default"], color: never, request_timeout_secs: 12, connect_timeout_secs: 12, subscription_capacity: 32)"#
+    );
     let config_path = directory.path().join("console.ron");
     fs::write(&config_path, &config)?;
     let log_path = directory.path().join("console.log");

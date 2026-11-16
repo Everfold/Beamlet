@@ -14,10 +14,6 @@ use tokio::{
 };
 use tracing::{Instrument, info, warn};
 
-const START_TIMEOUT: Duration = Duration::from_secs(10);
-// 足够覆盖当前报告等待及最终公告; 断网不能让 Node 无限等待退出.
-const STOP_TIMEOUT: Duration = Duration::from_secs(6);
-
 pub(crate) async fn run(
     settings: Settings,
     signal: impl Future<Output = std::io::Result<()>>,
@@ -40,10 +36,18 @@ pub(crate) async fn run(
         for (name, config) in settings.infrastructures {
             let span = tracing::info_span!("infrastructure", name = %name);
             let connection = match config {
-                Infrastructure::Nats { url } => {
-                    timeout(START_TIMEOUT, Nats::connect(&url).instrument(span))
-                        .await
-                        .context("连接基础设施超时")??
+                Infrastructure::Nats {
+                    url,
+                    connect_timeout_secs,
+                    subscription_capacity,
+                } => {
+                    let deadline = Duration::from_secs(connect_timeout_secs);
+                    timeout(
+                        deadline,
+                        Nats::connect(&url, deadline, subscription_capacity).instrument(span),
+                    )
+                    .await
+                    .context("连接基础设施超时")??
                 }
             };
             info!(event = "infrastructure.ready", %name, "基础设施已就绪");
@@ -70,7 +74,14 @@ pub(crate) async fn run(
                 .in_current_span(),
         );
     }
-    let result = supervise(tasks, stop, terminal::run(targets, shutdown), signal).await;
+    let result = supervise(
+        tasks,
+        stop,
+        terminal::run(targets, shutdown),
+        signal,
+        Duration::from_secs(settings.shutdown_timeout_secs),
+    )
+    .await;
     for (name, infrastructure) in &infrastructures {
         match timeout(Duration::from_secs(1), infrastructure.client.flush()).await {
             Ok(Ok(())) => {}
@@ -91,6 +102,7 @@ async fn supervise(
     stop: watch::Sender<bool>,
     local: impl Future<Output = Result<()>>,
     signal: impl Future<Output = std::io::Result<()>>,
+    shutdown_timeout: Duration,
 ) -> Result<()> {
     tokio::pin!(signal, local);
     let mut stopping = false;
@@ -126,7 +138,7 @@ async fn supervise(
         }
         if !stopping {
             stopping = true;
-            deadline = Instant::now() + STOP_TIMEOUT;
+            deadline = Instant::now() + shutdown_timeout;
             stop.send_replace(true);
             info!(event = "node.stopping", "通知所有角色停止新接收并排空");
         }
@@ -156,7 +168,14 @@ mod tests {
             });
         }
         tasks.spawn(async { anyhow::bail!("broken role") });
-        let result = supervise(tasks, stop, async { Ok(()) }, std::future::pending()).await;
+        let result = supervise(
+            tasks,
+            stop,
+            async { Ok(()) },
+            std::future::pending(),
+            Duration::from_secs(6),
+        )
+        .await;
         assert!(result.unwrap_err().to_string().contains("broken role"));
         assert_eq!(drained.load(Ordering::SeqCst), 3);
     }
@@ -176,10 +195,16 @@ mod tests {
                 Ok(())
             });
         }
-        let running = tokio::spawn(supervise(tasks, stop, async { Ok(()) }, async {
-            receive.await.expect("test signal sender");
-            Ok(())
-        }));
+        let running = tokio::spawn(supervise(
+            tasks,
+            stop,
+            async { Ok(()) },
+            async {
+                receive.await.expect("test signal sender");
+                Ok(())
+            },
+            Duration::from_secs(6),
+        ));
         tokio::task::yield_now().await;
         assert!(!running.is_finished());
         signal.send(()).unwrap();
@@ -190,9 +215,13 @@ mod tests {
     #[tokio::test]
     async fn infrastructure_only_node_waits_for_exit_and_propagates_signal_error() {
         let (stop, _shutdown) = shutdown::channel();
-        let result = supervise(JoinSet::new(), stop, async { Ok(()) }, async {
-            Err(std::io::Error::other("signal unavailable"))
-        })
+        let result = supervise(
+            JoinSet::new(),
+            stop,
+            async { Ok(()) },
+            async { Err(std::io::Error::other("signal unavailable")) },
+            Duration::from_secs(6),
+        )
         .await;
         assert!(
             result
@@ -213,8 +242,34 @@ mod tests {
             Ok(())
         });
         tasks.spawn(async { panic!("simulated role panic") });
-        let result = supervise(tasks, stop, async { Ok(()) }, std::future::pending()).await;
+        let result = supervise(
+            tasks,
+            stop,
+            async { Ok(()) },
+            std::future::pending(),
+            Duration::from_secs(6),
+        )
+        .await;
         assert!(result.is_err());
         received.await.unwrap();
+    }
+    #[tokio::test]
+    async fn configured_drain_deadline_stops_waiting_for_an_unfinished_role() {
+        let (stop, _) = shutdown::channel();
+        let mut tasks = JoinSet::new();
+        tasks.spawn(std::future::pending());
+        let result = timeout(
+            Duration::from_secs(1),
+            supervise(
+                tasks,
+                stop,
+                std::future::pending(),
+                async { Ok(()) },
+                Duration::from_millis(20),
+            ),
+        )
+        .await
+        .expect("configured shutdown deadline was ignored");
+        assert!(result.unwrap_err().to_string().contains("角色排空超时"));
     }
 }

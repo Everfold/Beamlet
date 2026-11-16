@@ -27,11 +27,14 @@ impl Color {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
     pub nats_url: String,
     pub color: Color,
     pub pools: BTreeSet<Pool>,
+    pub request_timeout_secs: u64,
+    pub connect_timeout_secs: u64,
+    pub subscription_capacity: usize,
 }
 
 impl Default for Settings {
@@ -40,6 +43,9 @@ impl Default for Settings {
             nats_url: "nats://127.0.0.1:4222".into(),
             color: Color::Auto,
             pools: BTreeSet::from([Pool::default()]),
+            request_timeout_secs: 10,
+            connect_timeout_secs: 10,
+            subscription_capacity: 65536,
         }
     }
 }
@@ -55,12 +61,32 @@ impl Settings {
     fn from_file(path: &Path) -> Result<Self> {
         let settings: Self = confy::load_path(path)
             .with_context(|| format!("加载控制台配置失败: {}", path.display()))?;
-        ensure!(
-            !settings.pools.is_empty(),
-            "Console 至少需要一个 pool: {}",
-            path.display()
-        );
+        settings
+            .validate()
+            .with_context(|| format!("控制台配置无效: {}", path.display()))?;
         Ok(settings)
+    }
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(!self.pools.is_empty(), "Console 至少需要一个 pool");
+        ensure!(!self.nats_url.trim().is_empty(), "nats_url 不能为空");
+        for (name, seconds) in [
+            ("request_timeout_secs", self.request_timeout_secs),
+            ("connect_timeout_secs", self.connect_timeout_secs),
+        ] {
+            ensure!(
+                seconds > 0
+                    && std::time::Instant::now()
+                        .checked_add(std::time::Duration::from_secs(seconds))
+                        .is_some(),
+                "{name} 必须大于 0 且在系统时钟范围内"
+            );
+        }
+        ensure!(
+            self.subscription_capacity > 0
+                && self.subscription_capacity <= tokio::sync::Semaphore::MAX_PERMITS,
+            "subscription_capacity 必须大于 0 且不超过通道容量范围"
+        );
+        Ok(())
     }
 }
 
@@ -73,20 +99,23 @@ mod tests {
     fn loads_existing_config_without_overwriting_it() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("console.ron");
-        for (source, url, color) in [
-            (
-                r#"(nats_url: "nats://localhost:4333", color: always)"#,
-                "nats://localhost:4333",
-                Color::Always,
-            ),
-            ("(color: never)", "nats://127.0.0.1:4222", Color::Never),
-            ("(color: auto)", "nats://127.0.0.1:4222", Color::Auto),
-            ("()", "nats://127.0.0.1:4222", Color::Auto),
-        ] {
-            fs::write(&path, source).unwrap();
+        for color in [Color::Always, Color::Never, Color::Auto] {
+            let config = Settings {
+                nats_url: "nats://localhost:4333".into(),
+                color,
+                request_timeout_secs: 30,
+                connect_timeout_secs: 20,
+                subscription_capacity: 32,
+                ..Settings::default()
+            };
+            confy::store_path(&path, &config).unwrap();
+            let source = fs::read_to_string(&path).unwrap();
             let settings = Settings::from_file(&path).unwrap();
-            assert_eq!(settings.nats_url, url, "配置: {source}");
-            assert_eq!(settings.color, color, "配置: {source}");
+            assert_eq!(settings.nats_url, config.nats_url);
+            assert_eq!(settings.color, color);
+            assert_eq!(settings.request_timeout_secs, 30);
+            assert_eq!(settings.connect_timeout_secs, 20);
+            assert_eq!(settings.subscription_capacity, 32);
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
         }
     }
@@ -131,5 +160,41 @@ mod tests {
         let path = parent.join("console.ron");
         let error = Settings::from_file(&path).unwrap_err();
         assert!(error.to_string().contains(&path.display().to_string()));
+    }
+    #[test]
+    fn deadlines_and_capacity_reject_missing_zero_negative_and_overflow_without_rewriting() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("console.ron");
+        confy::store_path(&path, Settings::default()).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        for field in [
+            "request_timeout_secs: 10",
+            "connect_timeout_secs: 10",
+            "subscription_capacity: 65536",
+        ] {
+            let name = field.split(':').next().unwrap();
+            for replacement in [
+                String::new(),
+                format!("{name}: 0"),
+                format!("{name}: -1"),
+                format!("{name}: {}", u64::MAX),
+            ] {
+                let invalid = source.replace(
+                    &format!("{field},"),
+                    &if replacement.is_empty() {
+                        replacement
+                    } else {
+                        format!("{replacement},")
+                    },
+                );
+                assert_ne!(invalid, source);
+                fs::write(&path, &invalid).unwrap();
+                assert!(
+                    Settings::from_file(&path).is_err(),
+                    "accepted {name}: {invalid}"
+                );
+                assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
+            }
+        }
     }
 }

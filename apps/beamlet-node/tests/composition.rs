@@ -169,7 +169,7 @@ fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
 }
 fn authority(pools: &str, timeout: u64, concurrency: usize) -> String {
     format!(
-        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, max_concurrent_tasks: {concurrency}))"
+        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, report_timeout_secs: 4, max_concurrent_tasks: {concurrency}))"
     )
 }
 fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
@@ -179,7 +179,7 @@ fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
 }
 fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {
     format!(
-        r#"(node_id: "{node_id}", label: Some("composed node"), color: never, infrastructures: {{{infrastructure}}}, roles: [{}])"#,
+        r#"(node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8, infrastructures: {{{infrastructure}}}, roles: [{}])"#,
         roles.join(",")
     )
 }
@@ -320,7 +320,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     let ids: Vec<_> = (0..6).map(|_| Uuid::new_v4()).collect();
     let node_id = Uuid::new_v4();
     let infrastructure = format!(
-        r#""primary": nats(url: "nats://127.0.0.1:{primary_port}"), "worker-connection": nats(url: "nats://127.0.0.1:{primary_port}"), "secondary": nats(url: "nats://127.0.0.1:{secondary_port}")"#
+        r#""primary": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "worker-connection": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "secondary": nats(url: "nats://127.0.0.1:{secondary_port}", connect_timeout_secs: 12, subscription_capacity: 32)"#
     );
     let roles = vec![
         role(

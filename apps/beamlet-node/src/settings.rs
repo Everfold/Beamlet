@@ -34,7 +34,11 @@ impl Color {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Infrastructure {
-    Nats { url: String },
+    Nats {
+        url: String,
+        connect_timeout_secs: u64,
+        subscription_capacity: usize,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -42,6 +46,7 @@ pub(crate) enum Infrastructure {
 pub(crate) struct Authority {
     pub pools: BTreeSet<Pool>,
     pub worker_timeout_secs: u64,
+    pub report_timeout_secs: u64,
     /// 同时交付并等待报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
 }
@@ -50,6 +55,7 @@ impl Default for Authority {
         Self {
             pools: BTreeSet::from([Pool::default()]),
             worker_timeout_secs: 15,
+            report_timeout_secs: 3,
             max_concurrent_tasks: 16,
         }
     }
@@ -105,6 +111,7 @@ pub(crate) struct Settings {
     pub node_id: Uuid,
     pub label: Option<String>,
     pub color: Color,
+    pub shutdown_timeout_secs: u64,
     pub infrastructures: BTreeMap<String, Infrastructure>,
     pub roles: Vec<RoleSettings>,
 }
@@ -114,10 +121,13 @@ impl Default for Settings {
             node_id: Uuid::new_v4(),
             label: None,
             color: Color::Auto,
+            shutdown_timeout_secs: 6,
             infrastructures: BTreeMap::from([(
                 "local".into(),
                 Infrastructure::Nats {
                     url: "nats://127.0.0.1:4222".into(),
+                    connect_timeout_secs: 10,
+                    subscription_capacity: 16,
                 },
             )]),
             roles: vec![
@@ -167,15 +177,24 @@ impl Settings {
         Ok(settings)
     }
     pub(crate) fn validate(&self) -> Result<()> {
+        validate_timeout(self.shutdown_timeout_secs, "shutdown_timeout_secs")?;
         ensure!(!self.node_id.is_nil(), "node_id 不能是 nil UUID");
         ensure!(!self.infrastructures.is_empty(), "至少需要一个基础设施实例");
         for (name, infrastructure) in &self.infrastructures {
             ensure!(!name.trim().is_empty(), "基础设施名称不能为空");
             match infrastructure {
-                Infrastructure::Nats { url } => ensure!(
-                    !url.trim().is_empty(),
-                    "基础设施 {name} 的 NATS 地址不能为空"
-                ),
+                Infrastructure::Nats {
+                    url,
+                    connect_timeout_secs,
+                    subscription_capacity,
+                } => {
+                    ensure!(
+                        !url.trim().is_empty(),
+                        "基础设施 {name} 的 NATS 地址不能为空"
+                    );
+                    validate_timeout(*connect_timeout_secs, "connect_timeout_secs")?;
+                    validate_capacity(*subscription_capacity, "subscription_capacity")?;
+                }
             }
         }
         // 允许只配置基础设施的 Node, 为后续基础设施类型保留相同装配方式.
@@ -191,6 +210,7 @@ impl Settings {
             );
             match &role.kind {
                 Role::Authority(config) => {
+                    validate_timeout(config.report_timeout_secs, "report_timeout_secs")?;
                     ensure!(
                         !config.pools.is_empty(),
                         "Authority {} 至少需要一个 pool",
@@ -213,6 +233,24 @@ impl Settings {
         }
         Ok(())
     }
+}
+
+fn validate_timeout(seconds: u64, name: &str) -> Result<()> {
+    ensure!(
+        seconds > 0
+            && std::time::Instant::now()
+                .checked_add(std::time::Duration::from_secs(seconds))
+                .is_some(),
+        "{name} 必须大于 0 且在系统时钟范围内"
+    );
+    Ok(())
+}
+fn validate_capacity(capacity: usize, name: &str) -> Result<()> {
+    ensure!(
+        capacity > 0 && capacity <= tokio::sync::Semaphore::MAX_PERMITS,
+        "{name} 必须大于 0 且不超过通道容量范围"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -260,6 +298,8 @@ mod tests {
             "secondary".into(),
             Infrastructure::Nats {
                 url: "nats://localhost:4333".into(),
+                connect_timeout_secs: 20,
+                subscription_capacity: 32,
             },
         );
         let mut extra = settings.roles[1].clone();
@@ -473,5 +513,70 @@ mod tests {
         let path = directory.path().join("missing/node.ron");
         let error = Settings::from_file(&path).unwrap_err();
         assert!(error.to_string().contains(&path.display().to_string()));
+    }
+    #[test]
+    fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let mut settings = Settings {
+            shutdown_timeout_secs: 30,
+            ..Settings::default()
+        };
+        let Role::Authority(authority) = &mut settings.roles[0].kind else {
+            panic!("authority")
+        };
+        authority.report_timeout_secs = 25;
+        let Infrastructure::Nats {
+            connect_timeout_secs,
+            subscription_capacity,
+            ..
+        } = settings.infrastructures.get_mut("local").unwrap();
+        *connect_timeout_secs = 20;
+        *subscription_capacity = 128;
+        confy::store_path(&path, &settings).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        let loaded = Settings::from_file(&path).unwrap();
+        assert_eq!(loaded.shutdown_timeout_secs, 30);
+        let Role::Authority(authority) = &loaded.roles[0].kind else {
+            panic!("authority")
+        };
+        assert_eq!(authority.report_timeout_secs, 25);
+        let Infrastructure::Nats {
+            connect_timeout_secs,
+            subscription_capacity,
+            ..
+        } = &loaded.infrastructures["local"];
+        assert_eq!((*connect_timeout_secs, *subscription_capacity), (20, 128));
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        for field in [
+            "shutdown_timeout_secs: 30",
+            "report_timeout_secs: 25",
+            "connect_timeout_secs: 20",
+            "subscription_capacity: 128",
+        ] {
+            let name = field.split(':').next().unwrap();
+            for replacement in [
+                String::new(),
+                format!("{name}: 0"),
+                format!("{name}: -1"),
+                format!("{name}: {}", u64::MAX),
+            ] {
+                let invalid = source.replace(
+                    &format!("{field},"),
+                    &if replacement.is_empty() {
+                        replacement
+                    } else {
+                        format!("{replacement},")
+                    },
+                );
+                assert_ne!(invalid, source);
+                fs::write(&path, &invalid).unwrap();
+                assert!(
+                    Settings::from_file(&path).is_err(),
+                    "accepted {name}: {invalid}"
+                );
+                assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
+            }
+        }
     }
 }

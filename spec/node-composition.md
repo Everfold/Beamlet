@@ -38,9 +38,10 @@ cargo run -p beamlet-console
     node_id: "76da5097-794c-4306-bd45-caa6a501c200",
     label: Some("开发节点"),
     color: auto,
+    shutdown_timeout_secs: 6,
     infrastructures: {
-        "local": nats(url: "nats://127.0.0.1:4222"),
-        "secondary": nats(url: "nats://127.0.0.1:4333"),
+        "local": nats(url: "nats://127.0.0.1:4222", connect_timeout_secs: 10, subscription_capacity: 16),
+        "secondary": nats(url: "nats://127.0.0.1:4333", connect_timeout_secs: 10, subscription_capacity: 16),
     },
     roles: [
         (
@@ -50,6 +51,7 @@ cargo run -p beamlet-console
             kind: authority((
                 pools: ["blue", "green"],
                 worker_timeout_secs: 15,
+                report_timeout_secs: 3,
                 max_concurrent_tasks: 16,
             )),
         ),
@@ -60,6 +62,7 @@ cargo run -p beamlet-console
             kind: authority((
                 pools: ["blue"],
                 worker_timeout_secs: 20,
+                report_timeout_secs: 3,
                 max_concurrent_tasks: 0,
             )),
         ),
@@ -121,6 +124,7 @@ Console 将输入、发现、查询和提交结果作为独立事件处理, 等�
 kind: authority((
     pools: ["default"],
     worker_timeout_secs: 15,
+                report_timeout_secs: 3,
     max_concurrent_tasks: 32,
 )),
 ```
@@ -129,7 +133,7 @@ kind: authority((
 
 Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 回复通过独立异步任务发送, 单个慢回复不占住主循环. 每个 Authority 最多保留 16 个待发送回复; 达到该上限时暂停业务接收和报告收取, 等待发送释放容量, 不无限积压回复. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付和回复发送结束.
 
-业务入口和 NATS 订阅的接收缓冲仍各为 16, 与此设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
+业务入口接收缓冲为 16, NATS 每个订阅的缓冲由 `subscription_capacity` 指定, 默认 16, 与执行并发设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
 
 ## Worker 并发
 
@@ -143,7 +147,7 @@ Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个�
 
 名额从取出调用开始占用, 到执行结束且报告发送完成或失败后释放. 达到正数上限时暂停取出下一条调用, 不额外创建大量等待名额的执行任务. 所有 Authority 发给该 Worker 的调用共用此上限; 其他 Worker 角色有自己的名额.
 
-能力执行接口返回 Future, I/O 能力可以直接异步等待; 现有文本能力自行将计算放入阻塞线程池. Worker 统一管理执行和报告发送, 挂起的任务仍占用并发名额, 心跳与控制循环继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 配置的在途上限和传输接收缓冲仍独立生效. Worker 接收缓冲保持 16 条, 与执行并发数是不同设置.
+能力执行接口返回 Future, I/O 能力可以直接异步等待; 现有文本能力自行将计算放入阻塞线程池. Worker 统一管理执行和报告发送, 挂起的任务仍占用并发名额, 心跳与控制循环继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 配置的在途上限和传输接收缓冲仍独立生效. Worker 接收缓冲由其 NATS 实例的 `subscription_capacity` 决定, 默认 16 条, 与执行并发数是不同设置.
 
 Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早的慢任务. 执行拒绝、报告发送失败都会释放名额, 不触发重新执行. 收到退出信号后停止新接收, 按当前并发上限排空已接收队列并等待运行中任务; 仍受 Node 的统一退出期限约束.
 
@@ -153,7 +157,7 @@ Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早
 
 Node 先校验整个配置、生成各角色会话并连接基础设施, 再启动角色. 每个 Authority 独立管理 Operation、登记表和在途上限; 每个 Worker 有自己的并发上限和有界接收队列. 基础设施共享不共享角色业务状态.
 
-连接中断由对应 NATS 实例重连, 不终止其他基础设施的角色. 某个角色不可恢复地退出或启动失败时, Node 通知所有角色停止新接收并排空, 然后返回失败; 不在进程内偷偷重启角色. Ctrl+C 同样广播一次退出请求, 每个 Worker 独立公告 draining / offline. 默认最多等待角色排空 6 秒, 超时返回失败并停止等待; 已开始的阻塞执行不能强行取消, 任务也不会自动重试. 退出时对每个连接最多等待 1 秒刷新, 刷新不保证远端已收到.
+连接中断由对应 NATS 实例重连, 不终止其他基础设施的角色. 某个角色不可恢复地退出或启动失败时, Node 通知所有角色停止新接收并排空, 然后返回失败; 不在进程内偷偷重启角色. Ctrl+C 同样广播一次退出请求, 每个 Worker 独立公告 draining / offline. 按 `shutdown_timeout_secs` 等待角色排空, 默认 6 秒, 超时返回失败并停止等待; 已开始的阻塞执行不能强行取消, 任务也不会自动重试. 退出时对每个连接最多等待 1 秒刷新, 刷新不保证远端已收到.
 
 配置修改需要重启. 当前没有角色热增删、角色自动重启、动态插件或任意基础设施类型注册框架. 新角色类型通过带配置的枚举分支和角色运行入口扩展; 新基础设施实现通过对应配置和连接入口扩展.
 
@@ -172,3 +176,11 @@ cargo test -p beamlet-console --test concurrency -- --ignored --nocapture
 组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端.
 
 Console 并发测试验证等待中的提交不阻止查询、目标快照、迟到结果隔离、容量拒绝、退出排空与中止等待. 真实 NATS 验收使用 Console 二进制和可控 Authority 回复, 验证多个提交和查询同时在途、乱序结果关联和配置不变. Authority 回复测试通过有界通道制造发送背压, 验证其他任务可继续、回复容量有限和停机排空.
+
+## 可配置期限和传输容量
+
+Node 顶层 `shutdown_timeout_secs` 默认 6; 每个 Authority 的 `report_timeout_secs` 默认 3. NATS 实例的 `connect_timeout_secs` 默认 10, 同时约束首次连接整体等待与客户端单次连接; `subscription_capacity` 默认 16, 分别作用于该连接上的每个普通订阅, 不表示连接共享的总消息数.
+
+Console 顶层 `request_timeout_secs` 默认 10, `connect_timeout_secs` 默认 10, `subscription_capacity` 默认 65536 (延续原客户端默认值). 请求期限同时传给客户端与外层等待, 发现也受整体请求期限约束. 超时与容量均须大于 0 且在系统支持范围内. 调大 Report 期限后应给 Console 留出排队和回复余量; Node 退出期限独立决定愿意等待角色多久. 超时不取消远端执行, 不自动重试.
+
+这些字段在首次生成配置时写入. 已有配置必须手动补全, 缺失或无效值会在启动前报错; 不迁移或改写已有配置.

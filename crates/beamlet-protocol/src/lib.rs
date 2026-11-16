@@ -14,11 +14,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// 线上消息的结构版本, 与业务能力版本独立.
 pub const VERSION: u16 = 3;
-/// Authority 等待 Worker 报告的上限.
-pub const REPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
-/// Console 等待最终回复的上限, 包含入口排队与交付开销.
-pub const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-
 /// 消息编码、解码或版本校验失败.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

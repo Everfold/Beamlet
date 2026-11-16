@@ -2,10 +2,10 @@
 use crate::{client, settings::Settings};
 use anyhow::{Context, Result, bail, ensure};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Outcome, Pool, PresenceState, REQUEST_TIMEOUT, RoleInstance, Selection,
-    Submission, Task, WorkerView,
+    AuthorityInfo, Command, Outcome, Pool, PresenceState, RoleInstance, Selection, Submission,
+    Task, WorkerView,
 };
-use std::{collections::BTreeSet, future::Future, io::BufRead};
+use std::{collections::BTreeSet, future::Future, io::BufRead, time::Duration};
 use tokio::{sync::mpsc, task::JoinSet};
 use tracing::Instrument;
 use uuid::Uuid;
@@ -92,12 +92,12 @@ impl Action {
             Self::Request { command, .. } => command.request_id(),
         }
     }
-    async fn execute(self, client: async_nats::Client) -> Completion {
+    async fn execute(self, client: async_nats::Client, request_timeout: Duration) -> Completion {
         match self {
             Self::Discover { request_id, pools } => Completion::Discovered {
                 request_id,
                 result: match tokio::time::timeout(
-                    REQUEST_TIMEOUT,
+                    request_timeout,
                     client::discover(&client, &pools, request_id),
                 )
                 .await
@@ -110,7 +110,7 @@ impl Action {
                 command,
                 choice_revision,
             } => {
-                let result = client::request(&client, &command).await;
+                let result = client::request(&client, &command, request_timeout).await;
                 Completion::reply(command, choice_revision, result)
             }
         }
@@ -494,14 +494,23 @@ fn index(input: &str) -> Result<usize> {
 
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     tracing::info!(event = "console.starting", "Console 启动");
-    let client = async_nats::ConnectOptions::new()
-        .request_timeout(Some(REQUEST_TIMEOUT))
-        .connect(settings.nats_url)
-        .await
-        .context("连接 NATS 失败")?;
+    settings.validate()?;
+    let connect_timeout = Duration::from_secs(settings.connect_timeout_secs);
+    let request_timeout = Duration::from_secs(settings.request_timeout_secs);
+    let client = tokio::time::timeout(
+        connect_timeout,
+        async_nats::ConnectOptions::new()
+            .connection_timeout(connect_timeout)
+            .subscription_capacity(settings.subscription_capacity)
+            .request_timeout(Some(request_timeout))
+            .connect(settings.nats_url),
+    )
+    .await
+    .context("连接 NATS 超时")?
+    .context("连接 NATS 失败")?;
     let mut session = Session::new(settings.pools);
     let work = drive(&mut session, terminal_input(), move |action| {
-        action.execute(client.clone())
+        action.execute(client.clone(), request_timeout)
     });
     tokio::select! {
         result = work => result?,

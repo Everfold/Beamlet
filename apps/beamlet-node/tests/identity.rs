@@ -60,11 +60,11 @@ fn restarts_preserve_each_role_id_and_renew_separate_sessions_without_writing_co
         let node_id = Uuid::new_v4();
         let role_ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
         let roles: Vec<_> = role_ids.iter().enumerate().map(|(i, id)| {
-            let kind = if i == 0 { "authority((pools: [\"default\"], worker_timeout_secs: 15, max_concurrent_tasks: 16))" } else { "worker((pool: \"default\", capabilities: [\"text.reverse/v1\"], heartbeat_interval_secs: 5, max_concurrent_tasks: 1))" };
+            let kind = if i == 0 { "authority((pools: [\"default\"], worker_timeout_secs: 15, report_timeout_secs: 3, max_concurrent_tasks: 16))" } else { "worker((pool: \"default\", capabilities: [\"text.reverse/v1\"], heartbeat_interval_secs: 5, max_concurrent_tasks: 1))" };
             format!(r#"(role_id: "{id}", label: Some("角色{i}"), infrastructure: "local", kind: {kind})"#)
         }).collect();
         let source = format!(
-            r#"(node_id: "{node_id}", label: Some("节点甲"), color: never, infrastructures: {{"local": nats(url: "nats://[invalid")}}, roles: [{}])"#,
+            r#"(node_id: "{node_id}", label: Some("节点甲"), color: never, shutdown_timeout_secs: 8, infrastructures: {{"local": nats(url: "nats://[invalid", connect_timeout_secs: 12, subscription_capacity: 32)}}, roles: [{}])"#,
             roles.join(",")
         );
         fs::write(&path, &source).unwrap();

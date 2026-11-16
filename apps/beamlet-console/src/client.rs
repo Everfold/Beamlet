@@ -1,8 +1,8 @@
 //! 发现收集多份回复; 提交只发送一次, 并校验回复关联.
 use anyhow::{Context, Result, ensure};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, REQUEST_TIMEOUT, Reply,
-    RoleInstance, decode, encode, subject,
+    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, Reply, RoleInstance, decode,
+    encode, subject,
 };
 use futures::StreamExt;
 use std::{
@@ -52,13 +52,22 @@ pub(crate) async fn discover(
     Ok(authorities.into_values().collect())
 }
 
-pub(crate) async fn request(client: &async_nats::Client, command: &Command) -> Result<Outcome> {
+pub(crate) async fn request(
+    client: &async_nats::Client,
+    command: &Command,
+    request_timeout: Duration,
+) -> Result<Outcome> {
     let target = subject::authority(command.pool(), command.authority());
     let request_id = command.request_id();
     tracing::info!(event = "request.send_started", %request_id, "发送请求");
     let message = timeout(
-        REQUEST_TIMEOUT,
-        client.request(target, encode(command)?.into()),
+        request_timeout,
+        client.send_request(
+            target,
+            async_nats::Request::new()
+                .payload(encode(command)?.into())
+                .timeout(Some(request_timeout)),
+        ),
     )
     .await
     .context("等待 Authority 超时; 请求可能已执行, 不会自动重发")?

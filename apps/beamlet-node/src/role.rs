@@ -43,7 +43,7 @@ impl RunningRole {
                     let registry = Registry::new(config.pools.clone(), Duration::from_secs(config.worker_timeout_secs), infrastructure.status.clone());
                     let info = AuthorityInfo { instance, label: settings.label, pools: config.pools };
                     let input = ingress::live::Inputs::connect(infrastructure.client.clone(), info, registry.clone(), infrastructure.status, local).await?;
-                    let sender = delivery::nats::Delivery::new(infrastructure.client.clone(), delivery::REPORT_TIMEOUT, registry);
+                    let sender = delivery::nats::Delivery::new(infrastructure.client.clone(), Duration::from_secs(config.report_timeout_secs), registry);
                     authority::run(input, sender, instance, config.max_concurrent_tasks, shutdown.wait()).await
                 }
                 Role::Worker(config) => {
