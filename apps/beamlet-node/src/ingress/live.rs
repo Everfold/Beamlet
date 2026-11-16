@@ -1,7 +1,7 @@
 //! 控制消息独立于 Authority 在途任务名额; 接收队列有界.
 use super::{Ingress, Reply, Request};
 use crate::{
-    delivery::MAX_IN_FLIGHT, infrastructure::Connection, registry::Registry, text_reverse,
+    delivery::RECEIVE_CAPACITY, infrastructure::Connection, registry::Registry, text_reverse,
 };
 use anyhow::{Context, Result};
 use beamlet_protocol::{
@@ -50,7 +50,7 @@ impl Inputs {
         }
         client.flush().await?;
         probe(&client, &info).await?;
-        let (send, remote) = mpsc::channel(MAX_IN_FLIGHT);
+        let (send, remote) = mpsc::channel(RECEIVE_CAPACITY);
         let control = tokio::spawn(
             control(
                 client.clone(),

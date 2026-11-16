@@ -1,5 +1,5 @@
 //! Node 只读取一次 stdin, 将本地输入交给用户选定的 Authority.
-use crate::{delivery::MAX_IN_FLIGHT, shutdown::Shutdown};
+use crate::{delivery::RECEIVE_CAPACITY, shutdown::Shutdown};
 use anyhow::{Context, Result};
 use beamlet_protocol::RoleInstance;
 use std::io::BufRead;
@@ -70,7 +70,7 @@ fn show(targets: &[Target]) {
     }
 }
 fn input() -> Input {
-    let (send, recv) = mpsc::channel(MAX_IN_FLIGHT);
+    let (send, recv) = mpsc::channel(RECEIVE_CAPACITY);
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
             if send.blocking_send(line).is_err() {

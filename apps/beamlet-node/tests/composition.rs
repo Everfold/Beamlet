@@ -167,8 +167,10 @@ fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
         r#"(role_id: "{id}", label: Some("same label"), infrastructure: "{infrastructure}", kind: {kind})"#
     )
 }
-fn authority(pools: &str, timeout: u64) -> String {
-    format!("authority((pools: [{pools}], worker_timeout_secs: {timeout}))")
+fn authority(pools: &str, timeout: u64, concurrency: usize) -> String {
+    format!(
+        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, max_concurrent_tasks: {concurrency}))"
+    )
 }
 fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
     format!(
@@ -321,15 +323,19 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         r#""primary": nats(url: "nats://127.0.0.1:{primary_port}"), "worker-connection": nats(url: "nats://127.0.0.1:{primary_port}"), "secondary": nats(url: "nats://127.0.0.1:{secondary_port}")"#
     );
     let roles = vec![
-        role(ids[0], "primary", &authority(r#""blue", "red", "blue""#, 3)),
-        role(ids[1], "primary", &authority(r#""blue""#, 5)),
+        role(
+            ids[0],
+            "primary",
+            &authority(r#""blue", "red", "blue""#, 3, 1),
+        ),
+        role(ids[1], "primary", &authority(r#""blue""#, 5, 4)),
         role(ids[2], "primary", &worker("text.uppercase/v1", 1, 4)),
         role(
             ids[3],
             "worker-connection",
             &worker("text.reverse/v1", 2, 1),
         ),
-        role(ids[4], "secondary", &authority(r#""blue""#, 3)),
+        role(ids[4], "secondary", &authority(r#""blue""#, 3, 0)),
         role(ids[5], "secondary", &worker("text.reverse/v1", 1, 0)),
     ];
     let source = config(node_id, &infrastructure, &roles);

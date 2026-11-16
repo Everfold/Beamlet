@@ -1,7 +1,7 @@
 //! Authority 生命周期, 通过交付接口将任务发给一个匹配的 Worker.
 
 use crate::{
-    delivery::{Call, Delivery, DeliveryError, MAX_IN_FLIGHT, WorkerReport},
+    delivery::{Call, Delivery, DeliveryError, WorkerReport},
     ingress::{Ingress, Reply, Request},
 };
 use anyhow::{Context, Result, ensure};
@@ -16,6 +16,7 @@ pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
     instance: RoleInstance,
+    max_concurrent_tasks: usize,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
     let session_id = instance.session_id;
@@ -27,7 +28,10 @@ pub(crate) async fn run(
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
 
-    info!(event = "role.ready", "Authority 已就绪; 输入文本后回车");
+    info!(
+        event = "role.ready",
+        max_concurrent_tasks, "Authority 已就绪; 并发上限 0 表示无限"
+    );
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -35,6 +39,8 @@ pub(crate) async fn run(
         }
 
         let incoming = tokio::select! {
+            // 优先响应退出和回收已完成交付, 无限模式也不积压已完成句柄.
+            biased;
             result = &mut shutdown, if !stopping => {
                 result?;
                 stopping = true;
@@ -61,7 +67,7 @@ pub(crate) async fn run(
                 None
             }
 
-            request = ingress.receive(), if !stopping && deliveries.len() < MAX_IN_FLIGHT => {
+            request = ingress.receive(), if !stopping && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
                 let request = request?;
                 if request.is_none() {
                     stopping = true;

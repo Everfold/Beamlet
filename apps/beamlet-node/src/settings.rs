@@ -42,12 +42,15 @@ pub(crate) enum Infrastructure {
 pub(crate) struct Authority {
     pub pools: BTreeSet<Pool>,
     pub worker_timeout_secs: u64,
+    /// 同时交付并等待报告的任务上限; 0 不限制.
+    pub max_concurrent_tasks: usize,
 }
 impl Default for Authority {
     fn default() -> Self {
         Self {
             pools: BTreeSet::from([Pool::default()]),
             worker_timeout_secs: 15,
+            max_concurrent_tasks: 16,
         }
     }
 }
@@ -307,6 +310,8 @@ mod tests {
             distinct.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
             distinct.replace("worker_timeout_secs: 15", "worker_timeout_secs: 0"),
             distinct.replace("text.reverse/v1", "text.reverse/v2"),
+            distinct.replace("max_concurrent_tasks: 16,", ""),
+            distinct.replace("max_concurrent_tasks: 16", "max_concurrent_tasks: -1"),
             distinct.replace("max_concurrent_tasks: 1,", ""),
             distinct.replace("max_concurrent_tasks: 1", "max_concurrent_tasks: -1"),
             distinct.replace("color: auto", "color: other"),
@@ -319,6 +324,42 @@ mod tests {
             assert!(format!("{error:#}").contains(&path.display().to_string()));
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
         }
+    }
+
+    #[test]
+    fn authority_concurrency_is_independent_per_role_and_does_not_rewrite_config() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let mut settings = Settings::default();
+        let Role::Authority(default) = &settings.roles[0].kind else {
+            panic!("expected authority")
+        };
+        assert_eq!(default.max_concurrent_tasks, 16);
+        for limit in [0, 1, 32] {
+            let mut role = settings.roles[0].clone();
+            role.role_id = Uuid::new_v4();
+            let Role::Authority(authority) = &mut role.kind else {
+                panic!("expected authority")
+            };
+            authority.max_concurrent_tasks = limit;
+            settings.roles.push(role);
+        }
+        confy::store_path(&path, &settings).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        let loaded = Settings::from_file(&path).unwrap();
+        let limits: Vec<_> = loaded
+            .roles
+            .iter()
+            .filter_map(|role| match &role.kind {
+                Role::Authority(authority) => Some(authority.max_concurrent_tasks),
+                Role::Worker(worker) => {
+                    assert_eq!(worker.max_concurrent_tasks, 1);
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(limits, [16, 0, 1, 32]);
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
     }
 
     #[test]

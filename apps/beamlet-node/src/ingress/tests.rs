@@ -3,7 +3,7 @@
 use super::{Ingress as _, channel};
 use crate::{
     authority,
-    delivery::{Call, Delivery, DeliveryError, MAX_IN_FLIGHT, WorkerReport},
+    delivery::{Call, Delivery, DeliveryError, RECEIVE_CAPACITY, WorkerReport},
     worker,
 };
 use beamlet_primitives::{Attempt, Report};
@@ -48,7 +48,7 @@ impl Delivery for ControlledDelivery {
 }
 
 fn controlled_delivery() -> (ControlledDelivery, mpsc::Receiver<Work>) {
-    let (send, recv) = mpsc::channel(MAX_IN_FLIGHT);
+    let (send, recv) = mpsc::channel(RECEIVE_CAPACITY);
     (ControlledDelivery(send), recv)
 }
 
@@ -61,6 +61,7 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             input,
             delivery,
             instance(),
+            crate::settings::Authority::default().max_concurrent_tasks,
             std::future::pending(),
         ));
 
@@ -109,6 +110,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
             input,
             delivery,
             instance(),
+            crate::settings::Authority::default().max_concurrent_tasks,
             std::future::pending(),
         ));
 
@@ -164,101 +166,105 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
 
 #[tokio::test]
 async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_work() {
-    within(async {
-        let (sender, input) = channel::pair(MAX_IN_FLIGHT + 1);
-        let (delivery, mut work) = controlled_delivery();
-        let (stop, signal) = oneshot::channel();
-        let authority = tokio::spawn(authority::run(input, delivery, instance(), async {
-            signal.await.unwrap();
-            Ok(())
-        }));
+    for limit in [1, 3, 32] {
+        within(async {
+            let (sender, input) = channel::pair(limit + 1);
+            let (delivery, mut work) = controlled_delivery();
+            let (stop, signal) = oneshot::channel();
+            let authority =
+                tokio::spawn(authority::run(input, delivery, instance(), limit, async {
+                    signal.await.unwrap();
+                    Ok(())
+                }));
 
-        let mut responses = Vec::new();
-        for index in 0..MAX_IN_FLIGHT {
-            responses.push(sender.submit(format!("request-{index}")).await.unwrap());
-        }
-        let unissued = sender.submit("not admitted".into()).await.unwrap();
+            let mut responses = Vec::new();
+            for index in 0..limit {
+                responses.push(sender.submit(format!("request-{index}")).await.unwrap());
+            }
+            let unissued = sender.submit("not admitted".into()).await.unwrap();
 
-        let mut issued = Vec::new();
-        for _ in 0..MAX_IN_FLIGHT {
-            issued.push(work.recv().await.unwrap());
-        }
-        assert!(matches!(
-            work.try_recv(),
-            Err(mpsc::error::TryRecvError::Empty)
-        ));
+            let mut issued = Vec::new();
+            for _ in 0..limit {
+                issued.push(work.recv().await.unwrap());
+            }
+            assert!(matches!(
+                work.try_recv(),
+                Err(mpsc::error::TryRecvError::Empty)
+            ));
 
-        stop.send(()).unwrap();
-        assert!(unissued.await.is_err());
-        assert!(!authority.is_finished(), "退出必须等待已经签发的交付");
-        assert!(sender.submit("after stop".into()).await.is_err());
+            stop.send(()).unwrap();
+            assert!(unissued.await.is_err());
+            assert!(!authority.is_finished(), "退出必须等待已经签发的交付");
+            assert!(sender.submit("after stop".into()).await.is_err());
 
-        for current in issued.into_iter().rev() {
-            current.succeed();
-        }
-        for (index, response) in responses.into_iter().enumerate() {
-            assert_eq!(
-                response.await.unwrap(),
-                format!("request-{index}").chars().rev().collect::<String>()
-            );
-        }
+            for current in issued.into_iter().rev() {
+                current.succeed();
+            }
+            for (index, response) in responses.into_iter().enumerate() {
+                assert_eq!(
+                    response.await.unwrap(),
+                    format!("request-{index}").chars().rev().collect::<String>()
+                );
+            }
 
-        authority.await.unwrap().unwrap();
-        assert!(work.recv().await.is_none(), "停止后不能签发新任务");
-    })
-    .await;
+            authority.await.unwrap().unwrap();
+            assert!(work.recv().await.is_none(), "停止后不能签发新任务");
+        })
+        .await;
+    }
 }
-
 #[tokio::test]
 async fn delivery_completion_releases_admission_capacity() {
-    within(async {
-        let (sender, input) = channel::pair(MAX_IN_FLIGHT + 1);
-        let (delivery, mut work) = controlled_delivery();
-        let authority = tokio::spawn(authority::run(
-            input,
-            delivery,
-            instance(),
-            std::future::pending(),
-        ));
+    for limit in [1, 3, 32] {
+        within(async {
+            let (sender, input) = channel::pair(limit + 1);
+            let (delivery, mut work) = controlled_delivery();
+            let authority = tokio::spawn(authority::run(
+                input,
+                delivery,
+                instance(),
+                limit,
+                std::future::pending(),
+            ));
 
-        // 先取得这一调用, 不假定并发交付任务的启动顺序.
-        let mut responses = vec![sender.submit("abc".into()).await.unwrap()];
-        let mut issued = vec![work.recv().await.unwrap()];
-        for _ in 1..=MAX_IN_FLIGHT {
-            responses.push(sender.submit("abc".into()).await.unwrap());
-        }
-        for _ in 1..MAX_IN_FLIGHT {
-            issued.push(work.recv().await.unwrap());
-        }
-        assert!(matches!(
-            work.try_recv(),
-            Err(mpsc::error::TryRecvError::Empty)
-        ));
+            // 先取得这一调用, 不假定并发交付任务的启动顺序.
+            let mut responses = vec![sender.submit("abc".into()).await.unwrap()];
+            let mut issued = vec![work.recv().await.unwrap()];
+            for _ in 1..=limit {
+                responses.push(sender.submit("abc".into()).await.unwrap());
+            }
+            for _ in 1..limit {
+                issued.push(work.recv().await.unwrap());
+            }
+            assert!(matches!(
+                work.try_recv(),
+                Err(mpsc::error::TryRecvError::Empty)
+            ));
 
-        issued
-            .remove(0)
-            .reply
-            .send(Err(DeliveryError::NoReceiver))
-            .unwrap();
-        assert_eq!(
-            responses.remove(0).await.unwrap(),
-            "错误: 当前没有匹配能力的接收者; 操作保持等待报告, 未重试"
-        );
+            issued
+                .remove(0)
+                .reply
+                .send(Err(DeliveryError::NoReceiver))
+                .unwrap();
+            assert_eq!(
+                responses.remove(0).await.unwrap(),
+                "错误: 当前没有匹配能力的接收者; 操作保持等待报告, 未重试"
+            );
 
-        work.recv().await.unwrap().succeed();
-        for current in issued {
-            current.succeed();
-        }
-        for response in responses {
-            assert_eq!(response.await.unwrap(), "cba");
-        }
+            work.recv().await.unwrap().succeed();
+            for current in issued {
+                current.succeed();
+            }
+            for response in responses {
+                assert_eq!(response.await.unwrap(), "cba");
+            }
 
-        drop(sender);
-        authority.await.unwrap().unwrap();
-    })
-    .await;
+            drop(sender);
+            authority.await.unwrap().unwrap();
+        })
+        .await;
+    }
 }
-
 #[tokio::test]
 async fn channel_backpressure_cancellation_and_stopped_replies() {
     within(async {
@@ -310,6 +316,7 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
             input,
             delivery,
             instance(),
+            crate::settings::Authority::default().max_concurrent_tasks,
             std::future::pending(),
         ));
 
@@ -346,6 +353,7 @@ async fn missing_worker_is_rejected_before_delivery() {
             input,
             delivery,
             instance(),
+            crate::settings::Authority::default().max_concurrent_tasks,
             std::future::pending(),
         ));
         assert_eq!(
@@ -354,6 +362,109 @@ async fn missing_worker_is_rejected_before_delivery() {
         );
         drop(sender);
         authority.await.unwrap().unwrap();
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associations() {
+    within(async {
+        let total = crate::settings::Authority::default().max_concurrent_tasks + 9;
+        let (sender, input) = channel::pair(total);
+        let (delivery, mut work) = controlled_delivery();
+        let authority = tokio::spawn(authority::run(
+            input,
+            delivery,
+            instance(),
+            0,
+            std::future::pending(),
+        ));
+        let mut responses = Vec::new();
+        for index in 0..total {
+            responses.push(sender.submit(format!("request:{index}")).await.unwrap());
+        }
+        let mut issued = Vec::new();
+        let mut operation_ids = std::collections::BTreeSet::new();
+        let mut attempt_ids = std::collections::BTreeSet::new();
+        // No report has completed: a hidden positive limit would stall here.
+        for _ in 0..total {
+            let current = work.recv().await.unwrap();
+            assert!(operation_ids.insert(current.call.attempt.operation_id().clone()));
+            assert!(attempt_ids.insert(current.call.attempt.id().clone()));
+            issued.push(current);
+        }
+        drop(sender); // EOF stops new requests but must wait for all issued work.
+        tokio::task::yield_now().await;
+        assert!(!authority.is_finished());
+        for current in issued.into_iter().rev() {
+            current.succeed();
+        }
+        for (index, response) in responses.into_iter().enumerate() {
+            assert_eq!(
+                response.await.unwrap(),
+                format!("request:{index}").chars().rev().collect::<String>()
+            );
+        }
+        authority.await.unwrap().unwrap();
+        assert!(work.recv().await.is_none());
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() {
+    within(async {
+        let (one_sender, one_input) = channel::pair(2);
+        let (two_sender, two_input) = channel::pair(2);
+        let (delivery, mut work) = controlled_delivery();
+        let one = tokio::spawn(authority::run(
+            one_input,
+            delivery.clone(),
+            instance(),
+            1,
+            std::future::pending(),
+        ));
+        let two_instance = RoleInstance {
+            role_id: uuid::Uuid::new_v4(),
+            session_id: uuid::Uuid::new_v4(),
+        };
+        let two = tokio::spawn(authority::run(
+            two_input,
+            delivery,
+            two_instance,
+            2,
+            std::future::pending(),
+        ));
+        let first_response = one_sender.submit("first".into()).await.unwrap();
+        let first = work.recv().await.unwrap();
+        let queued_response = one_sender.submit("queued".into()).await.unwrap();
+        let second_response = two_sender.submit("second".into()).await.unwrap();
+        let third_response = two_sender.submit("third".into()).await.unwrap();
+        let mut other = Vec::new();
+        for _ in 0..2 {
+            let current = work.recv().await.unwrap();
+            assert_eq!(current.call.authority, two_instance);
+            assert_eq!(current.call.worker, first.call.worker);
+            other.push(current);
+        }
+        for current in other.into_iter().rev() {
+            current.succeed();
+        }
+        assert_eq!(second_response.await.unwrap(), "dnoces");
+        assert_eq!(third_response.await.unwrap(), "driht");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(40), work.recv())
+                .await
+                .is_err(),
+            "second Authority released the first Authority's capacity"
+        );
+        first.succeed();
+        assert_eq!(first_response.await.unwrap(), "tsrif");
+        work.recv().await.unwrap().succeed();
+        assert_eq!(queued_response.await.unwrap(), "deueuq");
+        drop((one_sender, two_sender));
+        one.await.unwrap().unwrap();
+        two.await.unwrap().unwrap();
     })
     .await;
 }

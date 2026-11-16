@@ -10,7 +10,7 @@ mod tests;
 
 pub(crate) use contract::{Call, Delivery, DeliveryError, Inbox, Incoming, WorkerReport};
 
-/// 示例最多同时等待 16 次交付, 避免无界创建异步任务.
-pub(crate) const MAX_IN_FLIGHT: usize = 16;
+/// 本地入口和 NATS 订阅各自的接收缓冲容量, 与角色并发上限独立.
+pub(crate) const RECEIVE_CAPACITY: usize = 16;
 
 pub(crate) use beamlet_protocol::REPORT_TIMEOUT;

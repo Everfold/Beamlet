@@ -26,7 +26,7 @@ impl Nats {
         let span = tracing::Span::current();
 
         let client = async_nats::ConnectOptions::new()
-            .subscription_capacity(crate::delivery::MAX_IN_FLIGHT)
+            .subscription_capacity(crate::delivery::RECEIVE_CAPACITY)
             .event_callback(move |event| {
                 let events = events.clone();
                 let span = span.clone();

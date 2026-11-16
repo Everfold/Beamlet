@@ -44,7 +44,7 @@ impl RunningRole {
                     let info = AuthorityInfo { instance, label: settings.label, pools: config.pools };
                     let input = ingress::live::Inputs::connect(infrastructure.client.clone(), info, registry.clone(), infrastructure.status, local).await?;
                     let sender = delivery::nats::Delivery::new(infrastructure.client.clone(), delivery::REPORT_TIMEOUT, registry);
-                    authority::run(input, sender, instance, shutdown.wait()).await
+                    authority::run(input, sender, instance, config.max_concurrent_tasks, shutdown.wait()).await
                 }
                 Role::Worker(config) => {
                     let (state, changes) = watch::channel(PresenceState::Ready);
@@ -70,7 +70,7 @@ impl RunningRole {
         }.instrument(span).await
     }
     pub(crate) fn local_input(&self) -> (Option<terminal::Target>, terminal::Input) {
-        let (send, receive) = mpsc::channel(delivery::MAX_IN_FLIGHT);
+        let (send, receive) = mpsc::channel(delivery::RECEIVE_CAPACITY);
         let target = matches!(self.settings.kind, Role::Authority(_)).then(|| terminal::Target {
             instance: self.instance,
             label: self.settings.label.clone(),

@@ -218,9 +218,9 @@ async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
 }
 
 #[tokio::test]
-async fn zero_admits_more_than_the_authority_limit_without_waiting_for_completion() {
+async fn zero_admits_more_than_the_receive_capacity_without_waiting_for_completion() {
     within(async {
-        let total = delivery::MAX_IN_FLIGHT + 5;
+        let total = delivery::RECEIVE_CAPACITY + 5;
         let mut h = start(0, total);
         let mut blocked = Vec::new();
         for _ in 0..total {
