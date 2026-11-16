@@ -1,6 +1,6 @@
 # 能力交付契约
 
-状态: 已实现 Worker pool、会话登记与定向交付. node / console 使用同一 v2 协议; 不兼容旧纯文本网络入口. 启动和配置见[使用说明](../README.md).
+状态: 已实现 Worker pool、会话登记与定向交付. node / console 使用同一 v3 协议; 不兼容旧纯文本网络入口. 启动和独立角色配置见[Node 角色装配](node-composition.md).
 
 ## 1. 职责与边界
 
@@ -12,9 +12,9 @@ node 的 ingress 接收本地终端和网络提交, 返回结构化请求与一�
 
 ## 2. 身份、pool 与能力
 
-每个角色使用持久 `node_id` 和本次进程运行的 `session_id`. label 只用于展示. 同一 node_id 的不同会话独立登记、独立路由; 不按 UUID 大小决定新旧. 复制配置同时运行会展示多个会话, 不承诺单节点单活.
+每个角色使用持久 `role_id` 和本次角色运行独立生成的 `session_id`. Node 可同时承载多个 Authority / Worker; `node_id` 只用于承载进程的日志, 不参与路由. label 只用于展示. 同一 role_id 的不同会话独立登记、独立路由; 不按 UUID 大小决定新旧. 复制角色配置同时运行会展示多个会话, 不承诺单角色单活.
 
-Worker 属于一个 `pool`; Authority 加入非空 `pools` 集合. Console 的 `pools` 是发现范围. 名称为 1..=64 字节 ASCII 字母、数字、`-`、`_`, 按大小写敏感的精确值去重. 不修剪或改写配置中的名称; 去重不重写文件. Authority 之间无需共享 Worker 表: 同池公告由各 Authority 分别接收, 视图允许短暂不同.
+每个 Worker 角色属于一个 `pool`; 每个 Authority 角色加入非空 `pools` 集合. 角色引用一个命名基础设施, 同一个 Node 可共享或配置多个 NATS 连接; 独立 NATS 上的同名 pool 彼此不可见. Console 的 `pools` 是发现范围. 名称为 1..=64 字节 ASCII 字母、数字、`-`、`_`, 按大小写敏感的精确值去重. 不修剪或改写配置中的名称; 去重不重写文件. Authority 之间无需共享 Worker 表: 同池公告由各 Authority 分别接收, 视图允许短暂不同.
 
 Worker 配置的 `capabilities` 同时决定公告内容和执行许可, 空列表或未知版本使启动失败. 目前内置:
 
@@ -25,7 +25,7 @@ Worker 配置的 `capabilities` 同时决定公告内容和执行许可, 空列�
 
 ## 3. Worker 登记与存活
 
-每个 Authority 持有内存登记表, 键为 `(pool, node_id, session_id)`. 完整公告含 label、能力集合、`ready/draining/offline` 状态及会话内递增的 `sequence`. 同序号或倒序消息不更新状态, 也不续期. 心跳默认每 5 秒一次, Worker 可通过 `heartbeat_interval_secs` 修改.
+每个 Authority 持有内存登记表, 键为 `(pool, role_id, session_id)`. 完整公告含 label、能力集合、`ready/draining/offline` 状态及会话内递增的 `sequence`. 同序号或倒序消息不更新状态, 也不续期. 心跳默认每 5 秒一次, Worker 可通过 `heartbeat_interval_secs` 修改.
 
 Worker 在任务订阅刷新后公告 ready. Authority 启动时主动探测, Worker 收到探测即发布完整快照; 即使丢失上线消息, 后续完整心跳也能登记. 多 pool 订阅和公告均不使用共享队列组.
 
@@ -39,15 +39,15 @@ NATS 断开时所有现有记录立即停止用于选择; 重连后的连接世�
 
 ## 4. 版本、发现与定向路由
 
-JSON 外层统一为 `{ "version": 2, "body": ... }`. 未知版本、格式错误、字段错误不执行业务. 配置仍使用 RON.
+JSON 外层统一为 `{ "version": 3, "body": ... }`. 未知版本、格式错误、字段错误不执行业务. 配置仍使用 RON.
 
 | subject | 用途 |
 | --- | --- |
-| `beamlet.v2.<pool>.authority.discover` | 发现该 pool 内的 Authority, 每个 Authority 回复自身信息 |
-| `beamlet.v2.<pool>.authority.<node_id>.<session_id>.requests` | 指定 Authority 的 Worker 查询或创建请求 |
-| `beamlet.v2.<pool>.worker.presence` | 广播完整状态快照 |
-| `beamlet.v2.<pool>.worker.probe` | 请求 Worker 立即发布快照 |
-| `beamlet.v2.<pool>.worker.<node_id>.<session_id>.calls` | 指定 Worker 会话的调用 |
+| `beamlet.v3.<pool>.authority.discover` | 发现该 pool 内的 Authority, 每个 Authority 回复自身信息 |
+| `beamlet.v3.<pool>.authority.<role_id>.<session_id>.requests` | 指定 Authority 的 Worker 查询或创建请求 |
+| `beamlet.v3.<pool>.worker.presence` | 广播完整状态快照 |
+| `beamlet.v3.<pool>.worker.probe` | 请求 Worker 立即发布快照 |
+| `beamlet.v3.<pool>.worker.<role_id>.<session_id>.calls` | 指定 Worker 会话的调用 |
 
 Console 对配置的 pools 发出发现查询, 在一秒窗口内收集多份回复. 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
 
@@ -59,7 +59,7 @@ Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能�
 
 ## 5. 容量和失败语义
 
-Authority 最多同时等待 16 次交付, ingress 最多缓冲 16 个创建请求. 队列已满的请求明确拒绝, 控制查询仍可处理. Worker 按进程串行执行, 一个实例订阅共用 16 条缓冲, 多个 Authority 共享这份容量. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
+Authority 最多同时等待 16 次交付, ingress 最多缓冲 16 个创建请求. 队列已满的请求明确拒绝, 控制查询仍可处理. 每个 Worker 角色串行执行, 一个角色实例订阅共用 16 条缓冲, 多个 Authority 共享该角色的容量; 同一 Node 内其他 Worker 有独立队列. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
 
 | 时机 / 结果 | 行为 |
 | --- | --- |
@@ -72,10 +72,10 @@ Report 等待期限为 3 秒; Console 请求期限为 10 秒, 包含正常排队
 
 `request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
 
-Authority 退出停止新接收、丢弃尚未签发的排队请求, 等待已签发交付结束并刷新回复缓冲. 本地 EOF 不停止网络服务. 内存状态随进程退出丢失.
+Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
 
 ## 6. 验证
 
 普通 `cargo test --workspace` 不需要 NATS. [登记测试](../apps/beamlet-node/src/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [channel 交付测试](../apps/beamlet-node/src/delivery/tests.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../apps/beamlet-node/src/ingress/tests.rs)验证并发、满载、退出与失败语义. 共享协议测试验证版本和主题隔离.
 
-运行 `python3 scripts/smoke-worker-pools.py` 可进行真实 NATS 验收. 脚本只要求 Python 标准库、Cargo 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程, 自动回收. 覆盖多 pool、多 Authority 共享 Worker、相同持久身份的不同会话、晚启动、能力限制、无效输入、满载查询、旧公告、报告关联、超时不重试、下线/过期/重连和实际 Console 交互. 这些检查不构成任意网络故障下的恰好一次证明.
+显式运行 `cargo test -p beamlet-node --test composition -- --ignored --nocapture` 可进行真实 NATS 组合验收. 测试要求 Unix 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程并自动回收. 覆盖一个进程内多个同类型角色、多连接共享/隔离、精确角色定向、同角色不同会话、跨 Node 运行、正常退出、重连和配置不变. 普通 Cargo 测试默认忽略该验收, 不依赖服务端. 这些检查不构成任意网络故障下的恰好一次证明.

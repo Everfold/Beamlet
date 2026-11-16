@@ -333,6 +333,30 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
+        let mut settings = Settings::default();
+        settings.roles[1].role_id = settings.roles[0].role_id;
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("重复的 role_id")
+        );
+        settings.roles[1].role_id = Uuid::new_v4();
+        settings.roles[1].infrastructure = "not configured".into();
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("不存在的基础设施")
+        );
+        settings.roles.clear();
+        settings.validate().unwrap();
+    }
+
+    #[test]
     fn concurrent_first_starts_reuse_all_persisted_ids() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("node.ron");

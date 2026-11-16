@@ -1,6 +1,6 @@
 # Worker 能力、Pool 与定向交付开发计划
 
-状态: 已实施并验证. 本文保留开发时的阶段划分与验收要求; 实际行为以 [交付契约](delivery.md) 和 [内核规范](kernel.md) 为准. P2–P4 及 node 入口作为一个可编译阶段提交, Console 另行提交; 配置保持平铺 RON 布局, 登记模块位于 node 的 registry.rs.
+状态: 已实施并验证; 本文保留当时的单角色 Node / v2 设计背景. 当前多角色配置与 v3 身份见 [Node 角色装配](node-composition.md). 本文保留开发时的阶段划分与验收要求; 实际行为以 [交付契约](delivery.md) 和 [内核规范](kernel.md) 为准. P2–P4 及 node 入口作为一个可编译阶段提交, Console 另行提交; 配置保持平铺 RON 布局, 登记模块位于 node 的 registry.rs.
 
 **1. 目标与已确定的约定**
 

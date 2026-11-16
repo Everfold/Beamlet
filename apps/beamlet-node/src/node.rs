@@ -186,4 +186,35 @@ mod tests {
         running.await.unwrap().unwrap();
         assert_eq!(drained.load(Ordering::SeqCst), 2);
     }
+
+    #[tokio::test]
+    async fn infrastructure_only_node_waits_for_exit_and_propagates_signal_error() {
+        let (stop, _shutdown) = shutdown::channel();
+        let result = supervise(JoinSet::new(), stop, async { Ok(()) }, async {
+            Err(std::io::Error::other("signal unavailable"))
+        })
+        .await;
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("signal unavailable")
+        );
+    }
+
+    #[tokio::test]
+    async fn panicked_role_requests_shutdown_for_its_siblings() {
+        let (stop, shutdown) = shutdown::channel();
+        let (send, received) = tokio::sync::oneshot::channel();
+        let mut tasks = JoinSet::new();
+        tasks.spawn(async move {
+            shutdown.wait().await?;
+            send.send(()).expect("test receiver");
+            Ok(())
+        });
+        tasks.spawn(async { panic!("simulated role panic") });
+        let result = supervise(tasks, stop, async { Ok(()) }, std::future::pending()).await;
+        assert!(result.is_err());
+        received.await.unwrap();
+    }
 }
