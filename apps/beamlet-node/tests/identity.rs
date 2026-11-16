@@ -9,8 +9,9 @@ struct StoredIdentity {
     node_id: Uuid,
 }
 
-fn start(binary: &Path, working_directory: &Path) -> (String, Uuid) {
+fn start(binary: &Path, working_directory: &Path, args: &[&str]) -> (String, Uuid) {
     let output = Command::new(binary)
+        .args(args)
         .current_dir(working_directory)
         .output()
         .unwrap();
@@ -38,15 +39,26 @@ fn start(binary: &Path, working_directory: &Path) -> (String, Uuid) {
 
 #[test]
 fn restart_preserves_node_id_and_label_but_renews_session() {
-    for role in ["authority", "worker"] {
+    for (role, file_name, args) in [
+        ("authority", "node.ron", &[][..]),
+        ("worker", "worker-1.ron", &["--config", "worker-1.ron"][..]),
+        ("authority", "主节点.ron", &["-c", "主节点.ron"][..]),
+    ] {
         let directory = tempfile::tempdir().unwrap();
         let cwd = tempfile::tempdir().unwrap();
-        fs::write(cwd.path().join("node.ron"), "invalid cwd config").unwrap();
+        fs::write(cwd.path().join(file_name), "invalid cwd config").unwrap();
         let binary = directory
             .path()
             .join(format!("beamlet-node{}", std::env::consts::EXE_SUFFIX));
         fs::copy(env!("CARGO_BIN_EXE_beamlet-node"), &binary).unwrap();
-        let path = directory.path().join("node.ron");
+        let path = directory.path().join(file_name);
+        if file_name != "node.ron" {
+            fs::write(
+                directory.path().join("node.ron"),
+                "unselected default config",
+            )
+            .unwrap();
+        }
         let expected_node_id = Uuid::new_v4();
         fs::write(
             &path,
@@ -56,7 +68,7 @@ fn restart_preserves_node_id_and_label_but_renews_session() {
         )
         .unwrap();
 
-        let (first_log, first_session) = start(&binary, cwd.path());
+        let (first_log, first_session) = start(&binary, cwd.path(), args);
         let content = fs::read_to_string(&path).unwrap();
         let config: StoredIdentity = confy::load_path(&path).unwrap();
         let node_id = config.node_id;
@@ -74,14 +86,14 @@ fn restart_preserves_node_id_and_label_but_renews_session() {
         assert!(!content.contains("session_id"));
         assert!(!content.contains(&first_session.to_string()));
 
-        let (second_log, second_session) = start(&binary, cwd.path());
+        let (second_log, second_session) = start(&binary, cwd.path(), args);
         assert!(second_log.contains(&node_id.to_string()));
         assert!(second_log.contains("节点甲"));
         assert_ne!(first_session, second_session);
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
 
         fs::write(&path, content.replace("节点甲", "节点乙")).unwrap();
-        let (renamed_log, renamed_session) = start(&binary, cwd.path());
+        let (renamed_log, renamed_session) = start(&binary, cwd.path(), args);
         assert!(renamed_log.contains("节点乙"));
         assert!(renamed_log.contains(&node_id.to_string()));
         assert_ne!(second_session, renamed_session);

@@ -6,14 +6,23 @@ mod text_reverse;
 mod worker;
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use settings::{Color, Role, Settings};
-use std::process::ExitCode;
+use std::{path::PathBuf, process::ExitCode};
 use tracing::{Instrument, error, info, info_span};
 use uuid::Uuid;
 
+#[derive(Parser)]
+#[command(version, about = "启动 Beamlet 节点")]
+struct Args {
+    #[arg(short, long, value_name = "FILE", default_value = "node.ron")]
+    config: PathBuf,
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
-    let settings = Settings::load();
+    let args = Args::parse();
+    let settings = Settings::load(&args.config);
     let color = settings
         .as_ref()
         .map_or(Color::Auto, |settings| settings.color);

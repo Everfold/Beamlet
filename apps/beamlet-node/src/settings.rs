@@ -55,10 +55,15 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub(crate) fn load() -> Result<Self> {
+    pub(crate) fn load(file_name: &Path) -> Result<Self> {
+        ensure!(
+            file_name.file_name() == Some(file_name.as_os_str()),
+            "配置文件名称必须是文件名, 不能包含目录: {}",
+            file_name.display()
+        );
         let path = env::current_exe()
             .context("获取可执行文件路径失败")?
-            .with_file_name("node.ron");
+            .with_file_name(file_name);
         Self::from_file(&path)
     }
 

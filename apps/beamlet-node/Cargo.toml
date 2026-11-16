@@ -16,6 +16,8 @@ tokio.workspace = true
 
 async-nats.workspace = true
 
+clap.workspace = true
+
 confy.workspace = true
 uuid.workspace = true
 
