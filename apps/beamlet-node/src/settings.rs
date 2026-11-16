@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, ensure};
+use beamlet_protocol::Pool;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::{env, fs::OpenOptions, io::IsTerminal, path::Path};
 use uuid::Uuid;
 
@@ -40,6 +42,11 @@ pub(crate) struct Settings {
     pub role: Role,
     pub nats_url: String,
     pub color: Color,
+    pub pools: BTreeSet<Pool>,
+    pub pool: Pool,
+    pub capabilities: BTreeSet<String>,
+    pub heartbeat_interval_secs: u64,
+    pub worker_timeout_secs: u64,
 }
 
 impl Default for Settings {
@@ -50,6 +57,11 @@ impl Default for Settings {
             role: Role::Authority,
             nats_url: "nats://127.0.0.1:4222".into(),
             color: Color::Auto,
+            pools: BTreeSet::from([Pool::default()]),
+            pool: Pool::default(),
+            capabilities: BTreeSet::from([crate::text_reverse::CAPABILITY.into()]),
+            heartbeat_interval_secs: 5,
+            worker_timeout_secs: 15,
         }
     }
 }
@@ -85,6 +97,29 @@ impl Settings {
             "node_id 不能是 nil UUID: {}",
             path.display()
         );
+        match settings.role {
+            Role::Authority => {
+                ensure!(
+                    !settings.pools.is_empty(),
+                    "Authority 至少需要一个 pool: {}",
+                    path.display()
+                );
+                ensure!(
+                    settings.worker_timeout_secs > 0,
+                    "worker_timeout_secs 必须大于 0: {}",
+                    path.display()
+                );
+            }
+            Role::Worker => {
+                ensure!(
+                    settings.heartbeat_interval_secs > 0,
+                    "heartbeat_interval_secs 必须大于 0: {}",
+                    path.display()
+                );
+                crate::capabilities::validate(&settings.capabilities)
+                    .with_context(|| format!("Worker 能力配置无效: {}", path.display()))?;
+            }
+        }
         Ok(settings)
     }
 }
@@ -105,13 +140,14 @@ mod tests {
         ] {
             let node_id = Uuid::new_v4();
             let source = format!(
-                r#"(node_id: "{node_id}", role: {role_name}, label: Some("华东节点"), nats_url: "nats://localhost:4333", color: {color_name})"#
+                r#"(node_id: "{node_id}", role: {role_name}, label: Some("华东节点"), nats_url: "nats://localhost:4333", color: {color_name}, pools: ["default", "default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
             );
             fs::write(&path, &source).unwrap();
             let settings = Settings::from_file(&path).unwrap();
             assert_eq!(settings.node_id, node_id);
             assert_eq!(settings.label.as_deref(), Some("华东节点"));
             assert_eq!(settings.role, role);
+            assert_eq!(settings.pools.len(), 1);
             assert_eq!(settings.nats_url, "nats://localhost:4333");
             assert_eq!(settings.color, color);
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
@@ -124,7 +160,7 @@ mod tests {
         let path = directory.path().join("node.ron");
         let node_id = Uuid::new_v4();
         let valid = format!(
-            r#"(node_id: "{node_id}", role: worker, label: None, nats_url: "nats://localhost:4333", color: auto)"#
+            r#"(node_id: "{node_id}", role: worker, label: None, nats_url: "nats://localhost:4333", color: auto, pools: ["default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
         );
         for source in [
             valid.replace(&format!("node_id: \"{node_id}\", "), ""),
@@ -132,6 +168,10 @@ mod tests {
             valid.replace("role: worker", "role: other"),
             valid.replace("nats_url", "nats_ur1"),
             valid.replace("color: auto", "color: invalid"),
+            valid.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
+            valid.replace("text.reverse/v1", "text.reverse/v2"),
+            valid.replace("capabilities: [\"text.reverse/v1\"]", "capabilities: []"),
+            valid.replace("pool: \"default\"", "pool: \"bad.pool\""),
             valid.replace(&node_id.to_string(), "not-a-uuid"),
             valid.replace(&node_id.to_string(), &Uuid::nil().to_string()),
             valid.replace("label: None", "label: \"unsupported string\""),

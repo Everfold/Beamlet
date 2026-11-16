@@ -1,8 +1,8 @@
 //! Worker 只接收授权、执行业务并回报, 不持有 runtime.
 
 use crate::{
+    capabilities,
     delivery::{Call, Inbox, WorkerReport},
-    text_reverse::{self, CAPABILITY},
 };
 use anyhow::{Context, Result};
 use beamlet_primitives::Report;
@@ -19,11 +19,7 @@ pub(crate) async fn run(
     let mut stopping = false;
     let mut next_id = 0_u64;
 
-    info!(
-        event = "node.ready",
-        capability = CAPABILITY,
-        "Worker 已就绪"
-    );
+    info!(event = "node.ready", "Worker 已就绪");
 
     loop {
         let incoming = tokio::select! {
@@ -51,7 +47,12 @@ pub(crate) async fn run(
         async {
             info!(event = "operation.received", "收到 Operation 请求数据");
             info!(event = "attempt.received", "收到 Attempt");
-            match execute(incoming.call, report_id) {
+            let span = tracing::Span::current();
+            let result = tokio::task::spawn_blocking(move || {
+                let _entered = span.enter();
+                execute(incoming.call, report_id)
+            }).await.context("能力执行任务异常退出")?;
+            match result {
                 Ok(report) => {
                     let span = info_span!("report", report_id = %report.id());
                     async {
@@ -67,9 +68,10 @@ pub(crate) async fn run(
                 }
                 Err(error) => warn!(event = "attempt.rejected", error = %error, "拒绝执行 Attempt"),
             }
+            Ok::<_, anyhow::Error>(())
         }
         .instrument(span)
-        .await;
+        .await?;
     }
 
     info!(event = "worker.drained", "已接收调用处理完毕");
@@ -78,7 +80,7 @@ pub(crate) async fn run(
 }
 
 pub(crate) fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
-    let result = text_reverse::execute(&call.capability, &call.text)?;
+    let result = capabilities::execute(&call.capability, &call.text)?;
 
     let report = Report::new(report_id, call.attempt, result);
     info!(

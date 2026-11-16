@@ -63,7 +63,7 @@ fn restart_preserves_node_id_and_label_but_renews_session() {
         fs::write(
             &path,
             format!(
-                r#"(node_id: "{expected_node_id}", role: {role}, label: Some("节点甲"), nats_url: "nats://[invalid", color: auto)"#
+                r#"(node_id: "{expected_node_id}", role: {role}, label: Some("节点甲"), nats_url: "nats://[invalid", color: auto, pools: ["default"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, worker_timeout_secs: 15)"#
             ),
         )
         .unwrap();

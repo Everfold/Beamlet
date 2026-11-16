@@ -1,4 +1,5 @@
 mod authority;
+mod capabilities;
 mod delivery;
 mod ingress;
 mod settings;
@@ -90,9 +91,8 @@ async fn run(settings: Settings, session_id: Uuid) -> Result<()> {
         }
 
         Role::Worker => {
-            let inbox =
-                delivery::nats::Inbox::subscribe(client.clone(), &[text_reverse::CAPABILITY])
-                    .await?;
+            let capabilities: Vec<_> = settings.capabilities.iter().map(String::as_str).collect();
+            let inbox = delivery::nats::Inbox::subscribe(client.clone(), &capabilities).await?;
 
             worker::run(inbox, session_id.to_string(), tokio::signal::ctrl_c()).await?;
         }

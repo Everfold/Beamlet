@@ -1,5 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
+use beamlet_protocol::Pool;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::{env, io::IsTerminal, path::Path};
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -29,6 +31,7 @@ impl Color {
 pub(crate) struct Settings {
     pub nats_url: String,
     pub color: Color,
+    pub pools: BTreeSet<Pool>,
 }
 
 impl Default for Settings {
@@ -36,6 +39,7 @@ impl Default for Settings {
         Self {
             nats_url: "nats://127.0.0.1:4222".into(),
             color: Color::Auto,
+            pools: BTreeSet::from([Pool::default()]),
         }
     }
 }
@@ -49,7 +53,14 @@ impl Settings {
     }
 
     fn from_file(path: &Path) -> Result<Self> {
-        confy::load_path(path).with_context(|| format!("加载控制台配置失败: {}", path.display()))
+        let settings: Self = confy::load_path(path)
+            .with_context(|| format!("加载控制台配置失败: {}", path.display()))?;
+        ensure!(
+            !settings.pools.is_empty(),
+            "Console 至少需要一个 pool: {}",
+            path.display()
+        );
+        Ok(settings)
     }
 }
 
