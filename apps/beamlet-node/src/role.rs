@@ -52,7 +52,7 @@ impl RunningRole {
                     let snapshot = Presence { pool: config.pool, instance, label: settings.label, capabilities: config.capabilities, sequence: 0, state: PresenceState::Ready };
                     let announcements = presence::announce(infrastructure.client.clone(), snapshot, Duration::from_secs(config.heartbeat_interval_secs), changes, infrastructure.status);
                     tokio::pin!(announcements);
-                    let work = worker::run(inbox, instance.session_id.to_string(), shutdown.wait());
+                    let work = worker::run(inbox, instance.session_id.to_string(), config.max_concurrent_tasks, shutdown.wait());
                     tokio::pin!(work);
                     tokio::select! {
                         result = &mut announcements => { result?; anyhow::bail!("Worker 心跳任务意外结束"); }

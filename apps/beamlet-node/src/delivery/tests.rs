@@ -192,7 +192,12 @@ async fn channel_backpressure_and_worker_drain() {
     ));
 
     inbox.stop().await.unwrap();
-    let worker = tokio::spawn(worker::run(inbox, "worker".into(), std::future::pending()));
+    let worker = tokio::spawn(worker::run(
+        inbox,
+        "worker".into(),
+        1,
+        std::future::pending(),
+    ));
     assert_eq!(first.await.unwrap().result(), "cba");
     worker.await.unwrap().unwrap();
 

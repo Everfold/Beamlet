@@ -172,7 +172,7 @@ fn authority(pools: &str, timeout: u64) -> String {
 }
 fn worker(capability: &str, interval: u64) -> String {
     format!(
-        r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}))"#
+        r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: 4))"#
     )
 }
 fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {

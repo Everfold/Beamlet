@@ -27,7 +27,7 @@ impl Delivery {
             deadline,
         }
     }
-    pub(super) fn register(&mut self, capabilities: &[&str], capacity: usize) -> Inbox {
+    pub(crate) fn register(&mut self, capabilities: &[&str], capacity: usize) -> Inbox {
         let base = 3 + 2 * self.workers.len() as u128;
         self.register_in(
             Pool::default(),
@@ -102,7 +102,7 @@ impl super::Delivery for Delivery {
         contract::check_report(report, &operation_id, &attempt_id)
     }
 }
-pub(super) struct Inbox(mpsc::Receiver<Incoming>);
+pub(crate) struct Inbox(mpsc::Receiver<Incoming>);
 impl super::Inbox for Inbox {
     async fn receive(&mut self) -> Result<Option<Incoming>> {
         Ok(self.0.recv().await)

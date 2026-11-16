@@ -58,6 +58,8 @@ pub(crate) struct Worker {
     pub pool: Pool,
     pub capabilities: BTreeSet<String>,
     pub heartbeat_interval_secs: u64,
+    /// 同时执行并发送报告的任务上限; 0 不限制.
+    pub max_concurrent_tasks: usize,
 }
 impl Default for Worker {
     fn default() -> Self {
@@ -65,6 +67,7 @@ impl Default for Worker {
             pool: Pool::default(),
             capabilities: BTreeSet::from([crate::text_reverse::CAPABILITY.into()]),
             heartbeat_interval_secs: 5,
+            max_concurrent_tasks: 1,
         }
     }
 }
@@ -263,6 +266,7 @@ mod tests {
             pool: "other".parse().unwrap(),
             capabilities: BTreeSet::from([crate::capabilities::UPPERCASE.into()]),
             heartbeat_interval_secs: 1,
+            max_concurrent_tasks: 4,
         });
         settings.roles.push(extra);
         confy::store_path(&path, &settings).unwrap();
@@ -274,6 +278,7 @@ mod tests {
             panic!("expected worker")
         };
         assert_eq!(worker.heartbeat_interval_secs, 1);
+        assert_eq!(worker.max_concurrent_tasks, 4);
         assert_eq!(worker.pool.to_string(), "other");
         assert_eq!(fs::read_to_string(&path).unwrap(), source);
     }
@@ -302,6 +307,8 @@ mod tests {
             distinct.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
             distinct.replace("worker_timeout_secs: 15", "worker_timeout_secs: 0"),
             distinct.replace("text.reverse/v1", "text.reverse/v2"),
+            distinct.replace("max_concurrent_tasks: 1,", ""),
+            distinct.replace("max_concurrent_tasks: 1", "max_concurrent_tasks: -1"),
             distinct.replace("color: auto", "color: other"),
             distinct.replace("role_id:", "session_id:"),
             "invalid RON".into(),
@@ -312,6 +319,39 @@ mod tests {
             assert!(format!("{error:#}").contains(&path.display().to_string()));
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
         }
+    }
+
+    #[test]
+    fn worker_concurrency_is_loaded_per_role_including_unlimited_without_rewriting() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("node.ron");
+        let mut settings = Settings::default();
+        let Role::Worker(default) = &settings.roles[1].kind else {
+            panic!("expected default worker")
+        };
+        assert_eq!(default.max_concurrent_tasks, 1);
+        for limit in [0, 4, 32] {
+            let mut role = settings.roles[1].clone();
+            role.role_id = Uuid::new_v4();
+            let Role::Worker(worker) = &mut role.kind else {
+                panic!("expected worker")
+            };
+            worker.max_concurrent_tasks = limit;
+            settings.roles.push(role);
+        }
+        confy::store_path(&path, &settings).unwrap();
+        let source = fs::read_to_string(&path).unwrap();
+        let loaded = Settings::from_file(&path).unwrap();
+        let limits: Vec<_> = loaded
+            .roles
+            .iter()
+            .filter_map(|role| match &role.kind {
+                Role::Worker(worker) => Some(worker.max_concurrent_tasks),
+                Role::Authority(_) => None,
+            })
+            .collect();
+        assert_eq!(limits, [1, 0, 4, 32]);
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
     }
 
     #[test]
