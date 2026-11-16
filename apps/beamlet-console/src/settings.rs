@@ -1,23 +1,19 @@
 use anyhow::{Context, Result};
-use config::{Config, File, FileFormat};
-use serde::Deserialize;
-use std::{
-    env,
-    fs::OpenOptions,
-    io::{ErrorKind, Write},
-    path::Path,
-};
+use serde::{Deserialize, Serialize};
+use std::{env, path::Path};
 
-/// 首次启动配置.
-const DEFAULT_CONFIG: &str = r#"(
-    nats_url: "nats://127.0.0.1:4222",
-)
-"#;
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct Settings {
     pub nats_url: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            nats_url: "nats://127.0.0.1:4222".into(),
+        }
+    }
 }
 
 impl Settings {
@@ -29,23 +25,7 @@ impl Settings {
     }
 
     fn from_file(path: &Path) -> Result<Self> {
-        match OpenOptions::new().write(true).create_new(true).open(path) {
-            Ok(mut file) => file
-                .write_all(DEFAULT_CONFIG.as_bytes())
-                .with_context(|| format!("写入默认控制台配置失败: {}", path.display()))?,
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("创建控制台配置失败: {}", path.display()));
-            }
-        }
-
-        Config::builder()
-            .set_default("nats_url", "nats://127.0.0.1:4222")?
-            .add_source(File::from(path).format(FileFormat::Ron).required(true))
-            .build()
-            .and_then(Config::try_deserialize)
-            .with_context(|| format!("加载控制台配置失败: {}", path.display()))
+        confy::load_path(path).with_context(|| format!("加载控制台配置失败: {}", path.display()))
     }
 }
 
@@ -63,7 +43,7 @@ mod tests {
                 r#"(nats_url: "nats://localhost:4333")"#,
                 "nats://localhost:4333",
             ),
-            ("{}", "nats://127.0.0.1:4222"),
+            ("()", "nats://127.0.0.1:4222"),
         ] {
             fs::write(&path, source).unwrap();
             let settings = Settings::from_file(&path).unwrap();
@@ -104,7 +84,9 @@ mod tests {
     #[test]
     fn reports_config_creation_failure_with_path() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("missing/console.ron");
+        let parent = directory.path().join("not-a-directory");
+        fs::write(&parent, "occupied").unwrap();
+        let path = parent.join("console.ron");
         let error = Settings::from_file(&path).unwrap_err();
         assert!(error.to_string().contains(&path.display().to_string()));
     }

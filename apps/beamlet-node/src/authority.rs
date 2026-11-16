@@ -14,7 +14,7 @@ use tokio::task::JoinSet;
 pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
-    instance: String,
+    session_id: String,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
     let mut stopping = false;
@@ -25,7 +25,7 @@ pub(crate) async fn run(
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
 
-    println!("[Authority节点] 已就绪, 实例={instance}, 能力={CAPABILITY}; 输入文本后回车");
+    println!("[Authority节点] 已就绪, 会话={session_id}, 能力={CAPABILITY}; 输入文本后回车");
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -71,10 +71,10 @@ pub(crate) async fn run(
 
         if let Some(Request { text, reply }) = incoming {
             next_id = next_id.checked_add(1).context("操作身份已耗尽")?;
-            let id = format!("{instance}:operation:{next_id}");
+            let id = format!("{session_id}:operation:{next_id}");
 
             runtime.create_operation(id.clone(), text.clone())?;
-            let attempt = runtime.create_attempt(&id, format!("{instance}:attempt:{next_id}"))?;
+            let attempt = runtime.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
 
             let call = Call {
                 attempt,

@@ -11,14 +11,14 @@ use std::future::Future;
 /// Ctrl+C 后停止新交付并排空已接收队列, 不替 Authority 关闭 Operation.
 pub(crate) async fn run(
     mut inbox: impl Inbox,
-    instance: String,
+    session_id: String,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
     tokio::pin!(shutdown);
     let mut stopping = false;
     let mut next_id = 0_u64;
 
-    println!("[Worker节点] 已就绪, 实例={instance}, 能力={CAPABILITY}");
+    println!("[Worker节点] 已就绪, 会话={session_id}, 能力={CAPABILITY}");
 
     loop {
         let incoming = tokio::select! {
@@ -34,7 +34,7 @@ pub(crate) async fn run(
         let Some(incoming) = incoming else { break };
 
         next_id = next_id.checked_add(1).context("报告身份已耗尽")?;
-        let report_id = format!("{instance}:report:{next_id}");
+        let report_id = format!("{session_id}:report:{next_id}");
 
         println!(
             "[Worker节点] 收到调用, 操作={}, 授权={}",

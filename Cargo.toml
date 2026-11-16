@@ -44,7 +44,7 @@ rune = "0.14"
 wasmtime = "50"
 wasmtime-wasi = "50"
 
-config = { version = "0.15", default-features = false, features = ["ron"] }
+confy = { version = "2", default-features = false, features = ["ron_conf"] }
 diesel = { version = "2.4", features = ["sqlite"] }
 tempfile = "3.27"
 
