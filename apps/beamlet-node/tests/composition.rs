@@ -169,7 +169,7 @@ fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
 }
 fn authority(pools: &str, timeout: u64, concurrency: usize) -> String {
     format!(
-        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, report_timeout_secs: 4, max_concurrent_tasks: {concurrency}))"
+        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, report_timeout_secs: 4, input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"
     )
 }
 fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
@@ -622,6 +622,194 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     );
     println!(
         "PASS: multiple roles, infrastructure isolation, exact role routing, independent sessions, reconnect, local selection and shutdown"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires nats-server; explicit configured deadline test"]
+async fn configured_report_deadlines_and_input_capacity_are_independent_per_authority() -> Result<()>
+{
+    use beamlet_protocol::{Presence, ReportData, WorkerCall, WorkerReply};
+    use tokio::time::timeout;
+    let mut cluster = Cluster::new()?;
+    let port = port()?;
+    cluster.broker(port, "deadlines")?;
+    let client = connect(port).await?;
+    let ids = [Uuid::new_v4(), Uuid::new_v4()];
+    let pool: Pool = "blue".parse()?;
+    let fake_worker = RoleInstance {
+        role_id: Uuid::new_v4(),
+        session_id: Uuid::new_v4(),
+    };
+    let mut calls = client
+        .subscribe(subject::worker(&pool, fake_worker))
+        .await?;
+    client.flush().await?;
+    let base = authority(r#""blue""#, 30, 1).replace("input_capacity: 7", "input_capacity: 1");
+    let source = config(
+        Uuid::new_v4(),
+        &format!(
+            r#""local": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 9, subscription_capacity: 32)"#
+        ),
+        &[
+            role(
+                ids[0],
+                "local",
+                &base.replace("report_timeout_secs: 4", "report_timeout_secs: 1"),
+            ),
+            role(ids[1], "local", &base),
+        ],
+    );
+    let (process, roles) = cluster.node("deadlines-node", &source, 2).await?;
+    client
+        .publish(
+            subject::presence(&pool),
+            encode(&Presence {
+                pool: pool.clone(),
+                instance: fake_worker,
+                label: None,
+                capabilities: BTreeSet::from(["text.reverse/v1".into()]),
+                sequence: 1,
+                state: PresenceState::Ready,
+            })?
+            .into(),
+        )
+        .await?;
+    for authority in roles.values() {
+        wait_for_workers(&client, *authority, &pool, &[fake_worker]).await?;
+    }
+    let mut pending = Vec::new();
+    for (id, text) in [(ids[0], "short"), (ids[1], "long")] {
+        let client = client.clone();
+        let pool = pool.clone();
+        let authority = roles[&id];
+        pending.push(tokio::spawn(async move {
+            submit(
+                &client,
+                authority,
+                &pool,
+                fake_worker,
+                "text.reverse/v1",
+                text,
+            )
+            .await
+        }));
+    }
+    let mut received = BTreeMap::new();
+    for _ in 0..2 {
+        let message = timeout(Duration::from_secs(2), calls.next())
+            .await?
+            .context("call missing")?;
+        let call: WorkerCall = decode(&message.payload)?;
+        received.insert(call.task.text.clone(), (message, call));
+    }
+    // long Authority 已占用一个执行名额; 只能再排队一条输入.
+    let queued = client.send_request(
+        subject::authority(&pool, roles[&ids[1]]),
+        async_nats::Request::new()
+            .payload(
+                encode(&Command::Submit {
+                    request_id: Uuid::new_v4(),
+                    authority: roles[&ids[1]],
+                    submission: Submission {
+                        pool: pool.clone(),
+                        worker: Selection::Exact(fake_worker),
+                        task: Task {
+                            capability: "text.reverse/v1".into(),
+                            text: "queued".into(),
+                        },
+                    },
+                })?
+                .into(),
+            )
+            .timeout(Some(Duration::from_secs(6))),
+    );
+    tokio::pin!(queued);
+    ensure!(
+        futures::poll!(&mut queued).is_pending(),
+        "queued request unexpectedly completed"
+    );
+    client.flush().await?;
+    // 同一连接按顺序发送; 控制查询的回复确认前一条提交已进入业务队列.
+    workers(&client, roles[&ids[1]], &pool).await?;
+    let overflow = timeout(
+        Duration::from_secs(2),
+        submit(
+            &client,
+            roles[&ids[1]],
+            &pool,
+            fake_worker,
+            "text.reverse/v1",
+            "overflow",
+        ),
+    )
+    .await??;
+    ensure!(
+        matches!(overflow, Outcome::Rejected { .. }),
+        "input_capacity=1 did not reject excess input"
+    );
+    let short = pending.remove(0);
+    let outcome = timeout(Duration::from_secs(2), short).await???;
+    ensure!(
+        matches!(outcome, Outcome::Unresolved { .. }),
+        "short deadline was ignored"
+    );
+    // 超过旧的固定 3 秒后, 新的 4 秒期限仍应接受报告.
+    sleep(Duration::from_millis(2200)).await;
+    let long = pending.pop().context("long request missing")?;
+    ensure!(
+        !long.is_finished(),
+        "long deadline was truncated by an old timeout"
+    );
+    let (message, call) = received.remove("long").context("long call missing")?;
+    client
+        .publish(
+            message.reply.context("reply missing")?,
+            encode(&WorkerReply::Report {
+                pool: pool.clone(),
+                worker: fake_worker,
+                report: ReportData {
+                    report_id: "long-report".into(),
+                    operation_id: call.operation_id,
+                    attempt_id: call.attempt_id,
+                    result: "long-done".into(),
+                },
+            })?
+            .into(),
+        )
+        .await?;
+    completed(long.await??, fake_worker, "long-done")?;
+    let message = timeout(Duration::from_secs(2), calls.next())
+        .await?
+        .context("queued call missing")?;
+    let call: WorkerCall = decode(&message.payload)?;
+    ensure!(
+        call.task.text == "queued",
+        "unexpected retry or overflow delivery"
+    );
+    client
+        .publish(
+            message.reply.context("reply missing")?,
+            encode(&WorkerReply::Report {
+                pool,
+                worker: fake_worker,
+                report: ReportData {
+                    report_id: "queued-report".into(),
+                    operation_id: call.operation_id,
+                    attempt_id: call.attempt_id,
+                    result: "queued-done".into(),
+                },
+            })?
+            .into(),
+        )
+        .await?;
+    let reply: beamlet_protocol::Reply = decode(&queued.await?.payload)?;
+    completed(reply.outcome, fake_worker, "queued-done")?;
+    cluster.stop(process).await?;
+    ensure!(
+        fs::read_to_string(cluster.root.path().join("deadlines-node.ron"))? == source,
+        "config rewritten"
     );
     Ok(())
 }

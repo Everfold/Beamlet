@@ -1,8 +1,6 @@
 //! 控制消息独立于 Authority 在途任务名额; 接收队列有界.
 use super::{Ingress, Reply, Request};
-use crate::{
-    delivery::RECEIVE_CAPACITY, infrastructure::Connection, registry::Registry, text_reverse,
-};
+use crate::{infrastructure::Connection, registry::Registry, text_reverse};
 use anyhow::{Context, Result};
 use beamlet_protocol::{
     AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, Presence, Selection,
@@ -35,6 +33,7 @@ impl Inputs {
         registry: Registry,
         connection: watch::Receiver<Connection>,
         local: crate::terminal::Input,
+        input_capacity: usize,
     ) -> Result<Self> {
         let mut subscriptions = SelectAll::new();
         let mut routes = BTreeMap::new();
@@ -50,7 +49,7 @@ impl Inputs {
         }
         client.flush().await?;
         probe(&client, &info).await?;
-        let (send, remote) = mpsc::channel(RECEIVE_CAPACITY);
+        let (send, remote) = mpsc::channel(input_capacity);
         let control = tokio::spawn(
             control(
                 client.clone(),

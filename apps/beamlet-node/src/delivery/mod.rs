@@ -9,6 +9,3 @@ mod protocol;
 mod tests;
 
 pub(crate) use contract::{Call, Delivery, DeliveryError, Inbox, Incoming, WorkerReport};
-
-/// 本地入口和 NATS 订阅各自的接收缓冲容量, 与角色并发上限独立.
-pub(crate) const RECEIVE_CAPACITY: usize = 16;

@@ -3,7 +3,7 @@
 use super::{Ingress as _, channel};
 use crate::{
     authority,
-    delivery::{Call, Delivery, DeliveryError, RECEIVE_CAPACITY, WorkerReport},
+    delivery::{Call, Delivery, DeliveryError, WorkerReport},
     worker,
 };
 use beamlet_primitives::{Attempt, Report};
@@ -48,7 +48,7 @@ impl Delivery for ControlledDelivery {
 }
 
 fn controlled_delivery() -> (ControlledDelivery, mpsc::Receiver<Work>) {
-    let (send, recv) = mpsc::channel(RECEIVE_CAPACITY);
+    let (send, recv) = mpsc::channel(16);
     (ControlledDelivery(send), recv)
 }
 
@@ -61,7 +61,7 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default().max_concurrent_tasks,
+            crate::settings::Authority::default(),
             std::future::pending(),
         ));
 
@@ -110,7 +110,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default().max_concurrent_tasks,
+            crate::settings::Authority::default(),
             std::future::pending(),
         ));
 
@@ -171,11 +171,19 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
             let (sender, input) = channel::pair(limit + 1);
             let (delivery, mut work) = controlled_delivery();
             let (stop, signal) = oneshot::channel();
-            let authority =
-                tokio::spawn(authority::run(input, delivery, instance(), limit, async {
+            let authority = tokio::spawn(authority::run(
+                input,
+                delivery,
+                instance(),
+                crate::settings::Authority {
+                    max_concurrent_tasks: limit,
+                    ..Default::default()
+                },
+                async {
                     signal.await.unwrap();
                     Ok(())
-                }));
+                },
+            ));
 
             let mut responses = Vec::new();
             for index in 0..limit {
@@ -223,7 +231,10 @@ async fn delivery_completion_releases_admission_capacity() {
                 input,
                 delivery,
                 instance(),
-                limit,
+                crate::settings::Authority {
+                    max_concurrent_tasks: limit,
+                    ..Default::default()
+                },
                 std::future::pending(),
             ));
 
@@ -316,7 +327,7 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default().max_concurrent_tasks,
+            crate::settings::Authority::default(),
             std::future::pending(),
         ));
 
@@ -353,7 +364,7 @@ async fn missing_worker_is_rejected_before_delivery() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default().max_concurrent_tasks,
+            crate::settings::Authority::default(),
             std::future::pending(),
         ));
         assert_eq!(
@@ -376,7 +387,10 @@ async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associat
             input,
             delivery,
             instance(),
-            0,
+            crate::settings::Authority {
+                max_concurrent_tasks: 0,
+                ..Default::default()
+            },
             std::future::pending(),
         ));
         let mut responses = Vec::new();
@@ -421,7 +435,10 @@ async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() 
             one_input,
             delivery.clone(),
             instance(),
-            1,
+            crate::settings::Authority {
+                max_concurrent_tasks: 1,
+                ..Default::default()
+            },
             std::future::pending(),
         ));
         let two_instance = RoleInstance {
@@ -432,7 +449,10 @@ async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() 
             two_input,
             delivery,
             two_instance,
-            2,
+            crate::settings::Authority {
+                max_concurrent_tasks: 2,
+                ..Default::default()
+            },
             std::future::pending(),
         ));
         let first_response = one_sender.submit("first".into()).await.unwrap();

@@ -52,6 +52,8 @@ cargo run -p beamlet-console
                 pools: ["blue", "green"],
                 worker_timeout_secs: 15,
                 report_timeout_secs: 3,
+                input_capacity: 16,
+                max_concurrent_replies: 16,
                 max_concurrent_tasks: 16,
             )),
         ),
@@ -63,6 +65,8 @@ cargo run -p beamlet-console
                 pools: ["blue"],
                 worker_timeout_secs: 20,
                 report_timeout_secs: 3,
+                input_capacity: 16,
+                max_concurrent_replies: 16,
                 max_concurrent_tasks: 0,
             )),
         ),
@@ -112,7 +116,7 @@ Hello Beamlet
 
 Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
 
-Console 将输入、发现、查询和提交结果作为独立事件处理, 等待执行结果时仍可提交新任务、查询或切换目标. 每次提交固定当时的 Authority、pool、能力和 Worker 选择, 结果按完成顺序展示并带 request_id. 旧提交的拒绝不会撤销后来的选择; 查询乱序完成时只采用当前目标的最新查询结果. Console 自身最多保留 16 个在途请求 (包括发现和查询), 满载时明确拒绝新的网络请求, 本地选择、帮助和退出仍可使用. 此上限独立于 Authority / Worker 配置.
+Console 将输入、发现、查询和提交结果作为独立事件处理, 等待执行结果时仍可提交新任务、查询或切换目标. 每次提交固定当时的 Authority、pool、能力和 Worker 选择, 结果按完成顺序展示并带 request_id. 旧提交的拒绝不会撤销后来的选择; 查询乱序完成时只采用当前目标的最新查询结果. Console 的 `max_in_flight_requests` 限制在途请求数, 默认 16 (包括发现和查询), 满载时明确拒绝新的网络请求, 本地选择、帮助和退出仍可使用. 此上限独立于 Authority / Worker 配置.
 
 `/quit` 和 EOF 停止新输入并等待在途请求完成或达到已有期限. Ctrl+C 停止本地等待, 已发送请求仍可能在远端执行; 不会自动重发或宣称撤销 Attempt.
 
@@ -124,16 +128,18 @@ Console 将输入、发现、查询和提交结果作为独立事件处理, 等�
 kind: authority((
     pools: ["default"],
     worker_timeout_secs: 15,
-                report_timeout_secs: 3,
+    report_timeout_secs: 3,
+    input_capacity: 16,
+    max_concurrent_replies: 16,
     max_concurrent_tasks: 32,
 )),
 ```
 
 该上限跨当前 Authority 的所有 pools 和 Worker 共享, 其他 Authority 有自己的名额. 满载时暂停从业务入口取出请求, 发现、心跳与 Worker 查询继续由独立控制循环处理. 报告可以乱序完成; 交付完成或失败后释放名额. 超时释放并发名额不表示取消 Attempt 或关闭 Operation: 原操作仍保持等待报告, 不自动重试.
 
-Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 回复通过独立异步任务发送, 单个慢回复不占住主循环. 每个 Authority 最多保留 16 个待发送回复; 达到该上限时暂停业务接收和报告收取, 等待发送释放容量, 不无限积压回复. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付和回复发送结束.
+Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 回复通过独立异步任务发送, 单个慢回复不占住主循环. 每个 Authority 通过 `max_concurrent_replies` 限制待发送的业务结果/拒绝回复, 默认 16; 达到该上限时暂停业务接收和报告收取, 等待发送释放容量, 不无限积压回复. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付和回复发送结束.
 
-业务入口接收缓冲为 16, NATS 每个订阅的缓冲由 `subscription_capacity` 指定, 默认 16, 与执行并发设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
+每个 Authority 的本地和远端业务入口分别按 `input_capacity` 缓冲, 默认各 16 条, NATS 每个订阅的缓冲由 `subscription_capacity` 指定, 默认 16, 与执行并发设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
 
 ## Worker 并发
 
@@ -177,10 +183,31 @@ cargo test -p beamlet-console --test concurrency -- --ignored --nocapture
 
 Console 并发测试验证等待中的提交不阻止查询、目标快照、迟到结果隔离、容量拒绝、退出排空与中止等待. 真实 NATS 验收使用 Console 二进制和可控 Authority 回复, 验证多个提交和查询同时在途、乱序结果关联和配置不变. Authority 回复测试通过有界通道制造发送背压, 验证其他任务可继续、回复容量有限和停机排空.
 
-## 可配置期限和传输容量
+## 可配置期限和容量
 
 Node 顶层 `shutdown_timeout_secs` 默认 6; 每个 Authority 的 `report_timeout_secs` 默认 3. NATS 实例的 `connect_timeout_secs` 默认 10, 同时约束首次连接整体等待与客户端单次连接; `subscription_capacity` 默认 16, 分别作用于该连接上的每个普通订阅, 不表示连接共享的总消息数.
 
 Console 顶层 `request_timeout_secs` 默认 10, `connect_timeout_secs` 默认 10, `subscription_capacity` 默认 65536 (延续原客户端默认值). 请求期限同时传给客户端与外层等待, 发现也受整体请求期限约束. 超时与容量均须大于 0 且在系统支持范围内. 调大 Report 期限后应给 Console 留出排队和回复余量; Node 退出期限独立决定愿意等待角色多久. 超时不取消远端执行, 不自动重试.
 
 这些字段在首次生成配置时写入. 已有配置必须手动补全, 缺失或无效值会在启动前报错; 不迁移或改写已有配置.
+
+Authority 的 `input_capacity` 默认 16, 分别用于该角色的本地输入和远端业务队列; `max_concurrent_replies` 默认 16, 限制主循环已处理完毕但尚未发送完成的回复. 控制循环中的发现、查询和队列满拒绝仍直接发送, 不计入此回复上限. 两者均要求大于 0.
+
+Console 的 `max_in_flight_requests` 默认 16, 要求大于 0; `discovery_window_ms` 默认 1000, 从发送完发现查询后开始收集回复, 必须大于 0 且小于 `request_timeout_secs` 的总期限, 给连接发送等步骤留出余量. 完整 Console 配置示例:
+
+```ron
+(
+    nats_url: "nats://127.0.0.1:4222",
+    color: auto,
+    pools: ["default"],
+    request_timeout_secs: 10,
+    discovery_window_ms: 1000,
+    max_in_flight_requests: 16,
+    connect_timeout_secs: 10,
+    subscription_capacity: 65536,
+)
+```
+
+仅 Authority / Worker 的 `max_concurrent_tasks` 接受 `0 = 无限`. 输入队列、订阅缓冲、回复发送并发、Console 在途上限和超时均不采用无限语义. Node / Console 终端读取线程的缓冲仍固定 16 行; 心跳发送及退出刷新期限、登记清理频率和保留倍数、协议名称长度规则继续由内部控制.
+
+配置期限的真实 NATS 测试覆盖不同 Authority 的独立 Report 期限、超过原 3 秒仍接受报告、短期限返回未解决且不重试、业务队列满拒绝和 Console 的非默认请求超时. 容量测试分别使用 1、3、32 验证本地输入队列、Authority 回复发送与 Console 在途请求的限流和恢复.

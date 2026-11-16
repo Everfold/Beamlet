@@ -33,6 +33,8 @@ pub(crate) struct Settings {
     pub color: Color,
     pub pools: BTreeSet<Pool>,
     pub request_timeout_secs: u64,
+    pub discovery_window_ms: u64,
+    pub max_in_flight_requests: usize,
     pub connect_timeout_secs: u64,
     pub subscription_capacity: usize,
 }
@@ -44,6 +46,8 @@ impl Default for Settings {
             color: Color::Auto,
             pools: BTreeSet::from([Pool::default()]),
             request_timeout_secs: 10,
+            discovery_window_ms: 1000,
+            max_in_flight_requests: 16,
             connect_timeout_secs: 10,
             subscription_capacity: 65536,
         }
@@ -82,6 +86,16 @@ impl Settings {
             );
         }
         ensure!(
+            self.discovery_window_ms > 0
+                && std::time::Duration::from_millis(self.discovery_window_ms)
+                    < std::time::Duration::from_secs(self.request_timeout_secs),
+            "discovery_window_ms 必须大于 0 且小于 request_timeout_secs 指定的期限"
+        );
+        ensure!(
+            self.max_in_flight_requests > 0,
+            "max_in_flight_requests 必须大于 0"
+        );
+        ensure!(
             self.subscription_capacity > 0
                 && self.subscription_capacity <= tokio::sync::Semaphore::MAX_PERMITS,
             "subscription_capacity 必须大于 0 且不超过通道容量范围"
@@ -104,6 +118,8 @@ mod tests {
                 nats_url: "nats://localhost:4333".into(),
                 color,
                 request_timeout_secs: 30,
+                discovery_window_ms: 250,
+                max_in_flight_requests: 7,
                 connect_timeout_secs: 20,
                 subscription_capacity: 32,
                 ..Settings::default()
@@ -114,6 +130,8 @@ mod tests {
             assert_eq!(settings.nats_url, config.nats_url);
             assert_eq!(settings.color, color);
             assert_eq!(settings.request_timeout_secs, 30);
+            assert_eq!(settings.discovery_window_ms, 250);
+            assert_eq!(settings.max_in_flight_requests, 7);
             assert_eq!(settings.connect_timeout_secs, 20);
             assert_eq!(settings.subscription_capacity, 32);
             assert_eq!(fs::read_to_string(&path).unwrap(), source);
@@ -171,13 +189,15 @@ mod tests {
             "request_timeout_secs: 10",
             "connect_timeout_secs: 10",
             "subscription_capacity: 65536",
+            "discovery_window_ms: 1000",
+            "max_in_flight_requests: 16",
         ] {
             let name = field.split(':').next().unwrap();
             for replacement in [
                 String::new(),
                 format!("{name}: 0"),
                 format!("{name}: -1"),
-                format!("{name}: {}", u64::MAX),
+                format!("{name}: 18446744073709551616"),
             ] {
                 let invalid = source.replace(
                     &format!("{field},"),
@@ -195,6 +215,20 @@ mod tests {
                 );
                 assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
             }
+        }
+    }
+    #[test]
+    fn discovery_window_must_leave_time_for_network_setup() {
+        let mut settings = Settings {
+            request_timeout_secs: 2,
+            discovery_window_ms: 1500,
+            max_in_flight_requests: 3,
+            ..Default::default()
+        };
+        settings.validate().unwrap();
+        for window in [2000, 2001, u64::MAX] {
+            settings.discovery_window_ms = window;
+            assert!(settings.validate().is_err());
         }
     }
 }

@@ -97,7 +97,7 @@ async fn blocked_completion_and_rejection_allow_other_work_and_shutdown() {
         let (work_send, mut work) = mpsc::channel(4);
         let (stop, signal) = oneshot::channel();
         let running = tokio::spawn(run(
-            Input { receive, stopped: Some(stopped) }, Sender(work_send), instance(), 1,
+            Input { receive, stopped: Some(stopped) }, Sender(work_send), instance(), Authority { max_concurrent_tasks: 1, ..Default::default() },
             async { signal.await.map_err(std::io::Error::other) },
         ));
         let (rejected, mut rejection) = blocked_reply();
@@ -122,63 +122,69 @@ async fn blocked_completion_and_rejection_allow_other_work_and_shutdown() {
 
 #[tokio::test]
 async fn reply_backlog_is_bounded_and_releasing_one_reply_resumes_admission() {
-    within(async {
-        let (send, receive) = mpsc::channel(2);
-        let (stopped, observed) = oneshot::channel();
-        let (work_send, mut work) = mpsc::channel(2);
-        let (stop, signal) = oneshot::channel();
-        let running = tokio::spawn(run(
-            Input {
-                receive,
-                stopped: Some(stopped),
-            },
-            Sender(work_send),
-            instance(),
-            1,
-            async { signal.await.map_err(std::io::Error::other) },
-        ));
-        let mut replies = Vec::new();
-        for _ in 0..REPLY_CAPACITY {
-            let (reply, receive) = blocked_reply();
-            replies.push(receive);
-            send.send(request(reply, text_reverse::CAPABILITY))
+    for limit in [1, 3, 32] {
+        within(async {
+            let (send, receive) = mpsc::channel(2);
+            let (stopped, observed) = oneshot::channel();
+            let (work_send, mut work) = mpsc::channel(2);
+            let (stop, signal) = oneshot::channel();
+            let running = tokio::spawn(run(
+                Input {
+                    receive,
+                    stopped: Some(stopped),
+                },
+                Sender(work_send),
+                instance(),
+                Authority {
+                    max_concurrent_tasks: 1,
+                    max_concurrent_replies: limit,
+                    ..Default::default()
+                },
+                async { signal.await.map_err(std::io::Error::other) },
+            ));
+            let mut replies = Vec::new();
+            for _ in 0..limit {
+                let (reply, receive) = blocked_reply();
+                replies.push(receive);
+                send.send(request(reply, text_reverse::CAPABILITY))
+                    .await
+                    .unwrap();
+                work.recv().await.unwrap().finish().await;
+            }
+            let (last, mut last_reply) = mpsc::channel(1);
+            send.send(request(last, text_reverse::CAPABILITY))
                 .await
                 .unwrap();
-            work.recv().await.unwrap().finish().await;
-        }
-        let (last, mut last_reply) = mpsc::channel(1);
-        send.send(request(last, text_reverse::CAPABILITY))
-            .await
-            .unwrap();
-        assert!(
-            tokio::time::timeout(Duration::from_millis(40), work.recv())
-                .await
-                .is_err(),
-            "full reply backlog must stop admission"
-        );
-        let mut released = replies.pop().unwrap();
-        released.recv().await.unwrap();
-        assert!(matches!(
-            released.recv().await,
-            Some(Outcome::Completed { .. })
-        ));
-        let last = work.recv().await.unwrap();
-        stop.send(()).unwrap();
-        observed.await.unwrap();
-        assert!(!running.is_finished());
-        last.finish().await;
-        assert!(matches!(
-            last_reply.recv().await,
-            Some(Outcome::Completed { .. })
-        ));
-        for mut reply in replies {
-            reply.recv().await.unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(40), work.recv())
+                    .await
+                    .is_err(),
+                "full reply backlog must stop admission"
+            );
+            let mut released = replies.pop().unwrap();
+            released.recv().await.unwrap();
             assert!(matches!(
-                reply.recv().await,
+                released.recv().await,
                 Some(Outcome::Completed { .. })
             ));
-        }
-        running.await.unwrap().unwrap();
-    })
-    .await;
+            let last = work.recv().await.unwrap();
+            stop.send(()).unwrap();
+            observed.await.unwrap();
+            assert!(!running.is_finished());
+            last.finish().await;
+            assert!(matches!(
+                last_reply.recv().await,
+                Some(Outcome::Completed { .. })
+            ));
+            for mut reply in replies {
+                reply.recv().await.unwrap();
+                assert!(matches!(
+                    reply.recv().await,
+                    Some(Outcome::Completed { .. })
+                ));
+            }
+            running.await.unwrap().unwrap();
+        })
+        .await;
+    }
 }

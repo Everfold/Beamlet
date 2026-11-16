@@ -49,7 +49,7 @@ JSON 外层统一为 `{ "version": 3, "body": ... }`. 未知版本、格式错�
 | `beamlet.v3.<pool>.worker.probe` | 请求 Worker 立即发布快照 |
 | `beamlet.v3.<pool>.worker.<role_id>.<session_id>.calls` | 指定 Worker 会话的调用 |
 
-Console 对配置的 pools 发出发现查询, 在一秒窗口内收集多份回复. 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
+Console 对配置的 pools 发出发现查询, 在 `discovery_window_ms` 指定的窗口内收集多份回复 (默认 1000 毫秒). 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
 
 Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能力. Authority 创建 Operation 前检查租约、状态、能力及会话. Any 选定一个实例后走与 Exact 相同的定向路径. 不承诺公平、轮询或负载均衡. Exact 失效时拒绝, 不回退到其他会话.
 
@@ -59,7 +59,7 @@ Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能�
 
 ## 5. 容量和失败语义
 
-每个 Authority 角色通过 `max_concurrent_tasks` 配置同时交付并等待报告的上限, 默认为 `16`, `0` 表示不限. 所有 pools 与目标 Worker 共用该角色的上限, 其他 Authority 独立计数. 满载时暂停业务接收, 完成或失败时释放名额; 失败释放名额不会改变仍等待原 Report 的 Operation 状态. ingress 最多缓冲 16 个创建请求, 与角色并发设置独立. 队列已满的请求明确拒绝, 控制查询仍可处理. Authority 的结果与拒绝回复独立异步发送, 最多保留 16 个待发送回复; 满载时暂停业务接收和报告收取, 恢复发送后继续推进. 每个 Worker 角色通过 `max_concurrent_tasks` 配置并发上限, 首次生成配置默认为 `1`, `0` 表示 Worker 不限制并发. 从取出调用到执行和报告发送完成或失败期间占用一个名额, 满载时暂停取出新调用. 一个角色实例订阅使用其 NATS 实例 `subscription_capacity` 指定的接收缓冲 (默认 16 条), 多个 Authority 共享该角色的并发容量; 同一 Node 内其他 Worker 有独立名额和队列. `0` 不改变线程池、硬件、Authority 在途数和接收缓冲的独立限制. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
+每个 Authority 角色通过 `max_concurrent_tasks` 配置同时交付并等待报告的上限, 默认为 `16`, `0` 表示不限. 所有 pools 与目标 Worker 共用该角色的上限, 其他 Authority 独立计数. 满载时暂停业务接收, 完成或失败时释放名额; 失败释放名额不会改变仍等待原 Report 的 Operation 状态. ingress 根据该 Authority 的 `input_capacity` 缓冲创建请求 (默认 16), 与角色并发设置独立. 队列已满的请求明确拒绝, 控制查询仍可处理. Authority 的结果与拒绝回复独立异步发送, 按该角色 `max_concurrent_replies` 限制待发送回复 (默认 16); 满载时暂停业务接收和报告收取, 恢复发送后继续推进. 每个 Worker 角色通过 `max_concurrent_tasks` 配置并发上限, 首次生成配置默认为 `1`, `0` 表示 Worker 不限制并发. 从取出调用到执行和报告发送完成或失败期间占用一个名额, 满载时暂停取出新调用. 一个角色实例订阅使用其 NATS 实例 `subscription_capacity` 指定的接收缓冲 (默认 16 条), 多个 Authority 共享该角色的并发容量; 同一 Node 内其他 Worker 有独立名额和队列. `0` 不改变线程池、硬件、Authority 在途数和接收缓冲的独立限制. ready 不预留执行槽位. NATS 缓冲溢出无法证明交付结果时最终体现为未知/超时, 不伪称明确未交付.
 
 | 时机 / 结果 | 行为 |
 | --- | --- |
@@ -72,7 +72,7 @@ Report 身份按接收顺序分配, 有效报告按完成顺序返回, 无需等
 
 Report 等待期限由 Authority 的 `report_timeout_secs` 指定 (默认 3 秒); Console 请求期限由 `request_timeout_secs` 指定 (默认 10 秒), 包含正常排队和回复开销. 校验与发送之间仍可能失联. 无论拒收、断线或超时, 均不取消已签发 Attempt、不换人重发、不伪造 Report、不强制关闭 Operation. 超时不取消 Worker 执行; 本版 request 超时后可能丢失迟到 Report, 不提供持续监听或恢复.
 
-`request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 支持多个在途请求, 每次提交保存目标快照, 按完成顺序展示结果并标识 request_id. 发现和查询也独立等待, 迟到结果不能覆盖较新的选择或查询. Console 自身最多保留 16 个网络请求, 满载的新请求明确拒绝; `/quit` / EOF 排空在途请求, Ctrl+C 停止本地等待. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
+`request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 支持多个在途请求, 每次提交保存目标快照, 按完成顺序展示结果并标识 request_id. 发现和查询也独立等待, 迟到结果不能覆盖较新的选择或查询. Console 按 `max_in_flight_requests` 限制网络请求数 (默认 16), 满载的新请求明确拒绝; `/quit` / EOF 排空在途请求, Ctrl+C 停止本地等待. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
 
 Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
 

@@ -1,10 +1,13 @@
 //! Node 只读取一次 stdin, 将本地输入交给用户选定的 Authority.
-use crate::{delivery::RECEIVE_CAPACITY, shutdown::Shutdown};
+use crate::shutdown::Shutdown;
 use anyhow::{Context, Result};
 use beamlet_protocol::RoleInstance;
 use std::io::BufRead;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
+
+/// 终端读取线程与路由循环之间的行缓冲, 独立于角色输入队列.
+const INPUT_CAPACITY: usize = 16;
 
 pub(crate) type Input = mpsc::Receiver<std::io::Result<String>>;
 
@@ -70,7 +73,7 @@ fn show(targets: &[Target]) {
     }
 }
 fn input() -> Input {
-    let (send, recv) = mpsc::channel(RECEIVE_CAPACITY);
+    let (send, recv) = mpsc::channel(INPUT_CAPACITY);
     std::thread::spawn(move || {
         for line in std::io::stdin().lock().lines() {
             if send.blocking_send(line).is_err() {

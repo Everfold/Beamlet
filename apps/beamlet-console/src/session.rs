@@ -19,6 +19,7 @@ struct Choice {
 }
 struct Session {
     pools: BTreeSet<Pool>,
+    max_in_flight_requests: usize,
     authorities: Vec<AuthorityInfo>,
     workers: Vec<WorkerView>,
     capabilities: Vec<String>,
@@ -27,9 +28,6 @@ struct Session {
     discovery_request: Option<Uuid>,
     workers_request: Option<Uuid>,
 }
-
-/// 限制 Console 自身的在途请求, 满载仍可处理本地命令和退出.
-const MAX_REQUESTS: usize = 16;
 
 enum Action {
     Discover {
@@ -92,13 +90,18 @@ impl Action {
             Self::Request { command, .. } => command.request_id(),
         }
     }
-    async fn execute(self, client: async_nats::Client, request_timeout: Duration) -> Completion {
+    async fn execute(
+        self,
+        client: async_nats::Client,
+        request_timeout: Duration,
+        discovery_window: Duration,
+    ) -> Completion {
         match self {
             Self::Discover { request_id, pools } => Completion::Discovered {
                 request_id,
                 result: match tokio::time::timeout(
                     request_timeout,
-                    client::discover(&client, &pools, request_id),
+                    client::discover(&client, &pools, request_id, discovery_window),
                 )
                 .await
                 {
@@ -118,9 +121,10 @@ impl Action {
 }
 
 impl Session {
-    fn new(pools: BTreeSet<Pool>) -> Self {
+    fn new(pools: BTreeSet<Pool>, max_in_flight_requests: usize) -> Self {
         Self {
             pools,
+            max_in_flight_requests,
             authorities: Vec::new(),
             workers: Vec::new(),
             capabilities: Vec::new(),
@@ -464,8 +468,9 @@ impl Session {
         execute: &impl Fn(Action) -> F,
     ) -> Result<()> {
         ensure!(
-            tasks.len() < MAX_REQUESTS,
-            "已有 {MAX_REQUESTS} 个在途请求, 本次请求未发送, 请稍后再试"
+            tasks.len() < self.max_in_flight_requests,
+            "已有 {} 个在途请求, 本次请求未发送, 请稍后再试",
+            self.max_in_flight_requests
         );
         let request_id = action.request_id();
         match &action {
@@ -508,9 +513,10 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
     .await
     .context("连接 NATS 超时")?
     .context("连接 NATS 失败")?;
-    let mut session = Session::new(settings.pools);
+    let mut session = Session::new(settings.pools, settings.max_in_flight_requests);
+    let discovery_window = Duration::from_millis(settings.discovery_window_ms);
     let work = drive(&mut session, terminal_input(), move |action| {
-        action.execute(client.clone(), request_timeout)
+        action.execute(client.clone(), request_timeout, discovery_window)
     });
     tokio::select! {
         result = work => result?,

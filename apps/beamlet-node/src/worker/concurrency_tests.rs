@@ -1,7 +1,7 @@
 //! 以可控异步挂起验证真实 Worker 循环, 不靠文本大小或执行耗时猜测并发.
 use super::*;
 use crate::{
-    delivery::{self, Delivery as _, DeliveryError, Incoming, channel},
+    delivery::{Delivery as _, DeliveryError, Incoming, channel},
     text_reverse,
 };
 use beamlet_primitives::Attempt;
@@ -221,7 +221,7 @@ async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
 #[tokio::test]
 async fn zero_admits_more_than_the_receive_capacity_without_waiting_for_completion() {
     within(async {
-        let total = delivery::RECEIVE_CAPACITY + 5;
+        let total = 21;
         let mut h = start(0, total);
         let mut blocked = Vec::new();
         for _ in 0..total {

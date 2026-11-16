@@ -41,10 +41,10 @@ impl RunningRole {
             let result = match settings.kind {
                 Role::Authority(config) => {
                     let registry = Registry::new(config.pools.clone(), Duration::from_secs(config.worker_timeout_secs), infrastructure.status.clone());
-                    let info = AuthorityInfo { instance, label: settings.label, pools: config.pools };
-                    let input = ingress::live::Inputs::connect(infrastructure.client.clone(), info, registry.clone(), infrastructure.status, local).await?;
+                    let info = AuthorityInfo { instance, label: settings.label, pools: config.pools.clone() };
+                    let input = ingress::live::Inputs::connect(infrastructure.client.clone(), info, registry.clone(), infrastructure.status, local, config.input_capacity).await?;
                     let sender = delivery::nats::Delivery::new(infrastructure.client.clone(), Duration::from_secs(config.report_timeout_secs), registry);
-                    authority::run(input, sender, instance, config.max_concurrent_tasks, shutdown.wait()).await
+                    authority::run(input, sender, instance, config, shutdown.wait()).await
                 }
                 Role::Worker(config) => {
                     let (state, changes) = watch::channel(PresenceState::Ready);
@@ -70,12 +70,45 @@ impl RunningRole {
         }.instrument(span).await
     }
     pub(crate) fn local_input(&self) -> (Option<terminal::Target>, terminal::Input) {
-        let (send, receive) = mpsc::channel(delivery::RECEIVE_CAPACITY);
+        let (send, receive) = mpsc::channel(match &self.settings.kind {
+            Role::Authority(config) => config.input_capacity,
+            Role::Worker(_) => 1,
+        });
         let target = matches!(self.settings.kind, Role::Authority(_)).then(|| terminal::Target {
             instance: self.instance,
             label: self.settings.label.clone(),
             send,
         });
         (target, receive)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn each_authority_local_queue_uses_its_own_configured_capacity() {
+        for capacity in [1, 3, 32] {
+            let role = RunningRole::new(RoleSettings {
+                role_id: Uuid::new_v4(),
+                label: None,
+                infrastructure: "local".into(),
+                kind: Role::Authority(crate::settings::Authority {
+                    input_capacity: capacity,
+                    ..Default::default()
+                }),
+            });
+            let (target, mut input) = role.local_input();
+            let target = target.unwrap();
+            for _ in 0..capacity {
+                target.send.try_send(Ok("text".into())).unwrap();
+            }
+            assert!(matches!(
+                target.send.try_send(Ok("excess".into())),
+                Err(mpsc::error::TrySendError::Full(_))
+            ));
+            input.recv().await.unwrap().unwrap();
+            target.send.try_send(Ok("resumed".into())).unwrap();
+        }
     }
 }

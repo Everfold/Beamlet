@@ -39,7 +39,10 @@ fn workers() -> Vec<WorkerView> {
     }]
 }
 fn selected() -> Session {
-    let mut session = Session::new(BTreeSet::from([Pool::default()]));
+    let mut session = Session::new(
+        BTreeSet::from([Pool::default()]),
+        Settings::default().max_in_flight_requests,
+    );
     session.discovered(authorities());
     session.line("/authority 1".into()).unwrap();
     session.line("/pool default".into()).unwrap();
@@ -242,58 +245,61 @@ async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results()
 
 #[tokio::test]
 async fn full_console_still_accepts_quit_and_does_not_send_excess_requests() {
-    within(async {
-        let mut session = selected();
-        let (input, receive) = mpsc::channel(MAX_REQUESTS + 4);
-        let (events, mut pending) = mpsc::unbounded_channel();
-        let running = tokio::spawn(async move {
-            drive(&mut session, receive, move |action: Action| {
-                let events = events.clone();
-                async move {
-                    let (send, receive) = oneshot::channel();
-                    events
-                        .send((action, send))
-                        .unwrap_or_else(|_| panic!("test observer closed"));
-                    receive.await.unwrap()
-                }
-            })
-            .await
-        });
-        let (discovery, reply) = pending.recv().await.unwrap();
-        // 发现占一个名额; 其余名额全部占住, 不靠定时等待猜测任务是否已完成.
-        let mut held = vec![(discovery, reply)];
-        for i in 1..MAX_REQUESTS {
-            input.send(Ok(format!("text-{i}"))).await.unwrap();
-            held.push(pending.recv().await.unwrap());
-        }
-        input.send(Ok("overflow".into())).await.unwrap();
-        input.send(Ok("/help".into())).await.unwrap();
-        input.send(Ok("/quit".into())).await.unwrap();
-        input.closed().await;
-        assert!(!running.is_finished(), "quit must drain pending requests");
-        assert!(
-            pending.try_recv().is_err(),
-            "full console sent an excess request"
-        );
-        for (action, reply) in held.into_iter().rev() {
-            let completion = match action {
-                Action::Discover { request_id, .. } => Completion::Discovered {
-                    request_id,
-                    result: Ok(authorities()),
-                },
-                action => response(action, Err(anyhow::anyhow!("simulated request timeout"))),
-            };
-            reply
-                .send(completion)
-                .unwrap_or_else(|_| panic!("request receiver closed"));
-        }
-        running.await.unwrap().unwrap();
-        assert!(
-            pending.recv().await.is_none(),
-            "failed requests must not be retried"
-        );
-    })
-    .await;
+    for limit in [1, 3, 32] {
+        within(async {
+            let mut session = selected();
+            session.max_in_flight_requests = limit;
+            let (input, receive) = mpsc::channel(limit + 4);
+            let (events, mut pending) = mpsc::unbounded_channel();
+            let running = tokio::spawn(async move {
+                drive(&mut session, receive, move |action: Action| {
+                    let events = events.clone();
+                    async move {
+                        let (send, receive) = oneshot::channel();
+                        events
+                            .send((action, send))
+                            .unwrap_or_else(|_| panic!("test observer closed"));
+                        receive.await.unwrap()
+                    }
+                })
+                .await
+            });
+            let (discovery, reply) = pending.recv().await.unwrap();
+            // 发现占一个名额; 其余名额全部占住, 不靠定时等待猜测任务是否已完成.
+            let mut held = vec![(discovery, reply)];
+            for i in 1..limit {
+                input.send(Ok(format!("text-{i}"))).await.unwrap();
+                held.push(pending.recv().await.unwrap());
+            }
+            input.send(Ok("overflow".into())).await.unwrap();
+            input.send(Ok("/help".into())).await.unwrap();
+            input.send(Ok("/quit".into())).await.unwrap();
+            input.closed().await;
+            assert!(!running.is_finished(), "quit must drain pending requests");
+            assert!(
+                pending.try_recv().is_err(),
+                "full console sent an excess request"
+            );
+            for (action, reply) in held.into_iter().rev() {
+                let completion = match action {
+                    Action::Discover { request_id, .. } => Completion::Discovered {
+                        request_id,
+                        result: Ok(authorities()),
+                    },
+                    action => response(action, Err(anyhow::anyhow!("simulated request timeout"))),
+                };
+                reply
+                    .send(completion)
+                    .unwrap_or_else(|_| panic!("request receiver closed"));
+            }
+            running.await.unwrap().unwrap();
+            assert!(
+                pending.recv().await.is_none(),
+                "failed requests must not be retried"
+            );
+        })
+        .await;
+    }
 }
 
 #[tokio::test]

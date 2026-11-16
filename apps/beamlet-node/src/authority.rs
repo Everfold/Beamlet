@@ -3,6 +3,7 @@
 use crate::{
     delivery::{Call, Delivery, DeliveryError, WorkerReport},
     ingress::{Ingress, Reply, Request},
+    settings::Authority,
 };
 use anyhow::{Context, Result, ensure};
 use beamlet_protocol::{Outcome, RoleInstance, Submission};
@@ -10,9 +11,6 @@ use beamlet_runtime::Runtime;
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
-
-/// 最多同时等待 16 次回复发送; 满载后反压业务入口和报告收取.
-const REPLY_CAPACITY: usize = 16;
 
 #[cfg(test)]
 mod response_tests;
@@ -22,9 +20,14 @@ pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
     instance: RoleInstance,
-    max_concurrent_tasks: usize,
+    config: Authority,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
+    let Authority {
+        max_concurrent_tasks,
+        max_concurrent_replies,
+        ..
+    } = config;
     let session_id = instance.session_id;
     let mut stopping = false;
     let mut runtime = Runtime::new();
@@ -37,7 +40,7 @@ pub(crate) async fn run(
 
     info!(
         event = "role.ready",
-        max_concurrent_tasks, "Authority 已就绪; 并发上限 0 表示无限"
+        max_concurrent_tasks, max_concurrent_replies, "Authority 已就绪; 任务并发上限 0 表示无限"
     );
 
     loop {
@@ -62,7 +65,7 @@ pub(crate) async fn run(
                 None
             }
 
-            completed = deliveries.join_next(), if !deliveries.is_empty() && sends.len() < REPLY_CAPACITY => {
+            completed = deliveries.join_next(), if !deliveries.is_empty() && sends.len() < max_concurrent_replies => {
                 let (id, outcome) = completed.context("缺少交付任务")?.context("交付任务异常退出")?;
                 let (reply, worker, attempt_id) = replies.remove(&id).context("缺少回复来源")?;
                 let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
@@ -79,7 +82,7 @@ pub(crate) async fn run(
                 None
             }
 
-            request = ingress.receive(), if !stopping && sends.len() < REPLY_CAPACITY && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
+            request = ingress.receive(), if !stopping && sends.len() < max_concurrent_replies && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
                 let request = request?;
                 if request.is_none() {
                     stopping = true;

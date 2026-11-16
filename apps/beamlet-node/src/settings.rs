@@ -47,6 +47,10 @@ pub(crate) struct Authority {
     pub pools: BTreeSet<Pool>,
     pub worker_timeout_secs: u64,
     pub report_timeout_secs: u64,
+    /// 本地和远端业务入口各自的队列容量.
+    pub input_capacity: usize,
+    /// 等待发送的结果/拒绝回复上限, 必须大于 0.
+    pub max_concurrent_replies: usize,
     /// 同时交付并等待报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
 }
@@ -56,6 +60,8 @@ impl Default for Authority {
             pools: BTreeSet::from([Pool::default()]),
             worker_timeout_secs: 15,
             report_timeout_secs: 3,
+            input_capacity: 16,
+            max_concurrent_replies: 16,
             max_concurrent_tasks: 16,
         }
     }
@@ -211,6 +217,8 @@ impl Settings {
             match &role.kind {
                 Role::Authority(config) => {
                     validate_timeout(config.report_timeout_secs, "report_timeout_secs")?;
+                    validate_capacity(config.input_capacity, "input_capacity")?;
+                    validate_capacity(config.max_concurrent_replies, "max_concurrent_replies")?;
                     ensure!(
                         !config.pools.is_empty(),
                         "Authority {} 至少需要一个 pool",
@@ -526,6 +534,8 @@ mod tests {
             panic!("authority")
         };
         authority.report_timeout_secs = 25;
+        authority.input_capacity = 7;
+        authority.max_concurrent_replies = 3;
         let Infrastructure::Nats {
             connect_timeout_secs,
             subscription_capacity,
@@ -541,6 +551,10 @@ mod tests {
             panic!("authority")
         };
         assert_eq!(authority.report_timeout_secs, 25);
+        assert_eq!(
+            (authority.input_capacity, authority.max_concurrent_replies),
+            (7, 3)
+        );
         let Infrastructure::Nats {
             connect_timeout_secs,
             subscription_capacity,
@@ -553,6 +567,8 @@ mod tests {
             "report_timeout_secs: 25",
             "connect_timeout_secs: 20",
             "subscription_capacity: 128",
+            "input_capacity: 7",
+            "max_concurrent_replies: 3",
         ] {
             let name = field.split(':').next().unwrap();
             for replacement in [

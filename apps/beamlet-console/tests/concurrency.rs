@@ -127,7 +127,7 @@ async fn console_submits_concurrently_and_drains_correlated_results() -> Result<
     let binary = directory.path().join("beamlet-console");
     fs::copy(env!("CARGO_BIN_EXE_beamlet-console"), &binary)?;
     let config = format!(
-        r#"(nats_url: "nats://127.0.0.1:{port}", pools: ["default"], color: never, request_timeout_secs: 12, connect_timeout_secs: 12, subscription_capacity: 32)"#
+        r#"(nats_url: "nats://127.0.0.1:{port}", pools: ["default"], color: never, request_timeout_secs: 2, max_in_flight_requests: 4, discovery_window_ms: 200, connect_timeout_secs: 12, subscription_capacity: 32)"#
     );
     let config_path = directory.path().join("console.ron");
     fs::write(&config_path, &config)?;
@@ -200,6 +200,9 @@ async fn console_submits_concurrently_and_drains_correlated_results() -> Result<
         submissions.len() == 2 && control.is_some(),
         "requests did not overlap"
     );
+    writeln!(input, "timeout")?;
+    let unanswered = next(&mut requests).await?;
+    let unanswered_id = decode::<Command>(&unanswered.payload)?.request_id();
     writeln!(input, "/quit")?;
     output_contains(&log_path, "event=\"console.draining\"").await?;
     ensure!(
@@ -224,6 +227,13 @@ async fn console_submits_concurrently_and_drains_correlated_results() -> Result<
     let slow_id = decode::<Command>(&slow.payload)?.request_id();
     reply(&client, &slow, completed("slow-result")).await?;
     let output = output_contains(&log_path, "event=\"console.stopped\"").await?;
+    ensure!(
+        output
+            .lines()
+            .any(|line| line.contains(&unanswered_id.to_string())
+                && line.contains("event=\"request.failed\"")),
+        "configured 2-second request timeout was ignored: {output}"
+    );
     ensure!(
         output.contains(&format!("[{slow_id}] slow-result")),
         "slow result correlation: {output}"

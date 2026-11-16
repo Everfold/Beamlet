@@ -16,6 +16,7 @@ pub(crate) async fn discover(
     client: &async_nats::Client,
     pools: &BTreeSet<Pool>,
     request_id: Uuid,
+    discovery_window: Duration,
 ) -> Result<Vec<AuthorityInfo>> {
     let inbox = client.new_inbox();
     let mut replies = client.subscribe(inbox.clone()).await?;
@@ -31,7 +32,7 @@ pub(crate) async fn discover(
             )
             .await?;
     }
-    let deadline = Instant::now() + Duration::from_secs(1);
+    let deadline = Instant::now() + discovery_window;
     let mut authorities: BTreeMap<RoleInstance, AuthorityInfo> = BTreeMap::new();
     while let Ok(Some(message)) = timeout_at(deadline, replies.next()).await {
         let Ok(reply) = decode::<DiscoveryReply>(&message.payload) else {
