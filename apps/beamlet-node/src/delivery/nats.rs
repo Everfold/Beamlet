@@ -9,6 +9,7 @@ use async_nats::{Client, RequestErrorKind};
 use futures::{StreamExt, stream::SelectAll};
 use std::time::Duration;
 use tokio::time::timeout;
+use tracing::warn;
 
 const QUEUE: &str = "beamlet-workers-v1";
 
@@ -99,14 +100,14 @@ impl super::Inbox for Inbox {
     async fn receive(&mut self) -> Result<Option<Incoming>> {
         while let Some(message) = self.subscriptions.next().await {
             let Some(reply) = message.reply else {
-                eprintln!("[Worker节点] 忽略没有回复地址的调用");
+                warn!(event = "attempt.rejected", "忽略没有回复地址的调用");
                 continue;
             };
 
             let wire: WireCall = match serde_json::from_slice(&message.payload) {
                 Ok(wire) => wire,
                 Err(error) => {
-                    eprintln!("[Worker节点] 忽略无效调用: {error}");
+                    warn!(event = "attempt.rejected", error = %error, "忽略无效调用");
                     continue;
                 }
             };
@@ -114,7 +115,13 @@ impl super::Inbox for Inbox {
             if !self.capabilities.contains(&wire.capability)
                 || message.subject.as_str() != subject(&wire.capability)
             {
-                eprintln!("[Worker节点] 拒绝与声明不匹配的能力: {}", wire.capability);
+                warn!(
+                    event = "attempt.rejected",
+                    operation_id = %wire.operation_id,
+                    attempt_id = %wire.attempt_id,
+                    capability = %wire.capability,
+                    "拒绝与声明不匹配的能力"
+                );
                 continue;
             }
 

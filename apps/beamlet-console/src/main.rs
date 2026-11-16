@@ -2,12 +2,35 @@ mod settings;
 
 use anyhow::{Context, Result};
 use settings::Settings;
-use std::{io::BufRead, time::Duration};
+use std::{io::BufRead, process::ExitCode, time::Duration};
 use tokio::sync::mpsc;
+use tracing::{Instrument, error, info, info_span, warn};
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
+async fn main() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter("beamlet_console=info")
+        .with_target(false)
+        .with_ansi(false)
+        .with_writer(std::io::stderr)
+        .init();
+
+    async {
+        match run().await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                error!(event = "console.failed", error = %format!("{error:#}"), "Console 异常退出");
+                ExitCode::FAILURE
+            }
+        }
+    }
+    .instrument(info_span!("console"))
+    .await
+}
+
+async fn run() -> Result<()> {
     let settings = Settings::load()?;
+    info!(event = "console.starting", "Console 启动");
 
     let client = async_nats::ConnectOptions::new()
         .request_timeout(Some(Duration::from_secs(5)))
@@ -21,7 +44,7 @@ async fn main() -> Result<()> {
 
     tokio::pin!(signal);
 
-    println!("[Console] 已连接");
+    info!(event = "console.ready", "Console 已连接; 输入文本后回车");
 
     loop {
         let line = tokio::select! {
@@ -32,23 +55,26 @@ async fn main() -> Result<()> {
             }
         };
 
+        info!(event = "request.send_started", "开始发送请求");
         let response = tokio::select! {
             result = &mut signal => { result?; break; }
             response = client.request("beamlet.reverse", line.into()) => response,
         };
 
         match response {
-            Ok(message) => println!(
-                "[Console] 返回: {}",
-                std::str::from_utf8(&message.payload).context("回复不是 UTF-8 文本")?
-            ),
-
-            Err(error) => eprintln!("[Console] 请求失败, 请检查节点是否在线: {error}"),
+            Ok(message) => {
+                let response =
+                    std::str::from_utf8(&message.payload).context("回复不是 UTF-8 文本")?;
+                info!(event = "response.received", response = ?response, "收到回复");
+            }
+            Err(error) => {
+                warn!(event = "request.failed", error = %error, "请求失败, 请检查节点是否在线")
+            }
         }
     }
 
     client.flush().await?;
-    println!("[Console] 已退出");
+    info!(event = "console.stopped", "Console 已退出");
 
     Ok(())
 }

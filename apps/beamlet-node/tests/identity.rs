@@ -18,15 +18,22 @@ fn start(binary: &Path, working_directory: &Path) -> (String, Uuid) {
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("连接 NATS 失败"), "{stderr}");
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let session = stdout
+    assert!(output.stdout.is_empty(), "日志统一输出至 stderr");
+    assert!(stderr.contains("ERROR"), "{stderr}");
+    assert!(stderr.contains("event=\"node.failed\""), "{stderr}");
+    let startup = stderr
         .lines()
-        .find_map(|line| line.split_once("会话=").map(|(_, id)| id))
+        .find(|line| line.contains("event=\"node.starting\""))
+        .expect("必须输出节点启动事件");
+    assert!(startup.contains("INFO"), "{startup}");
+    let session = startup
+        .split_whitespace()
+        .find_map(|field| field.strip_prefix("session_id="))
         .expect("启动日志必须包含会话 UUID")
         .parse::<Uuid>()
         .unwrap();
     assert!(!session.is_nil());
-    (stdout, session)
+    (startup.to_owned(), session)
 }
 
 #[test]
@@ -54,7 +61,14 @@ fn restart_preserves_node_id_and_label_but_renews_session() {
         let config: StoredIdentity = confy::load_path(&path).unwrap();
         let node_id = config.node_id;
         assert_eq!(node_id, expected_node_id);
-        assert!(first_log.contains(&node_id.to_string()));
+        assert!(
+            first_log.contains(&format!("node_id={node_id}")),
+            "{first_log}"
+        );
+        assert!(
+            first_log.contains(&format!("role=\"{role}\"")),
+            "{first_log}"
+        );
         assert!(first_log.contains("节点甲"));
         assert_ne!(node_id, first_session);
         assert!(!content.contains("session_id"));

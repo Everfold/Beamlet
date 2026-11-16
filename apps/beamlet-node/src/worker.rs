@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{Context, Result};
 use beamlet_primitives::Report;
 use std::future::Future;
+use tracing::{Instrument, info, info_span, warn};
 
 /// Ctrl+C 后停止新交付并排空已接收队列, 不替 Authority 关闭 Operation.
 pub(crate) async fn run(
@@ -18,7 +19,11 @@ pub(crate) async fn run(
     let mut stopping = false;
     let mut next_id = 0_u64;
 
-    println!("[Worker节点] 已就绪, 会话={session_id}, 能力={CAPABILITY}");
+    info!(
+        event = "node.ready",
+        capability = CAPABILITY,
+        "Worker 已就绪"
+    );
 
     loop {
         let incoming = tokio::select! {
@@ -26,7 +31,7 @@ pub(crate) async fn run(
                 result?;
                 stopping = true;
                 inbox.stop().await?;
-                println!("[Worker节点] 停止接收新调用, 排空已接收队列");
+                info!(event = "node.stopping", "停止接收新调用, 排空已接收队列");
                 continue;
             }
             incoming = inbox.receive() => incoming?,
@@ -36,24 +41,38 @@ pub(crate) async fn run(
         next_id = next_id.checked_add(1).context("报告身份已耗尽")?;
         let report_id = format!("{session_id}:report:{next_id}");
 
-        println!(
-            "[Worker节点] 收到调用, 操作={}, 授权={}",
-            incoming.call.attempt.operation_id(),
-            incoming.call.attempt.id()
+        let span = info_span!(
+            "attempt",
+            operation_id = %incoming.call.attempt.operation_id(),
+            attempt_id = %incoming.call.attempt.id(),
+            capability = %incoming.call.capability,
         );
 
-        match execute(incoming.call, report_id) {
-            Ok(report) => {
-                if let Err(error) = incoming.reply.send(report).await {
-                    // 原 Authority 已离线不应让这个 Worker 停止处理其他调用.
-                    eprintln!("[Worker节点] 返回报告失败: {error}");
+        async {
+            info!(event = "operation.received", "收到 Operation 请求数据");
+            info!(event = "attempt.received", "收到 Attempt");
+            match execute(incoming.call, report_id) {
+                Ok(report) => {
+                    let span = info_span!("report", report_id = %report.id());
+                    async {
+                        info!(event = "report.send_started", "开始发送 Report");
+                        match incoming.reply.send(report).await {
+                            Ok(()) => info!(event = "report.sent", "Report 已提交至传输层"),
+                            // 原 Authority 已离线不应让这个 Worker 停止处理其他调用.
+                            Err(error) => warn!(event = "report.send_failed", error = %error, "发送 Report 失败"),
+                        }
+                    }
+                    .instrument(span)
+                    .await;
                 }
+                Err(error) => warn!(event = "attempt.rejected", error = %error, "拒绝执行 Attempt"),
             }
-            Err(error) => eprintln!("[Worker节点] 拒绝执行: {error}"),
         }
+        .instrument(span)
+        .await;
     }
 
-    println!("[Worker节点] 已退出");
+    info!(event = "worker.drained", "已接收调用处理完毕");
 
     Ok(())
 }
@@ -61,7 +80,15 @@ pub(crate) async fn run(
 pub(crate) fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
     let result = text_reverse::execute(&call.capability, &call.text)?;
 
-    Ok(Report::new(report_id, call.attempt, result))
+    let report = Report::new(report_id, call.attempt, result);
+    info!(
+        event = "report.created",
+        operation_id = %report.operation_id(),
+        attempt_id = %report.attempt_id(),
+        report_id = %report.id(),
+        "已创建 Report"
+    );
+    Ok(report)
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::future::Future;
+use tracing::info;
 
 /// 入口只交出有效文本及其回复入口, 不创建任何领域原语.
 pub(crate) struct Request {
@@ -48,10 +49,12 @@ impl Reply {
     /// 操作身份只用于日志; 返回文本保持原协议, 不自动重发失败的回复.
     pub(crate) async fn send(self, operation_id: &str, text: String) -> Result<()> {
         match self.0 {
-            ReplyKind::Terminal => println!("[Authority节点] 本地结果: {text}"),
+            ReplyKind::Terminal => {
+                info!(event = "response.local", operation_id, response = ?text, "本地结果")
+            }
             ReplyKind::Nats { client, subject } => {
                 client.publish(subject, text.into()).await?;
-                println!("[Authority节点] 已回复远端请求, 操作={operation_id}");
+                info!(event = "response.sent", operation_id, "已回复远端请求");
             }
             #[cfg(test)]
             ReplyKind::Channel(sender) => sender

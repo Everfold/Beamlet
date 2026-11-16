@@ -7,16 +7,53 @@ mod worker;
 
 use anyhow::{Context, Result};
 use settings::{Role, Settings};
+use std::process::ExitCode;
+use tracing::{Instrument, error, info, info_span};
 use uuid::Uuid;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
-    let settings = Settings::load()?;
+async fn main() -> ExitCode {
+    tracing_subscriber::fmt()
+        .with_env_filter("beamlet_node=info")
+        .with_target(false)
+        .with_ansi(false)
+        .with_writer(std::io::stderr)
+        .init();
+
+    let settings = match Settings::load() {
+        Ok(settings) => settings,
+        Err(error) => {
+            error!(event = "node.failed", error = %format!("{error:#}"), "加载配置失败");
+            return ExitCode::FAILURE;
+        }
+    };
     let session_id = Uuid::new_v4();
-    println!(
-        "[节点] 角色={:?}, 节点={}, label={:?}, 会话={session_id}",
-        settings.role, settings.node_id, settings.label
+    let span = info_span!(
+        "node",
+        node_id = %settings.node_id,
+        session_id = %session_id,
+        role = match settings.role {
+            Role::Authority => "authority",
+            Role::Worker => "worker",
+        },
+        label = ?settings.label,
     );
+
+    async {
+        match run(settings, session_id).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                error!(event = "node.failed", error = %format!("{error:#}"), "节点异常退出");
+                ExitCode::FAILURE
+            }
+        }
+    }
+    .instrument(span)
+    .await
+}
+
+async fn run(settings: Settings, session_id: Uuid) -> Result<()> {
+    info!(event = "node.starting", "节点启动");
 
     let client = async_nats::ConnectOptions::new()
         .subscription_capacity(delivery::MAX_IN_FLIGHT)
@@ -48,6 +85,7 @@ async fn main() -> Result<()> {
     }
 
     client.flush().await?;
+    info!(event = "node.stopped", "节点已退出");
 
     Ok(())
 }

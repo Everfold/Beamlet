@@ -9,6 +9,7 @@ use anyhow::{Context, Result, ensure};
 use beamlet_runtime::Runtime;
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
+use tracing::{Instrument, info, info_span, warn};
 
 /// 入口与交付分别注入; 每份交付独立等待, 不阻塞其他输入和报告.
 pub(crate) async fn run(
@@ -25,7 +26,11 @@ pub(crate) async fn run(
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
 
-    println!("[Authority节点] 已就绪, 会话={session_id}, 能力={CAPABILITY}; 输入文本后回车");
+    info!(
+        event = "node.ready",
+        capability = CAPABILITY,
+        "Authority 已就绪; 输入文本后回车"
+    );
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -38,7 +43,7 @@ pub(crate) async fn run(
                 stopping = true;
                 // 停止接收新请求, 只等待已经签发 Attempt 的调用.
                 ingress.stop().await?;
-                println!("[Authority节点] 停止接收新请求, 等待在途交付结束");
+                info!(event = "node.stopping", "停止接收新请求, 等待在途交付结束");
                 None
             }
 
@@ -48,7 +53,7 @@ pub(crate) async fn run(
                     Ok(text) => text,
                     Err(error) => {
                         unresolved += 1;
-                        eprintln!("[Authority节点] 操作={id}, {error}; 保持等待报告, 不重试");
+                        warn!(event = "operation.unresolved", operation_id = %id, error = %error, "保持等待报告, 不重试");
                         format!("错误: {error}; 操作保持等待报告, 未重试")
                     }
                 };
@@ -74,7 +79,20 @@ pub(crate) async fn run(
             let id = format!("{session_id}:operation:{next_id}");
 
             runtime.create_operation(id.clone(), text.clone())?;
+            info!(event = "operation.created", operation_id = %id, "已创建 Operation");
             let attempt = runtime.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
+            info!(
+                event = "attempt.created",
+                operation_id = %id,
+                attempt_id = %attempt.id(),
+                "已创建 Attempt"
+            );
+            let span = info_span!(
+                "attempt",
+                operation_id = %id,
+                attempt_id = %attempt.id(),
+                capability = CAPABILITY,
+            );
 
             let call = Call {
                 attempt,
@@ -84,16 +102,26 @@ pub(crate) async fn run(
             replies.insert(id.clone(), reply);
 
             let delivery = delivery.clone();
-            println!("[Authority节点] 已签发倒写授权, 操作={id}");
-            deliveries.spawn(async move {
-                let outcome = delivery.deliver(call).await;
-                (id, outcome)
-            });
+            deliveries.spawn(
+                async move {
+                    info!(event = "operation.send_started", "开始发送 Operation 请求数据");
+                    info!(event = "attempt.send_started", "开始发送 Attempt");
+                    let outcome = delivery.deliver(call).await;
+                    if let Err(error) = &outcome {
+                        warn!(event = "attempt.delivery_failed", error = %error, "未取得有效 Report");
+                    }
+                    (id, outcome)
+                }
+                .instrument(span),
+            );
         }
     }
 
     ingress.flush().await?;
-    println!("[Authority节点] 已退出, 未取得有效报告的操作={unresolved}; 内存状态不持久化");
+    info!(
+        event = "authority.drained",
+        unresolved, "在途交付已结束; 内存状态不持久化"
+    );
 
     Ok(())
 }
@@ -105,13 +133,23 @@ fn finish(
     outcome: Result<WorkerReport, DeliveryError>,
 ) -> Result<String> {
     let report = outcome?;
+    let span = info_span!(
+        "report",
+        operation_id = %report.operation_id(),
+        attempt_id = %report.attempt_id(),
+        report_id = %report.id(),
+    );
+    let _entered = span.enter();
+    info!(event = "report.received", "收到 Report");
     ensure!(
         report.operation_id() == id,
         "交付返回了其他 Operation 的报告"
     );
 
     runtime.accept_report(&report)?;
+    info!(event = "report.accepted", "已接受 Report");
     runtime.close(report.operation_id())?;
+    info!(event = "operation.closed", "已关闭 Operation");
 
     Ok(report.into_result())
 }

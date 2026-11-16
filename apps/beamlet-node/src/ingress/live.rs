@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use futures::{StreamExt, future::BoxFuture};
 use std::io::BufRead;
 use tokio::sync::mpsc;
+use tracing::warn;
 
 pub(crate) struct Inputs {
     client: async_nats::Client,
@@ -67,7 +68,7 @@ impl Ingress for Inputs {
                 message = self.subscription.next(), if self.rejection.is_none() => {
                     let message = message.context("NATS 订阅已关闭")?;
                     let Some(subject) = message.reply else {
-                        eprintln!("[Authority节点] 忽略没有回复地址的消息");
+                        warn!(event = "request.rejected", "忽略没有回复地址的消息");
                         continue;
                     };
 
@@ -77,6 +78,7 @@ impl Ingress for Inputs {
                             reply: Reply::nats(self.client.clone(), subject),
                         })),
                         Err(_) => {
+                            warn!(event = "request.rejected", "消息必须是 UTF-8 文本");
                             let client = self.client.clone();
                             // 外层 select 取消 receive 时保留发送进度, 不丢弃或重建拒绝回复.
                             self.rejection = Some(Box::pin(async move {
