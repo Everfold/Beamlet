@@ -8,11 +8,7 @@ use std::{
 };
 use tokio::sync::watch;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Connection {
-    pub epoch: u64,
-    pub connected: bool,
-}
+use crate::infrastructure::Connection;
 
 struct Entry {
     presence: Presence,

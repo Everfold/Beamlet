@@ -1,6 +1,7 @@
 mod authority;
 mod capabilities;
 mod delivery;
+mod infrastructure;
 mod ingress;
 mod presence;
 mod registry;
@@ -8,10 +9,10 @@ mod settings;
 mod text_reverse;
 mod worker;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use beamlet_protocol::{AuthorityInfo, Instance, Presence, PresenceState};
 use clap::Parser;
-use registry::{Connection, Registry};
+use registry::Registry;
 use settings::{Color, Role, Settings};
 use std::time::Duration;
 use std::{path::PathBuf, process::ExitCode};
@@ -83,49 +84,9 @@ async fn run(settings: Settings, session_id: Uuid) -> Result<()> {
         session_id,
     };
 
-    let (connection, status) = watch::channel(Connection {
-        epoch: 0,
-        connected: false,
-    });
-
-    let events = connection.clone();
-
-    let client = async_nats::ConnectOptions::new()
-        .subscription_capacity(delivery::MAX_IN_FLIGHT)
-        .event_callback(move |event| {
-            let events = events.clone();
-            async move {
-                let connected = match event {
-                    async_nats::Event::Connected => Some(true),
-                    async_nats::Event::Disconnected | async_nats::Event::Closed => Some(false),
-                    _ => None,
-                };
-                if let Some(connected) = connected {
-                    events.send_modify(|state| {
-                        state.epoch += 1;
-                        state.connected = connected;
-                    });
-                    info!(
-                        event = "transport.connection",
-                        connected, "NATS 连接状态变化"
-                    );
-                }
-            }
-        })
-        .connect(settings.nats_url)
-        .await
-        .context("连接 NATS 失败")?;
-
-    // connect 完成先建立初始状态; 后续事件始终推进连接世代.
-    connection.send_if_modified(|state| {
-        if state.epoch == 0 {
-            state.epoch = 1;
-            state.connected = true;
-            true
-        } else {
-            false
-        }
-    });
+    let infrastructure = infrastructure::Nats::connect(&settings.nats_url).await?;
+    let client = infrastructure.client;
+    let status = infrastructure.status;
 
     match settings.role {
         Role::Authority => {

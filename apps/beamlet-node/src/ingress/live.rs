@@ -1,9 +1,7 @@
 //! 控制消息独立于 Authority 在途任务名额; 接收队列有界.
 use super::{Ingress, Reply, Request};
 use crate::{
-    delivery::MAX_IN_FLIGHT,
-    registry::{Connection, Registry},
-    text_reverse,
+    delivery::MAX_IN_FLIGHT, infrastructure::Connection, registry::Registry, text_reverse,
 };
 use anyhow::{Context, Result};
 use beamlet_protocol::{
