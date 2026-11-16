@@ -2,6 +2,7 @@
 
 use super::{Ingress, Reply, Request};
 use anyhow::{Context, Result};
+use beamlet_protocol::{Pool, Selection, Submission, Task};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
@@ -20,7 +21,14 @@ impl Sender {
         let (send, recv) = oneshot::channel();
         self.0
             .send(Request {
-                text,
+                submission: Submission {
+                    pool: Pool::default(),
+                    worker: Selection::Any,
+                    task: Task {
+                        capability: crate::text_reverse::CAPABILITY.into(),
+                        text,
+                    },
+                },
                 reply: Reply::channel(send),
             })
             .await

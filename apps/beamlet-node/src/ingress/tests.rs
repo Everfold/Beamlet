@@ -7,6 +7,7 @@ use crate::{
     worker,
 };
 use beamlet_primitives::{Attempt, Report};
+use beamlet_protocol::{Instance, Outcome, Pool, Selection};
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
@@ -35,6 +36,10 @@ impl Work {
 struct ControlledDelivery(mpsc::Sender<Work>);
 
 impl Delivery for ControlledDelivery {
+    fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<Instance, DeliveryError> {
+        Ok(instance())
+    }
+
     async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
         let (reply, response) = oneshot::channel();
         self.0.send(Work { call, reply }).await.unwrap();
@@ -55,7 +60,7 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
-            "authority".into(),
+            instance(),
             std::future::pending(),
         ));
 
@@ -103,7 +108,7 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
-            "authority".into(),
+            instance(),
             std::future::pending(),
         ));
 
@@ -163,7 +168,7 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
         let (sender, input) = channel::pair(MAX_IN_FLIGHT + 1);
         let (delivery, mut work) = controlled_delivery();
         let (stop, signal) = oneshot::channel();
-        let authority = tokio::spawn(authority::run(input, delivery, "authority".into(), async {
+        let authority = tokio::spawn(authority::run(input, delivery, instance(), async {
             signal.await.unwrap();
             Ok(())
         }));
@@ -212,7 +217,7 @@ async fn delivery_completion_releases_admission_capacity() {
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
-            "authority".into(),
+            instance(),
             std::future::pending(),
         ));
 
@@ -270,7 +275,7 @@ async fn channel_backpressure_cancellation_and_stopped_replies() {
         tokio::pin!(second);
         assert!(futures::poll!(&mut second).is_pending(), "入口必须有界");
         let accepted = input.receive().await.unwrap().unwrap();
-        assert_eq!(accepted.text, "first");
+        assert_eq!(accepted.submission.task.text, "first");
         let queued_response = second.await.unwrap();
 
         input.stop().await.unwrap();
@@ -281,7 +286,13 @@ async fn channel_backpressure_cancellation_and_stopped_replies() {
 
         accepted
             .reply
-            .send("operation", "result".into())
+            .send(Outcome::Completed {
+                operation_id: "operation".into(),
+                attempt_id: "attempt".into(),
+                report_id: "report".into(),
+                worker: instance(),
+                result: "result".into(),
+            })
             .await
             .unwrap();
         input.flush().await.unwrap();
@@ -298,7 +309,7 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
-            "authority".into(),
+            instance(),
             std::future::pending(),
         ));
 
@@ -315,6 +326,34 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
                 .contains("请求回复端已关闭")
         );
         assert!(work.recv().await.is_none());
+    })
+    .await;
+}
+
+fn instance() -> Instance {
+    Instance {
+        node_id: uuid::Uuid::from_u128(1),
+        session_id: uuid::Uuid::from_u128(2),
+    }
+}
+
+#[tokio::test]
+async fn missing_worker_is_rejected_before_delivery() {
+    within(async {
+        let (sender, input) = channel::pair(1);
+        let delivery = crate::delivery::channel::Delivery::new(Duration::from_secs(1));
+        let authority = tokio::spawn(authority::run(
+            input,
+            delivery,
+            instance(),
+            std::future::pending(),
+        ));
+        assert_eq!(
+            sender.submit("abc".into()).await.unwrap().await.unwrap(),
+            "拒绝: 当前没有匹配能力的接收者"
+        );
+        drop(sender);
+        authority.await.unwrap().unwrap();
     })
     .await;
 }

@@ -1,10 +1,14 @@
 use anyhow::Result;
 use beamlet_primitives::{Attempt, Report};
+use beamlet_protocol::{Instance, Pool, Selection};
 use std::{fmt, future::Future};
 
 /// 交付元数据与既有授权同行, 不额外签发授权.
 #[derive(Debug)]
 pub(crate) struct Call {
+    pub pool: Pool,
+    pub authority: Instance,
+    pub worker: Instance,
     pub attempt: Attempt<String, String>,
     pub capability: String,
     pub text: String,
@@ -35,6 +39,13 @@ impl std::error::Error for DeliveryError {}
 
 /// 一次交付只发送一次, 返回关联匹配的 Report 或交付错误.
 pub(crate) trait Delivery: Clone + Send + Sync + 'static {
+    fn select(
+        &self,
+        pool: &Pool,
+        selection: Selection,
+        capability: &str,
+    ) -> Result<Instance, DeliveryError>;
+
     fn deliver(
         &self,
         call: Call,
@@ -58,14 +69,14 @@ pub(crate) struct Incoming {
 pub(crate) struct Reply(ReplyKind);
 
 enum ReplyKind {
-    Nats(super::nats::Reply),
+    Nats(Box<super::nats::Reply>),
     #[cfg(test)]
     Channel(tokio::sync::oneshot::Sender<WorkerReport>),
 }
 
 impl Reply {
     pub(super) fn nats(reply: super::nats::Reply) -> Self {
-        Self(ReplyKind::Nats(reply))
+        Self(ReplyKind::Nats(Box::new(reply)))
     }
 
     #[cfg(test)]

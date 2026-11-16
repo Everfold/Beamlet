@@ -42,16 +42,29 @@ pub(crate) async fn run(
             operation_id = %incoming.call.attempt.operation_id(),
             attempt_id = %incoming.call.attempt.id(),
             capability = %incoming.call.capability,
+            pool = %incoming.call.pool,
+            worker_node_id = %incoming.call.worker.node_id,
+            worker_session_id = %incoming.call.worker.session_id,
         );
 
         async {
             info!(event = "operation.received", "收到 Operation 请求数据");
             info!(event = "attempt.received", "收到 Attempt");
             let span = tracing::Span::current();
-            let result = tokio::task::spawn_blocking(move || {
+            let mut execution = tokio::task::spawn_blocking(move || {
                 let _entered = span.enter();
                 execute(incoming.call, report_id)
-            }).await.context("能力执行任务异常退出")?;
+            });
+            let result = tokio::select! {
+                result = &mut shutdown, if !stopping => {
+                    result?;
+                    stopping = true;
+                    inbox.stop().await?;
+                    info!(event = "node.stopping", "停止接收新调用, 等待当前执行和队列排空");
+                    execution.await
+                }
+                result = &mut execution => result,
+            }.context("能力执行任务异常退出")?;
             match result {
                 Ok(report) => {
                     let span = info_span!("report", report_id = %report.id());
@@ -101,6 +114,15 @@ mod tests {
     #[test]
     fn rejects_unsupported_capability() {
         let unsupported = Call {
+            pool: beamlet_protocol::Pool::default(),
+            authority: beamlet_protocol::Instance {
+                node_id: uuid::Uuid::from_u128(1),
+                session_id: uuid::Uuid::from_u128(2),
+            },
+            worker: beamlet_protocol::Instance {
+                node_id: uuid::Uuid::from_u128(3),
+                session_id: uuid::Uuid::from_u128(4),
+            },
             attempt: Attempt::from_parts("o".into(), "a".into()),
             capability: "text.reverse/v2".into(),
             text: "abc".into(),

@@ -8,6 +8,15 @@ const DEADLINE: Duration = Duration::from_millis(300);
 
 fn call(operation: &str, capability: &str, text: &str) -> Call {
     Call {
+        pool: beamlet_protocol::Pool::default(),
+        authority: beamlet_protocol::Instance {
+            node_id: uuid::Uuid::from_u128(1),
+            session_id: uuid::Uuid::from_u128(2),
+        },
+        worker: beamlet_protocol::Instance {
+            node_id: uuid::Uuid::from_u128(3),
+            session_id: uuid::Uuid::from_u128(4),
+        },
         attempt: Attempt::from_parts(operation.into(), format!("{operation}:attempt")),
         capability: capability.into(),
         text: text.into(),
@@ -193,5 +202,61 @@ async fn channel_backpressure_and_worker_drain() {
             .await
             .unwrap_err(),
         DeliveryError::NoReceiver
+    );
+}
+
+#[tokio::test]
+async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
+    use beamlet_protocol::{Instance, Pool, Selection};
+    use uuid::Uuid;
+    let mut sender = channel::Delivery::new(DEADLINE);
+    let first = Instance {
+        node_id: Uuid::new_v4(),
+        session_id: Uuid::new_v4(),
+    };
+    let second = Instance {
+        session_id: Uuid::new_v4(),
+        ..first
+    };
+    let pool: Pool = "other".parse().unwrap();
+    let mut a = sender.register_in(Pool::default(), first, &[REVERSE], 2);
+    let mut b = sender.register_in(Pool::default(), second, &[REVERSE], 2);
+    let mut c = sender.register_in(pool.clone(), first, &[REVERSE], 2);
+    assert_eq!(
+        sender.select(&pool, Selection::Any, REVERSE).unwrap(),
+        first
+    );
+    assert_eq!(
+        sender.select(&pool, Selection::Exact(second), REVERSE),
+        Err(DeliveryError::NoReceiver)
+    );
+    let mut request = call("exact", REVERSE, "abc");
+    request.worker = second;
+    let delivery = sender.clone();
+    let pending = tokio::spawn(async move { delivery.deliver(request).await });
+    let received = b.receive().await.unwrap().unwrap();
+    assert_eq!(received.call.worker, second);
+    received
+        .reply
+        .send(worker::execute(received.call, "r".into()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(pending.await.unwrap().unwrap().result(), "cba");
+    b.stop().await.unwrap();
+    let mut stale = call("stale", REVERSE, "abc");
+    stale.worker = second;
+    assert_eq!(
+        sender.deliver(stale).await.unwrap_err(),
+        DeliveryError::NoReceiver
+    );
+    assert!(
+        timeout(Duration::from_millis(20), a.receive())
+            .await
+            .is_err()
+    );
+    assert!(
+        timeout(Duration::from_millis(20), c.receive())
+            .await
+            .is_err()
     );
 }

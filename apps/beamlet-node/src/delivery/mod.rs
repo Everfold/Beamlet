@@ -1,7 +1,7 @@
 //! 按能力单选交付, 调用者不接触主题、队列组或编码细节.
 
 #[cfg(test)]
-mod channel;
+pub(crate) mod channel;
 mod contract;
 pub(crate) mod nats;
 mod protocol;

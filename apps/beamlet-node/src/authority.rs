@@ -3,9 +3,9 @@
 use crate::{
     delivery::{Call, Delivery, DeliveryError, MAX_IN_FLIGHT, WorkerReport},
     ingress::{Ingress, Reply, Request},
-    text_reverse::CAPABILITY,
 };
 use anyhow::{Context, Result, ensure};
+use beamlet_protocol::{Instance, Outcome, Submission};
 use beamlet_runtime::Runtime;
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
@@ -15,22 +15,19 @@ use tracing::{Instrument, info, info_span, warn};
 pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
-    session_id: String,
+    instance: Instance,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
+    let session_id = instance.session_id;
     let mut stopping = false;
     let mut runtime = Runtime::new();
-    let mut replies: HashMap<String, Reply> = HashMap::new();
+    let mut replies: HashMap<String, (Reply, Instance, String)> = HashMap::new();
     let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);
 
-    info!(
-        event = "node.ready",
-        capability = CAPABILITY,
-        "Authority 已就绪; 输入文本后回车"
-    );
+    info!(event = "node.ready", "Authority 已就绪; 输入文本后回车");
 
     loop {
         if stopping && deliveries.is_empty() {
@@ -49,17 +46,18 @@ pub(crate) async fn run(
 
             completed = deliveries.join_next(), if !deliveries.is_empty() => {
                 let (id, outcome) = completed.context("缺少交付任务")?.context("交付任务异常退出")?;
+                let (reply, worker, attempt_id) = replies.remove(&id).context("缺少回复来源")?;
+                let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
                 let result = match finish(&mut runtime, &id, outcome) {
-                    Ok(text) => text,
+                    Ok(result) => Outcome::Completed { operation_id: id.clone(), attempt_id: attempt_id.clone(), report_id: report_id.context("缺少报告身份")?, worker, result },
                     Err(error) => {
                         unresolved += 1;
                         warn!(event = "operation.unresolved", operation_id = %id, error = %error, "保持等待报告, 不重试");
-                        format!("错误: {error}; 操作保持等待报告, 未重试")
+                        Outcome::Unresolved { operation_id: id.clone(), attempt_id, worker, reason: error.to_string() }
                     }
                 };
 
-                let reply = replies.remove(&id).context("缺少回复来源")?;
-                reply.send(&id, result).await?;
+                reply.send(result).await?;
                 None
             }
 
@@ -74,11 +72,24 @@ pub(crate) async fn run(
             }
         };
 
-        if let Some(Request { text, reply }) = incoming {
+        if let Some(Request { submission, reply }) = incoming {
+            let Submission { pool, worker, task } = submission;
+            let worker = match delivery.select(&pool, worker, &task.capability) {
+                Ok(worker) => worker,
+                Err(error) => {
+                    warn!(event = "request.rejected", %pool, capability = %task.capability, %error, "创建 Operation 前拒绝请求");
+                    reply
+                        .send(Outcome::Rejected {
+                            reason: error.to_string(),
+                        })
+                        .await?;
+                    continue;
+                }
+            };
             next_id = next_id.checked_add(1).context("操作身份已耗尽")?;
             let id = format!("{session_id}:operation:{next_id}");
 
-            runtime.create_operation(id.clone(), text.clone())?;
+            runtime.create_operation(id.clone(), task.clone())?;
             info!(event = "operation.created", operation_id = %id, "已创建 Operation");
             let attempt = runtime.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
             info!(
@@ -88,18 +99,20 @@ pub(crate) async fn run(
                 "已创建 Attempt"
             );
             let span = info_span!(
-                "attempt",
-                operation_id = %id,
-                attempt_id = %attempt.id(),
-                capability = CAPABILITY,
-            );
+            "attempt",
+            operation_id = %id,
+            attempt_id = %attempt.id(),
+                );
 
+            replies.insert(id.clone(), (reply, worker, attempt.id().clone()));
             let call = Call {
+                pool,
+                authority: instance,
+                worker,
                 attempt,
-                capability: CAPABILITY.into(),
-                text,
+                capability: task.capability,
+                text: task.text,
             };
-            replies.insert(id.clone(), reply);
 
             let delivery = delivery.clone();
             deliveries.spawn(
@@ -127,8 +140,8 @@ pub(crate) async fn run(
 }
 
 /// 只有关联正确的 Report 能推进生命周期; 交付错误不伪装成报告.
-fn finish(
-    runtime: &mut Runtime<String, String, String>,
+fn finish<T>(
+    runtime: &mut Runtime<String, String, T>,
     id: &str,
     outcome: Result<WorkerReport, DeliveryError>,
 ) -> Result<String> {
@@ -164,7 +177,7 @@ mod tests {
         let id = "operation".to_owned();
         let mut runtime = Runtime::new();
         runtime
-            .create_operation(id.clone(), "hello".into())
+            .create_operation(id.clone(), String::from("hello"))
             .unwrap();
         let attempt = runtime.create_attempt(&id, "attempt".into()).unwrap();
 

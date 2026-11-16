@@ -1,72 +1,51 @@
-//! 只在通信适配器处展开原语字段, kernel 不依赖 serde.
-
+//! 只在通信边界展开原语字段, kernel 不依赖 serde.
 use super::{Call, WorkerReport};
 use beamlet_primitives::{Attempt, Report};
-use serde::{Deserialize, Serialize};
+use beamlet_protocol::{ReportData, Task, WorkerCall};
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct WireCall {
-    pub operation_id: String,
-    pub attempt_id: String,
-    pub capability: String,
-    pub text: String,
-}
-
-impl From<Call> for WireCall {
+impl From<Call> for WorkerCall {
     fn from(call: Call) -> Self {
         let (operation_id, attempt_id) = call.attempt.into_parts();
-
         Self {
+            pool: call.pool,
+            authority: call.authority,
+            worker: call.worker,
             operation_id,
             attempt_id,
-            capability: call.capability,
-            text: call.text,
+            task: Task {
+                capability: call.capability,
+                text: call.text,
+            },
         }
     }
 }
-
-impl From<WireCall> for Call {
-    /// 还原传输中的授权引用, 这不是身份认证或新授权.
-    fn from(wire: WireCall) -> Self {
+impl From<WorkerCall> for Call {
+    fn from(wire: WorkerCall) -> Self {
         Self {
+            pool: wire.pool,
+            authority: wire.authority,
+            worker: wire.worker,
             attempt: Attempt::from_parts(wire.operation_id, wire.attempt_id),
-            capability: wire.capability,
-            text: wire.text,
+            capability: wire.task.capability,
+            text: wire.task.text,
         }
     }
 }
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct WireReport {
-    report_id: String,
-    operation_id: String,
-    attempt_id: String,
-    result: String,
-}
-
-impl From<WorkerReport> for WireReport {
-    fn from(report: WorkerReport) -> Self {
-        let (report_id, attempt, result) = report.into_parts();
-        let (operation_id, attempt_id) = attempt.into_parts();
-
-        Self {
-            report_id,
-            operation_id,
-            attempt_id,
-            result,
-        }
+// 两个类型均来自外部 crate, 转换用命名函数表达.
+pub(super) fn encode_report(report: WorkerReport) -> ReportData {
+    let (report_id, attempt, result) = report.into_parts();
+    let (operation_id, attempt_id) = attempt.into_parts();
+    ReportData {
+        report_id,
+        operation_id,
+        attempt_id,
+        result,
     }
 }
-
-impl From<WireReport> for WorkerReport {
-    /// 解码不自动接受报告, 生命周期仍由 Authority 推进.
-    fn from(wire: WireReport) -> Self {
-        Report::new(
-            wire.report_id,
-            Attempt::from_parts(wire.operation_id, wire.attempt_id),
-            wire.result,
-        )
-    }
+pub(super) fn decode_report(wire: ReportData) -> WorkerReport {
+    Report::new(
+        wire.report_id,
+        Attempt::from_parts(wire.operation_id, wire.attempt_id),
+        wire.result,
+    )
 }
