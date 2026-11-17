@@ -2,9 +2,11 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
+use beamlet_api::{
+    AuthorityInfo, Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView,
+};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, Presence, PresenceState,
-    Reply, RoleInstance, Selection, WorkerView, decode, encode, subject,
+    Command, Discovery, DiscoveryReply, Outcome, Reply, decode, encode, subject,
 };
 use futures::StreamExt;
 use std::{

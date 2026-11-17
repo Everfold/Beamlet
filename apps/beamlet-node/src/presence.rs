@@ -1,7 +1,8 @@
 //! 完整心跳独立于任务执行, 每次连接恢复后重新声明当前状态.
 use crate::infrastructure::Connection;
 use anyhow::{Context, Result};
-use beamlet_protocol::{Presence, PresenceState, encode, subject};
+use beamlet_api::{Presence, PresenceState};
+use beamlet_protocol::{encode, subject};
 use futures::StreamExt;
 use std::time::Duration;
 use tokio::{

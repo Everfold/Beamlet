@@ -6,8 +6,9 @@ use crate::{
     delivery::{Call, Delivery, DeliveryError, WorkerReport},
     worker,
 };
+use beamlet_api::{Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
-use beamlet_protocol::{Outcome, Pool, RoleInstance, Selection};
+use beamlet_protocol::Outcome;
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 

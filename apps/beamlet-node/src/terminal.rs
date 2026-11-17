@@ -1,7 +1,7 @@
 //! Node 只读取一次 stdin, 将本地输入交给用户选定的 Authority.
 use crate::shutdown::Shutdown;
 use anyhow::{Context, Result};
-use beamlet_protocol::RoleInstance;
+use beamlet_api::RoleInstance;
 use std::io::BufRead;
 use tokio::sync::mpsc;
 use tracing::{info, warn};

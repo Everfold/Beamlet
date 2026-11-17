@@ -1,0 +1,22 @@
+[package]
+name = "beamlet-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+default = []
+serde = ["dep:serde", "uuid/serde"]
+
+[dependencies]
+uuid.workspace = true
+
+serde = { workspace = true, optional = true }
+
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

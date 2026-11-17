@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
 /// 大小写敏感、可安全用作单个主题片段的 pool 名称.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "String", into = "String"))]
 pub struct Pool(String);
 
 /// pool 名称为空、过长或包含主题分隔符等无效字符.

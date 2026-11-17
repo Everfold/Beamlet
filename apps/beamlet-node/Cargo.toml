@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+beamlet-api = { workspace = true, features = ["serde"] }
 beamlet-ledger.workspace = true
 beamlet-primitives.workspace = true
 beamlet-protocol.workspace = true

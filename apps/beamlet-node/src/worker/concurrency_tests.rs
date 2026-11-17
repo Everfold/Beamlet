@@ -4,8 +4,9 @@ use crate::{
     delivery::{Delivery as _, DeliveryError, Incoming, channel},
     text_reverse,
 };
+use beamlet_api::{Pool, RoleInstance};
 use beamlet_primitives::Attempt;
-use beamlet_protocol::{Pool, RoleInstance};
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{

@@ -1,6 +1,6 @@
 # 可复用 crate 拆分计划
 
-状态: 拆分待实施, Ledger 命名已采用. 本文制定目标结构、接口契约和迁移顺序, 不表示拟新增 crate 已经存在.
+状态: P0 基线通过; P1 已提取共享身份和一次性回复入口, 业务数据与运行参数解耦继续进行. Ledger 命名已采用. 本文制定目标结构、接口契约和迁移顺序, 不表示拟新增 crate 已经存在.
 
 目标是让其他程序能够独立使用 Authority、Worker、调用客户端及运行监督, 自行选择消息后端、配置来源和交互方式. node / console 是这些库的组合应用. 本次以现有行为为基线, 不改变 [内核规范](kernel.md)、[交付契约](delivery.md) 和 [角色身份约定](node-composition.md).
 
@@ -8,10 +8,10 @@
 
 目前适合保留的是从基础到编排的三层职责: `primitives`、`kernel`、`ledger`, 分别负责原语、单个 Operation 的合法转换、多个 Operation 的在线状态管理. Ledger 表示执行台账, 保存 Operation 当前状态及已使用的 Attempt 身份, 不承诺持久化或完整事件历史. 术语见 [领域词汇](../GLOSSARY.md).
 
-需要拆开的耦合集中在应用代码:
+拆分前的耦合集中在应用代码:
 
 - `authority::run` 直接接收 node 的文件配置结构; `RunningRole` 同时处理角色、NATS、终端和退出.
-- ingress / delivery 虽然有 trait, 但它们的 Reply 内部枚举直接包含 NATS、终端以及仅测试可用的 channel 分支. 外部项目不能添加自己的回复方式.
+- ingress / delivery 虽然有 trait, 但它们的 Reply 内部枚举直接包含 NATS、终端以及仅测试可用的 channel 分支. 外部项目不能添加自己的回复方式. 此项已由 `beamlet-api::Responder` 替换, 具体发送函数由适配器构造.
 - `Delivery::select` 把 Worker 选择与消息交付放在一起; `Registry` 依赖 node 的连接状态和 Tokio watch.
 - protocol 同时定义角色信息、提交数据、JSON 编码以及 NATS subject.
 - Console 的发现和请求代码直接接收 `async_nats::Client`; Worker 的能力表和执行入口直接依赖文本示例.

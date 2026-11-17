@@ -3,9 +3,8 @@ use super::{Call, DeliveryError, Incoming, WorkerReport, contract, protocol};
 use crate::registry::Registry;
 use anyhow::{Context, Result};
 use async_nats::{Client, RequestErrorKind};
-use beamlet_protocol::{
-    Pool, PresenceState, RoleInstance, Selection, WorkerCall, WorkerReply, decode, encode, subject,
-};
+use beamlet_api::{Pool, PresenceState, RoleInstance, Selection};
+use beamlet_protocol::{WorkerCall, WorkerReply, decode, encode, subject};
 use futures::StreamExt;
 use std::{
     collections::BTreeSet,
@@ -169,7 +168,7 @@ impl super::Inbox for Inbox {
             }
             return Ok(Some(Incoming {
                 call: wire.into(),
-                reply: contract::Reply::nats(Reply {
+                reply: responder(Reply {
                     client: self.client.clone(),
                     subject: reply,
                     pool: self.pool.clone(),
@@ -204,4 +203,13 @@ impl Reply {
             .await
             .context("发送报告失败")
     }
+}
+
+fn responder(reply: Reply) -> contract::Reply {
+    contract::Reply::new(move |report| async move {
+        reply
+            .send(report)
+            .await
+            .map_err(beamlet_api::ReplyError::new)
+    })
 }

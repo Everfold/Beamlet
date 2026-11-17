@@ -3,9 +3,11 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
+use beamlet_api::{
+    AuthorityInfo, Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView,
+};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, PresenceState, RoleInstance,
-    Selection, Submission, Task, WorkerView, decode, encode, subject,
+    Command, Discovery, DiscoveryReply, Outcome, Submission, Task, decode, encode, subject,
 };
 use futures::StreamExt;
 use std::{
@@ -630,7 +632,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
 #[ignore = "requires nats-server; explicit configured deadline test"]
 async fn configured_report_deadlines_and_input_capacity_are_independent_per_authority() -> Result<()>
 {
-    use beamlet_protocol::{Presence, ReportData, WorkerCall, WorkerReply};
+    use beamlet_protocol::{ReportData, WorkerCall, WorkerReply};
     use tokio::time::timeout;
     let mut cluster = Cluster::new()?;
     let port = port()?;

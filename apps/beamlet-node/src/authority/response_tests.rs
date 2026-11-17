@@ -1,7 +1,8 @@
 //! 可控发送背压驱动真实 Authority, 验证其他交付、名额和停机仍可推进.
 use super::*;
 use crate::{ingress::Ingress, text_reverse, worker};
-use beamlet_protocol::{Pool, Selection, Task};
+use beamlet_api::{Pool, Selection};
+use beamlet_protocol::Task;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -77,7 +78,12 @@ fn request(reply: mpsc::Sender<Outcome>, capability: &str) -> Request {
                 text: "abc".into(),
             },
         },
-        reply: Reply::buffered(reply),
+        reply: Reply::new(move |outcome| async move {
+            reply
+                .send(outcome)
+                .await
+                .map_err(beamlet_api::ReplyError::new)
+        }),
     }
 }
 fn blocked_reply() -> (mpsc::Sender<Outcome>, mpsc::Receiver<Outcome>) {

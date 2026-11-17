@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, ensure};
-use beamlet_protocol::Pool;
+use beamlet_api::Pool;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::{env, io::IsTerminal, path::Path};

@@ -1,5 +1,5 @@
 use super::*;
-use beamlet_protocol::Presence;
+use beamlet_api::Presence;
 use std::time::Duration;
 use tokio::sync::oneshot;
 

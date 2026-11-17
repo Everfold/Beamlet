@@ -1,10 +1,8 @@
 //! 普通行式交互, 编号只用于显示, 网络目标始终保存完整实例身份.
 use crate::{client, settings::Settings};
 use anyhow::{Context, Result, bail, ensure};
-use beamlet_protocol::{
-    AuthorityInfo, Command, Outcome, Pool, PresenceState, RoleInstance, Selection, Submission,
-    Task, WorkerView,
-};
+use beamlet_api::{AuthorityInfo, Pool, PresenceState, RoleInstance, Selection, WorkerView};
+use beamlet_protocol::{Command, Outcome, Submission, Task};
 use std::{collections::BTreeSet, future::Future, io::BufRead, time::Duration};
 use tokio::{sync::mpsc, task::JoinSet};
 use tracing::Instrument;

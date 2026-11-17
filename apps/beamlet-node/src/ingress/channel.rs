@@ -1,8 +1,9 @@
 //! 有界内存入口, 仅用于通过同一接口测试 Authority.
 
 use super::{Ingress, Reply, Request};
-use anyhow::{Context, Result};
-use beamlet_protocol::{Pool, Selection, Submission, Task};
+use anyhow::Result;
+use beamlet_api::{Pool, Selection};
+use beamlet_protocol::{Submission, Task};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
@@ -29,10 +30,10 @@ impl Sender {
                         text,
                     },
                 },
-                reply: Reply::channel(send),
+                reply: reply(send),
             })
             .await
-            .context("请求入口已关闭")?;
+            .map_err(|_| anyhow::anyhow!("请求入口已关闭"))?;
 
         Ok(recv)
     }
@@ -55,4 +56,25 @@ impl Ingress for Input {
     async fn flush(&mut self) -> Result<()> {
         Ok(())
     }
+}
+
+fn reply(sender: oneshot::Sender<String>) -> Reply {
+    Reply::new(move |outcome| async move {
+        use beamlet_protocol::Outcome;
+        let text = match outcome {
+            Outcome::Completed { result, .. } => result,
+            Outcome::Unresolved { reason, .. } => {
+                format!("错误: {reason}; 操作保持等待报告, 未重试")
+            }
+            Outcome::Rejected { reason } => format!("拒绝: {reason}"),
+            Outcome::Workers { .. } => {
+                return Err(beamlet_api::ReplyError::new(std::io::Error::other(
+                    "测试入口不接受节点查询",
+                )));
+            }
+        };
+        sender
+            .send(text)
+            .map_err(|_| beamlet_api::ReplyError::new(std::io::Error::other("请求回复端已关闭")))
+    })
 }

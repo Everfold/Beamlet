@@ -1,6 +1,6 @@
 //! Authority 的本地租约视图; 不参与 Operation/Attempt 生命周期.
 
-use beamlet_protocol::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
+use beamlet_api::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},

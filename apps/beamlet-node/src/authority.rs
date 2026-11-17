@@ -6,8 +6,9 @@ use crate::{
     settings::Authority,
 };
 use anyhow::{Context, Result, ensure};
+use beamlet_api::RoleInstance;
 use beamlet_ledger::Ledger;
-use beamlet_protocol::{Outcome, RoleInstance, Submission};
+use beamlet_protocol::{Outcome, Submission};
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
@@ -33,7 +34,7 @@ pub(crate) async fn run(
     let mut ledger = Ledger::new();
     let mut replies: HashMap<String, (Reply, RoleInstance, String)> = HashMap::new();
     let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
-    let mut sends: JoinSet<Result<()>> = JoinSet::new();
+    let mut sends: JoinSet<Result<(), beamlet_api::ReplyError>> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
     tokio::pin!(shutdown);

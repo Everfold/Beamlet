@@ -4,6 +4,7 @@ members = [
   "apps/beamlet-console",
   "apps/beamlet-node",
 
+  "crates/beamlet-api",
   "crates/beamlet-kernel",
   "crates/beamlet-ledger",
   "crates/beamlet-primitives",
@@ -19,6 +20,7 @@ repository = "https://github.com/Everfold/Beamlet"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+beamlet-api = { path = "crates/beamlet-api" }
 beamlet-kernel = { path = "crates/beamlet-kernel" }
 beamlet-ledger = { path = "crates/beamlet-ledger" }
 beamlet-primitives = { path = "crates/beamlet-primitives" }
@@ -52,7 +54,7 @@ tempfile = "3.27"
 
 blake3 = { version = "1.8", features = ["rayon"] }
 chrono = "0.4"
-uuid = { version = "1.29", features = ["serde", "v4"] }
+uuid = { version = "1.29", features = ["v4"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

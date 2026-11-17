@@ -1,6 +1,5 @@
-use beamlet_protocol::{
-    self as protocol, Command, Pool, RoleInstance, Selection, Submission, Task, subject,
-};
+use beamlet_api::{Pool, RoleInstance, Selection};
+use beamlet_protocol::{self as protocol, Command, Submission, Task, subject};
 use uuid::Uuid;
 
 #[test]

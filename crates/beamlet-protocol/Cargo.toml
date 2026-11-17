@@ -8,6 +8,8 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+beamlet-api = { workspace = true, features = ["serde"] }
+
 uuid.workspace = true
 
 serde.workspace = true

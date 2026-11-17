@@ -1,14 +1,12 @@
 //! Console 与节点共用的 v3 消息与主题, 不持有连接或管理 Operation 生命周期.
 
 mod message;
-mod pool;
 pub mod subject;
 
 pub use message::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Presence, PresenceState, Reply,
-    ReportData, RoleInstance, Selection, Submission, Task, WorkerCall, WorkerReply, WorkerView,
+    Command, Discovery, DiscoveryReply, Outcome, Reply, ReportData, Submission, Task, WorkerCall,
+    WorkerReply,
 };
-pub use pool::{InvalidPool, Pool};
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 

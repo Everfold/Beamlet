@@ -1,5 +1,5 @@
 //! 所有路由均包含 pool, 实例路由同时包含角色和会话身份.
-use crate::{Pool, RoleInstance};
+use beamlet_api::{Pool, RoleInstance};
 
 /// 查询一个 pool 中的 Authority, 收集所有回复.
 pub fn discovery(pool: &Pool) -> String {

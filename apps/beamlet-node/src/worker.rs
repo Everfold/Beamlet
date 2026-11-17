@@ -124,12 +124,12 @@ mod tests {
     #[tokio::test]
     async fn rejects_unsupported_capability() {
         let unsupported = Call {
-            pool: beamlet_protocol::Pool::default(),
-            authority: beamlet_protocol::RoleInstance {
+            pool: beamlet_api::Pool::default(),
+            authority: beamlet_api::RoleInstance {
                 role_id: uuid::Uuid::from_u128(1),
                 session_id: uuid::Uuid::from_u128(2),
             },
-            worker: beamlet_protocol::RoleInstance {
+            worker: beamlet_api::RoleInstance {
                 role_id: uuid::Uuid::from_u128(3),
                 session_id: uuid::Uuid::from_u128(4),
             },

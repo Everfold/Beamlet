@@ -2,9 +2,9 @@
 use super::{Ingress, Reply, Request};
 use crate::{infrastructure::Connection, registry::Registry, text_reverse};
 use anyhow::{Context, Result};
+use beamlet_api::{AuthorityInfo, Pool, Presence, Selection};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, Presence, Selection,
-    Submission, Task, decode, encode, subject,
+    Command, Discovery, DiscoveryReply, Outcome, Submission, Task, decode, encode, subject,
 };
 use futures::{FutureExt, StreamExt, stream::SelectAll};
 use std::{collections::BTreeMap, time::Instant};
@@ -109,7 +109,10 @@ impl Ingress for Inputs {
                     } else if text == "/workers" {
                         info!(workers = ?self.registry.workers(&self.pool, None, Instant::now()), "Worker 列表");
                     } else {
-                        return Ok(Some(Request { submission: Submission { pool: self.pool.clone(), worker: Selection::Any, task: Task { capability: self.capability.clone(), text } }, reply: Reply::terminal() }));
+                        return Ok(Some(Request { submission: Submission { pool: self.pool.clone(), worker: Selection::Any, task: Task { capability: self.capability.clone(), text } }, reply: Reply::new(|outcome| async move {
+                            tracing::info!(event = "response.local", response = ?outcome, "本地结果");
+                            Ok(())
+                        }) }));
                     }
                 }
             }
@@ -210,8 +213,7 @@ async fn control(
                         continue;
                     }
                 };
-                let reply =
-                    Reply::nats(client.clone(), subject, request.request_id(), info.instance);
+                let reply = reply(client.clone(), subject, request.request_id(), info.instance);
                 if request.authority() != info.instance
                     || request.pool() != pool
                     || request.request_id().is_nil()
@@ -250,4 +252,26 @@ async fn control(
             }
         }
     }
+}
+
+fn reply(
+    client: async_nats::Client,
+    subject: async_nats::Subject,
+    request_id: uuid::Uuid,
+    authority: beamlet_api::RoleInstance,
+) -> Reply {
+    Reply::new(move |outcome| async move {
+        let bytes = encode(&beamlet_protocol::Reply {
+            request_id,
+            authority,
+            outcome,
+        })
+        .map_err(beamlet_api::ReplyError::new)?;
+        client
+            .publish(subject, bytes.into())
+            .await
+            .map_err(beamlet_api::ReplyError::new)?;
+        tracing::info!(event = "response.sent", %request_id, "已回复远端请求");
+        Ok(())
+    })
 }

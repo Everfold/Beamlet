@@ -9,7 +9,8 @@ use crate::{
     terminal, worker,
 };
 use anyhow::{Context, Result};
-use beamlet_protocol::{AuthorityInfo, Presence, PresenceState, RoleInstance};
+use beamlet_api::{AuthorityInfo, Presence, PresenceState, RoleInstance};
+
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tracing::{Instrument, info, info_span};

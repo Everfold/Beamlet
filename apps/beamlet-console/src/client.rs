@@ -1,8 +1,8 @@
 //! 发现收集多份回复; 提交只发送一次, 并校验回复关联.
 use anyhow::{Context, Result, ensure};
+use beamlet_api::{AuthorityInfo, Pool, RoleInstance};
 use beamlet_protocol::{
-    AuthorityInfo, Command, Discovery, DiscoveryReply, Outcome, Pool, Reply, RoleInstance, decode,
-    encode, subject,
+    Command, Discovery, DiscoveryReply, Outcome, Reply, decode, encode, subject,
 };
 use futures::StreamExt;
 use std::{

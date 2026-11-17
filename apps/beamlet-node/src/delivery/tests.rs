@@ -1,5 +1,6 @@
 use super::{Call, Delivery as _, DeliveryError, Inbox as _, Incoming, channel};
 use crate::{text_reverse::CAPABILITY as REVERSE, worker};
+use beamlet_api::{Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -8,12 +9,12 @@ const DEADLINE: Duration = Duration::from_millis(300);
 
 fn call(operation: &str, capability: &str, text: &str) -> Call {
     Call {
-        pool: beamlet_protocol::Pool::default(),
-        authority: beamlet_protocol::RoleInstance {
+        pool: beamlet_api::Pool::default(),
+        authority: beamlet_api::RoleInstance {
             role_id: uuid::Uuid::from_u128(1),
             session_id: uuid::Uuid::from_u128(2),
         },
-        worker: beamlet_protocol::RoleInstance {
+        worker: beamlet_api::RoleInstance {
             role_id: uuid::Uuid::from_u128(3),
             session_id: uuid::Uuid::from_u128(4),
         },
@@ -220,7 +221,6 @@ async fn channel_backpressure_and_worker_drain() {
 
 #[tokio::test]
 async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
-    use beamlet_protocol::{Pool, RoleInstance, Selection};
     use uuid::Uuid;
     let mut sender = channel::Delivery::new(DEADLINE);
     let first = RoleInstance {

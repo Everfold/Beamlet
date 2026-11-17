@@ -1,6 +1,7 @@
 use anyhow::Result;
+use beamlet_api::{Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
-use beamlet_protocol::{Pool, RoleInstance, Selection};
+
 use std::{fmt, future::Future};
 
 /// 交付元数据与既有授权同行, 不额外签发授权.
@@ -65,36 +66,7 @@ pub(crate) struct Incoming {
     pub reply: Reply,
 }
 
-/// 业务侧只能回复, 不能读取或改写传输地址.
-pub(crate) struct Reply(ReplyKind);
-
-enum ReplyKind {
-    Nats(Box<super::nats::Reply>),
-    #[cfg(test)]
-    Channel(tokio::sync::oneshot::Sender<WorkerReport>),
-}
-
-impl Reply {
-    pub(super) fn nats(reply: super::nats::Reply) -> Self {
-        Self(ReplyKind::Nats(Box::new(reply)))
-    }
-
-    #[cfg(test)]
-    pub(super) fn channel(reply: tokio::sync::oneshot::Sender<WorkerReport>) -> Self {
-        Self(ReplyKind::Channel(reply))
-    }
-
-    /// 将完整报告交回原接收端, 不把发送成功解释成生命周期完成.
-    pub(crate) async fn send(self, report: WorkerReport) -> Result<()> {
-        match self.0 {
-            ReplyKind::Nats(reply) => reply.send(report).await,
-            #[cfg(test)]
-            ReplyKind::Channel(sender) => sender
-                .send(report)
-                .map_err(|_| anyhow::anyhow!("报告接收端已关闭")),
-        }
-    }
-}
+pub(crate) type Reply = beamlet_api::Responder<WorkerReport>;
 
 /// 即使传输回复地址正确, 仍拒绝指向其他调用的报告.
 pub(super) fn check_report(

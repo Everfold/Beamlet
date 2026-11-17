@@ -1,7 +1,8 @@
 //! 测试用本地定向适配器, 与 NATS 共用交付及接收接口.
 use super::{Call, DeliveryError, Incoming, WorkerReport, contract};
 use anyhow::Result;
-use beamlet_protocol::{Pool, RoleInstance, Selection};
+use beamlet_api::{Pool, RoleInstance, Selection};
+
 use std::time::Duration;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -92,7 +93,11 @@ impl super::Delivery for Delivery {
         sender
             .try_send(Incoming {
                 call,
-                reply: contract::Reply::channel(reply),
+                reply: contract::Reply::new(move |report| async move {
+                    reply.send(report).map_err(|_| {
+                        beamlet_api::ReplyError::new(std::io::Error::other("报告接收端已关闭"))
+                    })
+                }),
             })
             .map_err(|error| DeliveryError::NotDelivered(error.to_string()))?;
         let report = timeout(self.deadline, receive)
