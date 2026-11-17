@@ -177,6 +177,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "beamlet-host"
+version = "0.1.0"
+dependencies = [
+ "beamlet-api",
+ "beamlet-authority",
+ "beamlet-client",
+ "beamlet-transport-local",
+ "beamlet-worker",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "beamlet-kernel"
 version = "0.1.0"
 dependencies = [
@@ -200,6 +214,7 @@ dependencies = [
  "async-nats",
  "beamlet-api",
  "beamlet-authority",
+ "beamlet-host",
  "beamlet-protocol",
  "beamlet-transport-nats",
  "beamlet-worker",

@@ -3,7 +3,6 @@ mod local;
 mod node;
 mod role;
 mod settings;
-mod shutdown;
 mod terminal;
 mod text_reverse;
 

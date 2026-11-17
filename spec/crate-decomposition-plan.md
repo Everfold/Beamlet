@@ -1,6 +1,6 @@
 # 可复用 crate 拆分计划
 
-状态: P0–P5 已完成; 下一阶段为 P6 宿主提取. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
+状态: P0–P6 已完成; 本轮 crate 拆分已完成. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
 
 目标是让其他程序能够独立使用 Authority、Worker、调用客户端及运行监督, 自行选择消息后端、配置来源和交互方式. node / console 是这些库的组合应用. 本次以现有行为为基线, 不改变 [内核规范](kernel.md)、[交付契约](delivery.md) 和 [角色身份约定](node-composition.md).
 
@@ -32,9 +32,9 @@
 | **`beamlet-client`** | Authority 发现、Worker 查询、任务提交及请求关联 | api |
 | **`beamlet-transport-nats`** | NATS 连接、subject、订阅、收发、连接状态转换 | api、protocol |
 | **`beamlet-transport-local`** | 进程内端点、通道、发现及回复, 同时用于嵌入和契约测试 | api |
-| **`beamlet-host`** | 多个任务的共同启动监督、停止通知、退出期限、错误汇总 | api, 按实际需要 |
+| **`beamlet-host`** | 多个任务的共同启动监督、停止通知、退出期限、错误汇总 | 无 Beamlet 依赖 |
 
-`beamlet-api`、两个 transport、`beamlet-worker`、`beamlet-authority` 及 `beamlet-client` 已实现; host 为下一阶段. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
+`beamlet-api`、两个 transport、`beamlet-worker`、`beamlet-authority`、`beamlet-client` 及 `beamlet-host` 均已实现. Host 在角色接口通过复用验收后提取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
 
 依赖箭头表示“左方依赖右方”, 省略直接使用 primitives 的重复边:
 
@@ -149,7 +149,7 @@ Worker 接收能力集合和异步业务处理器. 它持有收到的 Attempt, �
 
 Client 提供 `discover`、`workers`、`submit` 三个主要操作, 集中实施发现去重、关联校验和请求期限. 传输端点只执行相应交互. Console 的命令解析、显示、当前选择、防止旧查询覆盖新选择的 UI revision, 以及终端动作的在途数量限制留在应用; 每次提交给 Client 的目标是不可变快照. Client 本身支持并发调用, 首轮不新增隐藏请求队列或额外的固定并发上限. 三个主要操作自动生成请求 UUID; 需要沿用调用方 UUID 时使用 `request(Command<P>)`, 同样经过期限与关联校验. 该 UUID 不提供幂等保证.
 
-Host 接收已经装配好的任务、身份和停止句柄, 负责共同停止、排空期限和异常汇总. 它不读取文件、不创建 Tokio 执行器、不监听 Ctrl+C、不预置角色枚举. 操作系统退出信号由应用转换为停止请求; 其他程序也可以直接运行单个角色, 无需 Host.
+Host 接收已经装配好的长期任务及调用方名称, 负责共同停止、排空期限和异常汇总. `add` 只保存 future, `run` 开始轮询才启动任务; `shutdown` 提供可克隆的只读通知. 名称仅用于诊断, 可以使用角色 UUID, Host 不分配或解析领域身份. 它不读取文件、不创建 Tokio 执行器、不监听 Ctrl+C、不预置角色枚举. 操作系统退出信号由应用转换为停止 future; `run_with_background` 可额外驱动终端等输入处理, 正常结束不停止服务, 返回错误会停止组, 开始排空时丢弃输入处理. 其他程序也可以直接运行单个角色, 无需 Host.
 
 角色的 `run` 返回受调用者管理的 future. 子任务、订阅和连接的所有权明确, 退出或 Drop 不遗留无人持有的后台任务; Drop 不阻塞, 正常停止通过显式异步入口完成. 超过退出期限不声称已经中断开始执行的阻塞计算或远端任务.
 
@@ -186,7 +186,7 @@ let outcome = client.submit(target, submission).await?;
 | P3 Worker 库（已完成） | 提取执行循环、能力注册和心跳驱动; 文本示例移到应用注册 | 单独启动 Worker; 非文本本地任务可运行; 依赖树无 kernel/ledger; 并发和排空语义不变 |
 | P4 Authority 库（已完成） | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
 | P5 Client 库与薄应用（已完成） | 提取 SDK; node/console 只保留配置、装配、交互、输出初始化 | 自定义程序可发现/查询/提交; 不依赖 console; 旧 UI 结果不能覆盖新选择 |
-| P6 宿主 | 提取监督和停止协调, 提供多角色嵌入示例 | 相同/不同角色多实例可运行; 共享/独立传输实例可装配; 单个错误能够停止同组任务 |
+| P6 宿主（已完成） | 提取监督和停止协调, 提供多角色嵌入示例 | 相同/不同角色多实例可运行; 共享/独立传输实例可装配; 单个错误能够停止同组任务 |
 
 P2 完成时适配器已经依赖 api. 尚未提取的角色在 apps 内实现新契约; 随 P3/P4 迁入角色库, 最终清除应用中暂存的策略实现. 不把 Registry 移进 NATS 再依靠反向依赖调用 Authority. 某阶段如无法独立编译, 合并最小相邻迁移提交, 不引入反向依赖的临时架构.
 
@@ -258,3 +258,15 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 公开接口测试覆盖发现窗口与总期限、取消清理、24 个并发非 Clone/Debug/Sync 输入、乱序回复、错误会话和结果、查询过滤、超时不重发与参数校验. console 保留旧结果隔离与退出测试, 真实 NATS 验收检查 Client 发送日志与关联 UUID.
 - 验证通过: workspace 测试、11 项 Client 公开接口测试、全部目标/feature 的 clippy、严格 rustdoc、真实 NATS console 验收与独立 SDK 调用. 两个 workspace 外 consumer 分别运行非文本本地完整流程和调用真实 NATS + Node; 仅 SDK consumer 的依赖树没有 Authority、Worker、ledger、kernel、state-machines、应用或 confy.
 - 提交检查通过: fmt、cargo deny、check、clippy 与 nextest. 本阶段未修改内核、v3 线格式或应用配置布局; 下一阶段为 P6 宿主监督与停止协调.
+
+## 12. P6 验证结果
+
+- 新增 `beamlet-host`: Host / Options、只读 Shutdown、Failure 与 RunError. `add` 保存带名称的长期任务, `run` / `run_with_background` 统一启动监督; 没有角色/基础设施枚举、配置来源、全局日志或 OS 信号处理, 正常依赖仅 Tokio、tracing、thiserror.
+- 任一任务错误、panic 或提前正常结束会通知同组停止; 停止信号和后台输入错误也传播. 后台 EOF 不停止服务, 空组仍等待外部信号. 不自动重启, 不添加任务数量上限.
+- 排空期限从第一次停止请求开始计算, 后续错误不延长它. RunError 保留按观测顺序发生的全部失败及 source, 同时报告期限内未收取完成的任务名称; 原始错误不会被超时覆盖. 超时中止异步任务并立即停止等待, 不承诺取消已开始的阻塞计算或远端任务.
+- 丢弃 Host 或运行 future 会通知停止并释放所拥有的 future; 已启动异步任务请求中止. 需要正常排空时必须完成停止信号并等待 run 返回. Shutdown 支持所有克隆及晚等待者; 不允许撤回停止通知.
+- node 删除自身的监督循环和 shutdown 模块, 保留 RON 校验、UUID 生成、基础设施连接/刷新、角色装配与终端交互. 原 `shutdown_timeout_secs` 转为 Options 的 Duration, 配置格式与加载行为保持不变. 库输出 host.stopping, node 继续输出 node.stopped.
+- [composed](../crates/beamlet-host/examples/composed.rs) 嵌入 3 个 Authority、3 个 Worker 与两个隔离 local 消息空间, 通过 Client 完成 5 次定向调用并共同排空: `cargo run -p beamlet-host --example composed`.
+- 原应用监督/停止测试迁入[公开接口测试](../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、终端选择、正常退出和配置不改写.
+- 验证通过: workspace 测试、9 项宿主公开接口测试及文档示例、全部目标/feature 的 clippy、严格 rustdoc. 两个 workspace 外 consumer 分别运行纯宿主自定义任务和完整多角色示例; 纯宿主正常依赖树没有其他 Beamlet crate、消息后端、serde 或配置库.
+- 最终验收同时通过 node/console 的真实 NATS 测试和 NATS 适配器契约测试. P0–P6 已完成, 后续持久化、自动重试或其他消息后端属于独立议题.

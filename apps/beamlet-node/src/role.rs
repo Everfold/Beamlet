@@ -2,11 +2,11 @@
 use crate::{
     local,
     settings::{Role, RoleSettings},
-    shutdown::Shutdown,
     terminal,
 };
 use anyhow::{Context, Result};
 use beamlet_api::{AuthorityInbox, AuthorityInfo, RoleInstance};
+use beamlet_host::Shutdown;
 use beamlet_transport_nats::Nats;
 use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};

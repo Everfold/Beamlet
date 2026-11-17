@@ -78,7 +78,7 @@ Report 等待期限由 Authority 的 `report_timeout_secs` 指定 (默认 3 秒)
 
 `request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 支持多个在途请求, 每次提交保存目标快照, 按完成顺序展示结果并标识 request_id. 发现和查询也独立等待, 迟到结果不能覆盖较新的选择或查询. Console 按 `max_in_flight_requests` 限制网络请求数 (默认 16), 满载的新请求明确拒绝; `/quit` / EOF 排空在途请求, Ctrl+C 停止本地等待. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
 
-Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
+Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务失败和排空超时. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
 
 ## 6. 验证
 
