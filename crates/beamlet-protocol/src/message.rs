@@ -62,19 +62,43 @@ pub enum Command {
 }
 
 impl Command {
-    /// 请求与回复关联 ID.
+    /// 读取请求与回复关联使用的 UUID。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Command` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 当前动作或命令已有的请求 UUID，不生成新身份。
     pub fn request_id(&self) -> Uuid {
         match self {
             Self::Workers { request_id, .. } | Self::Submit { request_id, .. } => *request_id,
         }
     }
-    /// 指定的 Authority 实例.
+    /// 读取命令明确指定的 Authority 角色与会话身份。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Command` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 命令中保存的 RoleInstance，不执行发现或重新选择。
     pub fn authority(&self) -> RoleInstance {
         match self {
             Self::Workers { authority, .. } | Self::Submit { authority, .. } => *authority,
         }
     }
-    /// 请求所属的 pool.
+    /// 借用命令所属的 pool。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Command` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 查询或提交所携带的 pool 引用。
     pub fn pool(&self) -> &Pool {
         match self {
             Self::Workers { pool, .. } => pool,

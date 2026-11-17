@@ -14,6 +14,15 @@ pub struct InvalidPool;
 impl TryFrom<String> for Pool {
     type Error = InvalidPool;
 
+    /// 校验 pool 名称并构造可安全用于主题片段的标识。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：pool 名称，要求 1..=64 字节 ASCII 字母、数字、短横线或下划线。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回保留大小写的 Pool；长度不在 1..=64 字节或字符非法时返回 InvalidPool。
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.is_empty()
             || value.len() > 64
@@ -29,24 +38,61 @@ impl TryFrom<String> for Pool {
 
 impl FromStr for Pool {
     type Err = InvalidPool;
+    /// 校验 pool 名称并构造可安全用于主题片段的标识。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：pool 名称，要求 1..=64 字节 ASCII 字母、数字、短横线或下划线。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回保留大小写的 Pool；长度不在 1..=64 字节或字符非法时返回 InvalidPool。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::try_from(value.to_owned())
     }
 }
 
 impl From<Pool> for String {
+    /// 消费 Pool 并取回名称所有权。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：已校验的 Pool，消费后取回内部字符串。
+    ///
+    /// # 返回值
+    ///
+    /// 原始 pool 名称的 String。
     fn from(value: Pool) -> Self {
         value.0
     }
 }
 
 impl fmt::Display for Pool {
+    /// 向格式化目标写入 `Pool` 的显示文本。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Pool` 的共享引用。
+    /// - `f`：接收格式化文本的写入目标。
+    ///
+    /// # 返回值
+    ///
+    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
 impl Default for Pool {
+    /// 构造默认 pool 标识。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 名称精确为 `default` 的 Pool。
     fn default() -> Self {
         Self("default".into())
     }

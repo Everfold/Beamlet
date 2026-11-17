@@ -20,7 +20,15 @@ state_machine! {
     }
 }
 
-/// 提取无 guard 和回调的合法转换, 失败表示内部状态图不一致.
+/// 提取类型状态允许的无条件状态转换结果。
+///
+/// # 参数
+///
+/// - `result`：类型状态允许的无 guard/回调转换结果，按内部不变量应当成功。
+///
+/// # 返回值
+///
+/// 成功转换后的值；转换失败说明内部图不一致并触发 panic。
 pub(crate) fn transition<T, E>(result: Result<T, E>) -> T {
     match result {
         Ok(machine) => machine,

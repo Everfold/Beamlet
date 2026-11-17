@@ -6,7 +6,15 @@ struct Identity(&'static str);
 #[derive(Debug)]
 struct Request(String);
 
-/// 创建时绑定身份并保留原始请求, 请求与身份均无需支持比较.
+/// 验证创建 Attempt 保持授权身份、Operation 身份和原始请求关联。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn creates_attempt_with_bound_identity_and_request() {
     let operation = Operation::new(Identity("operation-1"), Request(String::from("request")));

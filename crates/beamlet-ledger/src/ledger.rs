@@ -10,6 +10,15 @@ enum Managed<O, A, P> {
 }
 
 impl<O, A, P> Managed<O, A, P> {
+    /// 借用 Operation 的固定身份。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Managed<O, A, P>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 原 Operation 身份的引用，生命周期转换不改变它。
     fn id(&self) -> &O {
         match self {
             Self::Ready(o) => o.id(),
@@ -26,12 +35,28 @@ pub struct OperationView<'a, O, A, P> {
 }
 
 impl<O, A, P> OperationView<'_, O, A, P> {
-    /// 读取 Operation 身份.
+    /// 借用 Operation 的固定身份。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `OperationView<'_, O, A, P>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 原 Operation 身份的引用，生命周期转换不改变它。
     pub fn id(&self) -> &O {
         self.operation.id()
     }
 
-    /// 借用原始请求, 不复制业务数据.
+    /// 借用 Operation 保存的原始业务请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `OperationView<'_, O, A, P>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 原请求的只读引用，不转移所有权。
     pub fn request(&self) -> &P {
         match self.operation {
             Managed::Ready(o) => o.request(),
@@ -40,7 +65,15 @@ impl<O, A, P> OperationView<'_, O, A, P> {
         }
     }
 
-    /// 读取当前状态标签.
+    /// 查询台账中 Operation 的当前生命周期标签。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `OperationView<'_, O, A, P>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// Ready、AwaitingReport 或 Closed 状态枚举。
     pub fn status(&self) -> OperationStatus {
         match self.operation {
             Managed::Ready(o) => o.status(),
@@ -49,7 +82,15 @@ impl<O, A, P> OperationView<'_, O, A, P> {
         }
     }
 
-    /// 仅等待状态返回当前授权身份.
+    /// 查询台账视图当前是否正在等待一份授权报告。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `OperationView<'_, O, A, P>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 等待状态返回 `Some(&AttemptId)`；Ready 和 Closed 返回 `None`。
     pub fn pending_attempt_id(&self) -> Option<&A> {
         match self.operation {
             Managed::AwaitingReport(o) => Some(o.pending_attempt_id()),
@@ -69,13 +110,30 @@ pub struct Ledger<O, A, P> {
 }
 
 impl<O, A, P> Default for Ledger<O, A, P> {
+    /// 创建不含 Operation 和已用授权身份的空台账。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 独立的 Ledger，尚未记录任何操作或 Attempt。
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl<O, A, P> Ledger<O, A, P> {
-    /// 创建空的执行台账, 不执行 IO.
+    /// 创建不含 Operation 和已用授权身份的空台账。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 独立的 Ledger，尚未记录任何操作或 Attempt。
     pub fn new() -> Self {
         Self {
             operations: Vec::new(),
@@ -85,7 +143,17 @@ impl<O, A, P> Ledger<O, A, P> {
 }
 
 impl<O: Eq, A, P> Ledger<O, A, P> {
-    /// 注册请求, 由 kernel 创建 Ready Operation.
+    /// 向台账插入一个全新 Ready Operation。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的可变引用。
+    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
+    /// - `request`：创建 Operation 时的原始业务请求；状态转换保持其内容。
+    ///
+    /// # 返回值
+    ///
+    /// 插入成功返回 `Ok(())`；身份已存在时返回携带输入身份和请求的 CreateOperationError。
     ///
     /// # Errors
     ///
@@ -105,7 +173,16 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
         Ok(())
     }
 
-    /// 查询只读视图, 不存在时返回 None.
+    /// 按身份查询台账中的只读 Operation 视图。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的共享引用。
+    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
+    ///
+    /// # 返回值
+    ///
+    /// 存在时返回 `Some(OperationView)`，不存在时返回 `None`。
     pub fn operation(&self, id: &O) -> Option<OperationView<'_, O, A, P>> {
         self.operations
             .iter()
@@ -113,6 +190,16 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
             .map(|operation| OperationView { operation })
     }
 
+    /// 定位 Operation 在内部存储中的索引。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的共享引用。
+    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回零基位置；不存在返回 OperationNotFound。
     fn position(&self, id: &O) -> Result<usize, LedgerError> {
         self.operations
             .iter()
@@ -120,7 +207,16 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
             .ok_or(LedgerError::OperationNotFound)
     }
 
-    /// 显式关闭 Ready, 重复关闭保持 Closed.
+    /// 关闭台账中的 Ready Operation，已关闭时保持幂等。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的可变引用。
+    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 `Ok(())`；不存在或仍等待报告时返回 LedgerError。
     ///
     /// # Errors
     ///
@@ -143,7 +239,17 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
 }
 
 impl<O: Eq + Clone, A: Eq + Clone, P> Ledger<O, A, P> {
-    /// 在 Ready 上签发一次授权并保存等待状态, 交付由外部负责.
+    /// 为一个 Ready Operation 签发台账内未使用过的授权身份。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的可变引用。
+    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
+    /// - `attempt_id`：为本次授权分配的身份；Ledger 额外拒绝全台账已使用过的身份。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 Attempt 并进入等待状态；状态非法或身份已用时返回 LedgerError。
     ///
     /// # Errors
     ///
@@ -173,9 +279,18 @@ impl<O: Eq + Clone, A: Eq + Clone, P> Ledger<O, A, P> {
 }
 
 impl<O: Eq, A: Eq, P> Ledger<O, A, P> {
-    /// 根据 Report 的 Operation 身份路由, 由 kernel 校验当前授权.
+    /// 用完整报告推进台账中对应 Operation 的生命周期。
     ///
     /// 业务失败结果仍可接受; 报告只借用, 不保存结果或自动关闭.
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ledger<O, A, P>` 的可变引用。
+    /// - `report`：完整报告，包含 Operation/Attempt 关联、报告身份及业务结果。
+    ///
+    /// # 返回值
+    ///
+    /// 校验成功返回 `Ok(())` 并转回 Ready；不存在、状态非法或关联错误返回 LedgerError，保持原对象。
     ///
     /// # Errors
     ///

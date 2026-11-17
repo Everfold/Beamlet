@@ -12,6 +12,15 @@ use tokio::sync::oneshot;
 #[derive(Debug, PartialEq, Eq)]
 struct Answer(Vec<u8>);
 
+/// 验证一次性回复可移动非 Clone 数据，并等待适配器发送完成。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn custom_adapter_moves_owned_data_and_waits_for_send_completion() {
     let (sent, received) = oneshot::channel();
@@ -28,6 +37,15 @@ async fn custom_adapter_moves_owned_data_and_waits_for_send_completion() {
     sending.await.unwrap().unwrap();
 }
 
+/// 验证回复发送失败保留原错误来源且不自动重试。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn failures_preserve_the_original_source_without_retrying() {
     let calls = Arc::new(AtomicUsize::new(0));
@@ -52,6 +70,15 @@ async fn failures_preserve_the_original_source_without_retrying() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
+/// 验证丢弃未使用的回复入口只释放资源，不触发发送。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn dropping_an_unused_reply_releases_resources_without_sending() {
     let (sender, mut receiver) = oneshot::channel::<()>();

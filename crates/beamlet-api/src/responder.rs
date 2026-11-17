@@ -20,7 +20,15 @@ pub struct Responder<T> {
 }
 
 impl<T> Responder<T> {
-    /// 从适配器的发送函数构造入口, 不执行发送或启动后台任务.
+    /// 把一次性异步发送函数封装为回复入口。
+    ///
+    /// # 参数
+    ///
+    /// - `send`：消费一份回复值并异步完成发送的一次性函数；失败应返回 ReplyError。
+    ///
+    /// # 返回值
+    ///
+    /// 拥有发送函数的 Responder；构造时不执行发送。
     pub fn new<F, Fut>(send: F) -> Self
     where
         F: FnOnce(T) -> Fut + Send + 'static,
@@ -31,7 +39,16 @@ impl<T> Responder<T> {
         }
     }
 
-    /// 消费回复入口并等待适配器完成发送.
+    /// 消费回复入口并等待唯一一次发送完成。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Responder<T>` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `value`：本次唯一回复的数据；所有权交给构造时注入的发送函数。
+    ///
+    /// # 返回值
+    ///
+    /// 适配器发送完成返回 `Ok(())`；失败返回 ReplyError，不进行重试。
     ///
     /// # Errors
     /// 返回适配器报告的错误, 保留其 source; 不自动重试.
@@ -41,6 +58,16 @@ impl<T> Responder<T> {
 }
 
 impl<T> fmt::Debug for Responder<T> {
+    /// 向格式化目标写入 `Responder<T>` 的调试信息。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Responder<T>` 的共享引用。
+    /// - `f`：接收格式化文本的写入目标。
+    ///
+    /// # 返回值
+    ///
+    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Responder").finish_non_exhaustive()
     }
@@ -53,7 +80,15 @@ pub struct ReplyError {
 }
 
 impl ReplyError {
-    /// 封装发送失败原因, 不将其解释为远端未执行.
+    /// 包装底层失败原因并保留错误链。
+    ///
+    /// # 参数
+    ///
+    /// - `source`：底层失败原因；包装后仍可通过错误 source 链访问。
+    ///
+    /// # 返回值
+    ///
+    /// 持有原始错误的具体错误对象，不修改或重试失败操作。
     pub fn new(source: impl Into<Box<dyn Error + Send + Sync>>) -> Self {
         Self {
             source: source.into(),
@@ -62,12 +97,31 @@ impl ReplyError {
 }
 
 impl fmt::Display for ReplyError {
+    /// 向格式化目标写入 `ReplyError` 的显示文本。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `ReplyError` 的共享引用。
+    /// - `f`：接收格式化文本的写入目标。
+    ///
+    /// # 返回值
+    ///
+    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.source.fmt(f)
     }
 }
 
 impl Error for ReplyError {
+    /// 借用被包装的底层错误。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `ReplyError` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 始终为 `Some` 的错误引用，可继续访问其 source 链。
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(self.source.as_ref())
     }

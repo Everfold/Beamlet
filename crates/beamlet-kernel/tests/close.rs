@@ -6,7 +6,15 @@ struct Identity;
 #[derive(Debug)]
 struct Request(String);
 
-/// 从未执行的 Operation 可以关闭, 身份和请求无需克隆或比较.
+/// 验证关闭保持幂等且不额外要求身份类型 trait。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn closes_without_identity_trait_bounds() {
     let operation = Operation::new(Identity, Request(String::from("request")));

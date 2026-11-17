@@ -2,6 +2,15 @@ use beamlet_api::{Pool, RoleInstance, Selection};
 use beamlet_protocol::{self as protocol, Command, Submission, Task};
 use uuid::Uuid;
 
+/// 验证线协议往返保留身份与文本，并拒绝未知版本。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn messages_preserve_identity_and_text_and_reject_unknown_versions() {
     let authority = RoleInstance {
@@ -44,6 +53,15 @@ fn messages_preserve_identity_and_text_and_reject_unknown_versions() {
     ));
 }
 
+/// 验证语义请求转换仍使用 v3 的 text 字段格式。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn semantic_requests_keep_the_v3_text_profile() {
     let authority = RoleInstance {
@@ -83,6 +101,15 @@ fn semantic_requests_keep_the_v3_text_profile() {
     assert_eq!(submission.task.payload, " ß\n世界 ");
 }
 
+/// 验证 Call/Report 转换保留原授权关联和业务结果。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn call_and_report_conversion_preserves_authorization_and_result() {
     use beamlet_primitives::{Attempt, Report};

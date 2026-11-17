@@ -12,12 +12,28 @@ pub struct CapabilityId(String);
 pub struct InvalidCapabilityId;
 
 impl CapabilityId {
-    /// 借用原始能力标识, 保留调用者提供的版本和大小写.
+    /// 借用经过校验的能力标识文本。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `CapabilityId` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 原始能力字符串的切片，不修剪或重新编码。
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
-    /// 校验标识字节长度, 不分配内存或检查本地是否安装了该能力.
+    /// 校验能力标识的非空和字节长度限制。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：待校验的能力名称，要求 1..=256 字节，不修剪空白。
+    ///
+    /// # 返回值
+    ///
+    /// 合法时返回 `Ok(())`；为空或超过 256 字节时返回 InvalidCapabilityId。
     ///
     /// # Errors
     /// 空标识或长度超过 256 字节时返回错误.
@@ -32,6 +48,15 @@ impl CapabilityId {
 
 impl TryFrom<String> for CapabilityId {
     type Error = InvalidCapabilityId;
+    /// 校验并保存能力标识，保留输入的精确拼写。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：待接收所有权的能力名称，要求 1..=256 字节。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 CapabilityId；为空或超过 256 字节时返回错误。
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::validate(&value)?;
         Ok(Self(value))
@@ -39,17 +64,45 @@ impl TryFrom<String> for CapabilityId {
 }
 impl FromStr for CapabilityId {
     type Err = InvalidCapabilityId;
+    /// 校验并保存能力标识，保留输入的精确拼写。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：待校验的能力名称，要求 1..=256 字节，不修剪空白。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 CapabilityId；为空或超过 256 字节时返回错误。
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::validate(value)?;
         Ok(Self(value.to_owned()))
     }
 }
 impl From<CapabilityId> for String {
+    /// 消费能力标识并取回其字符串所有权。
+    ///
+    /// # 参数
+    ///
+    /// - `value`：已经校验的 CapabilityId，消费后取回内部字符串。
+    ///
+    /// # 返回值
+    ///
+    /// 原始能力名称的 String。
     fn from(value: CapabilityId) -> Self {
         value.0
     }
 }
 impl fmt::Display for CapabilityId {
+    /// 向格式化目标写入 `CapabilityId` 的显示文本。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `CapabilityId` 的共享引用。
+    /// - `f`：接收格式化文本的写入目标。
+    ///
+    /// # 返回值
+    ///
+    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
