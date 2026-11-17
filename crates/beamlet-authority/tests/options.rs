@@ -2,7 +2,7 @@ use beamlet_api::{AuthorityInfo, Pool, RoleInstance, Uuid};
 use beamlet_authority::{Authority, BuildError, Concurrency, Options};
 use std::time::Duration;
 
-/// 用始终连接的视图尝试构造 Authority.
+/// 按 info 和 options 尝试构造 Authority, 返回构造结果.
 ///
 /// # 参数
 ///

@@ -70,7 +70,7 @@ pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static
     ///
     /// # 返回值
     ///
-    /// 成功返回 RoleInstance; 无匹配候选时返回 NoReceiver, Exact 不回退.
+    /// 成功返回 `(RoleInstance, Route)`; 无匹配候选时返回 NoReceiver, Exact 不回退.
     fn select(
         &self,
         pool: &Pool,

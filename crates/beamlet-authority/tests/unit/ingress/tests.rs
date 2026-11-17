@@ -72,7 +72,7 @@ impl Delivery for ControlledDelivery {
     ///
     /// # 返回值
     ///
-    /// 始终为 `Ok(预设 RoleInstance)`; pool, 选择和能力参数不参与判断.
+    /// 返回预设会话和空路由; pool, 选择和能力参数不参与判断.
     fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<(RoleInstance, ()), DeliveryError> {
         Ok((instance(), ()))
     }

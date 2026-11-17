@@ -119,7 +119,10 @@ async fn one_authority_routes_between_independent_spaces_and_releases_all_endpoi
 
 /// 记录交付次数并返回未知结果的出口.
 #[derive(Clone)]
-struct Unknown(Arc<AtomicUsize>);
+struct Unknown(
+    /// 实际交付调用次数.
+    Arc<AtomicUsize>,
+);
 impl Delivery for Unknown {
     /// 记录 call 的一次交付并返回 Unknown; deadline 不参与模拟.
     async fn deliver(

@@ -108,7 +108,8 @@ fn transports_have_independent_epochs_and_duplicates_do_not_renew_leases() {
         state: PresenceState::Ready,
     };
     assert!(registry.observe(&remote, heartbeat.clone(), 1, now));
-    assert!(registry.observe(&local, heartbeat.clone(), 1, now));
+    assert!(registry.observe(&local, heartbeat.clone(), 1, now + Duration::from_secs(5)));
+    assert!(registry.workers(&pool, None, now + Duration::from_secs(15))[0].stale);
     assert_eq!(registry.workers(&pool, None, now).len(), 1);
     let select = || registry.select(&pool, Selection::Exact(heartbeat.instance), "echo/v1", now);
     assert_eq!(select(), Some((heartbeat.instance, 0)));
@@ -135,8 +136,9 @@ fn transports_have_independent_epochs_and_duplicates_do_not_renew_leases() {
     heartbeat.sequence = 3;
     assert!(registry.observe(&remote, heartbeat.clone(), 3, now));
     assert_eq!(registry.select(&pool, Selection::Any, "echo/v1", now), None);
-    heartbeat.sequence = 2;
     heartbeat.state = PresenceState::Ready;
+    assert!(!registry.observe(&local, heartbeat.clone(), 1, now));
+    heartbeat.sequence = 2;
     assert!(!registry.observe(&local, heartbeat, 1, now));
     assert_eq!(registry.select(&pool, Selection::Any, "echo/v1", now), None);
 }

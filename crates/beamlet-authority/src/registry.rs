@@ -42,6 +42,8 @@ impl Lease {
 struct Entry {
     /// 序号最新的完整公告.
     presence: Presence,
+    /// 最新序号首次到达的时间, 重复转送不延长租约.
+    received: Instant,
     /// 各传输独立接受的心跳, 按注册顺序选择出口.
     leases: BTreeMap<usize, Lease>,
     /// 防止重复输出失联日志.
@@ -104,6 +106,7 @@ impl Registry {
         let key = (presence.pool.clone(), presence.instance);
         if let Some(entry) = entries.get(&key)
             && (presence.sequence < entry.presence.sequence
+                || (presence.sequence == entry.presence.sequence && presence != entry.presence)
                 || entry
                     .leases
                     .get(&source.id)
@@ -122,16 +125,20 @@ impl Registry {
         let sequence = presence.sequence;
         let entry = entries.entry(key).or_insert_with(|| Entry {
             presence: presence.clone(),
+            received: now,
             leases: BTreeMap::new(),
             stale_logged: false,
         });
+        if sequence > entry.presence.sequence {
+            entry.received = now;
+        }
         entry.presence = presence;
         entry.stale_logged = false;
         entry.leases.insert(
             source.id,
             Lease {
                 source: source.clone(),
-                received: now,
+                received: entry.received,
                 sequence,
                 epoch,
             },

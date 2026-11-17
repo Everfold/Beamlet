@@ -47,7 +47,10 @@ type SendCall<P, R> = dyn Fn(Call<P>, Duration) -> DeliveryFuture<R> + Send + Sy
 pub(crate) type Deliveries<P, R> = Arc<[Sender<P, R>]>;
 
 /// 可共享的单次交付出口.
-pub(crate) struct Sender<P, R>(Arc<SendCall<P, R>>);
+pub(crate) struct Sender<P, R>(
+    /// 保留具体传输的共享交付函数.
+    Arc<SendCall<P, R>>,
+);
 impl<P, R> Sender<P, R> {
     /// 向此出口交付 call, 最多等待 deadline, 返回报告或交付错误.
     pub(crate) async fn deliver(
@@ -99,7 +102,7 @@ impl<P: Send + 'static, R: Send + 'static> Transports<P, R> {
         });
     }
 
-    /// 为 info 和 registry 启动控制任务, 向 send 提交请求, 返回按路由排序的出口.
+    /// 为 info/registry 启动 controls, 向 send 提交请求, 返回按路由排序的出口.
     pub(crate) fn start(
         self,
         info: AuthorityInfo,
