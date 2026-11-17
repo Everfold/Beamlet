@@ -1,11 +1,18 @@
 //! 进程内定向消息传输, 不持有角色选择、租约或 Operation 状态.
+/// 本地 Authority 路由与发现/请求交互的通道实现。
 mod authority;
+/// Worker 调用与公告端点的绑定、交付、探测和接收。
 mod worker;
 
 pub use authority::{AuthorityEndpoint, Discovery};
 pub use worker::{PresenceEndpoint, WorkerEndpoint};
 
 /// 同一次 Worker 绑定的调用入口和公告通道, 可分别驱动.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub type WorkerEndpoints<P = String, R = String> = (WorkerEndpoint<P, R>, PresenceEndpoint<P, R>);
 
 use beamlet_api::{
@@ -19,21 +26,54 @@ use std::{
 };
 use tokio::sync::{mpsc, watch};
 
+/// 进程内路由键：pool 与完整角色会话身份，避免跨池或跨会话混用。
 type Key = (Pool, beamlet_api::RoleInstance);
+/// 向一个 Authority 控制队列发送已解码事件的有界通道。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型。
+/// - `R`：业务结果类型。
 type AuthoritySend<P, R> = mpsc::Sender<AuthorityEvent<P, R>>;
+/// 单个 Worker 的本地路由记录，保存接收许可、调用入口和探测通知。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型。
+/// - `R`：业务结果类型。
 struct WorkerRoute<P, R> {
+    /// Worker 调用许可的固定快照，包含 pool、角色会话和启用能力。
     binding: WorkerBinding,
+    /// 该 Worker 已接受调用的有界队列发送端。
     sender: mpsc::Sender<Incoming<P, R>>,
+    /// 合并探测请求的序号通知发送端，不为每次探测堆积消息。
     probes: watch::Sender<u64>,
 }
+/// 同一个本地消息空间的 Authority 与 Worker 路由表。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型。
+/// - `R`：业务结果类型。
 struct Routes<P, R> {
+    /// Authority 路由键到控制事件发送端的映射。
     authorities: BTreeMap<Key, AuthoritySend<P, R>>,
+    /// Worker 路由键到接收许可和调用入口的映射。
     workers: BTreeMap<Key, WorkerRoute<P, R>>,
 }
 
 /// 一个隔离的进程内消息空间; clone 共享空间, new 创建独立空间.
+///
+/// 数据按值传递；调用队列有界，发现与公告允许丢失。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct Local<P = String, R = String> {
+    /// 本消息空间的共享路由表，Clone 继续引用同一份状态。
     routes: Arc<Mutex<Routes<P, R>>>,
+    /// 创建各本地有界通道时使用的容量。
     capacity: usize,
 }
 impl<P, R> Clone for Local<P, R> {

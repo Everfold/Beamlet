@@ -7,9 +7,17 @@ use std::{collections::BTreeSet, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
 /// Authority 的有界控制事件入口, 丢弃时解除全部 pool 绑定.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct AuthorityEndpoint<P = String, R = String> {
+    /// 本地消息空间句柄，端点与同空间其他角色共享路由表。
     local: Local<P, R>,
+    /// 此 Authority 绑定的全部 pool/角色会话键，Drop 时全部解除。
     keys: Vec<Key>,
+    /// 合并各类 Authority 控制事件的有界接收队列。
     receive: mpsc::Receiver<AuthorityEvent<P, R>>,
 }
 impl<P, R> std::fmt::Debug for AuthorityEndpoint<P, R> {
@@ -31,7 +39,10 @@ impl<P, R> std::fmt::Debug for AuthorityEndpoint<P, R> {
 }
 /// 发现查询的多回复接收端, 容量来自 Local 配置.
 #[derive(Debug)]
-pub struct Discovery(mpsc::Receiver<DiscoveryReply>);
+pub struct Discovery(
+    /// 本次发现查询的有界多回复通道。
+    mpsc::Receiver<DiscoveryReply>,
+);
 
 /// 在本地消息空间为 Authority 的各个 pool 注册控制入口。
 ///
@@ -158,6 +169,7 @@ impl DiscoveryInbox for Discovery {
     }
 }
 impl<P: Send + 'static, R: Send + 'static> ClientTransport<P, R> for Local<P, R> {
+    /// 本地多回复发现接收端；由调用方控制收集窗口和去重。
     type Discovery = Discovery;
     /// 向本地消息空间内目标 pools 的 Authority 发出发现请求。
     ///

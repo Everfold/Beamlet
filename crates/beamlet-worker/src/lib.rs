@@ -21,9 +21,13 @@
 //! # Ok(())
 //! # }
 //! ```
+/// 能力注册、启用校验和业务处理器上下文。
 mod capabilities;
+/// 本库运行参数、默认值及构造时的语义校验。
 mod options;
+/// Worker 完整公告的周期、探测、重连与停止状态驱动。
 mod presence;
+/// Worker 构造、并发执行、报告创建及公告驱动的生命周期。
 mod worker;
 
 pub use capabilities::{Capabilities, CapabilityError, Context, ExecutionError};

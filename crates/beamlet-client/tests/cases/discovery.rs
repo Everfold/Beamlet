@@ -155,9 +155,17 @@ async fn cancelled_discovery_releases_setup_and_collection() {
     }
 }
 
+/// 持续产生无效发现回复的传输替身，用于验证时间期限和调度公平性。
 #[derive(Clone)]
-struct Flood(std::sync::Arc<std::sync::atomic::AtomicUsize>);
-struct FloodInbox(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+struct Flood(
+    /// 记录 receive 被轮询次数的共享原子计数器。
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+);
+/// 每次轮询都立即返回无效发现回复的接收端。
+struct FloodInbox(
+    /// 记录 receive 被轮询次数的共享原子计数器。
+    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+);
 impl beamlet_api::DiscoveryInbox for FloodInbox {
     /// 连续立即返回带空请求身份的无效发现回复。
     ///
@@ -181,6 +189,7 @@ impl beamlet_api::DiscoveryInbox for FloodInbox {
     }
 }
 impl beamlet_api::ClientTransport for Flood {
+    /// Flood 的发现入口；每次回复均使用无效请求 UUID。
     type Discovery = FloodInbox;
     /// 创建可持续产生无效回复的发现端点。
     ///

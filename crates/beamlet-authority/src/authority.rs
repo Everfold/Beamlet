@@ -6,6 +6,11 @@ use beamlet_api::{
 use std::{future::Future, time::Instant};
 
 /// 本地提交与一次性回复入口; 不创建领域身份.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 #[derive(Debug)]
 pub struct Request<P = String, R = String> {
     /// 业务输入、pool 和目标约束.
@@ -14,6 +19,13 @@ pub struct Request<P = String, R = String> {
     pub reply: Responder<Outcome<R>>,
 }
 /// 可选本地提交来源, 例如终端或嵌入应用; EOF 不停止远端控制入口.
+///
+/// receive 可安全取消；stop 丢弃未交出的提交，不签发授权。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub trait LocalInbox<P = String, R = String>: Send {
     /// 接收一个本地提交，EOF 不要求停止远端服务。
     ///
@@ -44,6 +56,7 @@ pub trait LocalInbox<P = String, R = String>: Send {
     /// 关闭输入失败时返回错误.
     fn stop(&mut self) -> impl Future<Output = Result<(), TransportError>> + Send;
 }
+/// 没有本地提交来源时使用的空输入，立即返回 EOF 且停止操作幂等。
 struct Empty;
 impl<P: Send, R: Send> LocalInbox<P, R> for Empty {
     /// 表示没有配置本地输入来源。
@@ -74,7 +87,10 @@ impl<P: Send, R: Send> LocalInbox<P, R> for Empty {
 
 /// 当前 Authority 的只读 Worker 视图, 不跨 Authority 共享所有权.
 #[derive(Clone)]
-pub struct Directory(pub(crate) Registry);
+pub struct Directory(
+    /// 当前 Authority 的内部登记视图，克隆时共享。
+    pub(crate) Registry,
+);
 impl std::fmt::Debug for Directory {
     /// 向格式化目标写入 `Directory` 的调试信息。
     ///
@@ -109,8 +125,11 @@ impl Directory {
 /// 已验证的 Authority; 每次运行拥有独立台账和 Worker 登记表.
 #[derive(Debug)]
 pub struct Authority {
+    /// 当前 Authority 的角色会话、标签和已加入 pools。
     info: AuthorityInfo,
+    /// 已经通过构造校验的 Authority 运行参数。
     options: Options,
+    /// 与当前 Authority 登记表共享状态的只读 Worker 查询句柄。
     directory: Directory,
 }
 impl Authority {
@@ -248,20 +267,43 @@ impl Authority {
 pub enum RunError {
     /// 控制或输入通信失败.
     #[error(transparent)]
-    Transport(#[from] TransportError),
+    Transport(
+        /// 传输层返回的具体错误，保留原始 source。
+        #[from]
+        TransportError,
+    ),
     /// 回复发送失败, 保留一次性发送错误.
     #[error(transparent)]
-    Reply(#[from] beamlet_api::ReplyError),
+    Reply(
+        /// 一次性结果回复发送失败的原因。
+        #[from]
+        beamlet_api::ReplyError,
+    ),
     /// 调用方的停止信号失败.
     #[error("authority shutdown failed: {0}")]
-    Shutdown(#[source] TransportError),
+    Shutdown(
+        /// 停止 future 返回的错误，以中立传输错误保留原始来源。
+        #[source]
+        TransportError,
+    ),
     /// 异步任务 panic 或取消.
     #[error("authority task failed: {0}")]
-    Task(#[source] TransportError),
+    Task(
+        /// 交付、回复或控制子任务 panic/取消的原因。
+        #[source]
+        TransportError,
+    ),
     /// 台账拒绝更新, 状态保持不变.
     #[error(transparent)]
-    Ledger(#[from] beamlet_ledger::LedgerError),
+    Ledger(
+        /// 台账拒绝状态更新的错误。
+        #[from]
+        beamlet_ledger::LedgerError,
+    ),
     /// 内部序列或关联出现不可恢复错误.
     #[error("{0}")]
-    Invariant(&'static str),
+    Invariant(
+        /// 内部序列、回复来源或关联不变量被破坏的诊断消息。
+        &'static str,
+    ),
 }

@@ -53,7 +53,10 @@ impl Options {
 pub enum BuildError {
     /// 期限为零或超出时钟表示范围.
     #[error("invalid duration: {0}")]
-    InvalidDuration(&'static str),
+    InvalidDuration(
+        /// 期限为零或不可由时钟表示的参数名。
+        &'static str,
+    ),
     /// 总期限需要给发现入口创建留出时间.
     #[error("discovery window must be shorter than request timeout")]
     DiscoveryWindowTooLong,

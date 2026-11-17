@@ -6,7 +6,10 @@ pub enum Concurrency {
     /// 不在角色层限制数量, 仍受传输和系统资源限制.
     Unlimited,
     /// 有限正数, Authority 构造时拒绝 0.
-    Limited(usize),
+    Limited(
+        /// 允许同时在途的正整数任务数；构造时拒绝零值。
+        usize,
+    ),
 }
 impl Default for Concurrency {
     /// 构造 Authority 默认的有限任务并发。
@@ -130,8 +133,14 @@ pub enum BuildError {
     ZeroConcurrency,
     /// 容量为零或超出通道可表示范围.
     #[error("invalid capacity: {0}")]
-    InvalidCapacity(&'static str),
+    InvalidCapacity(
+        /// 容量为零或超出范围的参数名。
+        &'static str,
+    ),
     /// 期限为零或超出时钟可表示范围.
     #[error("invalid duration: {0}")]
-    InvalidDuration(&'static str),
+    InvalidDuration(
+        /// 期限为零或不可由时钟表示的参数名。
+        &'static str,
+    ),
 }

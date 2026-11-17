@@ -11,11 +11,17 @@ use std::{
 /// 业务处理器可读取的调用上下文, 不授予创建或替换 Attempt 的权限.
 #[derive(Debug, Clone)]
 pub struct Context {
+    /// Worker 或调用所属的唯一 pool。
     pool: Pool,
+    /// 签发当前调用的 Authority 角色会话。
     authority: RoleInstance,
+    /// 本次调用指定的 Worker 角色会话。
     worker: RoleInstance,
+    /// 处理器所属原始 Operation 的身份。
     operation_id: String,
+    /// 本次执行的既有 Attempt 身份。
     attempt_id: String,
+    /// 本次处理器对应的能力名称。
     capability: String,
 }
 impl Context {
@@ -114,7 +120,10 @@ impl Context {
 
 /// 执行未能产生业务结果, 不会因此伪造 Report 或自动重试.
 #[derive(Debug)]
-pub struct ExecutionError(Box<dyn Error + Send + Sync>);
+pub struct ExecutionError(
+    /// 被包装的底层错误对象，通过 Error::source 保留原因链。
+    Box<dyn Error + Send + Sync>,
+);
 impl ExecutionError {
     /// 包装底层失败原因并保留错误链。
     ///
@@ -174,20 +183,45 @@ pub enum CapabilityError {
     },
     /// 相同标识已经注册.
     #[error("capability already registered: {0}")]
-    Duplicate(String),
+    Duplicate(
+        /// 已被注册、不能再次覆盖的能力名称。
+        String,
+    ),
     /// 所选能力没有处理器.
     #[error("unknown capability: {0}")]
-    Unknown(String),
+    Unknown(
+        /// 启用集合中尚未注册处理器的能力名称。
+        String,
+    ),
     /// Worker 没有启用能力.
     #[error("at least one capability must be enabled")]
     Empty,
 }
 
+/// 业务能力处理器返回的异步执行任务；成功结果由 Worker 组装为 Report。
+///
+/// # 泛型参数
+///
+/// - `R`：业务结果类型。
 type Task<R> = Pin<Box<dyn Future<Output = Result<R, ExecutionError>> + Send>>;
+/// 可共享的异步能力处理器，消费业务输入与只读 Context 并产生执行任务。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型。
+/// - `R`：业务结果类型。
 pub(crate) type Handler<P, R> = Arc<dyn Fn(P, Context) -> Task<R> + Send + Sync>;
 
 /// 应用提供的能力集合, 一个标识对应一个异步处理器.
+///
+/// 重复注册会拒绝；启用集合同时决定公告与执行许可。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct Capabilities<P = String, R = String> {
+    /// 按精确能力标识索引的共享异步处理器集合。
     pub(crate) handlers: BTreeMap<String, Handler<P, R>>,
 }
 impl<P, R> Default for Capabilities<P, R> {

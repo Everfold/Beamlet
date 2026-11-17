@@ -23,8 +23,11 @@ async fn within<F: Future>(future: F) -> F::Output {
         .expect("入口测试未在五秒内完成")
 }
 
+/// 一次待测试驱动决定完成结果的交付。
 struct Work {
+    /// Authority 已选择目标并签发授权的调用。
     call: Call,
+    /// 把完整报告或交付错误返回给原交付等待者的通道。
     reply: oneshot::Sender<Result<WorkerReport, DeliveryError>>,
 }
 
@@ -48,8 +51,12 @@ impl Work {
     }
 }
 
+/// 通过测试工作队列挂起交付的 Dispatch 实现。
 #[derive(Clone)]
-struct ControlledDelivery(mpsc::Sender<Work>);
+struct ControlledDelivery(
+    /// 让测试接收并逐一释放交付的工作发送端。
+    mpsc::Sender<Work>,
+);
 
 impl Delivery for ControlledDelivery {
     /// 为编排测试返回预设 Worker，跳过登记选择。

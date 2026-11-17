@@ -44,8 +44,16 @@ fn completed<R>(result: R) -> Outcome<R> {
     }
 }
 // 故意不实现 Clone、Debug、Serialize; Cell 同时证明无需 Sync.
-struct Input(std::cell::Cell<usize>);
-struct Output(usize);
+/// Client 并发测试的非 Clone、非 Debug、非 Sync 输入类型。
+struct Input(
+    /// 携带调用序号的 Cell，证明输入不需要 Sync。
+    std::cell::Cell<usize>,
+);
+/// Client 并发测试的自定义结果类型，不要求 Clone 或 Debug。
+struct Output(
+    /// 该调用对应的结果序号。
+    usize,
+);
 /// 验证 Client 并发移动自定义数据、保持乱序关联且没有隐藏并发上限。
 ///
 /// # 返回值

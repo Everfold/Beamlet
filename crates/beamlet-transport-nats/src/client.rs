@@ -8,7 +8,10 @@ use std::{collections::BTreeSet, time::Duration};
 
 /// 一次发现查询的独立订阅, Drop 释放入口.
 #[derive(Debug)]
-pub struct Discovery(async_nats::Subscriber);
+pub struct Discovery(
+    /// 本次发现的独立 NATS inbox 订阅。
+    async_nats::Subscriber,
+);
 impl DiscoveryInbox for Discovery {
     /// 从 NATS 发现订阅中读取下一份可解码的回复。
     ///
@@ -32,6 +35,7 @@ impl DiscoveryInbox for Discovery {
     }
 }
 impl ClientTransport for Nats {
+    /// NATS 的独立发现回复订阅，丢弃时释放本次查询入口。
     type Discovery = Discovery;
     /// 创建 NATS 回复订阅并向目标 pools 广播发现请求。
     ///

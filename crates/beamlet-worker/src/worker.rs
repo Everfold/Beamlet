@@ -14,13 +14,25 @@ use tracing::{Instrument, info, info_span, warn};
 pub enum RunError {
     /// 接收、停止或公告通道失败.
     #[error(transparent)]
-    Transport(#[from] TransportError),
+    Transport(
+        /// 传输层返回的具体错误，保留原始 source。
+        #[from]
+        TransportError,
+    ),
     /// 停止信号来源失败.
     #[error("Worker shutdown signal failed: {0}")]
-    Shutdown(#[source] ExecutionError),
+    Shutdown(
+        /// 停止通知 future 返回的原始错误。
+        #[source]
+        ExecutionError,
+    ),
     /// 执行任务 panic 或被取消; 不作为普通业务拒绝忽略.
     #[error("Worker 执行任务异常退出: {0}")]
-    Task(#[source] ExecutionError),
+    Task(
+        /// 异步执行子任务 panic 或取消的原因。
+        #[source]
+        ExecutionError,
+    ),
     /// 当前会话的报告身份序列耗尽.
     #[error("报告身份已耗尽")]
     ReportIdExhausted,
@@ -36,21 +48,43 @@ pub enum RunError {
 }
 
 /// 已验证并冻结的 Worker, 身份、公告和执行许可由同一份描述生成.
+///
+/// 并发名额持续到报告发送结束；停止后排空已接收调用。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 #[derive(Debug)]
 pub struct Worker<P = String, R = String> {
+    /// Worker 调用许可的固定快照，包含 pool、角色会话和启用能力。
     binding: WorkerBinding,
+    /// 可选的人类可读标签，不参与身份比较或消息路由。
     label: Option<String>,
+    /// 当前 Worker 独立的并发、心跳与公告期限配置。
     options: Options,
+    /// Worker 可以调用的能力处理器集合；build 后仅保留已启用项。
     capabilities: Capabilities<P, R>,
 }
 /// 在运行前组装身份、启用集合和独立参数.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 #[derive(Debug)]
 pub struct Builder<P = String, R = String> {
+    /// 固定角色 UUID 和本次运行会话 UUID 组成的身份。
     instance: RoleInstance,
+    /// Worker 或调用所属的唯一 pool。
     pool: Pool,
+    /// 可选的人类可读标签，不参与身份比较或消息路由。
     label: Option<String>,
+    /// 当前 Worker 独立的并发、心跳与公告期限配置。
     options: Options,
+    /// Worker 可以调用的能力处理器集合；build 后仅保留已启用项。
     capabilities: Capabilities<P, R>,
+    /// 显式指定的启用集合；None 表示保留全部已注册能力，Some 在 build 时校验。
     enabled: Option<BTreeSet<String>>,
 }
 impl<P, R> Worker<P, R> {

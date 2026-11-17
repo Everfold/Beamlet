@@ -3,7 +3,10 @@ use tokio::sync::watch;
 
 /// 只读停止通知; 所有克隆都能观察到停止, 晚开始等待也不会错过.
 #[derive(Debug, Clone)]
-pub struct Shutdown(pub(crate) watch::Receiver<bool>);
+pub struct Shutdown(
+    /// 停止广播的只读接收端；发送端消失同样结束等待。
+    pub(crate) watch::Receiver<bool>,
+);
 impl Shutdown {
     /// 等待宿主主动停止或被丢弃。
     ///

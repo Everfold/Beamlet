@@ -17,6 +17,7 @@ use tokio::{
     time::timeout,
 };
 
+/// Worker 生命周期测试的步骤等待期限：3 秒。
 const DEADLINE: Duration = Duration::from_secs(3);
 /// 限制异步测试步骤的等待时长。
 ///
@@ -65,7 +66,11 @@ fn call(index: usize) -> Call {
         payload: format!("payload-{index}"),
     }
 }
-struct Inbox(mpsc::Receiver<Incoming>);
+/// 把测试调用队列适配为 WorkerInbox 的接收端。
+struct Inbox(
+    /// 可以被关闭并继续排空的 Incoming 队列。
+    mpsc::Receiver<Incoming>,
+);
 impl WorkerInbox for Inbox {
     /// 接收测试队列中下一份 Worker 调用。
     ///
@@ -93,10 +98,15 @@ impl WorkerInbox for Inbox {
         Ok(())
     }
 }
+/// 可控制连接、探测和刷新阻塞的公告通道替身。
 struct Announcements {
+    /// 把 Worker 发布的完整公告转给测试观察者的通道。
     snapshots: mpsc::UnboundedSender<Presence>,
+    /// 从测试驱动读取模拟连接状态的接收端。
     link: watch::Receiver<Connection>,
+    /// 接收测试触发的探测或连接变化事件。
     events: mpsc::Receiver<PresenceEvent>,
+    /// 为 true 时让 flush 挂起，验证公告期限与取消清理。
     block_flush: Arc<AtomicBool>,
 }
 impl PresenceChannel for Announcements {
@@ -158,13 +168,21 @@ impl PresenceChannel for Announcements {
         Ok(())
     }
 }
+/// Worker 生命周期测试的输入、公告、连接与停止控制集合。
 struct Harness {
+    /// 向 Worker 提供调用的有界发送端。
     input: mpsc::Sender<Incoming>,
+    /// 读取 Worker 发布的全部完整公告。
     snapshots: mpsc::UnboundedReceiver<Presence>,
+    /// 供测试修改连接世代与在线状态的发送端。
     link: watch::Sender<Connection>,
+    /// 供测试触发探测或连接事件的发送端。
     events: mpsc::Sender<PresenceEvent>,
+    /// 为 true 时让 flush 挂起，验证公告期限与取消清理。
     block_flush: Arc<AtomicBool>,
+    /// 向运行中的 Worker 请求停止的一次性发送端。
     stop: oneshot::Sender<()>,
+    /// Worker 主循环的异步任务句柄，供测试等待或取消。
     task: tokio::task::JoinHandle<Result<(), RunError>>,
 }
 /// 给 Worker 装配可控输入、连接和公告通道并启动运行。

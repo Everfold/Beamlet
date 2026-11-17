@@ -11,15 +11,31 @@ use tokio::{
 };
 
 /// 有界调用接收端, 正常 stop 后仍可排空已接收队列.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct WorkerEndpoint<P = String, R = String> {
+    /// 本地消息空间句柄，端点与同空间其他角色共享路由表。
     local: Local<P, R>,
+    /// 本端点唯一绑定的 pool 和角色会话。
     key: Key,
+    /// 已经交给该 Worker 的有界调用队列。
     receiver: mpsc::Receiver<Incoming<P, R>>,
 }
 /// Worker 的完整公告发送端与合并后的探测通知入口.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct PresenceEndpoint<P = String, R = String> {
+    /// 本地消息空间句柄，端点与同空间其他角色共享路由表。
     local: Local<P, R>,
+    /// 本端点唯一绑定的 pool 和角色会话。
     key: Key,
+    /// 合并后的探测序号接收端，变化时要求 Worker 重新公告。
     probes: watch::Receiver<u64>,
 }
 impl<P, R> std::fmt::Debug for WorkerEndpoint<P, R> {

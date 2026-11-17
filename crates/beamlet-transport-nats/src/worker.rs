@@ -9,16 +9,23 @@ use futures::StreamExt;
 /// 已绑定唯一实例的调用接收端, 不执行任务或维护心跳计时.
 #[derive(Debug)]
 pub struct WorkerEndpoint {
+    /// 本端点共享的 NATS 连接句柄。
     nats: Nats,
+    /// Worker 调用许可的固定快照，包含 pool、角色会话和启用能力。
     binding: WorkerBinding,
+    /// 唯一 Worker 会话调用主题的订阅。
     subscription: async_nats::Subscriber,
 }
 /// 公告发送与探测/重连接收端, 不改变公告状态或序号.
 #[derive(Debug)]
 pub struct PresenceEndpoint {
+    /// 本端点共享的 NATS 连接句柄。
     nats: Nats,
+    /// Worker 或调用所属的唯一 pool。
     pool: beamlet_api::Pool,
+    /// 固定角色 UUID 和本次运行会话 UUID 组成的身份。
     instance: beamlet_api::RoleInstance,
+    /// Worker 所在 pool 的探测主题订阅。
     probes: async_nats::Subscriber,
 }
 

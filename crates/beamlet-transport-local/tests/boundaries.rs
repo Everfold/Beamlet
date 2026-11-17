@@ -127,8 +127,16 @@ fn duplicate_binding_never_overwrites_and_drop_releases_all_pools() {
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn commands_and_outcomes_move_custom_data_without_clone_or_serialization() {
-    struct Payload(Vec<u8>);
-    struct Value(usize);
+    /// 本地传输测试的非 Clone、非序列化输入，用于验证按值移动。
+    struct Payload(
+        /// 输入持有的字节缓冲区。
+        Vec<u8>,
+    );
+    /// 本地传输测试的自定义业务结果。
+    struct Value(
+        /// 根据输入产生的数值结果。
+        usize,
+    );
     let local = Local::<Payload, Value>::new(2).unwrap();
     let info = AuthorityInfo {
         instance: instance(),

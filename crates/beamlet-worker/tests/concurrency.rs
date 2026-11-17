@@ -24,6 +24,7 @@ use tokio::{
     time::timeout,
 };
 
+/// Worker 并发测试的总等待期限：8 秒，防止执行控制错误导致挂起。
 const DEADLINE: Duration = Duration::from_secs(8);
 
 /// 给异步测试步骤施加整体等待期限，防止回归时永久挂起。
@@ -65,8 +66,11 @@ fn call(index: usize) -> Call {
         payload: format!("text:{index}"),
     }
 }
+/// 包装真实本地 WorkerInbox，并通知测试停止动作已发生。
 struct ObservedInbox {
+    /// 实际接收、停止和排空调用的本地端点。
     inner: WorkerEndpoint,
+    /// 停止输入后发送一次的测试观察通知。
     stopped: Option<oneshot::Sender<()>>,
 }
 impl WorkerInbox for ObservedInbox {
@@ -99,7 +103,11 @@ impl WorkerInbox for ObservedInbox {
         Ok(())
     }
 }
-struct Active(Arc<AtomicUsize>);
+/// 执行名额计数 guard，正常完成或取消时减少活动计数。
+struct Active(
+    /// 当前仍在执行的处理器数量。
+    Arc<AtomicUsize>,
+);
 impl Drop for Active {
     /// 在测试执行结束或取消时释放活动任务计数。
     ///
@@ -114,23 +122,38 @@ impl Drop for Active {
         self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
+/// 测试驱动释放一个挂起处理器时指定的行为。
 #[derive(Debug)]
 enum Action {
+    /// 正常执行倒序转换并产生业务结果。
     Execute,
+    /// 返回可预期的执行错误，不产生 Report。
     Reject,
+    /// 触发处理器 panic，用于验证角色监督接收异常。
     Panic,
 }
+/// 已经开始但尚未获准完成的处理器通知。
 struct Started {
+    /// 调用序号，用于对应任务、授权和结果。
     index: usize,
+    /// 由测试指定本次处理器继续执行、拒绝或 panic 的通道。
     release: oneshot::Sender<Action>,
 }
+/// Worker 并发测试的控制和观察集合，拥有所有提交与运行句柄。
 struct Harness {
+    /// 向目标 Worker 交付调用的本地传输句柄。
     delivery: Local,
+    /// 按序号保存的交付等待任务；每项最终返回报告或错误。
     responses: BTreeMap<usize, JoinHandle<Result<WorkerReport, DeliveryError>>>,
+    /// 收到每个处理器已经开始的通知。
     started: mpsc::UnboundedReceiver<Started>,
+    /// 向运行中的 Worker 请求停止的一次性发送端。
     stop: oneshot::Sender<()>,
+    /// 确认输入已关闭新接收的观察端。
     stopped: oneshot::Receiver<()>,
+    /// Worker 主循环的异步任务句柄，供测试等待或取消。
     running: JoinHandle<Result<(), RunError>>,
+    /// 已观察到的最大同时活动处理器数。
     peak: Arc<AtomicUsize>,
 }
 /// 启动可控处理器的 Worker 并并发提交测试调用。

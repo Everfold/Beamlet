@@ -24,8 +24,11 @@ async fn within<F: Future>(future: F) -> F::Output {
         .expect("authority response test timed out")
 }
 
+/// 用于回复背压测试的 Authority 输入，并可通知停止发生。
 struct Input {
+    /// 等待业务编排取出的请求队列。
     receive: mpsc::Receiver<Request>,
+    /// 输入停止后通知测试观察者的一次性发送端。
     stopped: Option<oneshot::Sender<()>>,
 }
 impl Ingress for Input {
@@ -59,7 +62,13 @@ impl Ingress for Input {
         Ok(())
     }
 }
-struct Work(Call, oneshot::Sender<WorkerReport>);
+/// 回复背压测试中待完成的调用及其报告返回通道。
+struct Work(
+    /// 已经签发并指向测试 Worker 的调用。
+    Call,
+    /// 向原交付等待者返回完整报告的一次性通道。
+    oneshot::Sender<WorkerReport>,
+);
 impl Work {
     /// 完成受控任务并把倒序结果作为报告回复。
     ///
@@ -77,8 +86,12 @@ impl Work {
         self.1.send(report).unwrap();
     }
 }
+/// 按测试能力选择 Worker，并将交付交给测试驱动的发送端。
 #[derive(Clone)]
-struct Sender(mpsc::Sender<Work>);
+struct Sender(
+    /// 待完成工作项的有界发送端。
+    mpsc::Sender<Work>,
+);
 impl Delivery for Sender {
     /// 按测试能力名称决定是否提供预设 Worker。
     ///

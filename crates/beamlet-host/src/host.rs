@@ -7,17 +7,27 @@ use tokio::{
 };
 use tracing::Instrument;
 
+/// 宿主保留的底层错误对象，允许跨线程传递并通过错误链访问原始原因。
 type Cause = Box<dyn Error + Send + Sync>;
+/// 擦除具体 future 与错误类型的长期任务；由 Host 持有并统一启动。
 type Task = Pin<Box<dyn Future<Output = Result<(), Cause>> + Send>>;
+/// 尚未启动的命名任务；名称只用于错误定位，不是角色身份认证。
 struct Pending {
+    /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
     name: String,
+    /// 尚未启动的长期任务 future，消费后不能再次运行。
     task: Task,
 }
 
 /// 装配一组长期任务; add 只保存 future, run 开始轮询后才统一启动.
+///
+/// 提前退出或失败会停止全组；排空有期限，不承诺取消阻塞计算或远端任务。
 pub struct Host {
+    /// 已经校验的宿主退出期限。
     options: Options,
+    /// 通过 add 登记、等待 run 统一启动的任务。
     pending: Vec<Pending>,
+    /// 停止广播发送端；true 表示不可撤回的停止请求。
     stop: watch::Sender<bool>,
 }
 impl fmt::Debug for Host {
@@ -234,22 +244,29 @@ pub enum Failure {
     /// 命名任务返回错误, 或其 Tokio 任务 panic/被取消.
     #[error("task {name} failed: {source}")]
     Task {
+        /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
         name: String,
+        /// 该次任务、信号或后台输入的原始失败原因。
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
     /// 长期任务在尚未请求停止时正常返回.
     #[error("task {name} exited before shutdown")]
-    UnexpectedExit { name: String },
+    UnexpectedExit {
+        /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
+        name: String,
+    },
     /// 调用方的停止信号失败.
     #[error("shutdown signal failed: {source}")]
     Signal {
+        /// 该次任务、信号或后台输入的原始失败原因。
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
     /// 可选后台输入处理失败.
     #[error("background input failed: {source}")]
     Background {
+        /// 该次任务、信号或后台输入的原始失败原因。
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
@@ -258,7 +275,9 @@ pub enum Failure {
 /// 汇总按观测顺序发生的失败以及超过期限仍未完成的任务.
 #[derive(Debug)]
 pub struct RunError {
+    /// 按观测顺序保存的全部失败，包含首次触发停止的错误。
     failures: Vec<Failure>,
+    /// 期限结束时尚未收取完成的任务名称，不代表已开始的阻塞计算被终止。
     unfinished: Vec<String>,
 }
 impl RunError {

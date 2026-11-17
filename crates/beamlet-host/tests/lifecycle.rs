@@ -177,7 +177,11 @@ async fn early_success_panic_and_background_error_all_stop_the_group() {
     }
 }
 
-struct Dropped(Arc<tokio::sync::Notify>);
+/// 测试资源清理 guard；Drop 唤醒等待清理完成的观察者。
+struct Dropped(
+    /// 资源被释放后发送通知的共享 Notify。
+    Arc<tokio::sync::Notify>,
+);
 impl Drop for Dropped {
     /// 在测试资源被释放时发送一次 Drop 通知。
     ///

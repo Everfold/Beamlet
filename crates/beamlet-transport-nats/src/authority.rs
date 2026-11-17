@@ -7,20 +7,29 @@ use beamlet_protocol::{decode, encode};
 use futures::{FutureExt, StreamExt, stream::SelectAll};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Authority NATS 订阅的消息种类，用于选择对应解码与控制事件。
 #[derive(Debug, Clone, Copy)]
 enum Kind {
+    /// Authority 发现请求，解码后保留多回复入口。
     Discovery,
+    /// Worker 完整状态公告，按所在 pool 交给 Authority 登记。
     Presence,
+    /// 发往唯一 Authority 会话的查询或提交命令。
     Request,
 }
 
 /// Authority 的原始控制事件入口, 与业务任务准入队列分离.
 #[derive(Debug)]
 pub struct AuthorityEndpoint {
+    /// 本端点共享的 NATS 连接句柄。
     nats: Nats,
+    /// 本 Authority 绑定的非空 pool 集合。
     pools: BTreeSet<Pool>,
+    /// 发现、公告与请求订阅的合并输入流。
     subscriptions: SelectAll<async_nats::Subscriber>,
+    /// 已订阅主题到 pool 和控制消息种类的映射。
     routes: BTreeMap<String, (Pool, Kind)>,
+    /// 最近处理的连接世代，用于使重连前缓冲失效。
     epoch: u64,
 }
 impl AuthorityEndpoint {

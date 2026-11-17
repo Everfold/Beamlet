@@ -19,8 +19,11 @@
 //! # Ok(())
 //! # }
 //! ```
+/// 命名长期任务的统一启动、停止、排空与失败汇总。
 mod host;
+/// 本库运行参数、默认值及构造时的语义校验。
 mod options;
+/// Host 发出的只读停止广播，支持克隆与晚等待者。
 mod shutdown;
 
 pub use host::{Failure, Host, RunError};

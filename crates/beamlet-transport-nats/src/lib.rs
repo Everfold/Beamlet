@@ -1,8 +1,13 @@
 //! NATS 上的定向收发与连接观测, 不保存角色策略或 Operation 状态.
+/// Authority 控制端点的绑定、事件接收与探测发送。
 mod authority;
+/// NATS 发现订阅及指定 Authority 的 v3 请求发送。
 mod client;
+/// NATS 指定 Worker 会话的单次交付与报告来源关联校验。
 mod delivery;
+/// 包含 pool、角色和会话身份的 NATS 主题构造规则。
 pub mod subject;
+/// Worker 调用与公告端点的绑定、交付、探测和接收。
 mod worker;
 
 pub use authority::AuthorityEndpoint;
@@ -37,9 +42,13 @@ impl Default for Options {
 }
 
 /// 可被多个角色共享的连接; clone 共享连接, 再次 connect 创建独立连接.
+///
+/// 使用 v3 文本协议；重连后需新公告才能恢复 Worker 租约。
 #[derive(Debug, Clone)]
 pub struct Nats {
+    /// 实际发送、订阅与重连使用的 async_nats 客户端。
     client: async_nats::Client,
+    /// 连接事件回调维护的当前状态与世代接收端。
     status: watch::Receiver<Connection>,
 }
 impl Nats {

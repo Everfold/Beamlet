@@ -10,11 +10,23 @@ use std::time::Instant;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::Instrument;
 
+/// 合并 Authority 本地与远端提交的入口，并拥有独立的控制处理任务。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型。
+/// - `R`：业务结果类型。
+/// - `L`：本地输入类型。
 pub(crate) struct Inputs<P, R, L> {
+    /// 独立控制任务分类后交给业务编排的有界远端提交队列。
     remote: mpsc::Receiver<Request<P, R>>,
+    /// 可选本地业务输入来源。
     local: L,
+    /// 本地输入是否已返回永久 EOF，避免继续轮询它。
     local_closed: bool,
+    /// 组合入口是否已停止，不再交出新请求。
     stopped: bool,
+    /// 独立控制处理任务；Inputs 被丢弃时请求中止它。
     control: JoinHandle<Result<(), RunError>>,
 }
 impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Inputs<P, R, L> {

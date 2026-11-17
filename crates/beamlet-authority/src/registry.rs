@@ -8,18 +8,28 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// 一个 pool/Worker 会话的最新有效公告及租约观测信息。
 struct Entry {
+    /// 最近一次被接受的完整 Worker 快照。
     presence: Presence,
+    /// Authority 收到此有效快照的本地单调时间。
     received: Instant,
+    /// 收到该公告时的连接世代，必须与当前连接视图一致。
     epoch: u64,
+    /// 是否已记录这次失联日志，防止清理循环重复输出。
     stale_logged: bool,
 }
 
+/// Authority 独立维护的 Worker 登记表，克隆时共享。
 #[derive(Clone)]
 pub(crate) struct Registry {
+    /// 按 pool 和 Worker 角色会话索引的共享登记记录；锁只用于短期同步访问。
     entries: Arc<Mutex<BTreeMap<(Pool, RoleInstance), Entry>>>,
+    /// 本 Authority 允许登记和选择的 pools。
     pools: BTreeSet<Pool>,
+    /// 有效快照的租约时长；记录保留期为其四倍。
     timeout: Duration,
+    /// 随时读取传输当前连接世代与状态的视图。
     connection: ConnectionView,
 }
 
@@ -205,6 +215,7 @@ impl Registry {
     }
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/registry.rs"]
 mod tests;

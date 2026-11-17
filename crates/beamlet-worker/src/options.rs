@@ -7,7 +7,10 @@ pub enum Concurrency {
     /// 不在角色层限制数量, 仍受传输和系统资源限制.
     Unlimited,
     /// 有限正数, Worker 构造时拒绝 0.
-    Limited(usize),
+    Limited(
+        /// 允许同时在途的正整数任务数；构造时拒绝零值。
+        usize,
+    ),
 }
 impl Default for Concurrency {
     /// 构造默认串行 Worker 并发策略。
@@ -114,8 +117,15 @@ pub enum BuildError {
     ZeroConcurrency,
     /// 正数期限无效.
     #[error("invalid duration: {0}")]
-    InvalidDuration(&'static str),
+    InvalidDuration(
+        /// 期限为零或不可由时钟表示的参数名。
+        &'static str,
+    ),
     /// 能力选择无效.
     #[error(transparent)]
-    Capabilities(#[from] CapabilityError),
+    Capabilities(
+        /// 能力注册或启用集合校验失败的具体原因。
+        #[from]
+        CapabilityError,
+    ),
 }

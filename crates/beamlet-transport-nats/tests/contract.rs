@@ -1,3 +1,4 @@
+/// 本后端与其他适配器共同执行的交付和控制契约测试。
 #[path = "../../../tests/support/transport_contract.rs"]
 mod contract;
 use beamlet_transport_nats::{Nats, Options};
@@ -7,7 +8,11 @@ use std::{
     time::Duration,
 };
 
-struct Server(Child);
+/// 测试子进程的清理 guard；离开作用域时尽力终止并回收服务进程。
+struct Server(
+    /// 由当前测试启动并负责回收的子进程句柄。
+    Child,
+);
 impl Drop for Server {
     /// 结束测试服务子进程并回收其退出状态。
     ///

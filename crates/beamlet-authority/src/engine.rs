@@ -12,7 +12,20 @@ use std::{
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
+/// Authority 提交结果的一次性回复入口，可返回完成、拒绝或未解决状态。
+///
+/// # 泛型参数
+///
+/// - `R`：业务结果类型，默认 String。
 pub(crate) type Reply<R = String> = Responder<Outcome<R>>;
+/// Authority 编排循环的内部业务输入约定，隔离控制处理与业务准入。
+///
+/// receive 可安全取消；stop 丢弃未签发请求，已签发工作由编排循环排空。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub(crate) trait Ingress<P = String, R = String>: Send {
     /// 向编排循环提供下一份结构化业务请求。
     ///
@@ -35,6 +48,14 @@ pub(crate) trait Ingress<P = String, R = String>: Send {
     /// 返回 future；等待完成后，future 停止成功返回 `Ok(())`，输入收尾失败返回 RunError。
     fn stop(&mut self) -> impl Future<Output = Result<(), RunError>> + Send;
 }
+/// Authority 内部的选人与交付接口，先选定一次实例，再交付已签发调用。
+///
+/// 创建 Operation 前选择一次 Worker；Exact 失败不回退，交付不重试。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static {
     /// 按 pool、能力和选择约束选定一个可用 Worker 会话。
     ///
@@ -69,10 +90,18 @@ pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static
         call: Call<P>,
     ) -> impl Future<Output = Result<WorkerReport<R>, DeliveryError>> + Send;
 }
+/// 把 Authority 登记选择与指定传输的单次交付组合起来的内部适配器。
+///
+/// # 泛型参数
+///
+/// - `T`：交付传输类型。
 #[derive(Clone)]
 pub(crate) struct Routed<T> {
+    /// 把已选定实例的 Call 实际交付出去的传输实现。
     pub transport: T,
+    /// 执行 Worker 选择时使用的当前 Authority 登记视图。
     pub registry: Registry,
+    /// 本次 Report 的最长等待时长，传给交付适配器。
     pub deadline: Duration,
 }
 impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
@@ -112,12 +141,24 @@ impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
         self.transport.deliver(call, self.deadline).await
     }
 }
+/// 报告收尾失败的原因；失败不被伪装成业务完成。
 #[derive(Debug, thiserror::Error)]
 enum FinishError {
+    /// 指定交付未取得有效完整报告。
     #[error(transparent)]
-    Delivery(#[from] DeliveryError),
+    Delivery(
+        /// 无接收者、明确未交付或结果未知的交付失败分类。
+        #[from]
+        DeliveryError,
+    ),
+    /// 报告接受或关闭阶段被台账拒绝。
     #[error(transparent)]
-    Ledger(#[from] beamlet_ledger::LedgerError),
+    Ledger(
+        /// 台账拒绝状态更新的错误。
+        #[from]
+        beamlet_ledger::LedgerError,
+    ),
+    /// 报告的 Operation 关联不符，或报告身份为空。
     #[error("交付返回了不匹配或空身份的报告")]
     Mismatch,
 }
@@ -322,10 +363,12 @@ fn finish<T, R>(
     Ok(report.into_result())
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/engine.rs"]
 mod tests;
 
+/// Authority 回复背压、准入释放和停止排空的单元测试。
 #[cfg(test)]
 #[path = "../tests/unit/responses.rs"]
 mod response_tests;

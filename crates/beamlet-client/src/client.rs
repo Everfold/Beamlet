@@ -13,9 +13,18 @@ use std::{
 use tokio::time::{Instant, timeout, timeout_at};
 
 /// 包装一个传输端点; 克隆仅复制端点句柄和参数, 多个调用独立等待.
+///
+/// # 泛型参数
+///
+/// - `T`：客户端传输类型。
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub struct Client<T, P = String, R = String> {
+    /// 调用方注入的传输句柄，Client 本身不负责连接。
     transport: T,
+    /// 构造时已校验的请求总期限和发现窗口。
     options: Options,
+    /// 记录输入/结果类型而不实际拥有数据，也不额外要求它们实现 Clone 或 Sync。
     data: PhantomData<fn(P) -> R>,
 }
 impl<T: Clone, P, R> Clone for Client<T, P, R> {

@@ -5,10 +5,18 @@ use anyhow::Result;
 use beamlet_api::{Pool, Selection, Submission, Task};
 use tokio::sync::{mpsc, oneshot};
 
+/// Authority 内部编排测试的业务请求发送端。
 #[derive(Clone)]
-pub(crate) struct Sender(mpsc::Sender<Request>);
+pub(crate) struct Sender(
+    /// 结构化请求的有界通道发送端。
+    mpsc::Sender<Request>,
+);
 
-pub(crate) struct Input(Option<mpsc::Receiver<Request>>);
+/// 可以停止并丢弃队列的测试业务输入。
+pub(crate) struct Input(
+    /// 仍开放的接收端；None 表示已停止并释放剩余请求。
+    Option<mpsc::Receiver<Request>>,
+);
 
 /// 创建供 Authority 单元测试使用的有界输入通道。
 ///

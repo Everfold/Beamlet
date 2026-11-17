@@ -8,6 +8,7 @@ use beamlet_primitives::Report;
 use beamlet_transport_local::Local;
 use std::{future::Future, time::Duration};
 use tokio::{sync::oneshot, time::timeout};
+/// Authority 公开接口测试的等待期限：3 秒，回归时避免无限挂起。
 const DEADLINE: Duration = Duration::from_secs(3);
 /// 为测试生成独立的角色 UUID 和会话 UUID。
 ///
@@ -245,9 +246,17 @@ async fn control_progresses_at_capacity_and_exact_never_falls_back() {
     within(scenario).await;
 }
 
+/// 非文本求和请求，用于验证 Authority 接收自定义业务类型。
 #[derive(Clone)]
-struct Numbers(Vec<u32>);
-struct Sum(u32);
+struct Numbers(
+    /// 参与求和的整数列表；Clone 供台账与交付各自保存输入。
+    Vec<u32>,
+);
+/// 自定义求和结果，故意不实现 Clone、Debug 或序列化。
+struct Sum(
+    /// Worker 计算得到的整数和。
+    u32,
+);
 /// 验证真实 Authority、Worker 与本地客户端使用自定义数据完成完整调用。
 ///
 /// # 返回值
@@ -335,7 +344,11 @@ async fn generic_authority_worker_and_client_use_public_interfaces_only() {
     within(scenario).await;
 }
 
-struct LocalRequests(tokio::sync::mpsc::Receiver<beamlet_authority::Request>);
+/// 把测试有界通道适配为公开 LocalInbox 的输入。
+struct LocalRequests(
+    /// 待交给 Authority 的结构化本地请求队列。
+    tokio::sync::mpsc::Receiver<beamlet_authority::Request>,
+);
 impl beamlet_authority::LocalInbox for LocalRequests {
     /// 从测试通道读取下一份结构化 Authority 提交。
     ///
@@ -416,12 +429,19 @@ async fn local_eof_leaves_remote_requests_running() {
     within(scenario).await;
 }
 
+/// 永不主动返回的交付替身，用于观测开始执行和取消清理。
 #[derive(Clone)]
 struct PendingDelivery {
+    /// deliver 已开始轮询的通知。
     started: std::sync::Arc<tokio::sync::Notify>,
+    /// 交付 future 释放时触发的通知。
     dropped: std::sync::Arc<tokio::sync::Notify>,
 }
-struct DropNotice(std::sync::Arc<tokio::sync::Notify>);
+/// 测试资源清理 guard；Drop 唤醒等待清理完成的观察者。
+struct DropNotice(
+    /// 资源被释放后发送通知的共享 Notify。
+    std::sync::Arc<tokio::sync::Notify>,
+);
 impl Drop for DropNotice {
     /// 在测试资源被释放时发送一次 Drop 通知。
     ///

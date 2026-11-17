@@ -6,10 +6,17 @@ use beamlet_api::{CapabilityId, Command, Outcome, Pool, RoleInstance, Selection,
 pub enum Error {
     /// 本地校验失败, 尚未发送请求.
     #[error("invalid request: {0}")]
-    InvalidRequest(&'static str),
+    InvalidRequest(
+        /// 发送前本地参数校验失败的诊断消息。
+        &'static str,
+    ),
     /// 传输失败; 请求可能已执行, 不自动重试.
     #[error("request transport failed; execution may have started: {0}")]
-    Transport(#[from] TransportError),
+    Transport(
+        /// 传输层返回的具体错误，保留原始 source。
+        #[from]
+        TransportError,
+    ),
     /// 超过总等待期限; 不证明请求未执行.
     #[error("request timed out; execution may have started")]
     Timeout,
@@ -18,7 +25,10 @@ pub enum Error {
     InvalidReply,
     /// Worker 查询被 Authority 明确拒绝; 提交拒绝保留为 Outcome::Rejected.
     #[error("worker query rejected: {reason}")]
-    Rejected { reason: String },
+    Rejected {
+        /// 拒绝或无法确认执行结果的具体诊断原因。
+        reason: String,
+    },
 }
 
 /// 检查角色 UUID 和会话 UUID 是否均非 nil。
@@ -34,12 +44,18 @@ pub(crate) fn valid_instance(instance: RoleInstance) -> bool {
     !instance.role_id.is_nil() && !instance.session_id.is_nil()
 }
 
+/// 发送命令前保存的回复校验约束，不持有业务 payload。
 pub(crate) enum Expected {
+    /// Worker 查询回复应满足的 pool 与能力条件。
     Workers {
+        /// 本次查询或调用所属的 pool，按精确名称隔离。
         pool: Pool,
+        /// 可选的能力过滤条件；None 表示不按能力筛选。
         capability: Option<String>,
     },
+    /// 业务提交回复应满足的 Worker 选择约束。
     Submit {
+        /// 已发送请求保存的 Any 或 Exact Worker 选择。
         worker: Selection,
     },
 }
