@@ -82,7 +82,7 @@ Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务�
 
 ## 6. 验证
 
-普通 `cargo test --workspace` 不需要 NATS. [登记测试](../crates/beamlet-authority/src/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [Authority 公开接口测试](../crates/beamlet-authority/tests/local.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../crates/beamlet-authority/src/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
+普通 `cargo test --workspace` 不需要 NATS. [登记测试](../crates/beamlet-authority/tests/unit/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [Authority 公开接口测试](../crates/beamlet-authority/tests/local.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../crates/beamlet-authority/tests/unit/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
 
 显式运行 `cargo test -p beamlet-node --test composition -- --ignored --nocapture` 可进行真实 NATS 组合验收. 测试要求 Unix 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程并自动回收. 覆盖一个进程内多个同类型角色、多连接共享/隔离、精确角色定向、同角色不同会话、跨 Node 运行、正常退出、重连和配置不变. 普通 Cargo 测试默认忽略该验收, 不依赖服务端. 这些检查不构成任意网络故障下的恰好一次证明.
 
@@ -95,3 +95,5 @@ Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验
 Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.
 
 Client 的[公开接口测试](../crates/beamlet-client/tests/client.rs)验证发现去重、总期限与收集窗口、取消清理、并发及回复校验. `Client::new(transport, options)` 不依赖 console 或角色库; `discover`、`workers`、`submit` 自动分配请求身份, `request` 可使用调用方提供的 UUID. Client 不保存可变目标选择, 调用者传入完整快照. Request 只交给传输一次, 本地错误不会变成业务 Report; 超时和丢弃 future 不取消远端执行. Options 使用 Duration, console 继续转换已有字段且不重写文件.
+
+测试实现在各包的 `tests/` 下. `tests/unit/` 保留需要访问私有状态的单元测试, 由 `src` 中的条件模块声明加载; 其余通过公开接口或真实二进制验证. 独立 examples 已删除, 不作为测试入口维护.

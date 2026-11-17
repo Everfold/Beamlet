@@ -136,7 +136,6 @@ dependencies = [
  "beamlet-primitives",
  "beamlet-transport-local",
  "beamlet-worker",
- "futures",
  "thiserror",
  "tokio",
  "tracing",

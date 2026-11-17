@@ -565,6 +565,7 @@ async fn drive<F: Future<Output = Completion> + Send + 'static>(
 }
 
 #[cfg(test)]
+#[path = "../tests/unit/session.rs"]
 mod tests;
 
 fn terminal_input() -> mpsc::Receiver<std::io::Result<String>> {

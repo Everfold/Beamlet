@@ -12,6 +12,8 @@ pub use authority::{Authority, Directory, LocalInbox, Request, RunError};
 pub use options::{BuildError, Concurrency, Options};
 
 #[cfg(test)]
+#[path = "../tests/unit/ingress/mod.rs"]
 mod ingress;
 #[cfg(test)]
+#[path = "../tests/unit/support.rs"]
 mod test_support;

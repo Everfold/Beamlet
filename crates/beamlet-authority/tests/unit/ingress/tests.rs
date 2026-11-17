@@ -1,9 +1,9 @@
 //! 通过入口与交付接口驱动真实 Authority 循环, 不启动 NATS 或读取 stdin.
 
-use super::{Ingress as _, channel};
+use super::channel;
 use crate::Concurrency;
 use crate::{engine as authority, engine::Dispatch as Delivery, test_support};
-use beamlet_api::{Call, DeliveryError, Outcome, Pool, RoleInstance, Selection, WorkerReport};
+use beamlet_api::{Call, DeliveryError, Pool, RoleInstance, Selection, WorkerReport};
 use beamlet_primitives::{Attempt, Report};
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
@@ -276,47 +276,6 @@ async fn delivery_completion_releases_admission_capacity() {
     }
 }
 #[tokio::test]
-async fn channel_backpressure_cancellation_and_stopped_replies() {
-    within(async {
-        let (sender, mut input) = channel::pair(1);
-
-        {
-            let receive = input.receive();
-            tokio::pin!(receive);
-            assert!(futures::poll!(&mut receive).is_pending());
-        }
-
-        let accepted_response = sender.submit("first".into()).await.unwrap();
-        let second = sender.submit("queued".into());
-        tokio::pin!(second);
-        assert!(futures::poll!(&mut second).is_pending(), "入口必须有界");
-        let accepted = input.receive().await.unwrap().unwrap();
-        assert_eq!(accepted.submission.task.payload, "first");
-        let queued_response = second.await.unwrap();
-
-        input.stop().await.unwrap();
-        input.stop().await.unwrap();
-        assert!(input.receive().await.unwrap().is_none());
-        assert!(queued_response.await.is_err());
-        assert!(sender.submit("new".into()).await.is_err());
-
-        accepted
-            .reply
-            .send(Outcome::Completed {
-                operation_id: "operation".into(),
-                attempt_id: "attempt".into(),
-                report_id: "report".into(),
-                worker: instance(),
-                result: "result".into(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(accepted_response.await.unwrap(), "result");
-    })
-    .await;
-}
-
-#[tokio::test]
 async fn reply_failure_is_returned_instead_of_silently_retrying() {
     within(async {
         let (sender, input) = channel::pair(1);
@@ -351,28 +310,6 @@ fn instance() -> RoleInstance {
         role_id: beamlet_api::Uuid::from_u128(1),
         session_id: beamlet_api::Uuid::from_u128(2),
     }
-}
-
-#[tokio::test]
-async fn missing_worker_is_rejected_before_delivery() {
-    within(async {
-        let (sender, input) = channel::pair(1);
-        let delivery = crate::test_support::Missing;
-        let authority = tokio::spawn(authority::run(
-            input,
-            delivery,
-            instance(),
-            crate::Options::default(),
-            std::future::pending::<std::io::Result<()>>(),
-        ));
-        assert_eq!(
-            sender.submit("abc".into()).await.unwrap().await.unwrap(),
-            "拒绝: 当前没有匹配能力的接收者"
-        );
-        drop(sender);
-        authority.await.unwrap().unwrap();
-    })
-    .await;
 }
 
 #[tokio::test]

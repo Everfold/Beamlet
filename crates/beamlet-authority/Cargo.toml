@@ -22,6 +22,4 @@ beamlet-primitives.workspace = true
 beamlet-transport-local.workspace = true
 beamlet-worker.workspace = true
 
-futures.workspace = true
-
 anyhow.workspace = true

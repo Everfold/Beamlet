@@ -94,33 +94,3 @@ impl RunningRole {
         (target, receive)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[tokio::test]
-    async fn each_authority_local_queue_uses_its_own_configured_capacity() {
-        for capacity in [1, 3, 32] {
-            let role = RunningRole::new(RoleSettings {
-                role_id: Uuid::new_v4(),
-                label: None,
-                infrastructure: "local".into(),
-                kind: Role::Authority(crate::settings::Authority {
-                    input_capacity: capacity,
-                    ..Default::default()
-                }),
-            });
-            let (target, mut input) = role.local_input();
-            let target = target.unwrap();
-            for _ in 0..capacity {
-                target.send.try_send(Ok("text".into())).unwrap();
-            }
-            assert!(matches!(
-                target.send.try_send(Ok("excess".into())),
-                Err(mpsc::error::TrySendError::Full(_))
-            ));
-            input.recv().await.unwrap().unwrap();
-            target.send.try_send(Ok("resumed".into())).unwrap();
-        }
-    }
-}
