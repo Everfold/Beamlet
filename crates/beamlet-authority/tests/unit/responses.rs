@@ -93,6 +93,8 @@ struct Sender(
     mpsc::Sender<Work>,
 );
 impl Delivery for Sender {
+    /// 测试使用单个出口.
+    type Route = ();
     /// 按测试能力名称决定是否提供预设 Worker.
     ///
     /// # 参数
@@ -110,11 +112,11 @@ impl Delivery for Sender {
         _: &Pool,
         _: Selection,
         capability: &str,
-    ) -> Result<RoleInstance, DeliveryError> {
+    ) -> Result<(RoleInstance, ()), DeliveryError> {
         if capability != text_reverse::CAPABILITY {
             return Err(DeliveryError::NoReceiver);
         }
-        Ok(instance())
+        Ok((instance(), ()))
     }
     /// 把交付发送给测试控制端, 等待它返回完整报告.
     ///
@@ -126,7 +128,7 @@ impl Delivery for Sender {
     /// # 返回值
     ///
     /// 返回 `Ok(WorkerReport)`; 测试通道意外关闭时 panic.
-    async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
+    async fn deliver(&self, call: Call, _: ()) -> Result<WorkerReport, DeliveryError> {
         let (send, receive) = oneshot::channel();
         self.0.send(Work(call, send)).await.unwrap();
         Ok(receive.await.unwrap())

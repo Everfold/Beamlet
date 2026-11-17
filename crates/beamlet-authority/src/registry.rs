@@ -1,77 +1,91 @@
-//! Authority 的本地租约视图; 不参与 Operation/Attempt 生命周期.
-
-use beamlet_api::ConnectionView;
-use beamlet_api::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
+//! Authority 的本地租约视图; 每个消息空间独立观测连接和心跳.
+use beamlet_api::{
+    ConnectionView, Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView,
+};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-/// 一个 pool/Worker 会话的最新有效公告及租约观测信息.
-struct Entry {
-    /// 最近一次被接受的完整 Worker 快照.
-    presence: Presence,
-    /// Authority 收到此有效快照的本地单调时间.
+/// 单次 Authority 运行中的传输来源.
+#[derive(Clone)]
+pub(crate) struct Source {
+    /// 稳定的交付出口下标.
+    pub id: usize,
+    /// 此来源的连接世代与状态.
+    pub connection: ConnectionView,
+}
+
+/// 一个传输对 Worker 的有效观测.
+struct Lease {
+    /// 观测来源及其实时连接状态.
+    source: Source,
+    /// 最后一次接受此来源心跳的时间.
     received: Instant,
-    /// 收到该公告时的连接世代, 必须与当前连接视图一致.
+    /// 此来源最后接受的心跳序号.
+    sequence: u64,
+    /// 观测时的连接世代.
     epoch: u64,
-    /// 是否已记录这次失联日志, 防止清理循环重复输出.
+}
+impl Lease {
+    /// 检查此观测在 now 是否仍处于 timeout 内, 返回是否有效.
+    fn fresh(&self, now: Instant, timeout: Duration) -> bool {
+        let link = self.source.connection.current();
+        link.connected
+            && link.epoch == self.epoch
+            && now.saturating_duration_since(self.received) < timeout
+    }
+}
+
+/// 同一个 pool/Worker 会话的最新状态及各传输租约.
+struct Entry {
+    /// 序号最新的完整公告.
+    presence: Presence,
+    /// 各传输独立接受的心跳, 按注册顺序选择出口.
+    leases: BTreeMap<usize, Lease>,
+    /// 防止重复输出失联日志.
     stale_logged: bool,
+}
+impl Entry {
+    /// 按 now 和 timeout 返回首个有效出口; 无有效租约则返回 None.
+    fn route(&self, now: Instant, timeout: Duration) -> Option<usize> {
+        self.leases
+            .iter()
+            .find(|(_, lease)| lease.fresh(now, timeout))
+            .map(|(id, _)| *id)
+    }
 }
 
 /// Authority 独立维护的 Worker 登记表, 克隆时共享.
 #[derive(Clone)]
 pub(crate) struct Registry {
-    /// 按 pool 和 Worker 角色会话索引的共享登记记录; 锁只用于短期同步访问.
+    /// 按 pool 和角色会话去重的登记记录.
     entries: Arc<Mutex<BTreeMap<(Pool, RoleInstance), Entry>>>,
-    /// 本 Authority 允许登记和选择的 pools.
+    /// 接受公告的 pool 集合.
     pools: BTreeSet<Pool>,
-    /// 有效快照的租约时长; 记录保留期为其四倍.
+    /// 心跳租约时长.
     timeout: Duration,
-    /// 随时读取传输当前连接世代与状态的视图.
-    connection: ConnectionView,
 }
-
 impl Registry {
-    /// 创建 Authority 自己的 Worker 登记视图.
-    ///
-    /// # 参数
-    ///
-    /// - `pools`: 本 Authority 接受完整公告并提供选择的 pool 集合.
-    /// - `timeout`: Worker 完整公告的有效租约时长.
-    /// - `connection`: 非阻塞读取连接状态的视图, 连接世代变化使旧租约失效.
-    ///
-    /// # 返回值
-    ///
-    /// 空 Registry; 连接状态通过注入的 ConnectionView 读取.
-    pub(crate) fn new(
-        pools: BTreeSet<Pool>,
-        timeout: Duration,
-        connection: ConnectionView,
-    ) -> Self {
+    /// 为 pools 创建空登记表, 租约长度为 timeout.
+    pub(crate) fn new(pools: BTreeSet<Pool>, timeout: Duration) -> Self {
         Self {
             entries: Arc::default(),
             pools,
             timeout,
-            connection,
         }
     }
 
-    /// 接收完整 Worker 公告, 按 pool, 连接世代及递增序号更新租约.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Registry` 的共享引用.
-    /// - `presence`: Worker 的完整状态快照, 包括 pool, 角色会话, 能力, 序号和运行状态.
-    /// - `epoch`: 收到公告时的连接观测世代, 必须等于当前连接世代.
-    /// - `now`: 本次观测或查询使用的单调时间, 不读取远端时钟.
-    ///
-    /// # 返回值
-    ///
-    /// 快照被接受并写入时返回 `true`; 无关, 过期世代, 非法或重复/倒退序号返回 `false`.
-    pub(crate) fn observe(&self, presence: Presence, epoch: u64, now: Instant) -> bool {
-        let link = self.connection.current();
+    /// 接受 source 在 epoch/now 收到的 presence; 返回是否更新租约.
+    pub(crate) fn observe(
+        &self,
+        source: &Source,
+        presence: Presence,
+        epoch: u64,
+        now: Instant,
+    ) -> bool {
+        let link = source.connection.current();
         if !link.connected
             || link.epoch != epoch
             || !self.pools.contains(&presence.pool)
@@ -88,78 +102,65 @@ impl Registry {
         }
         let mut entries = self.entries.lock().expect("worker registry lock poisoned");
         let key = (presence.pool.clone(), presence.instance);
-        if entries
-            .get(&key)
-            .is_some_and(|entry| presence.sequence <= entry.presence.sequence)
+        if let Some(entry) = entries.get(&key)
+            && (presence.sequence < entry.presence.sequence
+                || entry
+                    .leases
+                    .get(&source.id)
+                    .is_some_and(|lease| presence.sequence <= lease.sequence))
         {
             return false;
         }
         let changed = entries.get(&key).is_none_or(|entry| {
-            entry.presence.state != presence.state
-                || entry.epoch != epoch
-                || now.saturating_duration_since(entry.received) >= self.timeout
+            entry.presence.state != presence.state || entry.route(now, self.timeout).is_none()
         });
         if changed {
             tracing::info!(event = "worker.presence", pool = %presence.pool,
                 role_id = %presence.instance.role_id, session_id = %presence.instance.session_id,
                 label = presence.label.as_deref(), state = ?presence.state, "Worker 登记状态更新");
         }
-        entries.insert(
-            key,
-            Entry {
-                presence,
+        let sequence = presence.sequence;
+        let entry = entries.entry(key).or_insert_with(|| Entry {
+            presence: presence.clone(),
+            leases: BTreeMap::new(),
+            stale_logged: false,
+        });
+        entry.presence = presence;
+        entry.stale_logged = false;
+        entry.leases.insert(
+            source.id,
+            Lease {
+                source: source.clone(),
                 received: now,
+                sequence,
                 epoch,
-                stale_logged: false,
             },
         );
         true
     }
 
-    /// 标记租约失效, 并清理超过保留期的登记记录.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Registry` 的共享引用.
-    /// - `now`: 本次观测或查询使用的单调时间, 不读取远端时钟.
-    ///
-    /// # 返回值
-    ///
-    /// `()`; 更新失联日志标记并移除超过四倍租约期限的记录.
+    /// 在 now 标记失效记录并清理超过四倍租约的观测.
     pub(crate) fn expire(&self, now: Instant) {
         let retention = self.timeout.saturating_mul(4);
-        let link = self.connection.current();
         self.entries.lock().expect("worker registry lock poisoned").retain(|_, entry| {
-            let age = now.saturating_duration_since(entry.received);
-            if !entry.stale_logged && (age >= self.timeout || entry.epoch != link.epoch || !link.connected) {
+            if !entry.stale_logged && entry.route(now, self.timeout).is_none() {
                 tracing::info!(event = "worker.stale", pool = %entry.presence.pool,
                     role_id = %entry.presence.instance.role_id, session_id = %entry.presence.instance.session_id,
                     "Worker 登记已失效, 等待新心跳");
                 entry.stale_logged = true;
             }
-            age < retention
+            entry.leases.retain(|_, lease| now.saturating_duration_since(lease.received) < retention);
+            !entry.leases.is_empty()
         });
     }
 
-    /// 查询 pool 中的 Worker 快照, 按可选能力过滤.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Registry` 的共享引用.
-    /// - `pool`: 查询, 候选选择或主题构造的目标 pool.
-    /// - `capability`: 可选能力过滤条件; None 返回该 pool 中所有能力的记录.
-    /// - `now`: 本次观测或查询使用的单调时间, 不读取远端时钟.
-    ///
-    /// # 返回值
-    ///
-    /// 匹配记录的 Vec, 包含 Ready, Draining, Offline 和过期状态; stale 在查询时计算.
+    /// 按 pool 和可选 capability 查询去重快照, 在 now 计算租约状态.
     pub(crate) fn workers(
         &self,
         pool: &Pool,
         capability: Option<&str>,
         now: Instant,
     ) -> Vec<WorkerView> {
-        let link = self.connection.current();
         self.entries
             .lock()
             .expect("worker registry lock poisoned")
@@ -170,52 +171,50 @@ impl Registry {
             })
             .map(|entry| WorkerView {
                 presence: entry.presence.clone(),
-                last_seen_ms: u64::try_from(
-                    now.saturating_duration_since(entry.received).as_millis(),
-                )
-                .unwrap_or(u64::MAX),
-                stale: !link.connected
-                    || entry.epoch != link.epoch
-                    || now.saturating_duration_since(entry.received) >= self.timeout,
+                last_seen_ms: entry
+                    .leases
+                    .values()
+                    .map(|lease| {
+                        u64::try_from(now.saturating_duration_since(lease.received).as_millis())
+                            .unwrap_or(u64::MAX)
+                    })
+                    .min()
+                    .unwrap_or(u64::MAX),
+                stale: entry.route(now, self.timeout).is_none(),
             })
             .collect()
     }
 
-    /// 从登记表选出状态, 期限, 能力及目标约束均匹配的 Worker.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Registry` 的共享引用.
-    /// - `pool`: 查询, 候选选择或主题构造的目标 pool.
-    /// - `selection`: Worker 选择约束: Any 选择可用候选, Exact 锁定角色与会话且不回退.
-    /// - `capability`: 要调用或匹配的能力标识, 保留精确拼写.
-    /// - `now`: 本次观测或查询使用的单调时间, 不读取远端时钟.
-    ///
-    /// # 返回值
-    ///
-    /// 有候选返回 `Some(RoleInstance)`, 否则返回 `None`; 不替换 Exact 会话.
+    /// 在 now 按 pool, selection 和 capability 选定会话与出口; 无匹配则返回 None.
     pub(crate) fn select(
         &self,
         pool: &Pool,
         selection: Selection,
         capability: &str,
         now: Instant,
-    ) -> Option<RoleInstance> {
-        self.workers(pool, Some(capability), now)
-            .into_iter()
-            .find(|worker| {
-                !worker.stale
-                    && worker.presence.state == PresenceState::Ready
+    ) -> Option<(RoleInstance, usize)> {
+        self.entries
+            .lock()
+            .expect("worker registry lock poisoned")
+            .values()
+            .filter(|entry| {
+                &entry.presence.pool == pool
+                    && entry.presence.capabilities.contains(capability)
+                    && entry.presence.state == PresenceState::Ready
                     && match selection {
                         Selection::Any => true,
-                        Selection::Exact(instance) => instance == worker.presence.instance,
+                        Selection::Exact(instance) => instance == entry.presence.instance,
                     }
             })
-            .map(|worker| worker.presence.instance)
+            .find_map(|entry| {
+                entry
+                    .route(now, self.timeout)
+                    .map(|route| (entry.presence.instance, route))
+            })
     }
 }
 
-/// 当前模块关键行为与边界条件的单元测试, 实现在 tests/unit 目录.
+/// 租约与连接隔离测试.
 #[cfg(test)]
 #[path = "../tests/unit/registry.rs"]
 mod tests;

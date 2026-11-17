@@ -1,7 +1,7 @@
 use beamlet_api::{
-    AuthorityInbox, AuthorityInfo, ClientTransport, Command, DeliveryError, DiscoveryInbox,
-    Outcome, Pool, Presence, PresenceChannel, PresenceState, RoleInstance, Selection, Submission,
-    Task, Uuid, WorkerBinding, WorkerInbox,
+    AuthorityInfo, ClientTransport, Command, DeliveryError, DiscoveryInbox, Outcome, Pool,
+    Presence, PresenceChannel, PresenceState, RoleInstance, Selection, Submission, Task, Uuid,
+    WorkerBinding, WorkerInbox,
 };
 use beamlet_authority::{Authority, Concurrency, Options};
 use beamlet_primitives::Report;
@@ -118,12 +118,11 @@ async fn control_progresses_at_capacity_and_exact_never_falls_back() {
                 input_capacity: 1,
                 ..Options::default()
             },
-            endpoint.connection(),
         )
         .unwrap();
         let directory = authority.directory();
         let (stop, shutdown) = oneshot::channel();
-        let running = tokio::spawn(authority.run(endpoint, local.clone(), shutdown));
+        let running = tokio::spawn(authority.run((endpoint, local.clone()), shutdown));
         let target = instance();
         let binding = WorkerBinding {
             pool: Pool::default(),
@@ -268,8 +267,7 @@ async fn generic_authority_worker_and_client_use_public_interfaces_only() {
         let local = Local::<Numbers, Sum>::new(8).unwrap();
         let info = info();
         let endpoint = local.bind_authority(&info).unwrap();
-        let authority =
-            Authority::new(info.clone(), Options::default(), endpoint.connection()).unwrap();
+        let authority = Authority::new(info.clone(), Options::default()).unwrap();
         let mut capabilities = beamlet_worker::Capabilities::new();
         capabilities
             .register("sum/v1", |input: Numbers, _| async move {
@@ -284,7 +282,7 @@ async fn generic_authority_worker_and_client_use_public_interfaces_only() {
         let (stop_worker, worker_stop) = oneshot::channel();
         let worker = tokio::spawn(worker.run(inbox, presence, worker_stop));
         let (stop_authority, authority_stop) = oneshot::channel();
-        let authority = tokio::spawn(authority.run(endpoint, local.clone(), authority_stop));
+        let authority = tokio::spawn(authority.run((endpoint, local.clone()), authority_stop));
         loop {
             let reply = local
                 .request(
@@ -391,8 +389,7 @@ async fn local_eof_leaves_remote_requests_running() {
         let local = Local::new(8).unwrap();
         let info = info();
         let endpoint = local.bind_authority(&info).unwrap();
-        let authority =
-            Authority::new(info.clone(), Options::default(), endpoint.connection()).unwrap();
+        let authority = Authority::new(info.clone(), Options::default()).unwrap();
         let (send, receive) = tokio::sync::mpsc::channel(1);
         let (reply, result) = oneshot::channel();
         let Command::Submit { submission, .. } = submit(info.instance, Selection::Any, "local")
@@ -412,8 +409,7 @@ async fn local_eof_leaves_remote_requests_running() {
         drop(send);
         let (stop, shutdown) = oneshot::channel();
         let running = tokio::spawn(authority.run_with_local(
-            endpoint,
-            local.clone(),
+            (endpoint, local.clone()),
             LocalRequests(receive),
             shutdown,
         ));
@@ -490,15 +486,13 @@ async fn cancelling_authority_releases_delivery_and_control_endpoint() {
         let local = Local::new(8).unwrap();
         let info = info();
         let endpoint = local.bind_authority(&info).unwrap();
-        let authority =
-            Authority::new(info.clone(), Options::default(), endpoint.connection()).unwrap();
+        let authority = Authority::new(info.clone(), Options::default()).unwrap();
         let delivery = PendingDelivery {
             started: Default::default(),
             dropped: Default::default(),
         };
         let running = tokio::spawn(authority.run(
-            endpoint,
-            delivery.clone(),
+            (endpoint, delivery.clone()),
             std::future::pending::<std::io::Result<()>>(),
         ));
         let target = instance();

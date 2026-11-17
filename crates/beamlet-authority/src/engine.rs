@@ -57,6 +57,8 @@ pub(crate) trait Ingress<P = String, R = String>: Send {
 /// - `P`: 业务输入类型, 默认 String.
 /// - `R`: 业务结果类型, 默认 String.
 pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static {
+    /// 选择时固定的交付出口.
+    type Route: Send + 'static;
     /// 按 pool, 能力和选择约束选定一个可用 Worker 会话.
     ///
     /// # 参数
@@ -74,13 +76,14 @@ pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static
         pool: &Pool,
         selection: Selection,
         capability: &str,
-    ) -> Result<RoleInstance, DeliveryError>;
+    ) -> Result<(RoleInstance, Self::Route), DeliveryError>;
     /// 交付已经签发且已确定 Worker 的调用.
     ///
     /// # 参数
     ///
     /// - `self`: 当前 `Dispatch` 的共享引用.
     /// - `call`: 已指定 pool, Authority 和 Worker 会话的调用, 包含 Attempt, 能力及业务输入.
+    /// - `route`: 选择时固定的出口, 不在交付失败后切换.
     ///
     /// # 返回值
     ///
@@ -88,57 +91,47 @@ pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static
     fn deliver(
         &self,
         call: Call<P>,
+        route: Self::Route,
     ) -> impl Future<Output = Result<WorkerReport<R>, DeliveryError>> + Send;
 }
-/// 把 Authority 登记选择与指定传输的单次交付组合起来的内部适配器.
-///
-/// # 泛型参数
-///
-/// - `T`: 交付传输类型.
-#[derive(Clone)]
-pub(crate) struct Routed<T> {
-    /// 把已选定实例的 Call 实际交付出去的传输实现.
-    pub transport: T,
-    /// 执行 Worker 选择时使用的当前 Authority 登记视图.
+/// 共用登记表, 按选定的出口交付一次.
+pub(crate) struct Routed<P, R> {
+    /// 注册顺序固定的交付出口.
+    pub transports: crate::transports::Deliveries<P, R>,
+    /// 此 Authority 的登记视图.
     pub registry: Registry,
-    /// 本次 Report 的最长等待时长, 传给交付适配器.
+    /// 单次报告期限.
     pub deadline: Duration,
 }
-impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
-    /// 按 pool, 能力和选择约束选定一个可用 Worker 会话.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Routed<T>` 的共享引用.
-    /// - `pool`: 查询, 候选选择或主题构造的目标 pool.
-    /// - `selection`: Worker 选择约束: Any 选择可用候选, Exact 锁定角色与会话且不回退.
-    /// - `capability`: 要调用或匹配的能力标识, 保留精确拼写.
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回 RoleInstance; 无匹配候选时返回 NoReceiver, Exact 不回退.
+impl<P, R> Clone for Routed<P, R> {
+    /// 返回共享登记表和出口的句柄.
+    fn clone(&self) -> Self {
+        Self {
+            transports: self.transports.clone(),
+            registry: self.registry.clone(),
+            deadline: self.deadline,
+        }
+    }
+}
+impl<P: Send + 'static, R: Send + 'static> Dispatch<P, R> for Routed<P, R> {
+    /// 传输注册下标.
+    type Route = usize;
+
+    /// 按 pool, selection 和 capability 返回会话与出口; 无匹配则拒绝.
     fn select(
         &self,
         pool: &Pool,
         selection: Selection,
         capability: &str,
-    ) -> Result<RoleInstance, DeliveryError> {
+    ) -> Result<(RoleInstance, usize), DeliveryError> {
         self.registry
             .select(pool, selection, capability, Instant::now())
             .ok_or(DeliveryError::NoReceiver)
     }
-    /// 交付已经签发且已确定 Worker 的调用.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Routed<T>` 的共享引用.
-    /// - `call`: 已指定 pool, Authority 和 Worker 会话的调用, 包含 Attempt, 能力及业务输入.
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回完整报告; 失败返回 DeliveryError, 不重新选择或重试.
-    async fn deliver(&self, call: Call<P>) -> Result<WorkerReport<R>, DeliveryError> {
-        self.transport.deliver(call, self.deadline).await
+
+    /// 通过选定的 route 交付 call, 返回报告; 失败不切换出口.
+    async fn deliver(&self, call: Call<P>, route: usize) -> Result<WorkerReport<R>, DeliveryError> {
+        self.transports[route].deliver(call, self.deadline).await
     }
 }
 /// 报告收尾失败的原因; 失败不被伪装成业务完成.
@@ -256,7 +249,7 @@ where
 
         if let Some(Request { submission, reply }) = incoming {
             let Submission { pool, worker, task } = submission;
-            let worker = match delivery.select(&pool, worker, &task.capability) {
+            let (worker, route) = match delivery.select(&pool, worker, &task.capability) {
                 Ok(worker) => worker,
                 Err(error) => {
                     warn!(event = "request.rejected", %pool, capability = %task.capability, %error, "创建 Operation 前拒绝请求");
@@ -307,7 +300,7 @@ where
                 async move {
                     info!(event = "operation.send_started", "开始发送 Operation 请求数据");
                     info!(event = "attempt.send_started", "开始发送 Attempt");
-                    let outcome = delivery.deliver(call).await;
+                    let outcome = delivery.deliver(call, route).await;
                     if let Err(error) = &outcome {
                         warn!(event = "attempt.delivery_failed", error = %error, "未取得有效 Report");
                     }

@@ -59,6 +59,8 @@ struct ControlledDelivery(
 );
 
 impl Delivery for ControlledDelivery {
+    /// 测试使用单个出口.
+    type Route = ();
     /// 为编排测试返回预设 Worker, 跳过登记选择.
     ///
     /// # 参数
@@ -71,8 +73,8 @@ impl Delivery for ControlledDelivery {
     /// # 返回值
     ///
     /// 始终为 `Ok(预设 RoleInstance)`; pool, 选择和能力参数不参与判断.
-    fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<RoleInstance, DeliveryError> {
-        Ok(instance())
+    fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<(RoleInstance, ()), DeliveryError> {
+        Ok((instance(), ()))
     }
 
     /// 把交付交给测试观察者, 由观察者决定报告或错误.
@@ -85,7 +87,7 @@ impl Delivery for ControlledDelivery {
     /// # 返回值
     ///
     /// 观察者给出的 WorkerReport 或 DeliveryError; 测试控制通道意外关闭时 panic.
-    async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
+    async fn deliver(&self, call: Call, _: ()) -> Result<WorkerReport, DeliveryError> {
         let (reply, response) = oneshot::channel();
         self.0.send(Work { call, reply }).await.unwrap();
         response.await.unwrap()

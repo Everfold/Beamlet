@@ -1,4 +1,4 @@
-use beamlet_api::{AuthorityInfo, Connection, ConnectionView, Pool, RoleInstance, Uuid};
+use beamlet_api::{AuthorityInfo, Pool, RoleInstance, Uuid};
 use beamlet_authority::{Authority, BuildError, Concurrency, Options};
 use std::time::Duration;
 
@@ -13,14 +13,7 @@ use std::time::Duration;
 ///
 /// 构造成功返回 Authority; 参数或身份非法时返回 BuildError.
 fn build(info: AuthorityInfo, options: Options) -> Result<Authority, BuildError> {
-    Authority::new(
-        info,
-        options,
-        ConnectionView::new(|| Connection {
-            epoch: 1,
-            connected: true,
-        }),
-    )
+    Authority::new(info, options)
 }
 /// 构造 Authority 测试用身份与 pool 描述.
 ///

@@ -1,7 +1,6 @@
-use crate::{BuildError, Options, control::Inputs, engine, registry::Registry};
+use crate::{BuildError, Options, Transports, control::Inputs, engine, registry::Registry};
 use beamlet_api::{
-    AuthorityInbox, AuthorityInfo, ConnectionView, Delivery, Outcome, Pool, Responder, Submission,
-    TransportError, WorkerView,
+    AuthorityInfo, Outcome, Pool, Responder, Submission, TransportError, WorkerView,
 };
 use std::{future::Future, time::Instant};
 
@@ -139,7 +138,6 @@ impl Authority {
     ///
     /// - `info`: Authority 的角色/会话身份, 标签及其加入的 pools.
     /// - `options`: 当前模块的运行参数; 期限使用 Duration, 容量/并发由对应字段约束.
-    /// - `connection`: 非阻塞读取连接状态的视图, 连接世代变化使旧租约失效.
     ///
     /// # 返回值
     ///
@@ -147,11 +145,7 @@ impl Authority {
     ///
     /// # Errors
     /// 身份, pools, 容量或期限不合法时返回错误.
-    pub fn new(
-        info: AuthorityInfo,
-        options: Options,
-        connection: ConnectionView,
-    ) -> Result<Self, BuildError> {
+    pub fn new(info: AuthorityInfo, options: Options) -> Result<Self, BuildError> {
         if info.instance.role_id.is_nil() || info.instance.session_id.is_nil() {
             return Err(BuildError::InvalidIdentity);
         }
@@ -159,11 +153,7 @@ impl Authority {
             return Err(BuildError::EmptyPools);
         }
         options.validate()?;
-        let directory = Directory(Registry::new(
-            info.pools.clone(),
-            options.worker_timeout,
-            connection,
-        ));
+        let directory = Directory(Registry::new(info.pools.clone(), options.worker_timeout));
         Ok(Self {
             info,
             options,
@@ -189,8 +179,7 @@ impl Authority {
     /// # 参数
     ///
     /// - `self`: 当前 `Authority` 的值; 调用后转移其所有权(Copy 类型按值复制).
-    /// - `endpoint`: 属于当前 Authority 身份和 pools 的控制事件接收端.
-    /// - `delivery`: 向已选定 Worker 交付 Call 并等待 Report 的实现.
+    /// - `transports`: 匹配当前 Authority 的集合, 或单个 `(接收端, 交付端)`.
     /// - `shutdown`: 停止通知或 future; 完成后停止新接收并按角色语义排空.
     ///
     /// # 返回值
@@ -198,11 +187,10 @@ impl Authority {
     /// 正常停止返回 `Ok(())`; 传输, 回复, 停止信号, 任务或台账失败返回 RunError.
     ///
     /// # Errors
-    /// 传输, 回复, 停止信号, 任务或台账内部一致性失败时返回错误.
+    /// 空传输集合或运行失败时返回错误.
     pub async fn run<P, R, E>(
         self,
-        endpoint: impl AuthorityInbox<P, R> + 'static,
-        delivery: impl Delivery<P, R>,
+        transports: impl Into<Transports<P, R>>,
         shutdown: impl Future<Output = Result<(), E>>,
     ) -> Result<(), RunError>
     where
@@ -210,19 +198,17 @@ impl Authority {
         R: Send + 'static,
         E: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
-        self.run_with_local(endpoint, delivery, Empty, shutdown)
-            .await
+        self.run_with_local(transports, Empty, shutdown).await
     }
     /// 合并本地与远端输入, 共用选择, 签发及报告接受流程.
     ///
-    /// endpoint 必须属于构造时的 AuthorityInfo 和连接视图. 调用方负责运行后刷新
+    /// 所有端点必须属于构造时的 AuthorityInfo. 调用方负责运行后刷新
     /// 共享传输的发送缓冲. 丢弃 future 会取消本地异步任务, 不撤销远端 Attempt.
     ///
     /// # 参数
     ///
     /// - `self`: 当前 `Authority` 的值; 调用后转移其所有权(Copy 类型按值复制).
-    /// - `endpoint`: 属于当前 Authority 身份和 pools 的控制事件接收端.
-    /// - `delivery`: 向已选定 Worker 交付 Call 并等待 Report 的实现.
+    /// - `transports`: 匹配当前 Authority 的集合, 或单个 `(接收端, 交付端)`.
     /// - `local`: 本地输入来源, 提供尚未签发授权的业务提交.
     /// - `shutdown`: 停止通知或 future; 完成后停止新接收并按角色语义排空.
     ///
@@ -231,11 +217,10 @@ impl Authority {
     /// 正常停止并排空已签发工作返回 `Ok(())`; 输入或编排失败返回 RunError.
     ///
     /// # Errors
-    /// 输入, 控制, 交付子任务, 回复, 停止信号或台账内部一致性失败时返回错误.
+    /// 空传输集合或输入, 控制, 交付, 回复及停止处理失败时返回错误.
     pub async fn run_with_local<P, R, E>(
         self,
-        endpoint: impl AuthorityInbox<P, R> + 'static,
-        delivery: impl Delivery<P, R>,
+        transports: impl Into<Transports<P, R>>,
         local: impl LocalInbox<P, R>,
         shutdown: impl Future<Output = Result<(), E>>,
     ) -> Result<(), RunError>
@@ -244,16 +229,15 @@ impl Authority {
         R: Send + 'static,
         E: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
-        let input = Inputs::connect(
-            endpoint,
+        let (input, deliveries) = Inputs::connect(
+            transports.into(),
             self.info.clone(),
             self.directory.0.clone(),
             local,
             self.options.input_capacity,
-        )
-        .await?;
+        )?;
         let dispatch = engine::Routed {
-            transport: delivery,
+            transports: deliveries,
             registry: self.directory.0,
             deadline: self.options.report_timeout,
         };
@@ -265,6 +249,9 @@ impl Authority {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum RunError {
+    /// 运行前没有添加传输.
+    #[error("authority requires at least one transport")]
+    NoTransports,
     /// 控制或输入通信失败.
     #[error(transparent)]
     Transport(

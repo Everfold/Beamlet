@@ -5,7 +5,7 @@ use crate::{
     terminal,
 };
 use anyhow::{Context, Result};
-use beamlet_api::{AuthorityInbox, AuthorityInfo, RoleInstance};
+use beamlet_api::{AuthorityInfo, RoleInstance};
 use beamlet_host::Shutdown;
 use beamlet_transport_nats::Nats;
 use tokio::sync::mpsc;
@@ -67,14 +67,11 @@ impl RunningRole {
                         pools: config.pools.clone(),
                     };
                     let endpoint = infrastructure.bind_authority(&info).await?;
-                    let authority = beamlet_authority::Authority::new(
-                        info.clone(),
-                        (&config).into(),
-                        endpoint.connection(),
-                    )?;
+                    let authority =
+                        beamlet_authority::Authority::new(info.clone(), (&config).into())?;
                     let input = local::Input::new(info, authority.directory(), local)?;
                     authority
-                        .run_with_local(endpoint, infrastructure.clone(), input, shutdown.wait())
+                        .run_with_local((endpoint, infrastructure.clone()), input, shutdown.wait())
                         .await?;
                     infrastructure.flush().await?;
                     Ok(())
