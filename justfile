@@ -49,7 +49,7 @@ check-kernel-model:
     quint verify spec/kernel/tests.qnt --backend=tlc --invariant=invariants --max-steps=10 --verbosity=1
 
 doc:
-    cargo doc --workspace --no-deps
+    cargo doc --workspace --no-deps --document-private-items --open
 
 license:
     cargo about generate --workspace about.hbs > licenses.html
