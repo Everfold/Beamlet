@@ -54,11 +54,17 @@ pub(crate) struct Authority {
     /// 同时交付并等待报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
 }
-impl From<Authority> for crate::authority::Options {
-    fn from(config: Authority) -> Self {
+impl From<&Authority> for beamlet_authority::Options {
+    fn from(config: &Authority) -> Self {
         Self {
-            max_concurrent_tasks: config.max_concurrent_tasks,
+            concurrency: match config.max_concurrent_tasks {
+                0 => beamlet_authority::Concurrency::Unlimited,
+                limit => beamlet_authority::Concurrency::Limited(limit),
+            },
             max_concurrent_replies: config.max_concurrent_replies,
+            input_capacity: config.input_capacity,
+            worker_timeout: std::time::Duration::from_secs(config.worker_timeout_secs),
+            report_timeout: std::time::Duration::from_secs(config.report_timeout_secs),
         }
     }
 }

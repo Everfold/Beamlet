@@ -127,6 +127,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "beamlet-authority"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "beamlet-api",
+ "beamlet-ledger",
+ "beamlet-primitives",
+ "beamlet-transport-local",
+ "beamlet-worker",
+ "futures",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "beamlet-console"
 version = "0.1.0"
 dependencies = [
@@ -168,10 +184,8 @@ dependencies = [
  "anyhow",
  "async-nats",
  "beamlet-api",
- "beamlet-ledger",
- "beamlet-primitives",
+ "beamlet-authority",
  "beamlet-protocol",
- "beamlet-transport-local",
  "beamlet-transport-nats",
  "beamlet-worker",
  "clap",

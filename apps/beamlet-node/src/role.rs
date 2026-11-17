@@ -1,15 +1,13 @@
 //! 将一种角色的配置和基础设施装配为独立运行实例.
 use crate::{
-    authority, delivery, ingress,
-    registry::Registry,
+    local,
     settings::{Role, RoleSettings},
     shutdown::Shutdown,
     terminal,
 };
 use anyhow::{Context, Result};
-use beamlet_api::{AuthorityInfo, RoleInstance};
+use beamlet_api::{AuthorityInbox, AuthorityInfo, RoleInstance};
 use beamlet_transport_nats::Nats;
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
@@ -39,30 +37,21 @@ impl RunningRole {
             info!(event = "role.starting", "角色启动");
             let result = match settings.kind {
                 Role::Authority(config) => {
-                    let registry = Registry::new(
-                        config.pools.clone(),
-                        Duration::from_secs(config.worker_timeout_secs),
-                        infrastructure.connection(),
-                    );
                     let info = AuthorityInfo {
                         instance,
                         label: settings.label,
                         pools: config.pools.clone(),
                     };
-                    let input = ingress::live::Inputs::connect(
-                        infrastructure.bind_authority(&info).await?,
-                        info,
-                        registry.clone(),
-                        local,
-                        config.input_capacity,
-                    )
-                    .await?;
-                    let sender = delivery::routed::Routed::new(
-                        infrastructure.clone(),
-                        Duration::from_secs(config.report_timeout_secs),
-                        registry,
-                    );
-                    authority::run(input, sender, instance, config, shutdown.wait()).await?;
+                    let endpoint = infrastructure.bind_authority(&info).await?;
+                    let authority = beamlet_authority::Authority::new(
+                        info.clone(),
+                        (&config).into(),
+                        endpoint.connection(),
+                    )?;
+                    let input = local::Input::new(info, authority.directory(), local)?;
+                    authority
+                        .run_with_local(endpoint, infrastructure.clone(), input, shutdown.wait())
+                        .await?;
                     infrastructure.flush().await?;
                     Ok(())
                 }

@@ -1,15 +1,10 @@
-mod authority;
 mod capabilities;
-mod delivery;
-mod ingress;
+mod local;
 mod node;
-mod registry;
 mod role;
 mod settings;
 mod shutdown;
 mod terminal;
-#[cfg(test)]
-mod test_support;
 mod text_reverse;
 
 use clap::Parser;

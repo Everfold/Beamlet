@@ -5,6 +5,7 @@ members = [
   "apps/beamlet-node",
 
   "crates/beamlet-api",
+  "crates/beamlet-authority",
   "crates/beamlet-kernel",
   "crates/beamlet-ledger",
   "crates/beamlet-primitives",
@@ -24,6 +25,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 beamlet-api = { path = "crates/beamlet-api" }
+beamlet-authority = { path = "crates/beamlet-authority" }
 beamlet-kernel = { path = "crates/beamlet-kernel" }
 beamlet-ledger = { path = "crates/beamlet-ledger" }
 beamlet-primitives = { path = "crates/beamlet-primitives" }

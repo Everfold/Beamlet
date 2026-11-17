@@ -25,7 +25,7 @@ impl Sender {
                     pool: Pool::default(),
                     worker: Selection::Any,
                     task: Task {
-                        capability: crate::text_reverse::CAPABILITY.into(),
+                        capability: crate::test_support::text_reverse::CAPABILITY.into(),
                         payload: text,
                     },
                 },
@@ -39,20 +39,16 @@ impl Sender {
 }
 
 impl Ingress for Input {
-    async fn receive(&mut self) -> Result<Option<Request>> {
+    async fn receive(&mut self) -> Result<Option<Request>, crate::RunError> {
         Ok(match &mut self.0 {
             Some(input) => input.recv().await,
             None => None,
         })
     }
 
-    async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<(), crate::RunError> {
         // 未交出的请求不属于已签发任务, 直接丢弃而不是隐式排空执行.
         self.0 = None;
-        Ok(())
-    }
-
-    async fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 }

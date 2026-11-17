@@ -9,8 +9,7 @@ license.workspace = true
 
 [dependencies]
 beamlet-api = { workspace = true, features = ["serde"] }
-beamlet-ledger.workspace = true
-beamlet-primitives.workspace = true
+beamlet-authority.workspace = true
 beamlet-transport-nats.workspace = true
 beamlet-worker.workspace = true
 
@@ -31,7 +30,6 @@ anyhow.workspace = true
 
 [dev-dependencies]
 beamlet-protocol.workspace = true
-beamlet-transport-local.workspace = true
 
 async-nats.workspace = true
 

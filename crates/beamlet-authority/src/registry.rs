@@ -151,8 +151,8 @@ impl Registry {
 mod tests {
     use super::*;
     use beamlet_api::Connection;
+    use beamlet_api::Uuid;
     use tokio::sync::watch;
-    use uuid::Uuid;
 
     #[test]
     fn leases_are_scoped_monotonic_and_require_fresh_heartbeats_after_reconnect() {

@@ -1,0 +1,27 @@
+[package]
+name = "beamlet-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+beamlet-api.workspace = true
+beamlet-ledger.workspace = true
+
+tokio.workspace = true
+
+tracing.workspace = true
+
+thiserror.workspace = true
+
+[dev-dependencies]
+beamlet-primitives.workspace = true
+beamlet-transport-local.workspace = true
+beamlet-worker.workspace = true
+
+futures.workspace = true
+
+anyhow.workspace = true

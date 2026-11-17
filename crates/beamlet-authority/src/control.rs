@@ -1,117 +1,84 @@
-//! 控制消息独立于 Authority 在途任务名额; 接收队列有界.
-use super::{Ingress, Reply, Request};
-use crate::{registry::Registry, text_reverse};
-use anyhow::{Context, Result};
+use crate::{
+    LocalInbox, Request, RunError,
+    engine::{Ingress, Reply},
+    registry::Registry,
+};
 use beamlet_api::{
-    AuthorityEvent, AuthorityInbox, AuthorityInfo, Command, DiscoveryReply, Outcome, Pool,
-    Selection, Submission, Task,
+    AuthorityEvent, AuthorityInbox, AuthorityInfo, Command, DiscoveryReply, Outcome,
 };
 use std::time::Instant;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::{Instrument, info, warn};
+use tracing::Instrument;
 
-pub(crate) struct Inputs {
-    remote: mpsc::Receiver<Request>,
-    local: mpsc::Receiver<std::io::Result<String>>,
+pub(crate) struct Inputs<P, R, L> {
+    remote: mpsc::Receiver<Request<P, R>>,
+    local: L,
     local_closed: bool,
     stopped: bool,
-    control: JoinHandle<Result<()>>,
-    info: AuthorityInfo,
-    registry: Registry,
-    pool: Pool,
-    capability: String,
+    control: JoinHandle<Result<(), RunError>>,
 }
-impl Inputs {
+impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Inputs<P, R, L> {
     pub(crate) async fn connect(
-        endpoint: impl AuthorityInbox + 'static,
+        endpoint: impl AuthorityInbox<P, R> + 'static,
         info: AuthorityInfo,
         registry: Registry,
-        local: crate::terminal::Input,
-        input_capacity: usize,
-    ) -> Result<Self> {
+        local: L,
+        capacity: usize,
+    ) -> Result<Self, RunError> {
         endpoint.probe().await?;
-        let (send, remote) = mpsc::channel(input_capacity);
-        let control =
-            tokio::spawn(control(endpoint, info.clone(), registry.clone(), send).in_current_span());
-        let pool = if info.pools.contains(&Pool::default()) {
-            Pool::default()
-        } else {
-            info.pools.first().context("Authority 未配置 pool")?.clone()
-        };
+        let (send, remote) = mpsc::channel(capacity);
+        let control = tokio::spawn(control(endpoint, info, registry, send).in_current_span());
         Ok(Self {
             remote,
             local,
             local_closed: false,
             stopped: false,
             control,
-            info,
-            registry,
-            pool,
-            capability: text_reverse::CAPABILITY.into(),
         })
     }
 }
-impl Drop for Inputs {
+impl<P, R, L> Drop for Inputs<P, R, L> {
     fn drop(&mut self) {
         self.control.abort();
     }
 }
-impl Ingress for Inputs {
-    async fn receive(&mut self) -> Result<Option<Request>> {
+impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Ingress<P, R> for Inputs<P, R, L> {
+    async fn receive(&mut self) -> Result<Option<Request<P, R>>, RunError> {
         while !self.stopped {
             tokio::select! {
                 request = self.remote.recv() => {
                     if let Some(request) = request { return Ok(Some(request)); }
-                    (&mut self.control).await.context("Authority 控制任务异常退出")??;
-                    anyhow::bail!("Authority 控制任务意外结束");
+                    (&mut self.control).await.map_err(|error| RunError::Task(beamlet_api::TransportError::new(error)))??;
+                    return Err(RunError::Invariant("Authority 控制任务意外结束"));
                 }
-                line = self.local.recv(), if !self.local_closed => {
-                    let Some(line) = line else { self.local_closed = true; continue; };
-                    let text = line.context("读取本地输入失败")?;
-                    if let Some(pool) = text.strip_prefix("/pool ") {
-                        match pool.parse::<Pool>() {
-                            Ok(pool) if self.info.pools.contains(&pool) => { self.pool = pool; info!(pool = %self.pool, "已选择 pool"); }
-                            _ => warn!("该 pool 不属于当前 Authority"),
-                        }
-                    } else if let Some(capability) = text.strip_prefix("/capability ") {
-                        self.capability = capability.to_owned();
-                        info!(capability = %self.capability, "已选择能力");
-                    } else if text == "/workers" {
-                        info!(workers = ?self.registry.workers(&self.pool, None, Instant::now()), "Worker 列表");
-                    } else {
-                        return Ok(Some(Request { submission: Submission { pool: self.pool.clone(), worker: Selection::Any, task: Task { capability: self.capability.clone(), payload: text } }, reply: Reply::new(|outcome| async move {
-                            tracing::info!(event = "response.local", response = ?outcome, "本地结果");
-                            Ok(())
-                        }) }));
-                    }
+                request = self.local.receive(), if !self.local_closed => {
+                    match request? { Some(request) => return Ok(Some(request)), None => self.local_closed = true }
                 }
             }
         }
         Ok(None)
     }
-    async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<(), RunError> {
         self.stopped = true;
         self.control.abort();
         self.remote.close();
-        self.local.close();
-        Ok(())
-    }
-    async fn flush(&mut self) -> Result<()> {
+        while self.remote.try_recv().is_ok() {}
+        self.local.stop().await?;
         Ok(())
     }
 }
-async fn control(
-    mut endpoint: impl AuthorityInbox,
+async fn control<P: Send + 'static, R: Send + 'static>(
+    mut endpoint: impl AuthorityInbox<P, R>,
     info: AuthorityInfo,
     registry: Registry,
-    send: mpsc::Sender<Request>,
-) -> Result<()> {
+    send: mpsc::Sender<Request<P, R>>,
+) -> Result<(), RunError> {
     let mut cleanup = tokio::time::interval(std::time::Duration::from_secs(1));
     cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         let event = tokio::select! {
             _ = cleanup.tick() => { registry.expire(Instant::now()); continue; }
-            event = endpoint.receive() => event?.context("Authority 订阅已关闭")?,
+            event = endpoint.receive() => event?.ok_or(RunError::Invariant("Authority 订阅已关闭"))?,
         };
         match event {
             AuthorityEvent::Connection(link) => {
@@ -151,6 +118,7 @@ async fn control(
                 if command.authority() != info.instance
                     || command.pool() != &pool
                     || request_id.is_nil()
+                    || !info.pools.contains(&pool)
                 {
                     reply
                         .send(Outcome::Rejected {

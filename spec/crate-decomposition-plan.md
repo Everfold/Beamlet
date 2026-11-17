@@ -1,6 +1,6 @@
 # 可复用 crate 拆分计划
 
-状态: P0–P3 已完成; 下一阶段为 P4 Authority 库提取. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
+状态: P0–P4 已完成; 下一阶段为 P5 Client 库与薄应用. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
 
 目标是让其他程序能够独立使用 Authority、Worker、调用客户端及运行监督, 自行选择消息后端、配置来源和交互方式. node / console 是这些库的组合应用. 本次以现有行为为基线, 不改变 [内核规范](kernel.md)、[交付契约](delivery.md) 和 [角色身份约定](node-composition.md).
 
@@ -34,7 +34,7 @@
 | **`beamlet-transport-local`** | 进程内端点、通道、发现及回复, 同时用于嵌入和契约测试 | api |
 | **`beamlet-host`** | 多个任务的共同启动监督、停止通知、退出期限、错误汇总 | api, 按实际需要 |
 
-`beamlet-api`、两个 transport 及 `beamlet-worker` 已实现; authority、client、host 仍为后续阶段. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
+`beamlet-api`、两个 transport、`beamlet-worker` 及 `beamlet-authority` 已实现; client、host 仍为后续阶段. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
 
 依赖箭头表示“左方依赖右方”, 省略直接使用 primitives 的重复边:
 
@@ -184,7 +184,7 @@ let outcome = client.submit(&target, submission).await?;
 | P1 中立契约（已完成） | 新增 api; 提取共享语义类型、带单位的参数及可扩展回复入口; protocol 转为显式转换 | 原有 v3 wire 测试和应用构建通过; api 无消息客户端/配置/角色实现依赖 |
 | P2 两个适配器（已完成） | 提取 NATS 实现和 subject; 把测试 channel 升为 local 端点实现; 迁移共用协议校验 | 两个后端使用同一契约测试; local 可用于外部程序; 连接恢复不复活旧租约 |
 | P3 Worker 库（已完成） | 提取执行循环、能力注册和心跳驱动; 文本示例移到应用注册 | 单独启动 Worker; 非文本本地任务可运行; 依赖树无 kernel/ledger; 并发和排空语义不变 |
-| P4 Authority 库 | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
+| P4 Authority 库（已完成） | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
 | P5 Client 库与薄应用 | 提取 SDK; node/console 只保留配置、装配、交互、输出初始化 | 自定义程序可发现/查询/提交; 不依赖 console; 旧 UI 结果不能覆盖新选择 |
 | P6 宿主 | 提取监督和停止协调, 提供多角色嵌入示例 | 相同/不同角色多实例可运行; 共享/独立传输实例可装配; 单个错误能够停止同组任务 |
 
@@ -237,4 +237,13 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 原 Worker 并发测试迁入库的公开接口测试; 新增验证禁用能力、错误目标、报告发送占用并发、阻塞任务期间心跳/探测/重连、draining/offline 顺序、取消释放异步任务、错误 source 和参数校验. 原 Authority 测试通过测试辅助代码模拟报告, 不保留第二套 Worker 循环.
 - [local_worker](../crates/beamlet-worker/examples/local_worker.rs) 展示无 Clone/Debug/serde 的自定义请求和结果; workspace 外 consumer 已成功运行. [nats_worker](../crates/beamlet-worker/examples/nats_worker.rs) 展示单独嵌入 Worker 连接 NATS. Worker 正常依赖树不包含 kernel、ledger、应用、传输、protocol、confy 或 serde.
 - 验证通过: workspace 测试、fmt、全部目标/feature 的 clippy、rustdoc 和文档示例、独立 consumer、3 项 node/console 真实 NATS 验收; `prek run` 全部通过, 包括 cargo deny. 多进程验收同时检查 Worker 就绪及 Operation/Attempt/Report 相关事件仍可见.
-- 下一阶段 P4 提取 Authority 编排、Registry、选择与独立控制处理.
+- P4 已继续完成, 见下一节.
+
+## 10. P4 验证结果
+
+- `beamlet-authority` 统一拥有 Operation 编排、Worker 登记与选择、控制处理和并发准入. `Authority::new` 校验身份与 Options, `run` 接收消息端点和交付实现; `run_with_local` 可额外注入结构化本地输入, `directory` 提供只读 Worker 视图.
+- NATS 与 local 共用同一个 Authority 实现. Registry 使用显式观测时间和中立 ConnectionView, 无 NATS 或 watch 依赖; 连接失效立即影响查询与选择. 业务满载仍可发现、查询和接收公告, Exact 不回退, 交付失败不关闭等待中的 Operation.
+- 输入 `P: Clone + Send` 使台账保留原始请求并向 Worker 交付数据; 输出 `R: Send` 无需 Clone、Debug 或 serde. 库不读取配置、不生成身份、不安装日志输出; node 保留文件参数转换、终端解析及装配.
+- 无服务器示例: `cargo run -p beamlet-authority --example local_cluster`. 使用公开接口装配 Authority 与 Worker, 以自定义 Rust 数据完成求和; 外部 consumer 单独构建运行可验证依赖声明. 客户端部分暂用 api 的 ClientTransport, P5 再接入 SDK.
+- 原有并发、报告关联、回复背压和退出测试已迁入库. 公开接口测试补充满载控制处理、本地 EOF、取消清理和非文本任务; 旧 node 交付测试适配层由共享 transport 契约及 Authority 公开接口测试替代. 真实 NATS 组合验收继续覆盖多角色、多连接、重连与配置不变.
+- 验证通过: workspace 测试、全部目标/feature 的 clippy、rustdoc、独立 consumer 和 3 项 node/console 真实 NATS 验收. 提交检查包含 fmt、cargo deny、check、clippy 与 nextest; 外部 consumer 的正常依赖树无 serde、NATS、protocol、confy、clap 或应用 crate.

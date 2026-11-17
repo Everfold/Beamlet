@@ -1,12 +1,9 @@
 //! 通过入口与交付接口驱动真实 Authority 循环, 不启动 NATS 或读取 stdin.
 
 use super::{Ingress as _, channel};
-use crate::{
-    authority,
-    delivery::{Call, Delivery, DeliveryError, WorkerReport},
-    test_support,
-};
-use beamlet_api::{Outcome, Pool, RoleInstance, Selection};
+use crate::Concurrency;
+use crate::{engine as authority, engine::Dispatch as Delivery, test_support};
+use beamlet_api::{Call, DeliveryError, Outcome, Pool, RoleInstance, Selection, WorkerReport};
 use beamlet_primitives::{Attempt, Report};
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
@@ -63,8 +60,8 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default(),
-            std::future::pending(),
+            crate::Options::default(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
 
         let mut slow = sender.submit("Hello 世界".into()).await.unwrap();
@@ -112,8 +109,8 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default(),
-            std::future::pending(),
+            crate::Options::default(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
 
         for error in [
@@ -177,13 +174,13 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
                 input,
                 delivery,
                 instance(),
-                crate::settings::Authority {
-                    max_concurrent_tasks: limit,
+                crate::Options {
+                    concurrency: Concurrency::Limited(limit),
                     ..Default::default()
                 },
                 async {
                     signal.await.unwrap();
-                    Ok(())
+                    Ok::<_, std::io::Error>(())
                 },
             ));
 
@@ -233,11 +230,11 @@ async fn delivery_completion_releases_admission_capacity() {
                 input,
                 delivery,
                 instance(),
-                crate::settings::Authority {
-                    max_concurrent_tasks: limit,
+                crate::Options {
+                    concurrency: Concurrency::Limited(limit),
                     ..Default::default()
                 },
-                std::future::pending(),
+                std::future::pending::<std::io::Result<()>>(),
             ));
 
             // 先取得这一调用, 不假定并发交付任务的启动顺序.
@@ -314,7 +311,6 @@ async fn channel_backpressure_cancellation_and_stopped_replies() {
             })
             .await
             .unwrap();
-        input.flush().await.unwrap();
         assert_eq!(accepted_response.await.unwrap(), "result");
     })
     .await;
@@ -329,8 +325,8 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default(),
-            std::future::pending(),
+            crate::Options::default(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
 
         let abandoned = sender.submit("abc".into()).await.unwrap();
@@ -352,8 +348,8 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
 
 fn instance() -> RoleInstance {
     RoleInstance {
-        role_id: uuid::Uuid::from_u128(1),
-        session_id: uuid::Uuid::from_u128(2),
+        role_id: beamlet_api::Uuid::from_u128(1),
+        session_id: beamlet_api::Uuid::from_u128(2),
     }
 }
 
@@ -361,13 +357,13 @@ fn instance() -> RoleInstance {
 async fn missing_worker_is_rejected_before_delivery() {
     within(async {
         let (sender, input) = channel::pair(1);
-        let delivery = crate::delivery::channel::Delivery::new(Duration::from_secs(1));
+        let delivery = crate::test_support::Missing;
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
             instance(),
-            crate::settings::Authority::default(),
-            std::future::pending(),
+            crate::Options::default(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
         assert_eq!(
             sender.submit("abc".into()).await.unwrap().await.unwrap(),
@@ -382,18 +378,18 @@ async fn missing_worker_is_rejected_before_delivery() {
 #[tokio::test]
 async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associations() {
     within(async {
-        let total = crate::settings::Authority::default().max_concurrent_tasks + 9;
+        let total = 16 + 9;
         let (sender, input) = channel::pair(total);
         let (delivery, mut work) = controlled_delivery();
         let authority = tokio::spawn(authority::run(
             input,
             delivery,
             instance(),
-            crate::settings::Authority {
-                max_concurrent_tasks: 0,
+            crate::Options {
+                concurrency: Concurrency::Unlimited,
                 ..Default::default()
             },
-            std::future::pending(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
         let mut responses = Vec::new();
         for index in 0..total {
@@ -437,25 +433,25 @@ async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() 
             one_input,
             delivery.clone(),
             instance(),
-            crate::settings::Authority {
-                max_concurrent_tasks: 1,
+            crate::Options {
+                concurrency: Concurrency::Limited(1),
                 ..Default::default()
             },
-            std::future::pending(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
         let two_instance = RoleInstance {
-            role_id: uuid::Uuid::new_v4(),
-            session_id: uuid::Uuid::new_v4(),
+            role_id: beamlet_api::Uuid::new_v4(),
+            session_id: beamlet_api::Uuid::new_v4(),
         };
         let two = tokio::spawn(authority::run(
             two_input,
             delivery,
             two_instance,
-            crate::settings::Authority {
-                max_concurrent_tasks: 2,
+            crate::Options {
+                concurrency: Concurrency::Limited(2),
                 ..Default::default()
             },
-            std::future::pending(),
+            std::future::pending::<std::io::Result<()>>(),
         ));
         let first_response = one_sender.submit("first".into()).await.unwrap();
         let first = work.recv().await.unwrap();

@@ -1,11 +1,13 @@
 //! 可控发送背压驱动真实 Authority, 验证其他交付、名额和停机仍可推进.
 use super::*;
-use crate::settings::Authority;
-use crate::{ingress::Ingress, test_support, text_reverse};
+use super::{Dispatch as Delivery, Ingress};
+use crate::Concurrency;
+use crate::Options as Authority;
+use crate::test_support::{self, text_reverse};
+use beamlet_api::Uuid;
 use beamlet_api::{Pool, Selection, Task};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-use uuid::Uuid;
 
 async fn within<F: Future>(future: F) -> F::Output {
     tokio::time::timeout(Duration::from_secs(5), future)
@@ -18,18 +20,15 @@ struct Input {
     stopped: Option<oneshot::Sender<()>>,
 }
 impl Ingress for Input {
-    async fn receive(&mut self) -> Result<Option<Request>> {
+    async fn receive(&mut self) -> Result<Option<Request>, RunError> {
         Ok(self.receive.recv().await)
     }
-    async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<(), RunError> {
         self.receive.close();
         while self.receive.try_recv().is_ok() {}
         if let Some(stopped) = self.stopped.take() {
             let _ = stopped.send(());
         }
-        Ok(())
-    }
-    async fn flush(&mut self) -> Result<()> {
         Ok(())
     }
 }
@@ -103,7 +102,7 @@ async fn blocked_completion_and_rejection_allow_other_work_and_shutdown() {
         let (work_send, mut work) = mpsc::channel(4);
         let (stop, signal) = oneshot::channel();
         let running = tokio::spawn(run(
-            Input { receive, stopped: Some(stopped) }, Sender(work_send), instance(), Authority { max_concurrent_tasks: 1, ..Default::default() },
+            Input { receive, stopped: Some(stopped) }, Sender(work_send), instance(), Authority { concurrency: Concurrency::Limited(1), ..Default::default() },
             async { signal.await.map_err(std::io::Error::other) },
         ));
         let (rejected, mut rejection) = blocked_reply();
@@ -142,7 +141,7 @@ async fn reply_backlog_is_bounded_and_releasing_one_reply_resumes_admission() {
                 Sender(work_send),
                 instance(),
                 Authority {
-                    max_concurrent_tasks: 1,
+                    concurrency: Concurrency::Limited(1),
                     max_concurrent_replies: limit,
                     ..Default::default()
                 },

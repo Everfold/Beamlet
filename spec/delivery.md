@@ -4,11 +4,11 @@
 
 ## 1. 职责与边界
 
-领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. [beamlet-worker](../crates/beamlet-worker/src/lib.rs) 提供 Worker 执行、能力注册、报告创建和心跳驱动, 不持有 ledger; 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
+领域原语仍只有 [Operation、Attempt、Report](kernel.md). [beamlet-authority](../crates/beamlet-authority/src/lib.rs) 提供 Authority 的 Operation 创建、Attempt 签发、Report 接受及 Operation 关闭; Worker 执行收到的 Attempt 并创建 Report. [beamlet-worker](../crates/beamlet-worker/src/lib.rs) 提供 Worker 执行、能力注册、报告创建和心跳驱动, 不持有 ledger; 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
 
 Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构与版本, 不管理连接、选择策略或生命周期.
 
-node 的 ingress 接收本地终端和远端提交, 返回结构化请求与一次性回复入口. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. node/console 仍装配 NATS, 不自动回退到 local.
+Authority 库接收远端提交和可选的 LocalInbox, 共用结构化请求与一次性回复入口; node 把终端文本转换为本地提交. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. node/console 仍装配 NATS, 不自动回退到 local.
 
 两种传输使用相同的 WorkerInbox、Delivery、AuthorityInbox、PresenceChannel 和 ClientTransport 契约. Authority 接收发现、请求、完整公告及连接变化事件, 自己实施查询、选择和业务准入; 适配器不保存 Worker 租约或 Operation. local 的每次 `new(capacity)` 创建隔离消息空间, clone 共享该空间, 重复绑定同一 pool/角色/会话返回错误. 有界调用队列满时可以明确返回 NotDelivered; 发现与公告允许丢失, 由调用者的发现窗口、探测和后续完整心跳恢复.
 
@@ -82,7 +82,7 @@ Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚
 
 ## 6. 验证
 
-普通 `cargo test --workspace` 不需要 NATS. [登记测试](../apps/beamlet-node/src/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [channel 交付测试](../apps/beamlet-node/src/delivery/tests.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../apps/beamlet-node/src/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
+普通 `cargo test --workspace` 不需要 NATS. [登记测试](../crates/beamlet-authority/src/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [Authority 公开接口测试](../crates/beamlet-authority/tests/local.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../crates/beamlet-authority/src/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
 
 显式运行 `cargo test -p beamlet-node --test composition -- --ignored --nocapture` 可进行真实 NATS 组合验收. 测试要求 Unix 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程并自动回收. 覆盖一个进程内多个同类型角色、多连接共享/隔离、精确角色定向、同角色不同会话、跨 Node 运行、正常退出、重连和配置不变. 普通 Cargo 测试默认忽略该验收, 不依赖服务端. 这些检查不构成任意网络故障下的恰好一次证明.
 
@@ -91,3 +91,5 @@ Console 的真实 NATS 并发验收使用 `cargo test -p beamlet-console --test 
 NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test contract -- --include-ignored`, 需要 PATH 中的 `nats-server`. 无服务器的公开接口示例可以直接运行 `cargo run -p beamlet-transport-local --example typed_call`; 它只演示传输, 不代替 Authority 签发 Attempt 的领域职责.
 
 Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限. 可运行 `cargo run -p beamlet-worker --example local_worker` 验证独立非文本 Worker, 或 `cargo run -p beamlet-worker --example nats_worker -- nats://127.0.0.1:4222` 运行临时 echo Worker. 两个示例都不读取应用 RON 配置.
+
+Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. `cargo run -p beamlet-authority --example local_cluster` 使用真实 Authority 与 Worker 完成非文本任务, 无需配置文件或消息服务器. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.

@@ -1,47 +1,84 @@
-//! Authority 生命周期, 通过交付接口将任务发给一个匹配的 Worker.
-
-use crate::{
-    delivery::{Call, Delivery, DeliveryError, WorkerReport},
-    ingress::{Ingress, Reply, Request},
+use crate::{Options, Request, RunError, registry::Registry};
+use beamlet_api::{
+    Call, DeliveryError, Outcome, Pool, Responder, RoleInstance, Selection, Submission,
+    TransportError, WorkerReport,
 };
-use anyhow::{Context, Result, ensure};
-use beamlet_api::{Outcome, RoleInstance, Submission};
 use beamlet_ledger::Ledger;
-use std::{collections::HashMap, future::Future};
+use std::{
+    collections::HashMap,
+    future::Future,
+    time::{Duration, Instant},
+};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
-#[cfg(test)]
-mod response_tests;
-
-/// Authority 执行参数, 与配置文件和连接方式无关.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Options {
-    pub max_concurrent_tasks: usize,
-    pub max_concurrent_replies: usize,
+pub(crate) type Reply<R = String> = Responder<Outcome<R>>;
+pub(crate) trait Ingress<P = String, R = String>: Send {
+    fn receive(&mut self) -> impl Future<Output = Result<Option<Request<P, R>>, RunError>> + Send;
+    fn stop(&mut self) -> impl Future<Output = Result<(), RunError>> + Send;
 }
-
+pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static {
+    fn select(
+        &self,
+        pool: &Pool,
+        selection: Selection,
+        capability: &str,
+    ) -> Result<RoleInstance, DeliveryError>;
+    fn deliver(
+        &self,
+        call: Call<P>,
+    ) -> impl Future<Output = Result<WorkerReport<R>, DeliveryError>> + Send;
+}
+#[derive(Clone)]
+pub(crate) struct Routed<T> {
+    pub transport: T,
+    pub registry: Registry,
+    pub deadline: Duration,
+}
+impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
+    fn select(
+        &self,
+        pool: &Pool,
+        selection: Selection,
+        capability: &str,
+    ) -> Result<RoleInstance, DeliveryError> {
+        self.registry
+            .select(pool, selection, capability, Instant::now())
+            .ok_or(DeliveryError::NoReceiver)
+    }
+    async fn deliver(&self, call: Call<P>) -> Result<WorkerReport<R>, DeliveryError> {
+        self.transport.deliver(call, self.deadline).await
+    }
+}
+#[derive(Debug, thiserror::Error)]
+enum FinishError {
+    #[error(transparent)]
+    Delivery(#[from] DeliveryError),
+    #[error(transparent)]
+    Ledger(#[from] beamlet_ledger::LedgerError),
+    #[error("交付返回了不匹配或空身份的报告")]
+    Mismatch,
+}
 /// 入口与交付分别注入; 每份交付独立等待, 不阻塞其他输入和报告.
-pub(crate) async fn run(
-    mut ingress: impl Ingress,
-    delivery: impl Delivery,
+pub(crate) async fn run<P, R, E>(
+    mut ingress: impl Ingress<P, R>,
+    delivery: impl Dispatch<P, R>,
     instance: RoleInstance,
-    options: impl Into<Options>,
-    shutdown: impl Future<Output = std::io::Result<()>>,
-) -> Result<()> {
-    let Options {
-        max_concurrent_tasks,
-        max_concurrent_replies,
-    } = options.into();
-    ensure!(
-        max_concurrent_replies > 0,
-        "max_concurrent_replies 必须大于 0"
-    );
+    options: Options,
+    shutdown: impl Future<Output = Result<(), E>>,
+) -> Result<(), RunError>
+where
+    P: Clone + Send + 'static,
+    R: Send + 'static,
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
+{
+    let max_concurrent_tasks = options.concurrency.display_limit();
+    let max_concurrent_replies = options.max_concurrent_replies;
     let session_id = instance.session_id;
     let mut stopping = false;
     let mut ledger = Ledger::new();
-    let mut replies: HashMap<String, (Reply, RoleInstance, String)> = HashMap::new();
-    let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
+    let mut replies: HashMap<String, (Reply<R>, RoleInstance, String)> = HashMap::new();
+    let mut deliveries: JoinSet<(String, Result<WorkerReport<R>, DeliveryError>)> = JoinSet::new();
     let mut sends: JoinSet<Result<(), beamlet_api::ReplyError>> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
@@ -61,7 +98,7 @@ pub(crate) async fn run(
             // 优先响应退出和回收已完成交付, 无限模式也不积压已完成句柄.
             biased;
             result = &mut shutdown, if !stopping => {
-                result?;
+                result.map_err(|error| RunError::Shutdown(TransportError::new(error)))?;
                 stopping = true;
                 // 停止接收新请求, 只等待已经签发 Attempt 的调用.
                 ingress.stop().await?;
@@ -70,16 +107,16 @@ pub(crate) async fn run(
             }
 
             sent = sends.join_next(), if !sends.is_empty() => {
-                sent.context("缺少回复任务")?.context("回复任务异常退出")??;
+                sent.expect("nonempty reply task set").map_err(|error| RunError::Task(TransportError::new(error)))??;
                 None
             }
 
             completed = deliveries.join_next(), if !deliveries.is_empty() && sends.len() < max_concurrent_replies => {
-                let (id, outcome) = completed.context("缺少交付任务")?.context("交付任务异常退出")?;
-                let (reply, worker, attempt_id) = replies.remove(&id).context("缺少回复来源")?;
+                let (id, outcome) = completed.expect("nonempty delivery task set").map_err(|error| RunError::Task(TransportError::new(error)))?;
+                let (reply, worker, attempt_id) = replies.remove(&id).ok_or(RunError::Invariant("缺少回复来源"))?;
                 let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
                 let result = match finish(&mut ledger, &id, outcome) {
-                    Ok(result) => Outcome::Completed { operation_id: id.clone(), attempt_id: attempt_id.clone(), report_id: report_id.context("缺少报告身份")?, worker, result },
+                    Ok(result) => Outcome::Completed { operation_id: id.clone(), attempt_id: attempt_id.clone(), report_id: report_id.ok_or(RunError::Invariant("缺少报告身份"))?, worker, result },
                     Err(error) => {
                         unresolved += 1;
                         warn!(event = "operation.unresolved", operation_id = %id, error = %error, "保持等待报告, 不重试");
@@ -91,7 +128,7 @@ pub(crate) async fn run(
                 None
             }
 
-            request = ingress.receive(), if !stopping && sends.len() < max_concurrent_replies && (max_concurrent_tasks == 0 || deliveries.len() < max_concurrent_tasks) => {
+            request = ingress.receive(), if !stopping && sends.len() < max_concurrent_replies && options.concurrency.admits(deliveries.len()) => {
                 let request = request?;
                 if request.is_none() {
                     stopping = true;
@@ -118,10 +155,14 @@ pub(crate) async fn run(
                     continue;
                 }
             };
-            next_id = next_id.checked_add(1).context("操作身份已耗尽")?;
+            next_id = next_id
+                .checked_add(1)
+                .ok_or(RunError::Invariant("操作身份已耗尽"))?;
             let id = format!("{session_id}:operation:{next_id}");
 
-            ledger.create_operation(id.clone(), task.clone())?;
+            ledger
+                .create_operation(id.clone(), task.clone())
+                .map_err(|_| RunError::Invariant("duplicate generated operation identity"))?;
             info!(event = "operation.created", operation_id = %id, "已创建 Operation");
             let attempt = ledger.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
             info!(
@@ -131,10 +172,10 @@ pub(crate) async fn run(
                 "已创建 Attempt"
             );
             let span = info_span!(
-            "attempt",
-            operation_id = %id,
-            attempt_id = %attempt.id(),
-                );
+                "attempt",
+                operation_id = %id,
+                attempt_id = %attempt.id(),
+            );
 
             replies.insert(id.clone(), (reply, worker, attempt.id().clone()));
             let call = Call {
@@ -162,7 +203,6 @@ pub(crate) async fn run(
         }
     }
 
-    ingress.flush().await?;
     info!(
         event = "authority.drained",
         unresolved, "在途交付已结束; 内存状态不持久化"
@@ -172,11 +212,11 @@ pub(crate) async fn run(
 }
 
 /// 只有关联正确的 Report 能推进生命周期; 交付错误不伪装成报告.
-fn finish<T>(
+fn finish<T, R>(
     ledger: &mut Ledger<String, String, T>,
     id: &str,
-    outcome: Result<WorkerReport, DeliveryError>,
-) -> Result<String> {
+    outcome: Result<WorkerReport<R>, DeliveryError>,
+) -> Result<R, FinishError> {
     let report = outcome?;
     let span = info_span!(
         "report",
@@ -186,10 +226,9 @@ fn finish<T>(
     );
     let _entered = span.enter();
     info!(event = "report.received", "收到 Report");
-    ensure!(
-        report.operation_id() == id,
-        "交付返回了其他 Operation 的报告"
-    );
+    if report.operation_id() != id || report.id().is_empty() {
+        return Err(FinishError::Mismatch);
+    }
 
     ledger.accept_report(&report)?;
     info!(event = "report.accepted", "已接受 Report");
@@ -218,7 +257,7 @@ mod tests {
             DeliveryError::NotDelivered("full".into()),
             DeliveryError::Unknown("timeout".into()),
         ] {
-            assert!(finish(&mut ledger, &id, Err(error)).is_err());
+            assert!(finish::<_, String>(&mut ledger, &id, Err(error)).is_err());
             assert_eq!(
                 ledger
                     .operation(&id)
@@ -230,7 +269,7 @@ mod tests {
         }
 
         for (operation, attempt) in [("other", "attempt"), ("operation", "stale")] {
-            let report = Report::new(
+            let report: WorkerReport = Report::new(
                 "bad".into(),
                 Attempt::from_parts(operation.into(), attempt.into()),
                 "bad".into(),
@@ -246,11 +285,11 @@ mod tests {
             );
         }
 
-        let report = Report::new("good".into(), attempt, "olleh".into());
+        let report: WorkerReport = Report::new("good".into(), attempt, "olleh".into());
         assert_eq!(finish(&mut ledger, &id, Ok(report)).unwrap(), "olleh");
         assert!(ledger.create_attempt(&id, "new".into()).is_err());
 
-        let duplicate = Report::new(
+        let duplicate: WorkerReport = Report::new(
             "good".into(),
             Attempt::from_parts(id.clone(), "attempt".into()),
             "olleh".into(),
@@ -258,3 +297,6 @@ mod tests {
         assert!(finish(&mut ledger, &id, Ok(duplicate)).is_err());
     }
 }
+
+#[cfg(test)]
+mod response_tests;
