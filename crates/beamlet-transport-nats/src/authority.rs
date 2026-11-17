@@ -7,42 +7,42 @@ use beamlet_protocol::{decode, encode};
 use futures::{FutureExt, StreamExt, stream::SelectAll};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Authority NATS 订阅的消息种类，用于选择对应解码与控制事件。
+/// Authority NATS 订阅的消息种类, 用于选择对应解码与控制事件.
 #[derive(Debug, Clone, Copy)]
 enum Kind {
-    /// Authority 发现请求，解码后保留多回复入口。
+    /// Authority 发现请求, 解码后保留多回复入口.
     Discovery,
-    /// Worker 完整状态公告，按所在 pool 交给 Authority 登记。
+    /// Worker 完整状态公告, 按所在 pool 交给 Authority 登记.
     Presence,
-    /// 发往唯一 Authority 会话的查询或提交命令。
+    /// 发往唯一 Authority 会话的查询或提交命令.
     Request,
 }
 
 /// Authority 的原始控制事件入口, 与业务任务准入队列分离.
 #[derive(Debug)]
 pub struct AuthorityEndpoint {
-    /// 本端点共享的 NATS 连接句柄。
+    /// 本端点共享的 NATS 连接句柄.
     nats: Nats,
-    /// 本 Authority 绑定的非空 pool 集合。
+    /// 本 Authority 绑定的非空 pool 集合.
     pools: BTreeSet<Pool>,
-    /// 发现、公告与请求订阅的合并输入流。
+    /// 发现, 公告与请求订阅的合并输入流.
     subscriptions: SelectAll<async_nats::Subscriber>,
-    /// 已订阅主题到 pool 和控制消息种类的映射。
+    /// 已订阅主题到 pool 和控制消息种类的映射.
     routes: BTreeMap<String, (Pool, Kind)>,
-    /// 最近处理的连接世代，用于使重连前缓冲失效。
+    /// 最近处理的连接世代, 用于使重连前缓冲失效.
     epoch: u64,
 }
 impl AuthorityEndpoint {
-    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅。
+    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅.
     ///
     /// # 参数
     ///
-    /// - `nats`：已连接的 NATS 客户端及连接状态句柄。
-    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    /// - `nats`: 已连接的 NATS 客户端及连接状态句柄.
+    /// - `info`: Authority 的角色/会话身份, 标签及其加入的 pools.
     ///
     /// # 返回值
     ///
-    /// 成功返回 AuthorityEndpoint；绑定非法、订阅或刷新失败返回 TransportError。
+    /// 成功返回 AuthorityEndpoint; 绑定非法, 订阅或刷新失败返回 TransportError.
     pub(crate) async fn bind(mut nats: Nats, info: &AuthorityInfo) -> Result<Self, TransportError> {
         if info.instance.role_id.is_nil()
             || info.instance.session_id.is_nil()
@@ -79,27 +79,27 @@ impl AuthorityEndpoint {
     }
 }
 impl AuthorityInbox for AuthorityEndpoint {
-    /// 取得能够持续读取当前连接状态的视图。
+    /// 取得能够持续读取当前连接状态的视图.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `AuthorityEndpoint` 的共享引用。
+    /// - `self`: 当前 `AuthorityEndpoint` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 连接视图句柄；后续查询反映连接当前世代和状态。
+    /// 连接视图句柄; 后续查询反映连接当前世代和状态.
     fn connection(&self) -> ConnectionView {
         self.nats.connection()
     }
-    /// 合并 NATS 控制订阅与连接变化，丢弃重连前的旧缓冲。
+    /// 合并 NATS 控制订阅与连接变化, 丢弃重连前的旧缓冲.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `AuthorityEndpoint` 的可变引用。
+    /// - `self`: 当前 `AuthorityEndpoint` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 有有效事件返回 `Ok(Some(event))`；订阅结束返回 `Ok(None)`；连接观察失败返回错误。
+    /// 有有效事件返回 `Ok(Some(event))`; 订阅结束返回 `Ok(None)`; 连接观察失败返回错误.
     async fn receive(&mut self) -> Result<Option<AuthorityEvent>, TransportError> {
         loop {
             let message = tokio::select! {
@@ -192,15 +192,15 @@ impl AuthorityInbox for AuthorityEndpoint {
             }
         }
     }
-    /// 请求所绑定 pools 中的 Worker 重新发布完整快照。
+    /// 请求所绑定 pools 中的 Worker 重新发布完整快照.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `AuthorityEndpoint` 的共享引用。
+    /// - `self`: 当前 `AuthorityEndpoint` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 发送/通知完成返回 `Ok(())`；传输失败返回错误，不保证 Worker 已回复。
+    /// 发送/通知完成返回 `Ok(())`; 传输失败返回错误, 不保证 Worker 已回复.
     async fn probe(&self) -> Result<(), TransportError> {
         self.nats.flush().await?;
         for pool in &self.pools {

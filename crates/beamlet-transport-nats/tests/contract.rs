@@ -1,4 +1,4 @@
-/// 本后端与其他适配器共同执行的交付和控制契约测试。
+/// 本后端与其他适配器共同执行的交付和控制契约测试.
 #[path = "../../../tests/support/transport_contract.rs"]
 mod contract;
 use beamlet_transport_nats::{Nats, Options};
@@ -8,31 +8,31 @@ use std::{
     time::Duration,
 };
 
-/// 测试子进程的清理 guard；离开作用域时尽力终止并回收服务进程。
+/// 测试子进程的清理 guard; 离开作用域时尽力终止并回收服务进程.
 struct Server(
-    /// 由当前测试启动并负责回收的子进程句柄。
+    /// 由当前测试启动并负责回收的子进程句柄.
     Child,
 );
 impl Drop for Server {
-    /// 结束测试服务子进程并回收其退出状态。
+    /// 结束测试服务子进程并回收其退出状态.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Server` 的可变引用。
+    /// - `self`: 当前 `Server` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// `()`；尽力终止和等待子进程，不把清理错误向外传播。
+    /// `()`; 尽力终止和等待子进程, 不把清理错误向外传播.
     fn drop(&mut self) {
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
 }
-/// 启动临时 NATS 服务并连接待验收的适配器。
+/// 启动临时 NATS 服务并连接待验收的适配器.
 ///
 /// # 返回值
 ///
-/// 二元组 `(服务进程 guard, Nats)`；启动或连接超时会使测试失败。
+/// 二元组 `(服务进程 guard, Nats)`; 启动或连接超时会使测试失败.
 async fn transport() -> (Server, Nats) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -58,11 +58,11 @@ async fn transport() -> (Server, Nats) {
     .unwrap();
     (server, connected)
 }
-/// 用真实 NATS 服务验证共享的定向交付契约。
+/// 用真实 NATS 服务验证共享的定向交付契约.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 #[ignore = "requires nats-server"]
 async fn delivery_contract() {
@@ -70,11 +70,11 @@ async fn delivery_contract() {
     let (inbox, _presence) = transport.bind_worker(contract::binding()).await.unwrap();
     contract::delivery(transport, inbox).await;
 }
-/// 用真实 NATS 服务验证共享的发现、请求和公告控制契约。
+/// 用真实 NATS 服务验证共享的发现, 请求和公告控制契约.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 #[ignore = "requires nats-server"]
 async fn control_contract() {
@@ -87,11 +87,11 @@ async fn control_contract() {
     contract::control(transport, endpoint, presence).await;
 }
 
-/// 验证连接期限覆盖 TCP 已连接但服务端不发送 INFO 的场景。
+/// 验证连接期限覆盖 TCP 已连接但服务端不发送 INFO 的场景.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn configured_connection_timeout_covers_a_server_that_never_sends_info() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

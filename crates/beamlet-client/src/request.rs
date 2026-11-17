@@ -7,68 +7,68 @@ pub enum Error {
     /// 本地校验失败, 尚未发送请求.
     #[error("invalid request: {0}")]
     InvalidRequest(
-        /// 发送前本地参数校验失败的诊断消息。
+        /// 发送前本地参数校验失败的诊断消息.
         &'static str,
     ),
     /// 传输失败; 请求可能已执行, 不自动重试.
     #[error("request transport failed; execution may have started: {0}")]
     Transport(
-        /// 传输层返回的具体错误，保留原始 source。
+        /// 传输层返回的具体错误, 保留原始 source.
         #[from]
         TransportError,
     ),
     /// 超过总等待期限; 不证明请求未执行.
     #[error("request timed out; execution may have started")]
     Timeout,
-    /// 请求、角色会话或返回的数据与本次调用不匹配.
+    /// 请求, 角色会话或返回的数据与本次调用不匹配.
     #[error("reply does not match the request")]
     InvalidReply,
     /// Worker 查询被 Authority 明确拒绝; 提交拒绝保留为 Outcome::Rejected.
     #[error("worker query rejected: {reason}")]
     Rejected {
-        /// 拒绝或无法确认执行结果的具体诊断原因。
+        /// 拒绝或无法确认执行结果的具体诊断原因.
         reason: String,
     },
 }
 
-/// 检查角色 UUID 和会话 UUID 是否均非 nil。
+/// 检查角色 UUID 和会话 UUID 是否均非 nil.
 ///
 /// # 参数
 ///
-/// - `instance`：当前角色的固定 UUID 和本次运行会话 UUID；不会在此重新生成。
+/// - `instance`: 当前角色的固定 UUID 和本次运行会话 UUID; 不会在此重新生成.
 ///
 /// # 返回值
 ///
-/// 两者均非 nil 返回 `true`，否则返回 `false`。
+/// 两者均非 nil 返回 `true`, 否则返回 `false`.
 pub(crate) fn valid_instance(instance: RoleInstance) -> bool {
     !instance.role_id.is_nil() && !instance.session_id.is_nil()
 }
 
-/// 发送命令前保存的回复校验约束，不持有业务 payload。
+/// 发送命令前保存的回复校验约束, 不持有业务 payload.
 pub(crate) enum Expected {
-    /// Worker 查询回复应满足的 pool 与能力条件。
+    /// Worker 查询回复应满足的 pool 与能力条件.
     Workers {
-        /// 本次查询或调用所属的 pool，按精确名称隔离。
+        /// 本次查询或调用所属的 pool, 按精确名称隔离.
         pool: Pool,
-        /// 可选的能力过滤条件；None 表示不按能力筛选。
+        /// 可选的能力过滤条件; None 表示不按能力筛选.
         capability: Option<String>,
     },
-    /// 业务提交回复应满足的 Worker 选择约束。
+    /// 业务提交回复应满足的 Worker 选择约束.
     Submit {
-        /// 已发送请求保存的 Any 或 Exact Worker 选择。
+        /// 已发送请求保存的 Any 或 Exact Worker 选择.
         worker: Selection,
     },
 }
 impl Expected {
-    /// 校验命令并提取用于校验回复的目标约束。
+    /// 校验命令并提取用于校验回复的目标约束.
     ///
     /// # 参数
     ///
-    /// - `command`：本次 Authority 命令，携带请求 UUID、目标会话及查询/提交数据。
+    /// - `command`: 本次 Authority 命令, 携带请求 UUID, 目标会话及查询/提交数据.
     ///
     /// # 返回值
     ///
-    /// 成功返回 Expected；空身份或非法能力返回 InvalidRequest，尚未发送。
+    /// 成功返回 Expected; 空身份或非法能力返回 InvalidRequest, 尚未发送.
     pub(crate) fn for_command<P>(command: &Command<P>) -> Result<Self, Error> {
         if command.request_id().is_nil() || !valid_instance(command.authority()) {
             return Err(Error::InvalidRequest("nil request or authority UUID"));
@@ -99,16 +99,16 @@ impl Expected {
             }
         })
     }
-    /// 校验回复种类、Worker 目标和必要的关联字段。
+    /// 校验回复种类, Worker 目标和必要的关联字段.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Expected` 的共享引用。
-    /// - `outcome`：本次查询、提交或交付返回的结果。
+    /// - `self`: 当前 `Expected` 的共享引用.
+    /// - `outcome`: 本次查询, 提交或交付返回的结果.
     ///
     /// # 返回值
     ///
-    /// 匹配返回 `Ok(())`；类型、pool、能力、会话或身份字段不符返回 InvalidReply。
+    /// 匹配返回 `Ok(())`; 类型, pool, 能力, 会话或身份字段不符返回 InvalidReply.
     pub(crate) fn check<R>(&self, outcome: &Outcome<R>) -> Result<(), Error> {
         let valid = match (self, outcome) {
             (_, Outcome::Rejected { .. }) => true,
@@ -158,16 +158,16 @@ impl Expected {
         }
     }
 }
-/// 判断实际执行 Worker 是否满足 Any 或 Exact 选择。
+/// 判断实际执行 Worker 是否满足 Any 或 Exact 选择.
 ///
 /// # 参数
 ///
-/// - `selected`：请求保存的 Worker 选择约束。
-/// - `actual`：回复声明的实际执行 Worker 角色与会话身份。
+/// - `selected`: 请求保存的 Worker 选择约束.
+/// - `actual`: 回复声明的实际执行 Worker 角色与会话身份.
 ///
 /// # 返回值
 ///
-/// 实际身份有效且满足约束返回 `true`；Exact 会话不匹配时返回 `false`。
+/// 实际身份有效且满足约束返回 `true`; Exact 会话不匹配时返回 `false`.
 fn matches_worker(selected: Selection, actual: RoleInstance) -> bool {
     valid_instance(actual)
         && match selected {

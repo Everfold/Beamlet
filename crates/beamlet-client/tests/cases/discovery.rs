@@ -5,11 +5,11 @@ use beamlet_client::{Client, Error, Options};
 use std::{collections::BTreeSet, time::Duration};
 use tokio::sync::mpsc;
 
-/// 装配使用受控传输的 Client 和事件观察端。
+/// 装配使用受控传输的 Client 和事件观察端.
 ///
 /// # 返回值
 ///
-/// 二元组 `(Client, 传输事件接收端)`。
+/// 二元组 `(Client, 传输事件接收端)`.
 fn start() -> (
     Client<support::Transport>,
     mpsc::UnboundedReceiver<Event<String, String>>,
@@ -17,23 +17,23 @@ fn start() -> (
     let (transport, events) = support::pair();
     (Client::new(transport, Options::default()).unwrap(), events)
 }
-/// 把测试名称列表解析为去重的 pool 集合。
+/// 把测试名称列表解析为去重的 pool 集合.
 ///
 /// # 参数
 ///
-/// - `names`：要转换为 pool 标识的测试名称列表。
+/// - `names`: 要转换为 pool 标识的测试名称列表.
 ///
 /// # 返回值
 ///
-/// `BTreeSet<Pool>`；任一名称非法时 panic。
+/// `BTreeSet<Pool>`; 任一名称非法时 panic.
 fn pools(names: &[&str]) -> BTreeSet<Pool> {
     names.iter().map(|name| name.parse().unwrap()).collect()
 }
-/// 验证发现过滤无效回复，按会话合并 pools，并在窗口结束释放入口。
+/// 验证发现过滤无效回复, 按会话合并 pools, 并在窗口结束释放入口.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test(start_paused = true)]
 async fn discovery_filters_merges_sessions_and_releases_inbox_at_window_end() {
     let (client, mut events) = start();
@@ -88,11 +88,11 @@ async fn discovery_filters_merges_sessions_and_releases_inbox_at_window_end() {
     assert!(send.is_closed(), "window end retained discovery receiver");
     assert!(events.try_recv().is_err(), "discovery retried");
 }
-/// 验证发现总期限包含准备与收集，EOF 可以提前完成。
+/// 验证发现总期限包含准备与收集, EOF 可以提前完成.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test(start_paused = true)]
 async fn total_deadline_covers_setup_and_collection_and_eof_can_end_early() {
     for setup_delay in [Duration::from_secs(11), Duration::from_millis(9500)] {
@@ -126,11 +126,11 @@ async fn total_deadline_covers_setup_and_collection_and_eof_can_end_early() {
     assert_eq!(tokio::time::Instant::now(), before);
 }
 
-/// 验证取消发现会释放准备阶段或收集阶段持有的资源。
+/// 验证取消发现会释放准备阶段或收集阶段持有的资源.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn cancelled_discovery_releases_setup_and_collection() {
     for after_setup in [false, true] {
@@ -155,27 +155,27 @@ async fn cancelled_discovery_releases_setup_and_collection() {
     }
 }
 
-/// 持续产生无效发现回复的传输替身，用于验证时间期限和调度公平性。
+/// 持续产生无效发现回复的传输替身, 用于验证时间期限和调度公平性.
 #[derive(Clone)]
 struct Flood(
-    /// 记录 receive 被轮询次数的共享原子计数器。
+    /// 记录 receive 被轮询次数的共享原子计数器.
     std::sync::Arc<std::sync::atomic::AtomicUsize>,
 );
-/// 每次轮询都立即返回无效发现回复的接收端。
+/// 每次轮询都立即返回无效发现回复的接收端.
 struct FloodInbox(
-    /// 记录 receive 被轮询次数的共享原子计数器。
+    /// 记录 receive 被轮询次数的共享原子计数器.
     std::sync::Arc<std::sync::atomic::AtomicUsize>,
 );
 impl beamlet_api::DiscoveryInbox for FloodInbox {
-    /// 连续立即返回带空请求身份的无效发现回复。
+    /// 连续立即返回带空请求身份的无效发现回复.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `FloodInbox` 的可变引用。
+    /// - `self`: 当前 `FloodInbox` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 始终返回 `Ok(Some(DiscoveryReply))` 并增加轮询计数。
+    /// 始终返回 `Ok(Some(DiscoveryReply))` 并增加轮询计数.
     async fn receive(&mut self) -> Result<Option<DiscoveryReply>, beamlet_api::TransportError> {
         self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Ok(Some(DiscoveryReply {
@@ -189,19 +189,19 @@ impl beamlet_api::DiscoveryInbox for FloodInbox {
     }
 }
 impl beamlet_api::ClientTransport for Flood {
-    /// Flood 的发现入口；每次回复均使用无效请求 UUID。
+    /// Flood 的发现入口; 每次回复均使用无效请求 UUID.
     type Discovery = FloodInbox;
-    /// 创建可持续产生无效回复的发现端点。
+    /// 创建可持续产生无效回复的发现端点.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Flood` 的共享引用。
-    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
-    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
+    /// - `self`: 当前 `Flood` 的共享引用.
+    /// - `_`: 为满足测试接口签名保留的占位参数, 本实现不读取该值.
+    /// - `_`: 为满足测试接口签名保留的占位参数, 本实现不读取该值.
     ///
     /// # 返回值
     ///
-    /// 返回 `Ok(FloodInbox)`，与测试共享计数器。
+    /// 返回 `Ok(FloodInbox)`, 与测试共享计数器.
     async fn discover(
         &self,
         _: &BTreeSet<Pool>,
@@ -209,17 +209,17 @@ impl beamlet_api::ClientTransport for Flood {
     ) -> Result<FloodInbox, beamlet_api::TransportError> {
         Ok(FloodInbox(self.0.clone()))
     }
-    /// 阻止发现专用测试误调用提交接口。
+    /// 阻止发现专用测试误调用提交接口.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Flood` 的共享引用。
-    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
-    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
+    /// - `self`: 当前 `Flood` 的共享引用.
+    /// - `_`: 为满足测试接口签名保留的占位参数, 本实现不读取该值.
+    /// - `_`: 为满足测试接口签名保留的占位参数, 本实现不读取该值.
     ///
     /// # 返回值
     ///
-    /// 不返回；一旦调用即 panic，说明测试流程违反约定。
+    /// 不返回; 一旦调用即 panic, 说明测试流程违反约定.
     async fn request(
         &self,
         _: beamlet_api::Command,
@@ -229,11 +229,11 @@ impl beamlet_api::ClientTransport for Flood {
     }
 }
 
-/// 验证持续立即返回的无效发现回复不饿死计时器或其他任务。
+/// 验证持续立即返回的无效发现回复不饿死计时器或其他任务.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test(start_paused = true)]
 async fn continuously_ready_invalid_replies_do_not_starve_timers_or_other_tasks() {
     let count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));

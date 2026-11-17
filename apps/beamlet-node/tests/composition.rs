@@ -23,26 +23,26 @@ use std::{
 use tokio::time::{Instant, sleep, timeout_at};
 use uuid::Uuid;
 
-/// 测试子进程及其输出日志位置，供验收等待和失败诊断使用。
+/// 测试子进程及其输出日志位置, 供验收等待和失败诊断使用.
 struct ProcessRecord {
-    /// 已启动的 Node 或 NATS 子进程句柄。
+    /// 已启动的 Node 或 NATS 子进程句柄.
     child: Child,
-    /// 该进程标准输出和错误输出合并写入的日志路径。
+    /// 该进程标准输出和错误输出合并写入的日志路径.
     log: PathBuf,
 }
-/// 组合验收使用的临时 Node/NATS 集群，拥有子进程和文件清理责任。
+/// 组合验收使用的临时 Node/NATS 集群, 拥有子进程和文件清理责任.
 struct Cluster {
-    /// 存放临时二进制、配置和日志的目录，测试结束自动清理。
+    /// 存放临时二进制, 配置和日志的目录, 测试结束自动清理.
     root: tempfile::TempDir,
-    /// 测试启动的全部子进程及日志记录。
+    /// 测试启动的全部子进程及日志记录.
     processes: Vec<ProcessRecord>,
 }
 impl Cluster {
-    /// 创建临时测试集群目录并复制 Node 二进制。
+    /// 创建临时测试集群目录并复制 Node 二进制.
     ///
     /// # 返回值
     ///
-    /// 成功返回尚未启动子进程的 Cluster；文件系统操作失败返回错误。
+    /// 成功返回尚未启动子进程的 Cluster; 文件系统操作失败返回错误.
     fn new() -> Result<Self> {
         let root = tempfile::tempdir()?;
         fs::copy(
@@ -54,17 +54,17 @@ impl Cluster {
             processes: Vec::new(),
         })
     }
-    /// 在集群目录启动子进程，并把输出写入命名日志。
+    /// 在集群目录启动子进程, 并把输出写入命名日志.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
-    /// - `command`：已经配置好程序及参数的子进程启动命令。
-    /// - `name`：用作该子进程日志文件名的测试名称。
+    /// - `self`: 当前 `Cluster` 的可变引用.
+    /// - `command`: 已经配置好程序及参数的子进程启动命令.
+    /// - `name`: 用作该子进程日志文件名的测试名称.
     ///
     /// # 返回值
     ///
-    /// 成功返回进程记录的零基索引；日志或进程创建失败返回错误。
+    /// 成功返回进程记录的零基索引; 日志或进程创建失败返回错误.
     fn spawn(&mut self, mut command: Process, name: &str) -> Result<usize> {
         let log = self.root.path().join(format!("{name}.log"));
         let output = fs::File::create(&log)?;
@@ -77,35 +77,35 @@ impl Cluster {
         self.processes.push(ProcessRecord { child, log });
         Ok(self.processes.len() - 1)
     }
-    /// 在指定本地端口启动测试 NATS 服务。
+    /// 在指定本地端口启动测试 NATS 服务.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
-    /// - `port`：测试 NATS 服务监听的本地 TCP 端口。
-    /// - `name`：本次服务或节点的测试名称，用于日志及配置文件。
+    /// - `self`: 当前 `Cluster` 的可变引用.
+    /// - `port`: 测试 NATS 服务监听的本地 TCP 端口.
+    /// - `name`: 本次服务或节点的测试名称, 用于日志及配置文件.
     ///
     /// # 返回值
     ///
-    /// 成功返回服务进程的记录索引；启动失败返回错误。
+    /// 成功返回服务进程的记录索引; 启动失败返回错误.
     fn broker(&mut self, port: u16, name: &str) -> Result<usize> {
         let mut command = Process::new("nats-server");
         command.args(["-a", "127.0.0.1", "-p", &port.to_string()]);
         self.spawn(command, name)
             .context("nats-server must be installed on PATH")
     }
-    /// 写入临时配置并启动 Node，等待全部角色就绪。
+    /// 写入临时配置并启动 Node, 等待全部角色就绪.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
-    /// - `name`：本次服务或节点的测试名称，用于日志及配置文件。
-    /// - `config`：要写入临时配置文件的完整 RON 文本。
-    /// - `roles`：预期就绪的角色数量。
+    /// - `self`: 当前 `Cluster` 的可变引用.
+    /// - `name`: 本次服务或节点的测试名称, 用于日志及配置文件.
+    /// - `config`: 要写入临时配置文件的完整 RON 文本.
+    /// - `roles`: 预期就绪的角色数量.
     ///
     /// # 返回值
     ///
-    /// 成功返回 `(进程索引, role_id 到 RoleInstance 的映射)`；进程提前退出、超时或 I/O 失败返回错误。
+    /// 成功返回 `(进程索引, role_id 到 RoleInstance 的映射)`; 进程提前退出, 超时或 I/O 失败返回错误.
     async fn node(
         &mut self,
         name: &str,
@@ -142,31 +142,31 @@ impl Cluster {
             sleep(Duration::from_millis(40)).await;
         }
     }
-    /// 强制终止指定测试子进程并等待回收。
+    /// 强制终止指定测试子进程并等待回收.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
-    /// - `process`：Cluster 保存的子进程记录索引。
+    /// - `self`: 当前 `Cluster` 的可变引用.
+    /// - `process`: Cluster 保存的子进程记录索引.
     ///
     /// # 返回值
     ///
-    /// 成功返回 `Ok(())`；进程终止或等待失败返回错误。
+    /// 成功返回 `Ok(())`; 进程终止或等待失败返回错误.
     fn kill(&mut self, process: usize) -> Result<()> {
         self.processes[process].child.kill()?;
         self.processes[process].child.wait()?;
         Ok(())
     }
-    /// 向指定 Node 发送 SIGINT 并等待正常排空退出。
+    /// 向指定 Node 发送 SIGINT 并等待正常排空退出.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
-    /// - `process`：Cluster 保存的子进程记录索引。
+    /// - `self`: 当前 `Cluster` 的可变引用.
+    /// - `process`: Cluster 保存的子进程记录索引.
     ///
     /// # 返回值
     ///
-    /// 正常退出返回 `Ok(())`；信号发送、退出状态或排空超时返回错误。
+    /// 正常退出返回 `Ok(())`; 信号发送, 退出状态或排空超时返回错误.
     async fn stop(&mut self, process: usize) -> Result<()> {
         let pid = self.processes[process].child.id();
         ensure!(
@@ -192,15 +192,15 @@ impl Cluster {
     }
 }
 impl Drop for Cluster {
-    /// 清理测试集群全部子进程，测试 panic 时输出日志。
+    /// 清理测试集群全部子进程, 测试 panic 时输出日志.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Cluster` 的可变引用。
+    /// - `self`: 当前 `Cluster` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// `()`；尽力终止并等待每个子进程。
+    /// `()`; 尽力终止并等待每个子进程.
     fn drop(&mut self) {
         for record in &mut self.processes {
             let _ = record.child.kill();
@@ -215,16 +215,16 @@ impl Drop for Cluster {
         }
     }
 }
-/// 从结构化日志行中提取命名 UUID 字段。
+/// 从结构化日志行中提取命名 UUID 字段.
 ///
 /// # 参数
 ///
-/// - `line`：包含结构化身份字段的一条日志。
-/// - `name`：日志中要查找的 UUID 字段名。
+/// - `line`: 包含结构化身份字段的一条日志.
+/// - `name`: 日志中要查找的 UUID 字段名.
 ///
 /// # 返回值
 ///
-/// 解析出的 UUID；字段缺失或不是 UUID 时 panic。
+/// 解析出的 UUID; 字段缺失或不是 UUID 时 panic.
 fn uuid_field(line: &str, name: &str) -> Uuid {
     line.split_whitespace()
         .find_map(|part| part.strip_prefix(&format!("{name}=")))
@@ -232,23 +232,23 @@ fn uuid_field(line: &str, name: &str) -> Uuid {
         .parse()
         .expect("UUID field")
 }
-/// 让操作系统分配一个可用的本地 TCP 端口。
+/// 让操作系统分配一个可用的本地 TCP 端口.
 ///
 /// # 返回值
 ///
-/// 成功返回端口号；监听绑定或地址查询失败返回错误。
+/// 成功返回端口号; 监听绑定或地址查询失败返回错误.
 fn port() -> Result<u16> {
     Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
-/// 在测试期限内反复连接本地 NATS 服务。
+/// 在测试期限内反复连接本地 NATS 服务.
 ///
 /// # 参数
 ///
-/// - `port`：测试 NATS 服务监听的本地 TCP 端口。
+/// - `port`: 测试 NATS 服务监听的本地 TCP 端口.
 ///
 /// # 返回值
 ///
-/// 成功返回 async_nats 客户端；服务未及时启动时返回错误。
+/// 成功返回 async_nats 客户端; 服务未及时启动时返回错误.
 async fn connect(port: u16) -> Result<async_nats::Client> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -263,81 +263,81 @@ async fn connect(port: u16) -> Result<async_nats::Client> {
         sleep(Duration::from_millis(40)).await;
     }
 }
-/// 生成单个角色的 RON 配置片段。
+/// 生成单个角色的 RON 配置片段.
 ///
 /// # 参数
 ///
-/// - `id`：当前角色的固定 UUID。
-/// - `infrastructure`：该角色引用的基础设施配置名称。
-/// - `kind`：角色种类及其专属参数的 RON 片段。
+/// - `id`: 当前角色的固定 UUID.
+/// - `infrastructure`: 该角色引用的基础设施配置名称.
+/// - `kind`: 角色种类及其专属参数的 RON 片段.
 ///
 /// # 返回值
 ///
-/// 包含角色 UUID、基础设施名称和角色种类配置的字符串。
+/// 包含角色 UUID, 基础设施名称和角色种类配置的字符串.
 fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
     format!(
         r#"(role_id: "{id}", label: Some("same label"), infrastructure: "{infrastructure}", kind: {kind})"#
     )
 }
-/// 生成 Authority 的 RON 配置片段。
+/// 生成 Authority 的 RON 配置片段.
 ///
 /// # 参数
 ///
-/// - `pools`：已经按 RON 字符串列表格式准备的 pool 内容。
-/// - `timeout`：Worker 租约期限，单位为秒。
-/// - `concurrency`：测试角色的任务并发上限，零表示无限。
+/// - `pools`: 已经按 RON 字符串列表格式准备的 pool 内容.
+/// - `timeout`: Worker 租约期限, 单位为秒.
+/// - `concurrency`: 测试角色的任务并发上限, 零表示无限.
 ///
 /// # 返回值
 ///
-/// 包含 pools、Worker 超时、并发及测试容量设置的字符串。
+/// 包含 pools, Worker 超时, 并发及测试容量设置的字符串.
 fn authority(pools: &str, timeout: u64, concurrency: usize) -> String {
     format!(
         "authority((pools: [{pools}], worker_timeout_secs: {timeout}, report_timeout_secs: 4, input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"
     )
 }
-/// 生成 Worker 的 RON 配置片段。
+/// 生成 Worker 的 RON 配置片段.
 ///
 /// # 参数
 ///
-/// - `capability`：该 Worker 配置启用的唯一能力标识。
-/// - `interval`：测试 Worker 心跳周期，单位为秒。
-/// - `concurrency`：测试角色的任务并发上限，零表示无限。
+/// - `capability`: 该 Worker 配置启用的唯一能力标识.
+/// - `interval`: 测试 Worker 心跳周期, 单位为秒.
+/// - `concurrency`: 测试角色的任务并发上限, 零表示无限.
 ///
 /// # 返回值
 ///
-/// 包含固定 blue pool、指定能力、心跳和并发设置的字符串。
+/// 包含固定 blue pool, 指定能力, 心跳和并发设置的字符串.
 fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
     format!(
         r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency}))"#
     )
 }
-/// 组合 Node 身份、基础设施和角色列表生成完整 RON。
+/// 组合 Node 身份, 基础设施和角色列表生成完整 RON.
 ///
 /// # 参数
 ///
-/// - `node_id`：测试节点的固定 UUID。
-/// - `infrastructure`：完整的基础设施映射内容 RON 片段。
-/// - `roles`：已经编码的各角色 RON 配置片段。
+/// - `node_id`: 测试节点的固定 UUID.
+/// - `infrastructure`: 完整的基础设施映射内容 RON 片段.
+/// - `roles`: 已经编码的各角色 RON 配置片段.
 ///
 /// # 返回值
 ///
-/// 可写入临时文件的节点配置字符串。
+/// 可写入临时文件的节点配置字符串.
 fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {
     format!(
         r#"(node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8, infrastructures: {{{infrastructure}}}, roles: [{}])"#,
         roles.join(",")
     )
 }
-/// 在有限窗口内发现测试 pool 中的 Authority。
+/// 在有限窗口内发现测试 pool 中的 Authority.
 ///
 /// # 参数
 ///
-/// - `client`：已连接测试 NATS 服务的原生客户端。
-/// - `pool`：路由或查询所属的 pool，按精确名称隔离。
+/// - `client`: 已连接测试 NATS 服务的原生客户端.
+/// - `pool`: 路由或查询所属的 pool, 按精确名称隔离.
 ///
 /// # 返回值
 ///
-/// 成功返回按实例去重的描述列表；通信或关联校验失败返回错误。
+/// 成功返回按实例去重的描述列表; 通信或关联校验失败返回错误.
 async fn discover(client: &async_nats::Client, pool: &Pool) -> Result<Vec<AuthorityInfo>> {
     let inbox = client.new_inbox();
     let mut replies = client.subscribe(inbox.clone()).await?;
@@ -360,16 +360,16 @@ async fn discover(client: &async_nats::Client, pool: &Pool) -> Result<Vec<Author
     }
     Ok(found.into_values().collect())
 }
-/// 发送一个 v3 Authority 请求并检查回复关联。
+/// 发送一个 v3 Authority 请求并检查回复关联.
 ///
 /// # 参数
 ///
-/// - `client`：已连接测试 NATS 服务的原生客户端。
-/// - `command`：本次 Authority 命令，携带请求 UUID、目标会话及查询/提交数据。
+/// - `client`: 已连接测试 NATS 服务的原生客户端.
+/// - `command`: 本次 Authority 命令, 携带请求 UUID, 目标会话及查询/提交数据.
 ///
 /// # 返回值
 ///
-/// 成功返回 Outcome；通信、编码解码或请求/会话关联错误返回错误。
+/// 成功返回 Outcome; 通信, 编码解码或请求/会话关联错误返回错误.
 async fn request(client: &async_nats::Client, command: Command) -> Result<Outcome> {
     let message = client
         .request(
@@ -384,17 +384,17 @@ async fn request(client: &async_nats::Client, command: Command) -> Result<Outcom
     );
     Ok(reply.outcome)
 }
-/// 请求指定 Authority 的 pool 内 Worker 列表。
+/// 请求指定 Authority 的 pool 内 Worker 列表.
 ///
 /// # 参数
 ///
-/// - `client`：已连接测试 NATS 服务的原生客户端。
-/// - `authority`：明确选定的 Authority 角色与会话 UUID。
-/// - `pool`：路由或查询所属的 pool，按精确名称隔离。
+/// - `client`: 已连接测试 NATS 服务的原生客户端.
+/// - `authority`: 明确选定的 Authority 角色与会话 UUID.
+/// - `pool`: 路由或查询所属的 pool, 按精确名称隔离.
 ///
 /// # 返回值
 ///
-/// 成功返回 WorkerView 列表；通信失败或回复类型错误返回错误。
+/// 成功返回 WorkerView 列表; 通信失败或回复类型错误返回错误.
 async fn workers(
     client: &async_nats::Client,
     authority: RoleInstance,
@@ -415,18 +415,18 @@ async fn workers(
     };
     Ok(workers)
 }
-/// 轮询直到所有预期 Worker 都被 Authority 认为可用。
+/// 轮询直到所有预期 Worker 都被 Authority 认为可用.
 ///
 /// # 参数
 ///
-/// - `client`：已连接测试 NATS 服务的原生客户端。
-/// - `authority`：明确选定的 Authority 角色与会话 UUID。
-/// - `pool`：路由或查询所属的 pool，按精确名称隔离。
-/// - `expected`：需要全部处于可用状态的 Worker 角色/会话身份列表。
+/// - `client`: 已连接测试 NATS 服务的原生客户端.
+/// - `authority`: 明确选定的 Authority 角色与会话 UUID.
+/// - `pool`: 路由或查询所属的 pool, 按精确名称隔离.
+/// - `expected`: 需要全部处于可用状态的 Worker 角色/会话身份列表.
 ///
 /// # 返回值
 ///
-/// 满足条件返回 `Ok(())`；查询失败或超过期限返回错误。
+/// 满足条件返回 `Ok(())`; 查询失败或超过期限返回错误.
 async fn wait_for_workers(
     client: &async_nats::Client,
     authority: RoleInstance,
@@ -452,20 +452,20 @@ async fn wait_for_workers(
         sleep(Duration::from_millis(60)).await;
     }
 }
-/// 向指定 Authority 提交精确 Worker 会话的文本任务。
+/// 向指定 Authority 提交精确 Worker 会话的文本任务.
 ///
 /// # 参数
 ///
-/// - `client`：已连接测试 NATS 服务的原生客户端。
-/// - `authority`：明确选定的 Authority 角色与会话 UUID。
-/// - `pool`：路由或查询所属的 pool，按精确名称隔离。
-/// - `worker`：唯一目标 Worker 的角色与会话身份。
-/// - `capability`：要调用或匹配的能力标识，保留精确拼写。
-/// - `text`：测试提交的原始业务文本。
+/// - `client`: 已连接测试 NATS 服务的原生客户端.
+/// - `authority`: 明确选定的 Authority 角色与会话 UUID.
+/// - `pool`: 路由或查询所属的 pool, 按精确名称隔离.
+/// - `worker`: 唯一目标 Worker 的角色与会话身份.
+/// - `capability`: 要调用或匹配的能力标识, 保留精确拼写.
+/// - `text`: 测试提交的原始业务文本.
 ///
 /// # 返回值
 ///
-/// 成功返回提交的 Outcome；请求通信或关联失败返回错误。
+/// 成功返回提交的 Outcome; 请求通信或关联失败返回错误.
 async fn submit(
     client: &async_nats::Client,
     authority: RoleInstance,
@@ -491,17 +491,17 @@ async fn submit(
     )
     .await
 }
-/// 校验完成结果的 Worker 与文本，并提取 Operation 身份。
+/// 校验完成结果的 Worker 与文本, 并提取 Operation 身份.
 ///
 /// # 参数
 ///
-/// - `outcome`：本次查询、提交或交付返回的结果。
-/// - `instance`：期望完成任务的 Worker 实例。
-/// - `expected`：期望返回的业务文本。
+/// - `outcome`: 本次查询, 提交或交付返回的结果.
+/// - `instance`: 期望完成任务的 Worker 实例.
+/// - `expected`: 期望返回的业务文本.
 ///
 /// # 返回值
 ///
-/// 匹配时返回 Operation ID；结果类型、Worker 或文本不符返回错误。
+/// 匹配时返回 Operation ID; 结果类型, Worker 或文本不符返回错误.
 fn completed(outcome: Outcome, instance: RoleInstance, expected: &str) -> Result<String> {
     let Outcome::Completed {
         worker,
@@ -519,11 +519,11 @@ fn completed(outcome: Outcome, instance: RoleInstance, expected: &str) -> Result
     Ok(operation_id)
 }
 
-/// 验证真实多角色、多基础设施的定向路由、重启会话、重连和独立排空。
+/// 验证真实多角色, 多基础设施的定向路由, 重启会话, 重连和独立排空.
 ///
 /// # 返回值
 ///
-/// 所有断言通过时返回 `Ok(())`；I/O 或协议验证失败返回错误，断言失败会使测试失败。
+/// 所有断言通过时返回 `Ok(())`; I/O 或协议验证失败返回错误, 断言失败会使测试失败.
 #[tokio::test]
 #[ignore = "requires nats-server; explicit multi-process integration test"]
 async fn multiple_roles_and_infrastructures_route_restart_and_drain_independently() -> Result<()> {
@@ -860,11 +860,11 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     Ok(())
 }
 
-/// 验证各 Authority 的报告期限和输入容量独立生效。
+/// 验证各 Authority 的报告期限和输入容量独立生效.
 ///
 /// # 返回值
 ///
-/// 所有断言通过时返回 `Ok(())`；I/O 或协议验证失败返回错误，断言失败会使测试失败。
+/// 所有断言通过时返回 `Ok(())`; I/O 或协议验证失败返回错误, 断言失败会使测试失败.
 #[tokio::test]
 #[ignore = "requires nats-server; explicit configured deadline test"]
 async fn configured_report_deadlines_and_input_capacity_are_independent_per_authority() -> Result<()>

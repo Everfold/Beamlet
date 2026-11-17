@@ -11,16 +11,16 @@ use std::{collections::BTreeMap, future::Future, time::Duration};
 use tokio::time::timeout;
 use tracing::{Instrument, info, warn};
 
-/// 装配基础设施和角色，委托 Host 监督并在退出时刷新连接。
+/// 装配基础设施和角色, 委托 Host 监督并在退出时刷新连接.
 ///
 /// # 参数
 ///
-/// - `settings`：调用方提供的配置；本函数按其身份、期限和基础设施设置运行。
-/// - `signal`：调用方提供的退出 future；完成表示请求停止，错误也会触发停止并被返回。
+/// - `settings`: 调用方提供的配置; 本函数按其身份, 期限和基础设施设置运行.
+/// - `signal`: 调用方提供的退出 future; 完成表示请求停止, 错误也会触发停止并被返回.
 ///
 /// # 返回值
 ///
-/// 正常停止返回 `Ok(())`；配置、连接、停止信号或角色监督失败时返回错误。
+/// 正常停止返回 `Ok(())`; 配置, 连接, 停止信号或角色监督失败时返回错误.
 pub(crate) async fn run(
     settings: Settings,
     signal: impl Future<Output = std::io::Result<()>>,

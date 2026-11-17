@@ -8,46 +8,46 @@ pub enum Concurrency {
     Unlimited,
     /// 有限正数, Worker 构造时拒绝 0.
     Limited(
-        /// 允许同时在途的正整数任务数；构造时拒绝零值。
+        /// 允许同时在途的正整数任务数; 构造时拒绝零值.
         usize,
     ),
 }
 impl Default for Concurrency {
-    /// 构造默认串行 Worker 并发策略。
+    /// 构造默认串行 Worker 并发策略.
     ///
     /// # 返回值
     ///
-    /// `Concurrency::Limited(1)`。
+    /// `Concurrency::Limited(1)`.
     fn default() -> Self {
         Self::Limited(1)
     }
 }
 impl Concurrency {
-    /// 判断当前活动任务数是否允许再接收一项任务。
+    /// 判断当前活动任务数是否允许再接收一项任务.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Concurrency` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `active`：当前占用执行名额的任务数量。
+    /// - `self`: 当前 `Concurrency` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `active`: 当前占用执行名额的任务数量.
     ///
     /// # 返回值
     ///
-    /// 无限模式始终返回 `true`；有限模式仅在 active 小于上限时返回 `true`。
+    /// 无限模式始终返回 `true`; 有限模式仅在 active 小于上限时返回 `true`.
     pub(crate) fn admits(self, active: usize) -> bool {
         match self {
             Self::Unlimited => true,
             Self::Limited(limit) => active < limit,
         }
     }
-    /// 把并发策略转换为日志使用的数值。
+    /// 把并发策略转换为日志使用的数值.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Concurrency` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `self`: 当前 `Concurrency` 的值; 调用后转移其所有权(Copy 类型按值复制).
     ///
     /// # 返回值
     ///
-    /// 有限模式返回上限；无限模式返回约定的零值。
+    /// 有限模式返回上限; 无限模式返回约定的零值.
     pub(crate) fn display_limit(self) -> usize {
         match self {
             Self::Unlimited => 0,
@@ -67,11 +67,11 @@ pub struct Options {
     pub announcement_timeout: Duration,
 }
 impl Default for Options {
-    /// 构造默认 Worker 并发与公告参数。
+    /// 构造默认 Worker 并发与公告参数.
     ///
     /// # 返回值
     ///
-    /// 串行执行、心跳周期 5 秒、公告期限 1 秒的 Options。
+    /// 串行执行, 心跳周期 5 秒, 公告期限 1 秒的 Options.
     fn default() -> Self {
         Self {
             concurrency: Concurrency::default(),
@@ -81,15 +81,15 @@ impl Default for Options {
     }
 }
 impl Options {
-    /// 校验 Worker 并发、心跳和公告期限。
+    /// 校验 Worker 并发, 心跳和公告期限.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Options` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `self`: 当前 `Options` 的值; 调用后转移其所有权(Copy 类型按值复制).
     ///
     /// # 返回值
     ///
-    /// 合法返回 `Ok(())`；有限并发为零或期限非法返回 BuildError。
+    /// 合法返回 `Ok(())`; 有限并发为零或期限非法返回 BuildError.
     pub(crate) fn validate(self) -> Result<(), BuildError> {
         if self.concurrency == Concurrency::Limited(0) {
             return Err(BuildError::ZeroConcurrency);
@@ -118,13 +118,13 @@ pub enum BuildError {
     /// 正数期限无效.
     #[error("invalid duration: {0}")]
     InvalidDuration(
-        /// 期限为零或不可由时钟表示的参数名。
+        /// 期限为零或不可由时钟表示的参数名.
         &'static str,
     ),
     /// 能力选择无效.
     #[error(transparent)]
     Capabilities(
-        /// 能力注册或启用集合校验失败的具体原因。
+        /// 能力注册或启用集合校验失败的具体原因.
         #[from]
         CapabilityError,
     ),

@@ -1,35 +1,35 @@
-//! 终端文本转换成结构化本地提交; 登记、选择和业务控制由 Authority 库负责.
+//! 终端文本转换成结构化本地提交; 登记, 选择和业务控制由 Authority 库负责.
 use crate::text_reverse;
 use anyhow::{Context, Result};
 use beamlet_api::{AuthorityInfo, Pool, Responder, Selection, Submission, Task, TransportError};
 use beamlet_authority::{Directory, LocalInbox, Request};
 use tracing::{info, warn};
 
-/// 把终端文本转换为 Authority 本地提交的适配器，并保存该角色的 pool 与能力选择。
+/// 把终端文本转换为 Authority 本地提交的适配器, 并保存该角色的 pool 与能力选择.
 pub(crate) struct Input {
-    /// 终端路由到该 Authority 的文本输入队列。
+    /// 终端路由到该 Authority 的文本输入队列.
     local: crate::terminal::Input,
-    /// 当前 Authority 的角色会话、标签和已加入 pools。
+    /// 当前 Authority 的角色会话, 标签和已加入 pools.
     info: AuthorityInfo,
-    /// 与当前 Authority 登记表共享状态的只读 Worker 查询句柄。
+    /// 与当前 Authority 登记表共享状态的只读 Worker 查询句柄.
     directory: Directory,
-    /// 该 Authority 本地输入当前选定的 pool。
+    /// 该 Authority 本地输入当前选定的 pool.
     pool: Pool,
-    /// 该 Authority 本地文本提交当前选定的能力。
+    /// 该 Authority 本地文本提交当前选定的能力.
     capability: String,
 }
 impl Input {
-    /// 把终端入口装配为指定 Authority 的本地输入。
+    /// 把终端入口装配为指定 Authority 的本地输入.
     ///
     /// # 参数
     ///
-    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
-    /// - `directory`：当前 Authority 的只读 Worker 查询句柄。
-    /// - `local`：终端路由到该 Authority 的文本行接收端。
+    /// - `info`: Authority 的角色/会话身份, 标签及其加入的 pools.
+    /// - `directory`: 当前 Authority 的只读 Worker 查询句柄.
+    /// - `local`: 终端路由到该 Authority 的文本行接收端.
     ///
     /// # 返回值
     ///
-    /// 成功返回使用默认 pool 或首个已配置 pool 的输入；Authority 未配置 pool 时返回错误。
+    /// 成功返回使用默认 pool 或首个已配置 pool 的输入; Authority 未配置 pool 时返回错误.
     pub(crate) fn new(
         info: AuthorityInfo,
         directory: Directory,
@@ -50,15 +50,15 @@ impl Input {
     }
 }
 impl LocalInbox for Input {
-    /// 处理本地选择命令，直到收到需要提交的文本或输入结束。
+    /// 处理本地选择命令, 直到收到需要提交的文本或输入结束.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Input` 的可变引用。
+    /// - `self`: 当前 `Input` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 有效文本返回 `Ok(Some(Request))`，EOF 返回 `Ok(None)`；读取失败时返回错误。
+    /// 有效文本返回 `Ok(Some(Request))`, EOF 返回 `Ok(None)`; 读取失败时返回错误.
     async fn receive(&mut self) -> Result<Option<Request>, TransportError> {
         loop {
             let Some(line) = self.local.recv().await else {
@@ -96,15 +96,15 @@ impl LocalInbox for Input {
             }
         }
     }
-    /// 关闭本地输入并丢弃尚未签发的排队文本。
+    /// 关闭本地输入并丢弃尚未签发的排队文本.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Input` 的可变引用。
+    /// - `self`: 当前 `Input` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 返回 `Ok(())`；不把剩余输入转换为任务。
+    /// 返回 `Ok(())`; 不把剩余输入转换为任务.
     async fn stop(&mut self) -> Result<(), TransportError> {
         self.local.close();
         while self.local.try_recv().is_ok() {}

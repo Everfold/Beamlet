@@ -1,17 +1,17 @@
-//! Node 入口：加载配置、装配角色并协调退出。
-/// Node 内置文本处理能力的注册、校验与阻塞计算安排。
+//! Node 入口: 加载配置, 装配角色并协调退出.
+/// Node 内置文本处理能力的注册, 校验与阻塞计算安排.
 mod capabilities;
-/// Node 终端到 Authority 结构化本地提交的转换。
+/// Node 终端到 Authority 结构化本地提交的转换.
 mod local;
-/// 节点基础设施与角色装配，委托 Host 监督并处理连接收尾。
+/// 节点基础设施与角色装配, 委托 Host 监督并处理连接收尾.
 mod node;
-/// 单个 Authority 或 Worker 配置与运行会话的装配。
+/// 单个 Authority 或 Worker 配置与运行会话的装配.
 mod role;
-/// 应用 RON 配置的首次创建、加载与语义校验，不迁移已有文件。
+/// 应用 RON 配置的首次创建, 加载与语义校验, 不迁移已有文件.
 mod settings;
-/// Node 唯一 stdin 读取入口与按 Authority 选择的本地文本路由。
+/// Node 唯一 stdin 读取入口与按 Authority 选择的本地文本路由.
 mod terminal;
-/// 内置 text.reverse/v1 能力的 Unicode 标量倒序处理。
+/// 内置 text.reverse/v1 能力的 Unicode 标量倒序处理.
 mod text_reverse;
 
 use clap::Parser;
@@ -20,20 +20,20 @@ use std::{path::PathBuf, process::ExitCode};
 use tracing::{Instrument, error, info_span};
 use uuid::Uuid;
 
-/// Node 命令行入口；仅选择配置文件名，角色与运行参数从配置文件读取。
+/// Node 命令行入口; 仅选择配置文件名, 角色与运行参数从配置文件读取.
 #[derive(Parser)]
 #[command(version, about = "启动 Beamlet 节点")]
 struct Args {
-    /// 可执行文件旁的单个配置文件名，默认 node.ron，不接受目录路径。
+    /// 可执行文件旁的单个配置文件名, 默认 node.ron, 不接受目录路径.
     #[arg(short, long, value_name = "FILE", default_value = "node.ron")]
     config: PathBuf,
 }
 
-/// 解析配置文件名、初始化节点日志并启动 Node。
+/// 解析配置文件名, 初始化节点日志并启动 Node.
 ///
 /// # 返回值
 ///
-/// 正常结束返回 `ExitCode::SUCCESS`；配置或运行失败返回 `ExitCode::FAILURE`。
+/// 正常结束返回 `ExitCode::SUCCESS`; 配置或运行失败返回 `ExitCode::FAILURE`.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let args = Args::parse();

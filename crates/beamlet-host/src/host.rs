@@ -7,40 +7,40 @@ use tokio::{
 };
 use tracing::Instrument;
 
-/// 宿主保留的底层错误对象，允许跨线程传递并通过错误链访问原始原因。
+/// 宿主保留的底层错误对象, 允许跨线程传递并通过错误链访问原始原因.
 type Cause = Box<dyn Error + Send + Sync>;
-/// 擦除具体 future 与错误类型的长期任务；由 Host 持有并统一启动。
+/// 擦除具体 future 与错误类型的长期任务; 由 Host 持有并统一启动.
 type Task = Pin<Box<dyn Future<Output = Result<(), Cause>> + Send>>;
-/// 尚未启动的命名任务；名称只用于错误定位，不是角色身份认证。
+/// 尚未启动的命名任务; 名称只用于错误定位, 不是角色身份认证.
 struct Pending {
-    /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
+    /// 调用方提供的任务诊断名称, 可使用角色 UUID, 但不解析或验证其格式.
     name: String,
-    /// 尚未启动的长期任务 future，消费后不能再次运行。
+    /// 尚未启动的长期任务 future, 消费后不能再次运行.
     task: Task,
 }
 
 /// 装配一组长期任务; add 只保存 future, run 开始轮询后才统一启动.
 ///
-/// 提前退出或失败会停止全组；排空有期限，不承诺取消阻塞计算或远端任务。
+/// 提前退出或失败会停止全组; 排空有期限, 不承诺取消阻塞计算或远端任务.
 pub struct Host {
-    /// 已经校验的宿主退出期限。
+    /// 已经校验的宿主退出期限.
     options: Options,
-    /// 通过 add 登记、等待 run 统一启动的任务。
+    /// 通过 add 登记, 等待 run 统一启动的任务.
     pending: Vec<Pending>,
-    /// 停止广播发送端；true 表示不可撤回的停止请求。
+    /// 停止广播发送端; true 表示不可撤回的停止请求.
     stop: watch::Sender<bool>,
 }
 impl fmt::Debug for Host {
-    /// 向格式化目标写入 `Host` 的调试信息。
+    /// 向格式化目标写入 `Host` 的调试信息.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的共享引用。
-    /// - `f`：接收格式化文本的写入目标。
+    /// - `self`: 当前 `Host` 的共享引用.
+    /// - `f`: 接收格式化文本的写入目标.
     ///
     /// # 返回值
     ///
-    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
+    /// 写入成功返回 `Ok(())`; 格式化目标拒绝写入时返回 `fmt::Error`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Host")
             .field("options", &self.options)
@@ -56,15 +56,15 @@ impl fmt::Debug for Host {
     }
 }
 impl Host {
-    /// 校验退出期限并创建尚未启动的宿主任务组。
+    /// 校验退出期限并创建尚未启动的宿主任务组.
     ///
     /// # 参数
     ///
-    /// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+    /// - `options`: 当前模块的运行参数; 期限使用 Duration, 容量/并发由对应字段约束.
     ///
     /// # 返回值
     ///
-    /// 合法返回空 Host；期限非法返回 BuildError。
+    /// 合法返回空 Host; 期限非法返回 BuildError.
     ///
     /// # Errors
     /// 排空期限为零或超出时钟表示范围时返回错误.
@@ -77,32 +77,32 @@ impl Host {
             stop,
         })
     }
-    /// 订阅本组的只读停止通知。
+    /// 订阅本组的只读停止通知.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的共享引用。
+    /// - `self`: 当前 `Host` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 可克隆的 Shutdown；晚开始等待也可观察已经发出的停止。
+    /// 可克隆的 Shutdown; 晚开始等待也可观察已经发出的停止.
     pub fn shutdown(&self) -> Shutdown {
         Shutdown(self.stop.subscribe())
     }
-    /// 登记一个带诊断名称的长期任务，暂不执行。
+    /// 登记一个带诊断名称的长期任务, 暂不执行.
     ///
     /// name 仅用于错误定位, 可传角色 UUID 或调用方命名, 不分配/校验领域身份.
     /// 任务在 run 中启动; 错误或提前结束会停止同组任务, 不自动重启.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的可变引用。
-    /// - `name`：用于错误定位的任务名称，可使用角色 UUID；不承担身份认证或去重。
-    /// - `task`：待保存并在宿主运行时启动的长期任务 future。
+    /// - `self`: 当前 `Host` 的可变引用.
+    /// - `name`: 用于错误定位的任务名称, 可使用角色 UUID; 不承担身份认证或去重.
+    /// - `task`: 待保存并在宿主运行时启动的长期任务 future.
     ///
     /// # 返回值
     ///
-    /// `()`；future 保存到宿主，直到 run 开始轮询才启动。
+    /// `()`; future 保存到宿主, 直到 run 开始轮询才启动.
     pub fn add<E>(
         &mut self,
         name: impl Into<String>,
@@ -115,22 +115,22 @@ impl Host {
             task: Box::pin(async move { task.await.map_err(Into::into) }),
         });
     }
-    /// 统一启动长期任务并等待外部停止信号。
+    /// 统一启动长期任务并等待外部停止信号.
     ///
     /// 丢弃运行 future 会通知停止并中止其异步任务; 不等待排空, 不保证中断
     /// 已经开始的阻塞计算. 需要排空时应完成 signal 并等待本方法返回.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `signal`：调用方提供的退出 future；完成表示请求停止，错误也会触发停止并被返回。
+    /// - `self`: 当前 `Host` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `signal`: 调用方提供的退出 future; 完成表示请求停止, 错误也会触发停止并被返回.
     ///
     /// # 返回值
     ///
-    /// 正常排空返回 `Ok(())`；信号、任务、意外退出或超时汇总为 RunError。
+    /// 正常排空返回 `Ok(())`; 信号, 任务, 意外退出或超时汇总为 RunError.
     ///
     /// # Errors
-    /// 停止信号失败、任务错误/panic/提前结束或排空超时, 汇总为 RunError.
+    /// 停止信号失败, 任务错误/panic/提前结束或排空超时, 汇总为 RunError.
     pub async fn run<E>(self, signal: impl Future<Output = Result<(), E>>) -> Result<(), RunError>
     where
         E: Into<Cause>,
@@ -138,20 +138,20 @@ impl Host {
         self.run_with_background(signal, std::future::pending::<Result<(), Infallible>>())
             .await
     }
-    /// 监督长期任务，同时驱动允许正常提前结束的后台输入。
+    /// 监督长期任务, 同时驱动允许正常提前结束的后台输入.
     ///
     /// background 不单独 spawn, 可以借用调用方数据. 它返回错误会停止组,
     /// 宿主开始停止时直接丢弃它; 它不占用排空期限. 其余取消约定同 run.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `signal`：调用方提供的退出 future；完成表示请求停止，错误也会触发停止并被返回。
-    /// - `background`：可正常提前结束的后台输入 future；失败触发组停止，开始排空时被丢弃。
+    /// - `self`: 当前 `Host` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `signal`: 调用方提供的退出 future; 完成表示请求停止, 错误也会触发停止并被返回.
+    /// - `background`: 可正常提前结束的后台输入 future; 失败触发组停止, 开始排空时被丢弃.
     ///
     /// # 返回值
     ///
-    /// 正常排空返回 `Ok(())`；任务、信号、后台错误和排空超时汇总为 RunError。
+    /// 正常排空返回 `Ok(())`; 任务, 信号, 后台错误和排空超时汇总为 RunError.
     ///
     /// # Errors
     /// 与 run 相同, 另外汇总 background 返回的错误.
@@ -223,15 +223,15 @@ impl Host {
     }
 }
 impl Drop for Host {
-    /// 在宿主被丢弃时广播不可撤回的停止通知。
+    /// 在宿主被丢弃时广播不可撤回的停止通知.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Host` 的可变引用。
+    /// - `self`: 当前 `Host` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// `()`；不阻塞等待任务排空。
+    /// `()`; 不阻塞等待任务排空.
     fn drop(&mut self) {
         self.stop.send_replace(true);
     }
@@ -244,29 +244,29 @@ pub enum Failure {
     /// 命名任务返回错误, 或其 Tokio 任务 panic/被取消.
     #[error("task {name} failed: {source}")]
     Task {
-        /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
+        /// 调用方提供的任务诊断名称, 可使用角色 UUID, 但不解析或验证其格式.
         name: String,
-        /// 该次任务、信号或后台输入的原始失败原因。
+        /// 该次任务, 信号或后台输入的原始失败原因.
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
     /// 长期任务在尚未请求停止时正常返回.
     #[error("task {name} exited before shutdown")]
     UnexpectedExit {
-        /// 调用方提供的任务诊断名称，可使用角色 UUID，但不解析或验证其格式。
+        /// 调用方提供的任务诊断名称, 可使用角色 UUID, 但不解析或验证其格式.
         name: String,
     },
     /// 调用方的停止信号失败.
     #[error("shutdown signal failed: {source}")]
     Signal {
-        /// 该次任务、信号或后台输入的原始失败原因。
+        /// 该次任务, 信号或后台输入的原始失败原因.
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
     /// 可选后台输入处理失败.
     #[error("background input failed: {source}")]
     Background {
-        /// 该次任务、信号或后台输入的原始失败原因。
+        /// 该次任务, 信号或后台输入的原始失败原因.
         #[source]
         source: Box<dyn Error + Send + Sync>,
     },
@@ -275,22 +275,22 @@ pub enum Failure {
 /// 汇总按观测顺序发生的失败以及超过期限仍未完成的任务.
 #[derive(Debug)]
 pub struct RunError {
-    /// 按观测顺序保存的全部失败，包含首次触发停止的错误。
+    /// 按观测顺序保存的全部失败, 包含首次触发停止的错误.
     failures: Vec<Failure>,
-    /// 期限结束时尚未收取完成的任务名称，不代表已开始的阻塞计算被终止。
+    /// 期限结束时尚未收取完成的任务名称, 不代表已开始的阻塞计算被终止.
     unfinished: Vec<String>,
 }
 impl RunError {
-    /// 把累计失败和未完成任务转换为宿主最终结果。
+    /// 把累计失败和未完成任务转换为宿主最终结果.
     ///
     /// # 参数
     ///
-    /// - `failures`：按观测顺序记录的信号、输入和任务失败。
-    /// - `unfinished`：排空期限结束时尚未收取完成的任务名称。
+    /// - `failures`: 按观测顺序记录的信号, 输入和任务失败.
+    /// - `unfinished`: 排空期限结束时尚未收取完成的任务名称.
     ///
     /// # 返回值
     ///
-    /// 两个集合均为空时返回 `Ok(())`，否则返回包含它们的 RunError。
+    /// 两个集合均为空时返回 `Ok(())`, 否则返回包含它们的 RunError.
     fn finish(failures: Vec<Failure>, unfinished: Vec<String>) -> Result<(), Self> {
         if failures.is_empty() && unfinished.is_empty() {
             Ok(())
@@ -301,42 +301,42 @@ impl RunError {
             })
         }
     }
-    /// 借用本次运行按观测顺序记录的失败集合。
+    /// 借用本次运行按观测顺序记录的失败集合.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunError` 的共享引用。
+    /// - `self`: 当前 `RunError` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// Failure 切片，包括首次失败和排空期间的后续失败。
+    /// Failure 切片, 包括首次失败和排空期间的后续失败.
     pub fn failures(&self) -> &[Failure] {
         &self.failures
     }
-    /// 借用超过排空期限仍未收取完成的任务名称。
+    /// 借用超过排空期限仍未收取完成的任务名称.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunError` 的共享引用。
+    /// - `self`: 当前 `RunError` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 任务名称切片；为空表示没有因超时报告未完成任务。
+    /// 任务名称切片; 为空表示没有因超时报告未完成任务.
     pub fn unfinished(&self) -> &[String] {
         &self.unfinished
     }
 }
 impl fmt::Display for RunError {
-    /// 向格式化目标写入 `RunError` 的显示文本。
+    /// 向格式化目标写入 `RunError` 的显示文本.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunError` 的共享引用。
-    /// - `f`：接收格式化文本的写入目标。
+    /// - `self`: 当前 `RunError` 的共享引用.
+    /// - `f`: 接收格式化文本的写入目标.
     ///
     /// # 返回值
     ///
-    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
+    /// 写入成功返回 `Ok(())`; 格式化目标拒绝写入时返回 `fmt::Error`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (index, failure) in self.failures.iter().enumerate() {
             if index != 0 {
@@ -358,15 +358,15 @@ impl fmt::Display for RunError {
     }
 }
 impl Error for RunError {
-    /// 取得宿主首个失败作为错误链入口。
+    /// 取得宿主首个失败作为错误链入口.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunError` 的共享引用。
+    /// - `self`: 当前 `RunError` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 存在失败时返回第一个 Failure 引用；仅发生排空超时时返回 `None`。
+    /// 存在失败时返回第一个 Failure 引用; 仅发生排空超时时返回 `None`.
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.failures
             .first()

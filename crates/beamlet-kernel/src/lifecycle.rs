@@ -1,6 +1,6 @@
 use state_machines::state_machine;
 
-// 授权/报告循环：Ready → AwaitingReport → Ready；关闭：Ready → Closed。
+// 授权/报告循环: Ready → AwaitingReport → Ready; 关闭: Ready → Closed.
 state_machine! {
     name: Lifecycle,
     initial: Ready,
@@ -21,15 +21,15 @@ state_machine! {
     }
 }
 
-/// 提取类型状态允许的无条件状态转换结果。
+/// 提取类型状态允许的无条件状态转换结果.
 ///
 /// # 参数
 ///
-/// - `result`：类型状态允许的无 guard/回调转换结果，按内部不变量应当成功。
+/// - `result`: 类型状态允许的无 guard/回调转换结果, 按内部不变量应当成功.
 ///
 /// # 返回值
 ///
-/// 成功转换后的值；转换失败说明内部图不一致并触发 panic。
+/// 成功转换后的值; 转换失败说明内部图不一致并触发 panic.
 pub(crate) fn transition<T, E>(result: Result<T, E>) -> T {
     match result {
         Ok(machine) => machine,
@@ -37,7 +37,7 @@ pub(crate) fn transition<T, E>(result: Result<T, E>) -> T {
     }
 }
 
-/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
+/// 当前模块关键行为与边界条件的单元测试, 实现在 tests/unit 目录.
 #[cfg(test)]
 #[path = "../tests/unit/lifecycle.rs"]
 mod tests;

@@ -1,24 +1,24 @@
 use beamlet_kernel::Operation;
 
-/// 自定义 Operation 身份，用于验证授权创建中的身份关联。
+/// 自定义 Operation 身份, 用于验证授权创建中的身份关联.
 #[derive(Debug, Clone)]
 struct Identity(
-    /// 该测试身份的静态名称。
+    /// 该测试身份的静态名称.
     &'static str,
 );
 
-/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
+/// 内核或台账测试的原始请求, 故意不实现 Clone, 以验证所有权保留.
 #[derive(Debug)]
 struct Request(
-    /// 原始请求文本，失败时必须原样归还或继续保留。
+    /// 原始请求文本, 失败时必须原样归还或继续保留.
     String,
 );
 
-/// 验证创建 Attempt 保持授权身份、Operation 身份和原始请求关联。
+/// 验证创建 Attempt 保持授权身份, Operation 身份和原始请求关联.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn creates_attempt_with_bound_identity_and_request() {
     let operation = Operation::new(Identity("operation-1"), Request(String::from("request")));

@@ -1,31 +1,31 @@
 use beamlet_kernel::{AcceptReportError, Operation, Report};
 
-/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
+/// 内核或台账测试的原始请求, 故意不实现 Clone, 以验证所有权保留.
 #[derive(Debug)]
 struct Request(
-    /// 原始请求文本，失败时必须原样归还或继续保留。
+    /// 原始请求文本, 失败时必须原样归还或继续保留.
     String,
 );
 
-/// 报告接受测试中的自定义报告身份，避免把身份固定为字符串。
+/// 报告接受测试中的自定义报告身份, 避免把身份固定为字符串.
 #[derive(Debug)]
 struct ReportId(
-    /// 测试报告的静态名称。
+    /// 测试报告的静态名称.
     &'static str,
 );
 
-/// 作为 Report 业务结果保存的失败值；业务失败不等于报告关联失败。
+/// 作为 Report 业务结果保存的失败值; 业务失败不等于报告关联失败.
 #[derive(Debug, PartialEq, Eq)]
 struct Failure(
-    /// 测试业务失败的说明文本。
+    /// 测试业务失败的说明文本.
     &'static str,
 );
 
-/// 验证内核借用完整报告接受结果，无需克隆原请求或结果。
+/// 验证内核借用完整报告接受结果, 无需克隆原请求或结果.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn accepts_complete_report_without_cloning_request_or_result() {
     let operation = Operation::new("operation-1", Request(String::from("request")));
@@ -49,11 +49,11 @@ fn accepts_complete_report_without_cloning_request_or_result() {
     assert_eq!(report.into_result(), Failure("result"));
 }
 
-/// 验证 Operation 不匹配时错误归还原始等待对象。
+/// 验证 Operation 不匹配时错误归还原始等待对象.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn operation_mismatch_returns_original_operation() {
     let (operation, attempt) = Operation::new("operation-1", "request").create_attempt(1);
@@ -82,11 +82,11 @@ fn operation_mismatch_returns_original_operation() {
     let _closed = operation.close();
 }
 
-/// 验证一次报告接受后可再签发授权，同时拒绝旧授权报告。
+/// 验证一次报告接受后可再签发授权, 同时拒绝旧授权报告.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn retries_after_failure_and_rejects_old_report() {
     let (operation, first) = Operation::new("operation-1", "request").create_attempt(1);

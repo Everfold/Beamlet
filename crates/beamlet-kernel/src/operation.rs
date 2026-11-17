@@ -14,7 +14,7 @@ pub enum OperationStatus {
 /// 没有等待报告的 Attempt, 可以创建授权或结束 Operation.
 #[derive(Debug)]
 pub struct Ready {
-    /// 底层状态机的 Ready 类型状态，保证只有合法操作可调用。
+    /// 底层状态机的 Ready 类型状态, 保证只有合法操作可调用.
     machine: lifecycle::Lifecycle<(), lifecycle::Ready>,
 }
 
@@ -22,110 +22,110 @@ pub struct Ready {
 ///
 /// # 泛型参数
 ///
-/// - `A`：Attempt 身份类型。
+/// - `A`: Attempt 身份类型.
 #[derive(Debug)]
 pub struct AwaitingReport<A> {
-    /// 底层状态机的 AwaitingReport 类型状态。
+    /// 底层状态机的 AwaitingReport 类型状态.
     machine: lifecycle::Lifecycle<(), lifecycle::AwaitingReport>,
-    /// 当前唯一等待报告的 Attempt 身份。
+    /// 当前唯一等待报告的 Attempt 身份.
     attempt_id: A,
 }
 
 /// Operation 已结束, 允许重复关闭.
 #[derive(Debug)]
 pub struct Closed {
-    /// 底层状态机的 Closed 终态。
+    /// 底层状态机的 Closed 终态.
     machine: lifecycle::Lifecycle<(), lifecycle::Closed>,
 }
 
 /// 身份与请求保持不变的 Operation, S 表达当前生命周期状态.
 ///
-/// Ready 可签发或关闭；AwaitingReport 只接受匹配报告；Closed 不再执行。
+/// Ready 可签发或关闭; AwaitingReport 只接受匹配报告; Closed 不再执行.
 ///
 /// # 泛型参数
 ///
-/// - `O`：Operation 身份类型。
-/// - `P`：原始请求类型。
-/// - `S`：生命周期类型状态，默认 Ready。
+/// - `O`: Operation 身份类型.
+/// - `P`: 原始请求类型.
+/// - `S`: 生命周期类型状态, 默认 Ready.
 #[derive(Debug)]
 #[must_use]
 pub struct Operation<O, P, S = Ready> {
-    /// Operation 的固定身份，恢复或重复创建失败时仍保留输入所有权。
+    /// Operation 的固定身份, 恢复或重复创建失败时仍保留输入所有权.
     id: O,
-    /// Operation 的原始请求，不随生命周期转换改变。
+    /// Operation 的原始请求, 不随生命周期转换改变.
     request: P,
-    /// 当前生命周期的类型状态，决定可用的转换方法。
+    /// 当前生命周期的类型状态, 决定可用的转换方法.
     state: S,
 }
 
 impl<O, P, S> Operation<O, P, S> {
-    /// 借用 Operation 的固定身份。
+    /// 借用 Operation 的固定身份.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, S>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P, S>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 原 Operation 身份的引用，生命周期转换不改变它。
+    /// 原 Operation 身份的引用, 生命周期转换不改变它.
     pub fn id(&self) -> &O {
         &self.id
     }
 
-    /// 借用 Operation 保存的原始业务请求。
+    /// 借用 Operation 保存的原始业务请求.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, S>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P, S>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 原请求的只读引用，不转移所有权。
+    /// 原请求的只读引用, 不转移所有权.
     pub fn request(&self) -> &P {
         &self.request
     }
 }
 
 impl<O, P> Operation<O, P> {
-    /// 查询 Ready Operation 的状态标签。
+    /// 查询 Ready Operation 的状态标签.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// `OperationStatus::Ready`。
+    /// `OperationStatus::Ready`.
     pub fn status(&self) -> OperationStatus {
         OperationStatus::Ready
     }
 
-    /// 按已持久化的身份和请求重建已关闭 Operation。
+    /// 按已持久化的身份和请求重建已关闭 Operation.
     ///
     /// 调用者负责确认日志与快照的一致性.
     ///
     /// # 参数
     ///
-    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
-    /// - `request`：创建 Operation 时的原始业务请求；状态转换保持其内容。
+    /// - `id`: Operation 的固定身份, 用于创建, 恢复或查询对应操作.
+    /// - `request`: 创建 Operation 时的原始业务请求; 状态转换保持其内容.
     ///
     /// # 返回值
     ///
-    /// Closed 状态的 Operation，不重新触发关闭动作。
+    /// Closed 状态的 Operation, 不重新触发关闭动作.
     pub fn restore_closed(id: O, request: P) -> Operation<O, P, Closed> {
         Self::new(id, request).close()
     }
 
-    /// 使用身份和原始请求创建 Ready Operation。
+    /// 使用身份和原始请求创建 Ready Operation.
     ///
     /// # 参数
     ///
-    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
-    /// - `request`：创建 Operation 时的原始业务请求；状态转换保持其内容。
+    /// - `id`: Operation 的固定身份, 用于创建, 恢复或查询对应操作.
+    /// - `request`: 创建 Operation 时的原始业务请求; 状态转换保持其内容.
     ///
     /// # 返回值
     ///
-    /// 处于 Ready 的 Operation，尚未签发 Attempt。
+    /// 处于 Ready 的 Operation, 尚未签发 Attempt.
     pub fn new(id: O, request: P) -> Self {
         Self {
             id,
@@ -136,18 +136,18 @@ impl<O, P> Operation<O, P> {
         }
     }
 
-    /// 消费 Ready Operation 并签发一个新的 Attempt。
+    /// 消费 Ready Operation 并签发一个新的 Attempt.
     ///
     /// 调用者提供未使用的 Attempt 身份. 两个身份各克隆一次供授权独立持有.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P>` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `attempt_id`：为本次授权分配的身份；Ledger 额外拒绝全台账已使用过的身份。
+    /// - `self`: 当前 `Operation<O, P>` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `attempt_id`: 为本次授权分配的身份; Ledger 额外拒绝全台账已使用过的身份.
     ///
     /// # 返回值
     ///
-    /// 二元组 `(等待报告的 Operation, Attempt)`；二者使用同一 Operation/Attempt 身份。
+    /// 二元组 `(等待报告的 Operation, Attempt)`; 二者使用同一 Operation/Attempt 身份.
     pub fn create_attempt<A: Clone>(
         self,
         attempt_id: A,
@@ -168,15 +168,15 @@ impl<O, P> Operation<O, P> {
         (operation, attempt)
     }
 
-    /// 把 Ready Operation 转换为 Closed。
+    /// 把 Ready Operation 转换为 Closed.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P>` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `self`: 当前 `Operation<O, P>` 的值; 调用后转移其所有权(Copy 类型按值复制).
     ///
     /// # 返回值
     ///
-    /// 保留身份和请求的 Closed Operation。
+    /// 保留身份和请求的 Closed Operation.
     pub fn close(self) -> Operation<O, P, Closed> {
         Operation {
             id: self.id,
@@ -189,19 +189,19 @@ impl<O, P> Operation<O, P> {
 }
 
 impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
-    /// 根据已保存的授权重建等待报告的 Operation。
+    /// 根据已保存的授权重建等待报告的 Operation.
     ///
     /// 调用者负责确认快照与历史一致; 此处只验证授权所属身份.
     ///
     /// # 参数
     ///
-    /// - `id`：Operation 的固定身份，用于创建、恢复或查询对应操作。
-    /// - `request`：创建 Operation 时的原始业务请求；状态转换保持其内容。
-    /// - `attempt`：恢复时已保存的授权，其 operation_id 必须与 id 一致。
+    /// - `id`: Operation 的固定身份, 用于创建, 恢复或查询对应操作.
+    /// - `request`: 创建 Operation 时的原始业务请求; 状态转换保持其内容.
+    /// - `attempt`: 恢复时已保存的授权, 其 operation_id 必须与 id 一致.
     ///
     /// # 返回值
     ///
-    /// 成功返回 AwaitingReport Operation；授权所属 Operation 不符时返回携带全部输入的错误。
+    /// 成功返回 AwaitingReport Operation; 授权所属 Operation 不符时返回携带全部输入的错误.
     ///
     /// # Errors
     ///
@@ -233,44 +233,44 @@ impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
         })
     }
 
-    /// 查询等待报告 Operation 的状态标签。
+    /// 查询等待报告 Operation 的状态标签.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, AwaitingReport<A>>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P, AwaitingReport<A>>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// `OperationStatus::AwaitingReport`。
+    /// `OperationStatus::AwaitingReport`.
     pub fn status(&self) -> OperationStatus {
         OperationStatus::AwaitingReport
     }
 
-    /// 借用当前等待报告的 Attempt 身份。
+    /// 借用当前等待报告的 Attempt 身份.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, AwaitingReport<A>>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P, AwaitingReport<A>>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 当前授权身份的引用，不创建替代授权。
+    /// 当前授权身份的引用, 不创建替代授权.
     pub fn pending_attempt_id(&self) -> &A {
         &self.state.attempt_id
     }
 
-    /// 校验完整报告的关联并将 Operation 转回 Ready。
+    /// 校验完整报告的关联并将 Operation 转回 Ready.
     ///
     /// 调用者保证报告对应已结束的 Attempt, 结果是否满足请求由外层判断.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, AwaitingReport<A>>` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `report`：完整报告，包含 Operation/Attempt 关联、报告身份及业务结果。
+    /// - `self`: 当前 `Operation<O, P, AwaitingReport<A>>` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `report`: 完整报告, 包含 Operation/Attempt 关联, 报告身份及业务结果.
     ///
     /// # 返回值
     ///
-    /// 成功返回 Ready Operation；关联不符时错误保留原等待对象。
+    /// 成功返回 Ready Operation; 关联不符时错误保留原等待对象.
     ///
     /// # Errors
     ///
@@ -301,28 +301,28 @@ impl<O, P, A> Operation<O, P, AwaitingReport<A>> {
 }
 
 impl<O, P> Operation<O, P, Closed> {
-    /// 查询已关闭 Operation 的状态标签。
+    /// 查询已关闭 Operation 的状态标签.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, Closed>` 的共享引用。
+    /// - `self`: 当前 `Operation<O, P, Closed>` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// `OperationStatus::Closed`。
+    /// `OperationStatus::Closed`.
     pub fn status(&self) -> OperationStatus {
         OperationStatus::Closed
     }
 
-    /// 对已经关闭的 Operation 幂等关闭。
+    /// 对已经关闭的 Operation 幂等关闭.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Operation<O, P, Closed>` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `self`: 当前 `Operation<O, P, Closed>` 的值; 调用后转移其所有权(Copy 类型按值复制).
     ///
     /// # 返回值
     ///
-    /// 原 Closed Operation，自身状态与身份不变。
+    /// 原 Closed Operation, 自身状态与身份不变.
     pub fn close(self) -> Self {
         debug_assert!(self.state.machine.is_finished());
         self

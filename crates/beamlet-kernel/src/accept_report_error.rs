@@ -4,7 +4,7 @@ use std::fmt;
 ///
 /// # 泛型参数
 ///
-/// - `T`：失败后可取回的 Operation 类型。
+/// - `T`: 失败后可取回的 Operation 类型.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum AcceptReportError<T> {
@@ -21,15 +21,15 @@ pub enum AcceptReportError<T> {
 }
 
 impl<T> AcceptReportError<T> {
-    /// 从报告校验错误中取回未被改变的 Operation。
+    /// 从报告校验错误中取回未被改变的 Operation.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `AcceptReportError<T>` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `self`: 当前 `AcceptReportError<T>` 的值; 调用后转移其所有权(Copy 类型按值复制).
     ///
     /// # 返回值
     ///
-    /// 原 Operation 的所有权，供调用者继续等待正确报告。
+    /// 原 Operation 的所有权, 供调用者继续等待正确报告.
     #[must_use]
     pub fn into_operation(self) -> T {
         match self {
@@ -41,16 +41,16 @@ impl<T> AcceptReportError<T> {
 }
 
 impl<T> fmt::Display for AcceptReportError<T> {
-    /// 向格式化目标写入 `AcceptReportError<T>` 的显示文本。
+    /// 向格式化目标写入 `AcceptReportError<T>` 的显示文本.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `AcceptReportError<T>` 的共享引用。
-    /// - `formatter`：接收格式化文本的写入目标。
+    /// - `self`: 当前 `AcceptReportError<T>` 的共享引用.
+    /// - `formatter`: 接收格式化文本的写入目标.
     ///
     /// # 返回值
     ///
-    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
+    /// 写入成功返回 `Ok(())`; 格式化目标拒绝写入时返回 `fmt::Error`.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::OperationMismatch { .. } => "report belongs to a different operation",

@@ -1,32 +1,32 @@
 use beamlet_kernel::{AcceptReportError, Operation, OperationStatus};
 use beamlet_primitives::{Attempt, Report};
 
-/// 恢复测试的自定义身份，验证无需克隆输入也能重建状态。
+/// 恢复测试的自定义身份, 验证无需克隆输入也能重建状态.
 #[derive(Debug, PartialEq, Eq)]
 struct Identity(
-    /// 身份的数值表示。
+    /// 身份的数值表示.
     u64,
 );
 
-/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
+/// 内核或台账测试的原始请求, 故意不实现 Clone, 以验证所有权保留.
 #[derive(Debug)]
 struct Request(
-    /// 原始请求文本，失败时必须原样归还或继续保留。
+    /// 原始请求文本, 失败时必须原样归还或继续保留.
     String,
 );
 
-/// 不提供额外能力的不透明身份，用于验证 Closed 状态恢复。
+/// 不提供额外能力的不透明身份, 用于验证 Closed 状态恢复.
 #[derive(Debug)]
 struct OpaqueIdentity(
-    /// 不透明身份拥有的文本数据。
+    /// 不透明身份拥有的文本数据.
     String,
 );
 
-/// 验证从已保存授权恢复等待状态，不重新签发或克隆输入。
+/// 验证从已保存授权恢复等待状态, 不重新签发或克隆输入.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
     let operation = Operation::restore_awaiting_report(
@@ -55,11 +55,11 @@ fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
     assert_eq!(ready.close().status(), OperationStatus::Closed);
 }
 
-/// 验证恢复时身份不匹配会归还全部输入数据。
+/// 验证恢复时身份不匹配会归还全部输入数据.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restore_mismatch_returns_all_owned_inputs() {
     let error = Operation::restore_awaiting_report(
@@ -76,11 +76,11 @@ fn restore_mismatch_returns_all_owned_inputs() {
     assert_eq!(attempt.id().0, 7);
 }
 
-/// 验证可以使用不透明身份恢复 Closed Operation。
+/// 验证可以使用不透明身份恢复 Closed Operation.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restores_closed_with_opaque_identity() {
     let operation = Operation::restore_closed(
@@ -95,11 +95,11 @@ fn restores_closed_with_opaque_identity() {
     assert_eq!(closed.request().0, "request");
 }
 
-/// 验证恢复后的等待对象拒绝旧报告后仍可接受正确报告。
+/// 验证恢复后的等待对象拒绝旧报告后仍可接受正确报告.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restored_waiting_rejects_stale_report_and_remains_usable() {
     let operation = Operation::restore_awaiting_report(1, "request", Attempt::from_parts(1, 7))

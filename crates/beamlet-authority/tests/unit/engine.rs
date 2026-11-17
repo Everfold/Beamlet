@@ -1,11 +1,11 @@
 use super::*;
 use beamlet_primitives::{Attempt, Report};
 
-/// 验证交付或报告关联错误不改变当前等待的 Attempt。
+/// 验证交付或报告关联错误不改变当前等待的 Attempt.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn errors_preserve_pending_attempt() {
     let id = "operation".to_owned();

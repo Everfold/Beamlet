@@ -12,23 +12,23 @@ use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
-/// 单个角色的装配信息，包含持久配置和新生成的本次会话身份。
+/// 单个角色的装配信息, 包含持久配置和新生成的本次会话身份.
 pub(crate) struct RunningRole {
-    /// 该角色的持久配置及命名基础设施引用。
+    /// 该角色的持久配置及命名基础设施引用.
     pub settings: RoleSettings,
-    /// 由固定 role_id 和本次新 session_id 组成的运行身份。
+    /// 由固定 role_id 和本次新 session_id 组成的运行身份.
     pub instance: RoleInstance,
 }
 impl RunningRole {
-    /// 使用角色固定身份并生成本次运行的会话 UUID。
+    /// 使用角色固定身份并生成本次运行的会话 UUID.
     ///
     /// # 参数
     ///
-    /// - `settings`：单个角色的固定 UUID、标签、基础设施引用和角色专属配置。
+    /// - `settings`: 单个角色的固定 UUID, 标签, 基础设施引用和角色专属配置.
     ///
     /// # 返回值
     ///
-    /// 携带原角色配置和新会话身份的角色运行实例。
+    /// 携带原角色配置和新会话身份的角色运行实例.
     pub(crate) fn new(settings: RoleSettings) -> Self {
         let instance = RoleInstance {
             role_id: settings.role_id,
@@ -36,18 +36,18 @@ impl RunningRole {
         };
         Self { settings, instance }
     }
-    /// 根据角色种类装配并运行 Authority 或 Worker。
+    /// 根据角色种类装配并运行 Authority 或 Worker.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunningRole` 的值；调用后转移其所有权（Copy 类型按值复制）。
-    /// - `infrastructure`：该角色使用的已连接 NATS 句柄，可与其他角色共享。
-    /// - `local`：分配给该角色的本地终端队列；Worker 不使用文本提交。
-    /// - `shutdown`：停止通知或 future；完成后停止新接收并按角色语义排空。
+    /// - `self`: 当前 `RunningRole` 的值; 调用后转移其所有权(Copy 类型按值复制).
+    /// - `infrastructure`: 该角色使用的已连接 NATS 句柄, 可与其他角色共享.
+    /// - `local`: 分配给该角色的本地终端队列; Worker 不使用文本提交.
+    /// - `shutdown`: 停止通知或 future; 完成后停止新接收并按角色语义排空.
     ///
     /// # 返回值
     ///
-    /// 正常停止返回 `Ok(())`；绑定、构造、运行或必要的刷新失败时返回带角色上下文的错误。
+    /// 正常停止返回 `Ok(())`; 绑定, 构造, 运行或必要的刷新失败时返回带角色上下文的错误.
     pub(crate) async fn run(
         self,
         infrastructure: Nats,
@@ -105,15 +105,15 @@ impl RunningRole {
         .instrument(span)
         .await
     }
-    /// 按角色配置创建本地队列，Authority 同时提供终端路由目标。
+    /// 按角色配置创建本地队列, Authority 同时提供终端路由目标.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `RunningRole` 的共享引用。
+    /// - `self`: 当前 `RunningRole` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 二元组 `(目标, 接收端)`；Authority 的目标为 `Some`，Worker 的目标为 `None`。
+    /// 二元组 `(目标, 接收端)`; Authority 的目标为 `Some`, Worker 的目标为 `None`.
     pub(crate) fn local_input(&self) -> (Option<terminal::Target>, terminal::Input) {
         let (send, receive) = mpsc::channel(match &self.settings.kind {
             Role::Authority(config) => config.input_capacity,

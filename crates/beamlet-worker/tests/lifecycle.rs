@@ -17,42 +17,42 @@ use tokio::{
     time::timeout,
 };
 
-/// Worker 生命周期测试的步骤等待期限：3 秒。
+/// Worker 生命周期测试的步骤等待期限: 3 秒.
 const DEADLINE: Duration = Duration::from_secs(3);
-/// 限制异步测试步骤的等待时长。
+/// 限制异步测试步骤的等待时长.
 ///
 /// # 参数
 ///
-/// - `f`：需要限制等待时长的异步测试步骤。
+/// - `f`: 需要限制等待时长的异步测试步骤.
 ///
 /// # 返回值
 ///
-/// 原 future 的输出；未在测试期限内完成时 panic。
+/// 原 future 的输出; 未在测试期限内完成时 panic.
 async fn within<T>(f: impl Future<Output = T>) -> T {
     timeout(DEADLINE, f)
         .await
         .expect("worker lifecycle stalled")
 }
-/// 构造 Worker 生命周期测试复用的固定角色实例。
+/// 构造 Worker 生命周期测试复用的固定角色实例.
 ///
 /// # 返回值
 ///
-/// 角色 UUID 数值为 3、会话 UUID 数值为 4 的 RoleInstance。
+/// 角色 UUID 数值为 3, 会话 UUID 数值为 4 的 RoleInstance.
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: Uuid::from_u128(3),
         session_id: Uuid::from_u128(4),
     }
 }
-/// 按测试序号创建关联身份明确的 Worker 调用。
+/// 按测试序号创建关联身份明确的 Worker 调用.
 ///
 /// # 参数
 ///
-/// - `index`：测试调用序号，用于关联 Operation、Attempt 和业务数据。
+/// - `index`: 测试调用序号, 用于关联 Operation, Attempt 和业务数据.
 ///
 /// # 返回值
 ///
-/// 供指定测试 Worker 执行的 Call。
+/// 供指定测试 Worker 执行的 Call.
 fn call(index: usize) -> Call {
     Call {
         pool: Pool::default(),
@@ -66,101 +66,101 @@ fn call(index: usize) -> Call {
         payload: format!("payload-{index}"),
     }
 }
-/// 把测试调用队列适配为 WorkerInbox 的接收端。
+/// 把测试调用队列适配为 WorkerInbox 的接收端.
 struct Inbox(
-    /// 可以被关闭并继续排空的 Incoming 队列。
+    /// 可以被关闭并继续排空的 Incoming 队列.
     mpsc::Receiver<Incoming>,
 );
 impl WorkerInbox for Inbox {
-    /// 接收测试队列中下一份 Worker 调用。
+    /// 接收测试队列中下一份 Worker 调用.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Inbox` 的可变引用。
+    /// - `self`: 当前 `Inbox` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 有调用为 `Ok(Some(Incoming))`；关闭且排空后为 `Ok(None)`。
+    /// 有调用为 `Ok(Some(Incoming))`; 关闭且排空后为 `Ok(None)`.
     async fn receive(&mut self) -> Result<Option<Incoming>, TransportError> {
         Ok(self.0.recv().await)
     }
-    /// 停止测试 Worker 队列接收新调用。
+    /// 停止测试 Worker 队列接收新调用.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Inbox` 的可变引用。
+    /// - `self`: 当前 `Inbox` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 返回 `Ok(())`，已排队的调用仍可被消费。
+    /// 返回 `Ok(())`, 已排队的调用仍可被消费.
     async fn stop(&mut self) -> Result<(), TransportError> {
         self.0.close();
         Ok(())
     }
 }
-/// 可控制连接、探测和刷新阻塞的公告通道替身。
+/// 可控制连接, 探测和刷新阻塞的公告通道替身.
 struct Announcements {
-    /// 把 Worker 发布的完整公告转给测试观察者的通道。
+    /// 把 Worker 发布的完整公告转给测试观察者的通道.
     snapshots: mpsc::UnboundedSender<Presence>,
-    /// 从测试驱动读取模拟连接状态的接收端。
+    /// 从测试驱动读取模拟连接状态的接收端.
     link: watch::Receiver<Connection>,
-    /// 接收测试触发的探测或连接变化事件。
+    /// 接收测试触发的探测或连接变化事件.
     events: mpsc::Receiver<PresenceEvent>,
-    /// 为 true 时让 flush 挂起，验证公告期限与取消清理。
+    /// 为 true 时让 flush 挂起, 验证公告期限与取消清理.
     block_flush: Arc<AtomicBool>,
 }
 impl PresenceChannel for Announcements {
-    /// 读取测试驱动的模拟连接状态。
+    /// 读取测试驱动的模拟连接状态.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Announcements` 的共享引用。
+    /// - `self`: 当前 `Announcements` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 当前 watch 中的 Connection 副本。
+    /// 当前 watch 中的 Connection 副本.
     fn connection(&self) -> Connection {
         *self.link.borrow()
     }
-    /// 读取测试驱动发送的探测或连接事件。
+    /// 读取测试驱动发送的探测或连接事件.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Announcements` 的可变引用。
+    /// - `self`: 当前 `Announcements` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 成功返回 PresenceEvent；事件入口关闭返回 TransportError。
+    /// 成功返回 PresenceEvent; 事件入口关闭返回 TransportError.
     async fn receive(&mut self) -> Result<PresenceEvent, TransportError> {
         self.events
             .recv()
             .await
             .ok_or_else(|| TransportError::new("probe channel closed"))
     }
-    /// 把 Worker 完整公告转发给测试观察者。
+    /// 把 Worker 完整公告转发给测试观察者.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Announcements` 的共享引用。
-    /// - `presence`：Worker 的完整状态快照，包括 pool、角色会话、能力、序号和运行状态。
+    /// - `self`: 当前 `Announcements` 的共享引用.
+    /// - `presence`: Worker 的完整状态快照, 包括 pool, 角色会话, 能力, 序号和运行状态.
     ///
     /// # 返回值
     ///
-    /// 观察者接收成功返回 `Ok(())`；观察队列关闭返回 TransportError。
+    /// 观察者接收成功返回 `Ok(())`; 观察队列关闭返回 TransportError.
     async fn publish(&self, presence: &Presence) -> Result<(), TransportError> {
         self.snapshots
             .send(presence.clone())
             .map_err(TransportError::new)
     }
-    /// 按测试开关模拟立即完成或永久挂起的传输刷新。
+    /// 按测试开关模拟立即完成或永久挂起的传输刷新.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Announcements` 的共享引用。
+    /// - `self`: 当前 `Announcements` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 未阻塞时为 `Ok(())`；阻塞模式不主动完成，需要由上层期限或取消结束等待。
+    /// 未阻塞时为 `Ok(())`; 阻塞模式不主动完成, 需要由上层期限或取消结束等待.
     async fn flush(&self) -> Result<(), TransportError> {
         if self.block_flush.load(Ordering::SeqCst) {
             std::future::pending::<()>().await;
@@ -168,32 +168,32 @@ impl PresenceChannel for Announcements {
         Ok(())
     }
 }
-/// Worker 生命周期测试的输入、公告、连接与停止控制集合。
+/// Worker 生命周期测试的输入, 公告, 连接与停止控制集合.
 struct Harness {
-    /// 向 Worker 提供调用的有界发送端。
+    /// 向 Worker 提供调用的有界发送端.
     input: mpsc::Sender<Incoming>,
-    /// 读取 Worker 发布的全部完整公告。
+    /// 读取 Worker 发布的全部完整公告.
     snapshots: mpsc::UnboundedReceiver<Presence>,
-    /// 供测试修改连接世代与在线状态的发送端。
+    /// 供测试修改连接世代与在线状态的发送端.
     link: watch::Sender<Connection>,
-    /// 供测试触发探测或连接事件的发送端。
+    /// 供测试触发探测或连接事件的发送端.
     events: mpsc::Sender<PresenceEvent>,
-    /// 为 true 时让 flush 挂起，验证公告期限与取消清理。
+    /// 为 true 时让 flush 挂起, 验证公告期限与取消清理.
     block_flush: Arc<AtomicBool>,
-    /// 向运行中的 Worker 请求停止的一次性发送端。
+    /// 向运行中的 Worker 请求停止的一次性发送端.
     stop: oneshot::Sender<()>,
-    /// Worker 主循环的异步任务句柄，供测试等待或取消。
+    /// Worker 主循环的异步任务句柄, 供测试等待或取消.
     task: tokio::task::JoinHandle<Result<(), RunError>>,
 }
-/// 给 Worker 装配可控输入、连接和公告通道并启动运行。
+/// 给 Worker 装配可控输入, 连接和公告通道并启动运行.
 ///
 /// # 参数
 ///
-/// - `worker`：已校验构造完成、即将接入可控通道的 Worker。
+/// - `worker`: 已校验构造完成, 即将接入可控通道的 Worker.
 ///
 /// # 返回值
 ///
-/// Harness，供测试发送调用、模拟连接/探测、观察公告及触发停止。
+/// Harness, 供测试发送调用, 模拟连接/探测, 观察公告及触发停止.
 fn start(worker: Worker) -> Harness {
     let (input, inbox) = mpsc::channel(8);
     let (snapshot_send, snapshots) = mpsc::unbounded_channel();
@@ -221,16 +221,16 @@ fn start(worker: Worker) -> Harness {
         task,
     }
 }
-/// 持续读取公告，直到出现指定 Worker 运行状态。
+/// 持续读取公告, 直到出现指定 Worker 运行状态.
 ///
 /// # 参数
 ///
-/// - `h`：Worker 生命周期测试的控制与观察句柄。
-/// - `state`：期望下一次观察到的 Worker 公告状态。
+/// - `h`: Worker 生命周期测试的控制与观察句柄.
+/// - `state`: 期望下一次观察到的 Worker 公告状态.
 ///
 /// # 返回值
 ///
-/// 第一份匹配状态的 Presence；等待超时或公告队列关闭时 panic。
+/// 第一份匹配状态的 Presence; 等待超时或公告队列关闭时 panic.
 async fn next(h: &mut Harness, state: PresenceState) -> Presence {
     loop {
         let snapshot = within(h.snapshots.recv()).await.unwrap();
@@ -240,11 +240,11 @@ async fn next(h: &mut Harness, state: PresenceState) -> Presence {
     }
 }
 
-/// 验证执行挂起期间心跳、探测、重连和 Draining 公告仍推进。
+/// 验证执行挂起期间心跳, 探测, 重连和 Draining 公告仍推进.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn heartbeats_probe_reconnect_and_draining_progress_while_execution_is_suspended() {
     let mut capabilities = Capabilities::new();
@@ -347,11 +347,11 @@ async fn heartbeats_probe_reconnect_and_draining_progress_while_execution_is_sus
     within(h.task).await.unwrap().unwrap();
 }
 
-/// 验证禁用能力和错误目标不会执行，报告发送等待仍占用并发名额。
+/// 验证禁用能力和错误目标不会执行, 报告发送等待仍占用并发名额.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn disabled_or_misrouted_calls_never_execute_and_reply_waiting_occupies_capacity() {
     let mut capabilities = Capabilities::new();
@@ -454,11 +454,11 @@ async fn disabled_or_misrouted_calls_never_execute_and_reply_waiting_occupies_ca
     within(h.task).await.unwrap().unwrap();
 }
 
-/// 验证取消 Worker 运行会释放异步处理器并关闭调用入口。
+/// 验证取消 Worker 运行会释放异步处理器并关闭调用入口.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn dropping_run_releases_suspended_handler_and_closes_input() {
     let mut capabilities = Capabilities::new();
@@ -491,11 +491,11 @@ async fn dropping_run_releases_suspended_handler_and_closes_input() {
     assert!(h.input.is_closed());
 }
 
-/// 验证离线刷新受到期限限制，并保留停止信号的原始错误。
+/// 验证离线刷新受到期限限制, 并保留停止信号的原始错误.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn offline_flush_is_bounded_and_shutdown_source_is_preserved() {
     let mut capabilities = Capabilities::new();

@@ -1,13 +1,13 @@
 //! NATS 上的定向收发与连接观测, 不保存角色策略或 Operation 状态.
-/// Authority 控制端点的绑定、事件接收与探测发送。
+/// Authority 控制端点的绑定, 事件接收与探测发送.
 mod authority;
-/// NATS 发现订阅及指定 Authority 的 v3 请求发送。
+/// NATS 发现订阅及指定 Authority 的 v3 请求发送.
 mod client;
-/// NATS 指定 Worker 会话的单次交付与报告来源关联校验。
+/// NATS 指定 Worker 会话的单次交付与报告来源关联校验.
 mod delivery;
-/// 包含 pool、角色和会话身份的 NATS 主题构造规则。
+/// 包含 pool, 角色和会话身份的 NATS 主题构造规则.
 pub mod subject;
-/// Worker 调用与公告端点的绑定、交付、探测和接收。
+/// Worker 调用与公告端点的绑定, 交付, 探测和接收.
 mod worker;
 
 pub use authority::AuthorityEndpoint;
@@ -28,11 +28,11 @@ pub struct Options {
     pub subscription_capacity: usize,
 }
 impl Default for Options {
-    /// 构造 NATS 默认连接期限和订阅容量。
+    /// 构造 NATS 默认连接期限和订阅容量.
     ///
     /// # 返回值
     ///
-    /// 连接期限 10 秒、订阅容量 16 的 Options。
+    /// 连接期限 10 秒, 订阅容量 16 的 Options.
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(10),
@@ -43,28 +43,28 @@ impl Default for Options {
 
 /// 可被多个角色共享的连接; clone 共享连接, 再次 connect 创建独立连接.
 ///
-/// 使用 v3 文本协议；重连后需新公告才能恢复 Worker 租约。
+/// 使用 v3 文本协议; 重连后需新公告才能恢复 Worker 租约.
 #[derive(Debug, Clone)]
 pub struct Nats {
-    /// 实际发送、订阅与重连使用的 async_nats 客户端。
+    /// 实际发送, 订阅与重连使用的 async_nats 客户端.
     client: async_nats::Client,
-    /// 连接事件回调维护的当前状态与世代接收端。
+    /// 连接事件回调维护的当前状态与世代接收端.
     status: watch::Receiver<Connection>,
 }
 impl Nats {
-    /// 校验 NATS 选项并在连接期限内建立客户端连接。
+    /// 校验 NATS 选项并在连接期限内建立客户端连接.
     ///
     /// # 参数
     ///
-    /// - `url`：NATS 服务地址，由调用方从任意配置来源提供。
-    /// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+    /// - `url`: NATS 服务地址, 由调用方从任意配置来源提供.
+    /// - `options`: 当前模块的运行参数; 期限使用 Duration, 容量/并发由对应字段约束.
     ///
     /// # 返回值
     ///
-    /// 成功返回 Nats 句柄；参数非法、连接失败或超时返回 TransportError。
+    /// 成功返回 Nats 句柄; 参数非法, 连接失败或超时返回 TransportError.
     ///
     /// # Errors
-    /// 参数无效、连接失败或超过期限时返回错误.
+    /// 参数无效, 连接失败或超过期限时返回错误.
     pub async fn connect(url: &str, options: Options) -> Result<Self, TransportError> {
         if options.connect_timeout.is_zero()
             || std::time::Instant::now()
@@ -133,29 +133,29 @@ impl Nats {
         });
         Ok(Self { client, status })
     }
-    /// 取得能够持续读取当前连接状态的视图。
+    /// 取得能够持续读取当前连接状态的视图.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Nats` 的共享引用。
+    /// - `self`: 当前 `Nats` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 连接视图句柄；后续查询反映连接当前世代和状态。
+    /// 连接视图句柄; 后续查询反映连接当前世代和状态.
     pub fn connection(&self) -> ConnectionView {
         let status = self.status.clone();
         ConnectionView::new(move || *status.borrow())
     }
-    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅。
+    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Nats` 的共享引用。
-    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    /// - `self`: 当前 `Nats` 的共享引用.
+    /// - `info`: Authority 的角色/会话身份, 标签及其加入的 pools.
     ///
     /// # 返回值
     ///
-    /// 成功返回 AuthorityEndpoint；绑定非法、订阅或刷新失败返回 TransportError。
+    /// 成功返回 AuthorityEndpoint; 绑定非法, 订阅或刷新失败返回 TransportError.
     ///
     /// # Errors
     /// 身份或 pools 无效, 订阅或刷新失败时返回错误.
@@ -165,16 +165,16 @@ impl Nats {
     ) -> Result<AuthorityEndpoint, TransportError> {
         AuthorityEndpoint::bind(self.clone(), info).await
     }
-    /// 订阅指定 Worker 会话的调用和探测主题。
+    /// 订阅指定 Worker 会话的调用和探测主题.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Nats` 的共享引用。
-    /// - `binding`：Worker 的 pool、角色/会话身份和启用能力集合。
+    /// - `self`: 当前 `Nats` 的共享引用.
+    /// - `binding`: Worker 的 pool, 角色/会话身份和启用能力集合.
     ///
     /// # 返回值
     ///
-    /// 成功返回 `(WorkerEndpoint, PresenceEndpoint)`；绑定、订阅或刷新失败返回 TransportError。
+    /// 成功返回 `(WorkerEndpoint, PresenceEndpoint)`; 绑定, 订阅或刷新失败返回 TransportError.
     ///
     /// # Errors
     /// 身份或能力无效, 订阅或刷新失败时返回错误.
@@ -184,15 +184,15 @@ impl Nats {
     ) -> Result<(WorkerEndpoint, PresenceEndpoint), TransportError> {
         worker::bind(self.clone(), binding).await
     }
-    /// 等待传输缓冲完成刷新。
+    /// 等待传输缓冲完成刷新.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Nats` 的共享引用。
+    /// - `self`: 当前 `Nats` 的共享引用.
     ///
     /// # 返回值
     ///
-    /// 刷新完成返回 `Ok(())`；失败返回 TransportError，成功不代表远端已接受业务。
+    /// 刷新完成返回 `Ok(())`; 失败返回 TransportError, 成功不代表远端已接受业务.
     ///
     /// # Errors
     /// NATS 刷新失败时返回错误.

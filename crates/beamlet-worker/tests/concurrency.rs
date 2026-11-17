@@ -24,32 +24,32 @@ use tokio::{
     time::timeout,
 };
 
-/// Worker 并发测试的总等待期限：8 秒，防止执行控制错误导致挂起。
+/// Worker 并发测试的总等待期限: 8 秒, 防止执行控制错误导致挂起.
 const DEADLINE: Duration = Duration::from_secs(8);
 
-/// 给异步测试步骤施加整体等待期限，防止回归时永久挂起。
+/// 给异步测试步骤施加整体等待期限, 防止回归时永久挂起.
 ///
 /// # 参数
 ///
-/// - `future`：需要在测试期限内完成的异步步骤。
+/// - `future`: 需要在测试期限内完成的异步步骤.
 ///
 /// # 返回值
 ///
-/// future 的原始输出；超过测试期限会 panic 并使测试失败。
+/// future 的原始输出; 超过测试期限会 panic 并使测试失败.
 async fn within<F: Future>(future: F) -> F::Output {
     timeout(DEADLINE, future)
         .await
         .expect("worker concurrency test timed out")
 }
-/// 按测试序号创建关联身份明确的 Worker 调用。
+/// 按测试序号创建关联身份明确的 Worker 调用.
 ///
 /// # 参数
 ///
-/// - `index`：测试调用序号，用于关联 Operation、Attempt 和业务数据。
+/// - `index`: 测试调用序号, 用于关联 Operation, Attempt 和业务数据.
 ///
 /// # 返回值
 ///
-/// 供指定测试 Worker 执行的 Call。
+/// 供指定测试 Worker 执行的 Call.
 fn call(index: usize) -> Call {
     Call {
         pool: Pool::default(),
@@ -66,35 +66,35 @@ fn call(index: usize) -> Call {
         payload: format!("text:{index}"),
     }
 }
-/// 包装真实本地 WorkerInbox，并通知测试停止动作已发生。
+/// 包装真实本地 WorkerInbox, 并通知测试停止动作已发生.
 struct ObservedInbox {
-    /// 实际接收、停止和排空调用的本地端点。
+    /// 实际接收, 停止和排空调用的本地端点.
     inner: WorkerEndpoint,
-    /// 停止输入后发送一次的测试观察通知。
+    /// 停止输入后发送一次的测试观察通知.
     stopped: Option<oneshot::Sender<()>>,
 }
 impl WorkerInbox for ObservedInbox {
-    /// 委托真实本地 Worker 入口接收调用。
+    /// 委托真实本地 Worker 入口接收调用.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `ObservedInbox` 的可变引用。
+    /// - `self`: 当前 `ObservedInbox` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 底层 receive 的原始结果：调用、EOF 或传输错误。
+    /// 底层 receive 的原始结果: 调用, EOF 或传输错误.
     async fn receive(&mut self) -> Result<Option<Incoming>, TransportError> {
         self.inner.receive().await
     }
-    /// 停止真实输入，并通知测试观察者关闭已发生。
+    /// 停止真实输入, 并通知测试观察者关闭已发生.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `ObservedInbox` 的可变引用。
+    /// - `self`: 当前 `ObservedInbox` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// 成功返回 `Ok(())`；底层输入关闭失败返回 TransportError。
+    /// 成功返回 `Ok(())`; 底层输入关闭失败返回 TransportError.
     async fn stop(&mut self) -> Result<(), TransportError> {
         self.inner.stop().await?;
         if let Some(stopped) = self.stopped.take() {
@@ -103,69 +103,69 @@ impl WorkerInbox for ObservedInbox {
         Ok(())
     }
 }
-/// 执行名额计数 guard，正常完成或取消时减少活动计数。
+/// 执行名额计数 guard, 正常完成或取消时减少活动计数.
 struct Active(
-    /// 当前仍在执行的处理器数量。
+    /// 当前仍在执行的处理器数量.
     Arc<AtomicUsize>,
 );
 impl Drop for Active {
-    /// 在测试执行结束或取消时释放活动任务计数。
+    /// 在测试执行结束或取消时释放活动任务计数.
     ///
     /// # 参数
     ///
-    /// - `self`：当前 `Active` 的可变引用。
+    /// - `self`: 当前 `Active` 的可变引用.
     ///
     /// # 返回值
     ///
-    /// `()`；共享计数减一。
+    /// `()`; 共享计数减一.
     fn drop(&mut self) {
         self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
-/// 测试驱动释放一个挂起处理器时指定的行为。
+/// 测试驱动释放一个挂起处理器时指定的行为.
 #[derive(Debug)]
 enum Action {
-    /// 正常执行倒序转换并产生业务结果。
+    /// 正常执行倒序转换并产生业务结果.
     Execute,
-    /// 返回可预期的执行错误，不产生 Report。
+    /// 返回可预期的执行错误, 不产生 Report.
     Reject,
-    /// 触发处理器 panic，用于验证角色监督接收异常。
+    /// 触发处理器 panic, 用于验证角色监督接收异常.
     Panic,
 }
-/// 已经开始但尚未获准完成的处理器通知。
+/// 已经开始但尚未获准完成的处理器通知.
 struct Started {
-    /// 调用序号，用于对应任务、授权和结果。
+    /// 调用序号, 用于对应任务, 授权和结果.
     index: usize,
-    /// 由测试指定本次处理器继续执行、拒绝或 panic 的通道。
+    /// 由测试指定本次处理器继续执行, 拒绝或 panic 的通道.
     release: oneshot::Sender<Action>,
 }
-/// Worker 并发测试的控制和观察集合，拥有所有提交与运行句柄。
+/// Worker 并发测试的控制和观察集合, 拥有所有提交与运行句柄.
 struct Harness {
-    /// 向目标 Worker 交付调用的本地传输句柄。
+    /// 向目标 Worker 交付调用的本地传输句柄.
     delivery: Local,
-    /// 按序号保存的交付等待任务；每项最终返回报告或错误。
+    /// 按序号保存的交付等待任务; 每项最终返回报告或错误.
     responses: BTreeMap<usize, JoinHandle<Result<WorkerReport, DeliveryError>>>,
-    /// 收到每个处理器已经开始的通知。
+    /// 收到每个处理器已经开始的通知.
     started: mpsc::UnboundedReceiver<Started>,
-    /// 向运行中的 Worker 请求停止的一次性发送端。
+    /// 向运行中的 Worker 请求停止的一次性发送端.
     stop: oneshot::Sender<()>,
-    /// 确认输入已关闭新接收的观察端。
+    /// 确认输入已关闭新接收的观察端.
     stopped: oneshot::Receiver<()>,
-    /// Worker 主循环的异步任务句柄，供测试等待或取消。
+    /// Worker 主循环的异步任务句柄, 供测试等待或取消.
     running: JoinHandle<Result<(), RunError>>,
-    /// 已观察到的最大同时活动处理器数。
+    /// 已观察到的最大同时活动处理器数.
     peak: Arc<AtomicUsize>,
 }
-/// 启动可控处理器的 Worker 并并发提交测试调用。
+/// 启动可控处理器的 Worker 并并发提交测试调用.
 ///
 /// # 参数
 ///
-/// - `limit`：Worker 并发上限；零表示不设角色层上限。
-/// - `count`：要提交的测试调用总数，同时决定本地接收缓冲容量。
+/// - `limit`: Worker 并发上限; 零表示不设角色层上限.
+/// - `count`: 要提交的测试调用总数, 同时决定本地接收缓冲容量.
 ///
 /// # 返回值
 ///
-/// Harness，包含每项调用结果、释放执行入口、停止信号和并发峰值观察。
+/// Harness, 包含每项调用结果, 释放执行入口, 停止信号和并发峰值观察.
 fn start(limit: usize, count: usize) -> Harness {
     let delivery = Local::new(count).unwrap();
     let (stop, signal) = oneshot::channel();
@@ -235,16 +235,16 @@ fn start(limit: usize, count: usize) -> Harness {
         peak,
     }
 }
-/// 校验测试报告与序号对应，并提取报告身份。
+/// 校验测试报告与序号对应, 并提取报告身份.
 ///
 /// # 参数
 ///
-/// - `report`：完整报告，包含 Operation/Attempt 关联、报告身份及业务结果。
-/// - `index`：测试调用序号，用于关联 Operation、Attempt 和业务数据。
+/// - `report`: 完整报告, 包含 Operation/Attempt 关联, 报告身份及业务结果.
+/// - `index`: 测试调用序号, 用于关联 Operation, Attempt 和业务数据.
 ///
 /// # 返回值
 ///
-/// Report ID 的副本；Operation、Attempt 或结果不符时 panic。
+/// Report ID 的副本; Operation, Attempt 或结果不符时 panic.
 fn check_report(report: WorkerReport, index: usize) -> String {
     assert_eq!(report.operation_id(), &index.to_string());
     assert_eq!(report.attempt_id(), &format!("attempt:{index}"));
@@ -255,11 +255,11 @@ fn check_report(report: WorkerReport, index: usize) -> String {
     report.id().clone()
 }
 
-/// 验证有限 Worker 并发阻止超额准入，停止后排空队列和运行中任务。
+/// 验证有限 Worker 并发阻止超额准入, 停止后排空队列和运行中任务.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
     within(async {
@@ -323,11 +323,11 @@ async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
     .await;
 }
 
-/// 验证 Worker 的零上限表示无限，可以在完成前接收超过接收缓冲数量的任务。
+/// 验证 Worker 的零上限表示无限, 可以在完成前接收超过接收缓冲数量的任务.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn zero_admits_more_than_the_receive_capacity_without_waiting_for_completion() {
     within(async {
@@ -354,11 +354,11 @@ async fn zero_admits_more_than_the_receive_capacity_without_waiting_for_completi
     .await;
 }
 
-/// 验证执行拒绝和调用者丢弃回复都会释放 Worker 并发名额。
+/// 验证执行拒绝和调用者丢弃回复都会释放 Worker 并发名额.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn execution_rejection_and_abandoned_reply_release_capacity() {
     within(async {
@@ -393,11 +393,11 @@ async fn execution_rejection_and_abandoned_reply_release_capacity() {
     .await;
 }
 
-/// 验证业务处理器 panic 会传播到角色监督层。
+/// 验证业务处理器 panic 会传播到角色监督层.
 ///
 /// # 返回值
 ///
-/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
+/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn execution_panic_is_propagated_to_role_supervision() {
     within(async {

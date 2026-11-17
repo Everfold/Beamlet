@@ -4,15 +4,15 @@ use beamlet_api as api;
 use beamlet_primitives::{Attempt, Report};
 
 impl From<api::Task> for Task {
-    /// 将 `api::Task` 按字段转换为 `Task`，保留业务与路由关联。
+    /// 将 `api::Task` 按字段转换为 `Task`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `task`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `task`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `Task`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `Task`; 不进行网络发送或领域状态推进.
     fn from(task: api::Task) -> Self {
         Self {
             capability: task.capability,
@@ -21,15 +21,15 @@ impl From<api::Task> for Task {
     }
 }
 impl From<Task> for api::Task {
-    /// 将 `Task` 按字段转换为 `api::Task`，保留业务与路由关联。
+    /// 将 `Task` 按字段转换为 `api::Task`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `task`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `task`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Task`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Task`; 不进行网络发送或领域状态推进.
     fn from(task: Task) -> Self {
         Self {
             capability: task.capability,
@@ -38,15 +38,15 @@ impl From<Task> for api::Task {
     }
 }
 impl From<api::Submission> for Submission {
-    /// 将 `api::Submission` 按字段转换为 `Submission`，保留业务与路由关联。
+    /// 将 `api::Submission` 按字段转换为 `Submission`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `submission`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `submission`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `Submission`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `Submission`; 不进行网络发送或领域状态推进.
     fn from(submission: api::Submission) -> Self {
         Self {
             pool: submission.pool,
@@ -56,15 +56,15 @@ impl From<api::Submission> for Submission {
     }
 }
 impl From<Submission> for api::Submission {
-    /// 将 `Submission` 按字段转换为 `api::Submission`，保留业务与路由关联。
+    /// 将 `Submission` 按字段转换为 `api::Submission`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `submission`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `submission`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Submission`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Submission`; 不进行网络发送或领域状态推进.
     fn from(submission: Submission) -> Self {
         Self {
             pool: submission.pool,
@@ -74,15 +74,15 @@ impl From<Submission> for api::Submission {
     }
 }
 impl From<api::Command> for Command {
-    /// 将 `api::Command` 按字段转换为 `Command`，保留业务与路由关联。
+    /// 将 `api::Command` 按字段转换为 `Command`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `command`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `command`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `Command`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `Command`; 不进行网络发送或领域状态推进.
     fn from(command: api::Command) -> Self {
         match command {
             api::Command::Workers {
@@ -109,15 +109,15 @@ impl From<api::Command> for Command {
     }
 }
 impl From<Command> for api::Command {
-    /// 将 `Command` 按字段转换为 `api::Command`，保留业务与路由关联。
+    /// 将 `Command` 按字段转换为 `api::Command`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `command`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `command`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Command`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Command`; 不进行网络发送或领域状态推进.
     fn from(command: Command) -> Self {
         match command {
             Command::Workers {
@@ -144,15 +144,15 @@ impl From<Command> for api::Command {
     }
 }
 impl From<api::Outcome> for Outcome {
-    /// 将 `api::Outcome` 按字段转换为 `Outcome`，保留业务与路由关联。
+    /// 将 `api::Outcome` 按字段转换为 `Outcome`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `outcome`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `outcome`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `Outcome`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `Outcome`; 不进行网络发送或领域状态推进.
     fn from(outcome: api::Outcome) -> Self {
         match outcome {
             api::Outcome::Rejected { reason } => Self::Rejected { reason },
@@ -185,15 +185,15 @@ impl From<api::Outcome> for Outcome {
     }
 }
 impl From<Outcome> for api::Outcome {
-    /// 将 `Outcome` 按字段转换为 `api::Outcome`，保留业务与路由关联。
+    /// 将 `Outcome` 按字段转换为 `api::Outcome`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `outcome`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `outcome`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Outcome`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Outcome`; 不进行网络发送或领域状态推进.
     fn from(outcome: Outcome) -> Self {
         match outcome {
             Outcome::Rejected { reason } => Self::Rejected { reason },
@@ -226,15 +226,15 @@ impl From<Outcome> for api::Outcome {
     }
 }
 impl From<api::Reply> for Reply {
-    /// 将 `api::Reply` 按字段转换为 `Reply`，保留业务与路由关联。
+    /// 将 `api::Reply` 按字段转换为 `Reply`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `reply`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `reply`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `Reply`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `Reply`; 不进行网络发送或领域状态推进.
     fn from(reply: api::Reply) -> Self {
         Self {
             request_id: reply.request_id,
@@ -244,15 +244,15 @@ impl From<api::Reply> for Reply {
     }
 }
 impl From<Reply> for api::Reply {
-    /// 将 `Reply` 按字段转换为 `api::Reply`，保留业务与路由关联。
+    /// 将 `Reply` 按字段转换为 `api::Reply`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `reply`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `reply`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Reply`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Reply`; 不进行网络发送或领域状态推进.
     fn from(reply: Reply) -> Self {
         Self {
             request_id: reply.request_id,
@@ -263,15 +263,15 @@ impl From<Reply> for api::Reply {
 }
 
 impl From<api::Call> for WorkerCall {
-    /// 将 `api::Call` 按字段转换为 `WorkerCall`，保留业务与路由关联。
+    /// 将 `api::Call` 按字段转换为 `WorkerCall`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `call`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `call`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `WorkerCall`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `WorkerCall`; 不进行网络发送或领域状态推进.
     fn from(call: api::Call) -> Self {
         let (operation_id, attempt_id) = call.attempt.into_parts();
         Self {
@@ -288,15 +288,15 @@ impl From<api::Call> for WorkerCall {
     }
 }
 impl From<WorkerCall> for api::Call {
-    /// 将 `WorkerCall` 按字段转换为 `api::Call`，保留业务与路由关联。
+    /// 将 `WorkerCall` 按字段转换为 `api::Call`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `wire`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `wire`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::Call`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::Call`; 不进行网络发送或领域状态推进.
     fn from(wire: WorkerCall) -> Self {
         Self {
             pool: wire.pool,
@@ -309,15 +309,15 @@ impl From<WorkerCall> for api::Call {
     }
 }
 impl From<api::WorkerReport> for ReportData {
-    /// 将 `api::WorkerReport` 按字段转换为 `ReportData`，保留业务与路由关联。
+    /// 将 `api::WorkerReport` 按字段转换为 `ReportData`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `report`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `report`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `ReportData`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `ReportData`; 不进行网络发送或领域状态推进.
     fn from(report: api::WorkerReport) -> Self {
         let (report_id, attempt, result) = report.into_parts();
         let (operation_id, attempt_id) = attempt.into_parts();
@@ -330,15 +330,15 @@ impl From<api::WorkerReport> for ReportData {
     }
 }
 impl From<ReportData> for api::WorkerReport {
-    /// 将 `ReportData` 按字段转换为 `api::WorkerReport`，保留业务与路由关联。
+    /// 将 `ReportData` 按字段转换为 `api::WorkerReport`, 保留业务与路由关联.
     ///
     /// # 参数
     ///
-    /// - `wire`：待转换的消息；消费其字段所有权，不执行序列化或版本校验。
+    /// - `wire`: 待转换的消息; 消费其字段所有权, 不执行序列化或版本校验.
     ///
     /// # 返回值
     ///
-    /// 拥有转换后字段的 `api::WorkerReport`；不进行网络发送或领域状态推进。
+    /// 拥有转换后字段的 `api::WorkerReport`; 不进行网络发送或领域状态推进.
     fn from(wire: ReportData) -> Self {
         Report::new(
             wire.report_id,

@@ -3,11 +3,11 @@ use beamlet_primitives::{Attempt, Report};
 
 /// 交付元数据与既有授权同行, 不额外签发授权.
 ///
-/// 只携带既有授权；接收者仍需校验目标和授权关联。
+/// 只携带既有授权; 接收者仍需校验目标和授权关联.
 ///
 /// # 泛型参数
 ///
-/// - `P`：业务输入类型，默认 String。
+/// - `P`: 业务输入类型, 默认 String.
 #[derive(Debug)]
 pub struct Call<P = String> {
     /// 目标所在的 pool.
@@ -28,5 +28,5 @@ pub struct Call<P = String> {
 ///
 /// # 泛型参数
 ///
-/// - `R`：业务结果类型，默认 String。
+/// - `R`: 业务结果类型, 默认 String.
 pub type WorkerReport<R = String> = Report<String, String, String, R>;
