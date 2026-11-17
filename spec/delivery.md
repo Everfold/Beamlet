@@ -53,7 +53,7 @@ JSON 外层统一为 `{ "version": 3, "body": ... }`. 未知版本、格式错�
 | `beamlet.v3.<pool>.worker.probe` | 请求 Worker 立即发布快照 |
 | `beamlet.v3.<pool>.worker.<role_id>.<session_id>.calls` | 指定 Worker 会话的调用 |
 
-Console 对配置的 pools 发出发现查询, 在 `discovery_window_ms` 指定的窗口内收集多份回复 (默认 1000 毫秒). 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
+[beamlet-client](../crates/beamlet-client/src/lib.rs) 统一提供发现、Worker 查询和提交; Console 把配置的 pools 交给 Client 发出发现查询, 在 `discovery_window_ms` 指定的窗口内收集多份回复 (默认 1000 毫秒). 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
 
 Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能力. Authority 创建 Operation 前检查租约、状态、能力及会话. Any 选定一个实例后走与 Exact 相同的定向路径. 不承诺公平、轮询或负载均衡. Exact 失效时拒绝, 不回退到其他会话.
 
@@ -93,3 +93,7 @@ NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test co
 Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限. 可运行 `cargo run -p beamlet-worker --example local_worker` 验证独立非文本 Worker, 或 `cargo run -p beamlet-worker --example nats_worker -- nats://127.0.0.1:4222` 运行临时 echo Worker. 两个示例都不读取应用 RON 配置.
 
 Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. `cargo run -p beamlet-authority --example local_cluster` 使用真实 Authority 与 Worker 完成非文本任务, 无需配置文件或消息服务器. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.
+
+Client 的[公开接口测试](../crates/beamlet-client/tests/client.rs)验证发现去重、总期限与收集窗口、取消清理、并发及回复校验. `Client::new(transport, options)` 不依赖 console 或角色库; `discover`、`workers`、`submit` 自动分配请求身份, `request` 可使用调用方提供的 UUID. Client 不保存可变目标选择, 调用者传入完整快照. Request 只交给传输一次, 本地错误不会变成业务 Report; 超时和丢弃 future 不取消远端执行. Options 使用 Duration, console 继续转换已有字段且不重写文件.
+
+`cargo run -p beamlet-client --example local_cluster` 使用 Client、Authority、Worker 和 local 完成自定义 Rust 数据调用; `cargo run -p beamlet-client --example nats_client -- nats://127.0.0.1:4222` 演示外部程序调用已有的默认 pool 与 text.reverse/v1 Worker. 两个示例均不读取应用配置文件.

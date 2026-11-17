@@ -243,6 +243,15 @@ async fn console_submits_concurrently_and_drains_correlated_results() -> Result<
         output.find("fast-result") < output.find("slow-result"),
         "results not shown as completed"
     );
+    for id in [fast_id, slow_id, unanswered_id] {
+        ensure!(
+            output
+                .lines()
+                .any(|line| line.contains("event=\"request.send_started\"")
+                    && line.contains(&id.to_string())),
+            "Client send event missing for {id}: {output}"
+        );
+    }
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if let Some(status) = console.0.try_wait()? {

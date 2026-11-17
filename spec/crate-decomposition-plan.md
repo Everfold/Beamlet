@@ -1,6 +1,6 @@
 # 可复用 crate 拆分计划
 
-状态: P0–P4 已完成; 下一阶段为 P5 Client 库与薄应用. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
+状态: P0–P5 已完成; 下一阶段为 P6 宿主提取. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
 
 目标是让其他程序能够独立使用 Authority、Worker、调用客户端及运行监督, 自行选择消息后端、配置来源和交互方式. node / console 是这些库的组合应用. 本次以现有行为为基线, 不改变 [内核规范](kernel.md)、[交付契约](delivery.md) 和 [角色身份约定](node-composition.md).
 
@@ -34,7 +34,7 @@
 | **`beamlet-transport-local`** | 进程内端点、通道、发现及回复, 同时用于嵌入和契约测试 | api |
 | **`beamlet-host`** | 多个任务的共同启动监督、停止通知、退出期限、错误汇总 | api, 按实际需要 |
 
-`beamlet-api`、两个 transport、`beamlet-worker` 及 `beamlet-authority` 已实现; client、host 仍为后续阶段. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
+`beamlet-api`、两个 transport、`beamlet-worker`、`beamlet-authority` 及 `beamlet-client` 已实现; host 为下一阶段. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
 
 依赖箭头表示“左方依赖右方”, 省略直接使用 primitives 的重复边:
 
@@ -147,7 +147,7 @@ Worker 接收能力集合和异步业务处理器. 它持有收到的 Attempt, �
 
 ### 3.6 Client、宿主和输出
 
-Client 提供 `discover`、`workers`、`submit` 三个主要操作, 集中实施发现去重、关联校验和请求期限. 传输端点只执行相应交互. Console 的命令解析、显示、当前选择、防止旧查询覆盖新选择的 UI revision, 以及终端动作的在途数量限制留在应用; 每次提交给 Client 的目标是不可变快照. Client 本身支持并发调用, 首轮不新增隐藏请求队列或额外的固定并发上限.
+Client 提供 `discover`、`workers`、`submit` 三个主要操作, 集中实施发现去重、关联校验和请求期限. 传输端点只执行相应交互. Console 的命令解析、显示、当前选择、防止旧查询覆盖新选择的 UI revision, 以及终端动作的在途数量限制留在应用; 每次提交给 Client 的目标是不可变快照. Client 本身支持并发调用, 首轮不新增隐藏请求队列或额外的固定并发上限. 三个主要操作自动生成请求 UUID; 需要沿用调用方 UUID 时使用 `request(Command<P>)`, 同样经过期限与关联校验. 该 UUID 不提供幂等保证.
 
 Host 接收已经装配好的任务、身份和停止句柄, 负责共同停止、排空期限和异常汇总. 它不读取文件、不创建 Tokio 执行器、不监听 Ctrl+C、不预置角色枚举. 操作系统退出信号由应用转换为停止请求; 其他程序也可以直接运行单个角色, 无需 Host.
 
@@ -166,10 +166,10 @@ let worker = Worker::builder(instance, capabilities)
 let (inbox, presence) = transport.bind_worker(worker.binding()).await?;
 worker.run(inbox, presence, shutdown).await?;
 
-let client = Client::new(transport.client_endpoint(), client_options)?;
+let client = Client::new(transport, client_options)?;
 let authorities = client.discover(&pools).await?;
-let workers = client.workers(&target, None).await?;
-let outcome = client.submit(&target, submission).await?;
+let workers = client.workers(target, pool, None).await?;
+let outcome = client.submit(target, submission).await?;
 ```
 
 更换 transport 或改为直接构造 options 不需要改 Worker / Client 的业务使用方式. 配置来源转换也不会进入以上接口.
@@ -185,7 +185,7 @@ let outcome = client.submit(&target, submission).await?;
 | P2 两个适配器（已完成） | 提取 NATS 实现和 subject; 把测试 channel 升为 local 端点实现; 迁移共用协议校验 | 两个后端使用同一契约测试; local 可用于外部程序; 连接恢复不复活旧租约 |
 | P3 Worker 库（已完成） | 提取执行循环、能力注册和心跳驱动; 文本示例移到应用注册 | 单独启动 Worker; 非文本本地任务可运行; 依赖树无 kernel/ledger; 并发和排空语义不变 |
 | P4 Authority 库（已完成） | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
-| P5 Client 库与薄应用 | 提取 SDK; node/console 只保留配置、装配、交互、输出初始化 | 自定义程序可发现/查询/提交; 不依赖 console; 旧 UI 结果不能覆盖新选择 |
+| P5 Client 库与薄应用（已完成） | 提取 SDK; node/console 只保留配置、装配、交互、输出初始化 | 自定义程序可发现/查询/提交; 不依赖 console; 旧 UI 结果不能覆盖新选择 |
 | P6 宿主 | 提取监督和停止协调, 提供多角色嵌入示例 | 相同/不同角色多实例可运行; 共享/独立传输实例可装配; 单个错误能够停止同组任务 |
 
 P2 完成时适配器已经依赖 api. 尚未提取的角色在 apps 内实现新契约; 随 P3/P4 迁入角色库, 最终清除应用中暂存的策略实现. 不把 Registry 移进 NATS 再依靠反向依赖调用 Authority. 某阶段如无法独立编译, 合并最小相邻迁移提交, 不引入反向依赖的临时架构.
@@ -247,3 +247,14 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 无服务器示例: `cargo run -p beamlet-authority --example local_cluster`. 使用公开接口装配 Authority 与 Worker, 以自定义 Rust 数据完成求和; 外部 consumer 单独构建运行可验证依赖声明. 客户端部分暂用 api 的 ClientTransport, P5 再接入 SDK.
 - 原有并发、报告关联、回复背压和退出测试已迁入库. 公开接口测试补充满载控制处理、本地 EOF、取消清理和非文本任务; 旧 node 交付测试适配层由共享 transport 契约及 Authority 公开接口测试替代. 真实 NATS 组合验收继续覆盖多角色、多连接、重连与配置不变.
 - 验证通过: workspace 测试、全部目标/feature 的 clippy、rustdoc、独立 consumer 和 3 项 node/console 真实 NATS 验收. 提交检查包含 fmt、cargo deny、check、clippy 与 nextest; 外部 consumer 的正常依赖树无 serde、NATS、protocol、confy、clap 或应用 crate.
+
+## 11. P5 验证结果
+
+- 新增 `beamlet-client`: `Client::new` 接收传输和 Options, `discover`、`workers`、`submit` 提供常用操作, `request` 接收带外部 UUID 的 Command. 无全局日志初始化、文件读取、后台任务或隐藏并发队列; 输入/结果无需 Clone、Debug、Sync 或 serde, 可通过传输推断其类型.
+- 发现按 Authority 角色/会话去重并合并声明的 pools, 忽略错误请求 ID、空身份及无关 pool. 发现窗口从端点就绪起计算, 总等待期限包含创建入口与收集; EOF 可提前结束. 持续立即返回的无效回复也不会阻止计时器与其他任务推进.
+- 请求仅发送一次, 校验请求 UUID、Authority 会话、结果种类、非空领域身份及 Exact Worker 会话; Worker 查询校验 pool 与能力过滤, 保留 stale/offline 记录. 提交的 Rejected / Unresolved 保留为业务结果, 参数、传输、期限和关联失败使用可判别错误, 不自动换人或重试.
+- console 使用新库, 保留选择快照、UI revision、终端在途上限与退出排空. 原 RON 字段只转换为带 Duration 的 Options, 不新增迁移或写回逻辑. 日志过滤覆盖 Client, 保留 request.send_started 与请求 UUID.
+- [local_cluster](../crates/beamlet-client/examples/local_cluster.rs) 通过真实 Client / Authority / Worker 完成非文本求和; [nats_client](../crates/beamlet-client/examples/nats_client.rs) 展示独立发现、查询和定向提交. 前者可直接运行 `cargo run -p beamlet-client --example local_cluster`, 后者需要运行中的 NATS 与默认 pool 的 Authority / text.reverse Worker.
+- 公开接口测试覆盖发现窗口与总期限、取消清理、24 个并发非 Clone/Debug/Sync 输入、乱序回复、错误会话和结果、查询过滤、超时不重发与参数校验. console 保留旧结果隔离与退出测试, 真实 NATS 验收检查 Client 发送日志与关联 UUID.
+- 验证通过: workspace 测试、11 项 Client 公开接口测试、全部目标/feature 的 clippy、严格 rustdoc、真实 NATS console 验收与独立 SDK 调用. 两个 workspace 外 consumer 分别运行非文本本地完整流程和调用真实 NATS + Node; 仅 SDK consumer 的依赖树没有 Authority、Worker、ledger、kernel、state-machines、应用或 confy.
+- 提交检查通过: fmt、cargo deny、check、clippy 与 nextest. 本阶段未修改内核、v3 线格式或应用配置布局; 下一阶段为 P6 宿主监督与停止协调.

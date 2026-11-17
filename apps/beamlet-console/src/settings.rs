@@ -39,6 +39,15 @@ pub(crate) struct Settings {
     pub subscription_capacity: usize,
 }
 
+impl From<&Settings> for beamlet_client::Options {
+    fn from(settings: &Settings) -> Self {
+        Self {
+            request_timeout: std::time::Duration::from_secs(settings.request_timeout_secs),
+            discovery_window: std::time::Duration::from_millis(settings.discovery_window_ms),
+        }
+    }
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {

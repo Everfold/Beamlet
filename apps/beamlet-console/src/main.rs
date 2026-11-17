@@ -1,4 +1,3 @@
-mod client;
 mod session;
 mod settings;
 
@@ -14,7 +13,7 @@ async fn main() -> ExitCode {
         .map_or(Color::Auto, |settings| settings.color);
     tracing_subscriber::fmt()
         .compact()
-        .with_env_filter("beamlet_console=info")
+        .with_env_filter("beamlet=info")
         .with_target(false)
         .with_ansi(color.enabled())
         .with_writer(std::io::stderr)

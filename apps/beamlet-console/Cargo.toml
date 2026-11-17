@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 beamlet-api = { workspace = true, features = ["serde"] }
+beamlet-client.workspace = true
 beamlet-transport-nats.workspace = true
 
 futures.workspace = true

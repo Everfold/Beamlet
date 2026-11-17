@@ -1,5 +1,5 @@
 //! 普通行式交互, 编号只用于显示, 网络目标始终保存完整实例身份.
-use crate::{client, settings::Settings};
+use crate::settings::Settings;
 use anyhow::{Context, Result, bail, ensure};
 use beamlet_api::{
     AuthorityInfo, Command, Outcome, Pool, PresenceState, RoleInstance, Selection, Submission,
@@ -92,28 +92,22 @@ impl Action {
     }
     async fn execute(
         self,
-        client: beamlet_transport_nats::Nats,
-        request_timeout: Duration,
-        discovery_window: Duration,
+        client: beamlet_client::Client<beamlet_transport_nats::Nats>,
     ) -> Completion {
         match self {
             Self::Discover { request_id, pools } => Completion::Discovered {
+                // UI 动作身份独立于库内部的发现请求, 用于屏蔽旧查询结果.
                 request_id,
-                result: match tokio::time::timeout(
-                    request_timeout,
-                    client::discover(&client, &pools, request_id, discovery_window),
-                )
-                .await
-                {
-                    Ok(result) => result,
-                    Err(error) => Err(error).context("发现 Authority 超时"),
-                },
+                result: client.discover(&pools).await.context("发现 Authority 失败"),
             },
             Self::Request {
                 command,
                 choice_revision,
             } => {
-                let result = client::request(&client, &command, request_timeout).await;
+                let result = client
+                    .request(command.clone())
+                    .await
+                    .context("请求未取得有效回复; 可能已执行, 不会自动重发");
                 Completion::reply(command, choice_revision, result)
             }
         }
@@ -501,7 +495,7 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
     tracing::info!(event = "console.starting", "Console 启动");
     settings.validate()?;
     let connect_timeout = Duration::from_secs(settings.connect_timeout_secs);
-    let request_timeout = Duration::from_secs(settings.request_timeout_secs);
+    let client_options = (&settings).into();
     let client = beamlet_transport_nats::Nats::connect(
         &settings.nats_url,
         beamlet_transport_nats::Options {
@@ -511,10 +505,10 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
     )
     .await
     .context("连接 NATS 失败")?;
+    let client = beamlet_client::Client::new(client, client_options)?;
     let mut session = Session::new(settings.pools, settings.max_in_flight_requests);
-    let discovery_window = Duration::from_millis(settings.discovery_window_ms);
     let work = drive(&mut session, terminal_input(), move |action| {
-        action.execute(client.clone(), request_timeout, discovery_window)
+        action.execute(client.clone())
     });
     tokio::select! {
         result = work => result?,
