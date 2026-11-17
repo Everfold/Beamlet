@@ -190,7 +190,7 @@ let outcome = client.submit(target, submission).await?;
 
 P2 完成时适配器已经依赖 api. 尚未提取的角色在 apps 内实现新契约; 随 P3/P4 迁入角色库, 最终清除应用中暂存的策略实现. 不把 Registry 移进 NATS 再依靠反向依赖调用 Authority. 某阶段如无法独立编译, 合并最小相邻迁移提交, 不引入反向依赖的临时架构.
 
-P1 已以原有本地通道和 NATS 实现验证一次性回复入口, 并完成业务输入/输出泛型化. 角色 Options 随其执行模块定义, 由应用文件配置转换; 当前 Authority 执行参数已独立于 settings. 每次公共接口变化都附可编译的外部使用示例, 不能只靠 crate 内单元测试证明可用.
+P1 已以原有本地通道和 NATS 实现验证一次性回复入口, 并完成业务输入/输出泛型化. 角色 Options 随其执行模块定义, 由应用文件配置转换; 当前 Authority 执行参数已独立于 settings. 公共接口通过外部 consumer 和公开接口测试验证可用性; 本轮验收所用的独立 examples 已在后续清理中删除.
 
 ## 5. 验收和测试
 
@@ -223,7 +223,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 新增 `beamlet-transport-nats` 和 `beamlet-transport-local`. 两者实现 api 的 WorkerInbox / Delivery、AuthorityInbox、PresenceChannel 和 ClientTransport; 接口不公开 NATS Message、Subscriber 或 Tokio 通道. NATS subject 从 protocol 移入适配器, v3 文本线格式保持不变.
 - node 的选择、租约、控制分类和有界业务队列继续由角色侧实施, console 继续负责发现去重及请求关联校验. 心跳周期、状态与序号由角色驱动; 连接视图只提供当前连接世代, 重连后的旧公告不能给新世代续租. Authority 排空后由装配层刷新连接, Node 退出前仍执行最终刷新.
 - local 提供独立消息空间、共享连接句柄、完整控制交互和有界调用队列; 重复绑定拒绝覆盖, Drop 解除绑定, stop 保留队列供排空. 请求与结果可以是无 Clone、无 serde 的自定义类型. 公告和发现仍允许丢失, 不承诺可靠队列或 exactly-once.
-- 两个后端执行同一份公开接口契约测试. local 增加队列满载、重复绑定和自定义数据验证; NATS 保留真实服务契约与 node/console 多进程验收. 独立使用示例见 [typed_call](../crates/beamlet-transport-local/examples/typed_call.rs).
+- 两个后端执行同一份公开接口契约测试. local 增加队列满载、重复绑定和自定义数据验证; NATS 保留真实服务契约与 node/console 多进程验收. 公开接口契约持续由 tests 目录下的测试验证.
 - `cargo test --workspace`、fmt、clippy（全部目标和 feature）及严格 rustdoc 检查通过; 5 项真实 NATS 验收通过. workspace 外 consumer 在 api 关闭默认 feature 时运行 typed_call 成功, 正常依赖树没有 kernel、ledger、应用或 confy.
 - 提交检查中的 `cargo deny` 许可证检查仍失败: 仓库现有白名单仅允许 Apache-2.0, 修改前 HEAD 和本次均有 52 项拒绝. 未调整许可证策略或外部依赖版本.
 - P3 已继续完成, 见下一节; Authority、Client 与宿主的应用代码仍待迁出.
@@ -235,7 +235,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 库使用 `Concurrency::Limited(n)` / `Unlimited`; 应用把原 `max_concurrent_tasks = 0` 转为 Unlimited. 时间参数使用 Duration, 构造时验证正数与可表示范围. 公告发送及刷新期限默认为 1 秒, 防止停机卡在不可推进的刷新中. 未增加或重写 RON 配置字段.
 - 文本示例继续由 node 注册和执行, 库不包含文本能力白名单. node 保留配置、身份生成和基础设施装配, 日志过滤覆盖 Beamlet 各库以继续显示 Worker 和 Report 事件.
 - 原 Worker 并发测试迁入库的公开接口测试; 新增验证禁用能力、错误目标、报告发送占用并发、阻塞任务期间心跳/探测/重连、draining/offline 顺序、取消释放异步任务、错误 source 和参数校验. 原 Authority 测试通过测试辅助代码模拟报告, 不保留第二套 Worker 循环.
-- [local_worker](../crates/beamlet-worker/examples/local_worker.rs) 展示无 Clone/Debug/serde 的自定义请求和结果; workspace 外 consumer 已成功运行. [nats_worker](../crates/beamlet-worker/examples/nats_worker.rs) 展示单独嵌入 Worker 连接 NATS. Worker 正常依赖树不包含 kernel、ledger、应用、传输、protocol、confy 或 serde.
+- 本阶段已通过 workspace 外 consumer 验证无 Clone/Debug/serde 的自定义请求和结果, 并验证单独嵌入 Worker 连接 NATS. Worker 正常依赖树不包含 kernel、ledger、应用、传输、protocol、confy 或 serde.
 - 验证通过: workspace 测试、fmt、全部目标/feature 的 clippy、rustdoc 和文档示例、独立 consumer、3 项 node/console 真实 NATS 验收; `prek run` 全部通过, 包括 cargo deny. 多进程验收同时检查 Worker 就绪及 Operation/Attempt/Report 相关事件仍可见.
 - P4 已继续完成, 见下一节.
 
@@ -244,7 +244,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - `beamlet-authority` 统一拥有 Operation 编排、Worker 登记与选择、控制处理和并发准入. `Authority::new` 校验身份与 Options, `run` 接收消息端点和交付实现; `run_with_local` 可额外注入结构化本地输入, `directory` 提供只读 Worker 视图.
 - NATS 与 local 共用同一个 Authority 实现. Registry 使用显式观测时间和中立 ConnectionView, 无 NATS 或 watch 依赖; 连接失效立即影响查询与选择. 业务满载仍可发现、查询和接收公告, Exact 不回退, 交付失败不关闭等待中的 Operation.
 - 输入 `P: Clone + Send` 使台账保留原始请求并向 Worker 交付数据; 输出 `R: Send` 无需 Clone、Debug 或 serde. 库不读取配置、不生成身份、不安装日志输出; node 保留文件参数转换、终端解析及装配.
-- 无服务器示例: `cargo run -p beamlet-authority --example local_cluster`. 使用公开接口装配 Authority 与 Worker, 以自定义 Rust 数据完成求和; 外部 consumer 单独构建运行可验证依赖声明. 客户端部分暂用 api 的 ClientTransport, P5 再接入 SDK.
+- 本阶段已通过外部 consumer 装配 Authority 与 Worker, 以自定义 Rust 数据完成求和并验证依赖声明; 此行为继续由 Authority 公开接口测试覆盖.
 - 原有并发、报告关联、回复背压和退出测试已迁入库. 公开接口测试补充满载控制处理、本地 EOF、取消清理和非文本任务; 旧 node 交付测试适配层由共享 transport 契约及 Authority 公开接口测试替代. 真实 NATS 组合验收继续覆盖多角色、多连接、重连与配置不变.
 - 验证通过: workspace 测试、全部目标/feature 的 clippy、rustdoc、独立 consumer 和 3 项 node/console 真实 NATS 验收. 提交检查包含 fmt、cargo deny、check、clippy 与 nextest; 外部 consumer 的正常依赖树无 serde、NATS、protocol、confy、clap 或应用 crate.
 
@@ -254,7 +254,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 发现按 Authority 角色/会话去重并合并声明的 pools, 忽略错误请求 ID、空身份及无关 pool. 发现窗口从端点就绪起计算, 总等待期限包含创建入口与收集; EOF 可提前结束. 持续立即返回的无效回复也不会阻止计时器与其他任务推进.
 - 请求仅发送一次, 校验请求 UUID、Authority 会话、结果种类、非空领域身份及 Exact Worker 会话; Worker 查询校验 pool 与能力过滤, 保留 stale/offline 记录. 提交的 Rejected / Unresolved 保留为业务结果, 参数、传输、期限和关联失败使用可判别错误, 不自动换人或重试.
 - console 使用新库, 保留选择快照、UI revision、终端在途上限与退出排空. 原 RON 字段只转换为带 Duration 的 Options, 不新增迁移或写回逻辑. 日志过滤覆盖 Client, 保留 request.send_started 与请求 UUID.
-- [local_cluster](../crates/beamlet-client/examples/local_cluster.rs) 通过真实 Client / Authority / Worker 完成非文本求和; [nats_client](../crates/beamlet-client/examples/nats_client.rs) 展示独立发现、查询和定向提交. 前者可直接运行 `cargo run -p beamlet-client --example local_cluster`, 后者需要运行中的 NATS 与默认 pool 的 Authority / text.reverse Worker.
+- 本阶段已通过外部 consumer 验证真实 Client / Authority / Worker 非文本调用, 以及默认 pool 中的 NATS 发现、查询和定向提交. Client 的持续行为验证保留在公开接口测试中.
 - 公开接口测试覆盖发现窗口与总期限、取消清理、24 个并发非 Clone/Debug/Sync 输入、乱序回复、错误会话和结果、查询过滤、超时不重发与参数校验. console 保留旧结果隔离与退出测试, 真实 NATS 验收检查 Client 发送日志与关联 UUID.
 - 验证通过: workspace 测试、11 项 Client 公开接口测试、全部目标/feature 的 clippy、严格 rustdoc、真实 NATS console 验收与独立 SDK 调用. 两个 workspace 外 consumer 分别运行非文本本地完整流程和调用真实 NATS + Node; 仅 SDK consumer 的依赖树没有 Authority、Worker、ledger、kernel、state-machines、应用或 confy.
 - 提交检查通过: fmt、cargo deny、check、clippy 与 nextest. 本阶段未修改内核、v3 线格式或应用配置布局; 下一阶段为 P6 宿主监督与停止协调.
@@ -266,7 +266,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 排空期限从第一次停止请求开始计算, 后续错误不延长它. RunError 保留按观测顺序发生的全部失败及 source, 同时报告期限内未收取完成的任务名称; 原始错误不会被超时覆盖. 超时中止异步任务并立即停止等待, 不承诺取消已开始的阻塞计算或远端任务.
 - 丢弃 Host 或运行 future 会通知停止并释放所拥有的 future; 已启动异步任务请求中止. 需要正常排空时必须完成停止信号并等待 run 返回. Shutdown 支持所有克隆及晚等待者; 不允许撤回停止通知.
 - node 删除自身的监督循环和 shutdown 模块, 保留 RON 校验、UUID 生成、基础设施连接/刷新、角色装配与终端交互. 原 `shutdown_timeout_secs` 转为 Options 的 Duration, 配置格式与加载行为保持不变. 库输出 host.stopping, node 继续输出 node.stopped.
-- [composed](../crates/beamlet-host/examples/composed.rs) 嵌入 3 个 Authority、3 个 Worker 与两个隔离 local 消息空间, 通过 Client 完成 5 次定向调用并共同排空: `cargo run -p beamlet-host --example composed`.
+- 本阶段已通过外部 consumer 嵌入 3 个 Authority、3 个 Worker 与两个隔离 local 消息空间, 通过 Client 完成 5 次定向调用并共同排空. 多角色组合和宿主生命周期分别由 Node 组合测试与 Host 公开接口测试持续验证.
 - 原应用监督/停止测试迁入[公开接口测试](../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、终端选择、正常退出和配置不改写.
 - 验证通过: workspace 测试、9 项宿主公开接口测试及文档示例、全部目标/feature 的 clippy、严格 rustdoc. 两个 workspace 外 consumer 分别运行纯宿主自定义任务和完整多角色示例; 纯宿主正常依赖树没有其他 Beamlet crate、消息后端、serde 或配置库.
 - 最终验收同时通过 node/console 的真实 NATS 测试和 NATS 适配器契约测试. P0–P6 已完成, 后续持久化、自动重试或其他消息后端属于独立议题.

@@ -17,9 +17,4 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-beamlet-authority.workspace = true
-beamlet-transport-local.workspace = true
-beamlet-transport-nats.workspace = true
-beamlet-worker.workspace = true
-
 tokio = { workspace = true, features = ["test-util"] }

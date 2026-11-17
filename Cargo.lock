@@ -147,10 +147,6 @@ name = "beamlet-client"
 version = "0.1.0"
 dependencies = [
  "beamlet-api",
- "beamlet-authority",
- "beamlet-transport-local",
- "beamlet-transport-nats",
- "beamlet-worker",
  "thiserror",
  "tokio",
  "tracing",
@@ -180,11 +176,6 @@ dependencies = [
 name = "beamlet-host"
 version = "0.1.0"
 dependencies = [
- "beamlet-api",
- "beamlet-authority",
- "beamlet-client",
- "beamlet-transport-local",
- "beamlet-worker",
  "thiserror",
  "tokio",
  "tracing",
@@ -274,7 +265,6 @@ dependencies = [
  "beamlet-api",
  "beamlet-primitives",
  "beamlet-transport-local",
- "beamlet-transport-nats",
  "thiserror",
  "tokio",
  "tracing",

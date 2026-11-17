@@ -88,12 +88,10 @@ Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务�
 
 Console 的真实 NATS 并发验收使用 `cargo test -p beamlet-console --test concurrency -- --ignored --nocapture`, 同样需要 PATH 中的 `nats-server`. 普通 Console 测试通过可控 Future 验证多个请求、迟到回复隔离、容量限制、EOF / 退出排空和中止时释放 Future.
 
-NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test contract -- --include-ignored`, 需要 PATH 中的 `nats-server`. 无服务器的公开接口示例可以直接运行 `cargo run -p beamlet-transport-local --example typed_call`; 它只演示传输, 不代替 Authority 签发 Attempt 的领域职责.
+NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test contract -- --include-ignored`, 需要 PATH 中的 `nats-server`.
 
-Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限. 可运行 `cargo run -p beamlet-worker --example local_worker` 验证独立非文本 Worker, 或 `cargo run -p beamlet-worker --example nats_worker -- nats://127.0.0.1:4222` 运行临时 echo Worker. 两个示例都不读取应用 RON 配置.
+Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限.
 
-Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. `cargo run -p beamlet-authority --example local_cluster` 使用真实 Authority 与 Worker 完成非文本任务, 无需配置文件或消息服务器. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.
+Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.
 
 Client 的[公开接口测试](../crates/beamlet-client/tests/client.rs)验证发现去重、总期限与收集窗口、取消清理、并发及回复校验. `Client::new(transport, options)` 不依赖 console 或角色库; `discover`、`workers`、`submit` 自动分配请求身份, `request` 可使用调用方提供的 UUID. Client 不保存可变目标选择, 调用者传入完整快照. Request 只交给传输一次, 本地错误不会变成业务 Report; 超时和丢弃 future 不取消远端执行. Options 使用 Duration, console 继续转换已有字段且不重写文件.
-
-`cargo run -p beamlet-client --example local_cluster` 使用 Client、Authority、Worker 和 local 完成自定义 Rust 数据调用; `cargo run -p beamlet-client --example nats_client -- nats://127.0.0.1:4222` 演示外部程序调用已有的默认 pool 与 text.reverse/v1 Worker. 两个示例均不读取应用配置文件.

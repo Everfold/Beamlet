@@ -216,4 +216,4 @@ Console 的 `max_in_flight_requests` 默认 16, 要求大于 0; `discovery_windo
 
 其他程序可以使用 `Host::new(options)`、`host.shutdown()` 和 `host.add(name, future)` 管理任意长期任务, 无需 node 的角色配置枚举. `add` 不启动任务, `run(signal)` 开始轮询才启动. `run_with_background(signal, input)` 允许输入处理正常结束后服务继续运行, 输入失败则停止组; 排空开始时释放输入 future. 任务在停止请求前正常结束也视为意外退出.
 
-宿主不连接消息服务、不创建 Tokio 执行器、不监听 Ctrl+C, 由应用完成这些工作. 丢弃运行 future 会广播停止并请求中止异步子任务, 不等待排空; 正常排空需完成 signal 后等待 run 返回. 任务内部启动的阻塞计算和远端调用不因此被强制取消. 运行 `cargo run -p beamlet-host --example composed` 可验证共享/隔离消息空间中的多角色嵌入, 无需配置文件或服务器.
+宿主不连接消息服务、不创建 Tokio 执行器、不监听 Ctrl+C, 由应用完成这些工作. 丢弃运行 future 会广播停止并请求中止异步子任务, 不等待排空; 正常排空需完成 signal 后等待 run 返回. 任务内部启动的阻塞计算和远端调用不因此被强制取消. 宿主的停止与排空行为由 `beamlet-host/tests/lifecycle.rs` 验证, 多角色共享/隔离传输通过 Node 组合验收验证.
