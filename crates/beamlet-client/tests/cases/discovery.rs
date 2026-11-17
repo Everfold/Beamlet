@@ -7,10 +7,6 @@ use tokio::sync::mpsc;
 
 /// 装配使用受控传输的 Client 和事件观察端。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 二元组 `(Client, 传输事件接收端)`。
@@ -34,10 +30,6 @@ fn pools(names: &[&str]) -> BTreeSet<Pool> {
     names.iter().map(|name| name.parse().unwrap()).collect()
 }
 /// 验证发现过滤无效回复，按会话合并 pools，并在窗口结束释放入口。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -98,10 +90,6 @@ async fn discovery_filters_merges_sessions_and_releases_inbox_at_window_end() {
 }
 /// 验证发现总期限包含准备与收集，EOF 可以提前完成。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -139,10 +127,6 @@ async fn total_deadline_covers_setup_and_collection_and_eof_can_end_early() {
 }
 
 /// 验证取消发现会释放准备阶段或收集阶段持有的资源。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -237,10 +221,6 @@ impl beamlet_api::ClientTransport for Flood {
 }
 
 /// 验证持续立即返回的无效发现回复不饿死计时器或其他任务。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

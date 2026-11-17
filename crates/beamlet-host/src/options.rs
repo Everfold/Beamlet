@@ -9,10 +9,6 @@ pub struct Options {
 impl Default for Options {
     /// 构造默认宿主退出期限。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 退出排空期限为 6 秒的 Options。

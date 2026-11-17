@@ -13,10 +13,6 @@ use std::{
 
 /// 为测试生成独立的角色 UUID 和会话 UUID。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 新的 RoleInstance，用于隔离测试绑定。
@@ -27,10 +23,6 @@ fn instance() -> RoleInstance {
     }
 }
 /// 构造本地传输测试的默认 Worker 绑定。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -64,10 +56,6 @@ fn call(worker: RoleInstance, index: u8) -> Call {
 }
 
 /// 验证本地队列满时明确未交付，停止后排空已经接收的调用。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -108,10 +96,6 @@ async fn full_queue_is_not_delivered_and_stop_drains_accepted_work() {
 
 /// 验证重复绑定不覆盖现有路由，丢弃端点后释放全部 pools。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -137,10 +121,6 @@ fn duplicate_binding_never_overwrites_and_drop_releases_all_pools() {
 }
 
 /// 验证本地命令和结果能够移动无 Clone/serde 的自定义数据。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

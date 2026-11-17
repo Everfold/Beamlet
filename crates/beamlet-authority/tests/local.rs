@@ -11,10 +11,6 @@ use tokio::{sync::oneshot, time::timeout};
 const DEADLINE: Duration = Duration::from_secs(3);
 /// 为测试生成独立的角色 UUID 和会话 UUID。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 新的 RoleInstance，用于隔离测试绑定。
@@ -39,10 +35,6 @@ async fn within<T>(future: impl Future<Output = T>) -> T {
         .expect("authority contract stalled")
 }
 /// 构造 Authority 测试用身份与 pool 描述。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -108,10 +100,6 @@ async fn workers(local: &Local, authority: RoleInstance) -> Vec<beamlet_api::Wor
     workers
 }
 /// 验证 Authority 满载时控制处理仍推进，Exact 失效不回退。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -262,10 +250,6 @@ struct Numbers(Vec<u32>);
 struct Sum(u32);
 /// 验证真实 Authority、Worker 与本地客户端使用自定义数据完成完整调用。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -385,10 +369,6 @@ impl beamlet_authority::LocalInbox for LocalRequests {
 
 /// 验证本地输入 EOF 后 Authority 仍接收远端请求。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -480,10 +460,6 @@ impl beamlet_api::Delivery for PendingDelivery {
 }
 
 /// 验证取消 Authority 运行会释放交付等待和控制端点。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

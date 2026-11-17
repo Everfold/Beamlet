@@ -34,10 +34,6 @@ async fn within<T>(f: impl Future<Output = T>) -> T {
 }
 /// 构造 Worker 生命周期测试复用的固定角色实例。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 角色 UUID 数值为 3、会话 UUID 数值为 4 的 RoleInstance。
@@ -228,10 +224,6 @@ async fn next(h: &mut Harness, state: PresenceState) -> Presence {
 
 /// 验证执行挂起期间心跳、探测、重连和 Draining 公告仍推进。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -338,10 +330,6 @@ async fn heartbeats_probe_reconnect_and_draining_progress_while_execution_is_sus
 }
 
 /// 验证禁用能力和错误目标不会执行，报告发送等待仍占用并发名额。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -450,10 +438,6 @@ async fn disabled_or_misrouted_calls_never_execute_and_reply_waiting_occupies_ca
 
 /// 验证取消 Worker 运行会释放异步处理器并关闭调用入口。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -490,10 +474,6 @@ async fn dropping_run_releases_suspended_handler_and_closes_input() {
 }
 
 /// 验证离线刷新受到期限限制，并保留停止信号的原始错误。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

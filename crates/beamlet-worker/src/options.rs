@@ -12,10 +12,6 @@ pub enum Concurrency {
 impl Default for Concurrency {
     /// 构造默认串行 Worker 并发策略。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// `Concurrency::Limited(1)`。
@@ -69,10 +65,6 @@ pub struct Options {
 }
 impl Default for Options {
     /// 构造默认 Worker 并发与公告参数。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

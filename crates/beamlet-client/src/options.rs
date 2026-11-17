@@ -11,10 +11,6 @@ pub struct Options {
 impl Default for Options {
     /// 构造默认 Client 请求期限和发现窗口。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 请求期限 10 秒、发现窗口 1 秒的 Options。

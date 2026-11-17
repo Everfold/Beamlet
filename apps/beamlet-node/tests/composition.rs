@@ -34,10 +34,6 @@ struct Cluster {
 impl Cluster {
     /// 创建临时测试集群目录并复制 Node 二进制。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 成功返回尚未启动子进程的 Cluster；文件系统操作失败返回错误。
@@ -231,10 +227,6 @@ fn uuid_field(line: &str, name: &str) -> Uuid {
         .expect("UUID field")
 }
 /// 让操作系统分配一个可用的本地 TCP 端口。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -522,10 +514,6 @@ fn completed(outcome: Outcome, instance: RoleInstance, expected: &str) -> Result
 }
 
 /// 验证真实多角色、多基础设施的定向路由、重启会话、重连和独立排空。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -867,10 +855,6 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
 }
 
 /// 验证各 Authority 的报告期限和输入容量独立生效。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

@@ -34,10 +34,6 @@ fn instance(id: u128) -> RoleInstance {
 }
 /// 构造供终端选择测试使用的 Authority 列表。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 两个身份不同、加入默认 pool 的 AuthorityInfo。
@@ -52,10 +48,6 @@ fn authorities() -> Vec<AuthorityInfo> {
         .collect()
 }
 /// 构造供会话选择测试使用的 Worker 快照。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -75,10 +67,6 @@ fn workers() -> Vec<WorkerView> {
     }]
 }
 /// 创建已经选择 Authority、pool、能力和 Worker 的会话。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -151,10 +139,6 @@ fn track_query(session: &mut Session) -> Action {
 
 /// 验证提交锁定目标快照，旧拒绝不会覆盖新选择。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -201,10 +185,6 @@ fn submission_keeps_target_snapshot_and_late_rejection_preserves_new_choice() {
 }
 
 /// 验证较旧的查询或发现完成事件不能替换新结果。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -262,10 +242,6 @@ fn older_queries_and_discovery_never_replace_newer_results() {
 }
 
 /// 验证等待中的提交不阻塞查询，EOF 后按完成顺序排空。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -345,10 +321,6 @@ async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results()
 
 /// 验证 Console 满载时仍可处理退出，且不发送超额请求。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -412,10 +384,6 @@ async fn full_console_still_accepts_quit_and_does_not_send_excess_requests() {
 }
 
 /// 验证中断 Console 会释放尚未完成的请求 future。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

@@ -14,10 +14,6 @@ struct Answer(Vec<u8>);
 
 /// 验证一次性回复可移动非 Clone 数据，并等待适配器发送完成。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -38,10 +34,6 @@ async fn custom_adapter_moves_owned_data_and_waits_for_send_completion() {
 }
 
 /// 验证回复发送失败保留原错误来源且不自动重试。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -71,10 +63,6 @@ async fn failures_preserve_the_original_source_without_retrying() {
 }
 
 /// 验证丢弃未使用的回复入口只释放资源，不触发发送。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

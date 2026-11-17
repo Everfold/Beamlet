@@ -121,10 +121,6 @@ impl Delivery for Sender {
 }
 /// 构造编排单元测试复用的固定角色实例。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 预设非 nil 的角色和会话身份。
@@ -164,10 +160,6 @@ fn request(reply: mpsc::Sender<Outcome>, capability: &str) -> Request {
 }
 /// 创建并预先占满一个结果通道，用于制造回复背压。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 二元组 `(发送端, 接收端)`，容量已被一项拒绝结果占满。
@@ -181,10 +173,6 @@ fn blocked_reply() -> (mpsc::Sender<Outcome>, mpsc::Receiver<Outcome>) {
 }
 
 /// 验证回复发送受阻时其他工作和停止信号仍能推进。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -221,10 +209,6 @@ async fn blocked_completion_and_rejection_allow_other_work_and_shutdown() {
 }
 
 /// 验证待发送回复有上限，释放一个回复后恢复任务准入。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

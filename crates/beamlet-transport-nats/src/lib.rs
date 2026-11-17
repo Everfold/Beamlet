@@ -25,10 +25,6 @@ pub struct Options {
 impl Default for Options {
     /// 构造 NATS 默认连接期限和订阅容量。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 连接期限 10 秒、订阅容量 16 的 Options。

@@ -11,10 +11,6 @@ pub enum Concurrency {
 impl Default for Concurrency {
     /// 构造 Authority 默认的有限任务并发。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// `Concurrency::Limited(16)`。
@@ -72,10 +68,6 @@ pub struct Options {
 }
 impl Default for Options {
     /// 构造默认 Authority 运行参数。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

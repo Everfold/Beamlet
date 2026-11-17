@@ -69,10 +69,6 @@ impl From<&Settings> for beamlet_client::Options {
 impl Default for Settings {
     /// 构造首次创建 Console 配置时使用的默认值。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 包含默认 NATS 地址、pool、颜色和各项期限/容量的配置。
@@ -92,10 +88,6 @@ impl Default for Settings {
 
 impl Settings {
     /// 加载可执行文件旁的 console.ron，缺失时首次创建。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

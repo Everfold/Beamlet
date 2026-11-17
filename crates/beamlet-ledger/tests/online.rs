@@ -7,10 +7,6 @@ struct Request(String);
 
 /// 验证台账路由交错报告并保留各 Operation 的原始请求。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -51,10 +47,6 @@ fn routes_interleaved_reports_and_preserves_requests() {
 }
 
 /// 验证报告被拒绝后台账仍保留原等待 Operation。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -98,10 +90,6 @@ fn rejected_reports_preserve_waiting_operation() {
 
 /// 验证重复创建错误归还被拒绝请求的所有权。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -123,10 +111,6 @@ fn duplicate_operation_returns_owned_request() {
 }
 
 /// 验证台账状态约束和全台账 Attempt 身份唯一性。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

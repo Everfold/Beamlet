@@ -3,10 +3,6 @@ use std::fs;
 
 /// 验证首次配置生成不同固定 UUID，后续加载不生成新身份或写回。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -42,10 +38,6 @@ fn first_start_creates_distinct_persistent_ids_and_reload_does_not_write() {
 }
 
 /// 验证同类型角色和基础设施可多次配置且各自参数独立。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -88,10 +80,6 @@ fn independently_configures_repeated_role_and_infrastructure_types() {
 }
 
 /// 验证已有配置缺失或无效角色 UUID 时拒绝启动，不自动补写。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -138,10 +126,6 @@ fn invalid_or_missing_role_ids_are_not_generated_or_written_back() {
 
 /// 验证 Authority 并发配置按角色独立生效且不写回文件。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -183,10 +167,6 @@ fn authority_concurrency_is_independent_per_role_and_does_not_rewrite_config() {
 
 /// 验证 Worker 有限/无限并发均可按角色加载且不写回文件。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -225,10 +205,6 @@ fn worker_concurrency_is_loaded_per_role_including_unlimited_without_rewriting()
 
 /// 验证 pool 去重只作用于内存，保留原配置文本。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -251,10 +227,6 @@ fn pool_duplicates_are_deduplicated_without_rewriting() {
 }
 
 /// 验证跨角色种类的重复 UUID 和未知基础设施引用被拒绝。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -284,10 +256,6 @@ fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
 }
 
 /// 验证同进程并发首次加载复用已写入的全部固定 UUID。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -324,10 +292,6 @@ fn concurrent_first_starts_reuse_all_persisted_ids() {
 
 /// 验证首次创建配置失败时错误包含目标路径。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -339,10 +303,6 @@ fn reports_config_creation_failure_with_path() {
     assert!(error.to_string().contains(&path.display().to_string()));
 }
 /// 验证退出/报告/连接期限及传输容量必填、为正且不会自动写回。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

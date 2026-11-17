@@ -24,10 +24,6 @@ fn build(info: AuthorityInfo, options: Options) -> Result<Authority, BuildError>
 }
 /// 构造 Authority 测试用身份与 pool 描述。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 带有效独立身份和非空 pools 的 AuthorityInfo。
@@ -43,10 +39,6 @@ fn info() -> AuthorityInfo {
 }
 
 /// 验证直接构造 Authority 时拒绝非法身份、容量及期限。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

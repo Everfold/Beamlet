@@ -3,10 +3,6 @@ use beamlet_worker::{BuildError, Capabilities, CapabilityError, Concurrency, Opt
 use std::time::Duration;
 /// 为测试生成独立的角色 UUID 和会话 UUID。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 新的 RoleInstance，用于隔离测试绑定。
@@ -17,10 +13,6 @@ fn instance() -> RoleInstance {
     }
 }
 /// 构造带测试处理器的能力注册表。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -36,10 +28,6 @@ fn capabilities() -> Capabilities {
     capabilities
 }
 /// 验证注册拒绝重复能力，构建 Worker 后只保留已知启用处理器。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -80,10 +68,6 @@ fn registry_rejects_duplicates_and_worker_freezes_only_known_enabled_handlers() 
     ));
 }
 /// 验证直接构造 Worker 时在绑定传输前拒绝非法参数与 nil 身份。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

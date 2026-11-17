@@ -234,10 +234,6 @@ fn check_report(report: WorkerReport, index: usize) -> String {
 
 /// 验证有限 Worker 并发阻止超额准入，停止后排空队列和运行中任务。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -306,10 +302,6 @@ async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
 
 /// 验证 Worker 的零上限表示无限，可以在完成前接收超过接收缓冲数量的任务。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -340,10 +332,6 @@ async fn zero_admits_more_than_the_receive_capacity_without_waiting_for_completi
 }
 
 /// 验证执行拒绝和调用者丢弃回复都会释放 Worker 并发名额。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -383,10 +371,6 @@ async fn execution_rejection_and_abandoned_reply_release_capacity() {
 }
 
 /// 验证业务处理器 panic 会传播到角色监督层。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

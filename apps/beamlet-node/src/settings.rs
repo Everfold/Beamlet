@@ -89,10 +89,6 @@ impl From<&Authority> for beamlet_authority::Options {
 impl Default for Authority {
     /// 构造新 Authority 配置的默认 pools、期限及并发容量。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 默认 Authority 文件配置，不生成角色身份。
@@ -140,10 +136,6 @@ impl From<&Worker> for beamlet_worker::Options {
 }
 impl Default for Worker {
     /// 构造单个 Worker 的默认 pool、能力和执行参数。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///
@@ -203,10 +195,6 @@ pub(crate) struct Settings {
 }
 impl Default for Settings {
     /// 构造首次启动 Node 时的默认基础设施与两个角色。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

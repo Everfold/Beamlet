@@ -112,10 +112,6 @@ pub struct Ledger<O, A, P> {
 impl<O, A, P> Default for Ledger<O, A, P> {
     /// 创建不含 Operation 和已用授权身份的空台账。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 独立的 Ledger，尚未记录任何操作或 Attempt。
@@ -126,10 +122,6 @@ impl<O, A, P> Default for Ledger<O, A, P> {
 
 impl<O, A, P> Ledger<O, A, P> {
     /// 创建不含 Operation 和已用授权身份的空台账。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

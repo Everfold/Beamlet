@@ -193,10 +193,6 @@ pub struct Capabilities<P = String, R = String> {
 impl<P, R> Default for Capabilities<P, R> {
     /// 创建尚未注册处理器的空能力集合。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 空 Capabilities；构造 Worker 前需注册并启用至少一个处理器。
@@ -225,10 +221,6 @@ impl<P, R> fmt::Debug for Capabilities<P, R> {
 }
 impl<P, R> Capabilities<P, R> {
     /// 创建尚未注册处理器的空能力集合。
-    ///
-    /// # 参数
-    ///
-    /// 无。
     ///
     /// # 返回值
     ///

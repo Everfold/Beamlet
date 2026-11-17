@@ -86,10 +86,6 @@ impl fmt::Display for Pool {
 impl Default for Pool {
     /// 构造默认 pool 标识。
     ///
-    /// # 参数
-    ///
-    /// 无。
-    ///
     /// # 返回值
     ///
     /// 名称精确为 `default` 的 Pool。

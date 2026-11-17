@@ -11,10 +11,6 @@ struct Failure(&'static str);
 
 /// 验证内核借用完整报告接受结果，无需克隆原请求或结果。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -42,10 +38,6 @@ fn accepts_complete_report_without_cloning_request_or_result() {
 }
 
 /// 验证 Operation 不匹配时错误归还原始等待对象。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -79,10 +71,6 @@ fn operation_mismatch_returns_original_operation() {
 }
 
 /// 验证一次报告接受后可再签发授权，同时拒绝旧授权报告。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

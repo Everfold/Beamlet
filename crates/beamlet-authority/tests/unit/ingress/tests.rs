@@ -87,10 +87,6 @@ impl Delivery for ControlledDelivery {
 
 /// 创建用于暂停与释放交付的测试通道。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 二元组 `(ControlledDelivery, 工作接收端)`。
@@ -100,10 +96,6 @@ fn controlled_delivery() -> (ControlledDelivery, mpsc::Receiver<Work>) {
 }
 
 /// 验证并发请求在报告乱序完成时仍对应各自的回复入口。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -158,10 +150,6 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
 }
 
 /// 验证交付错误和无效报告产生未解决回复，不重复执行。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -231,10 +219,6 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
 
 /// 验证满载退出丢弃未签发请求，并等待已签发工作结束。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -297,10 +281,6 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
 }
 /// 验证交付成功或失败都会释放 Authority 的并发准入名额。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -361,10 +341,6 @@ async fn delivery_completion_releases_admission_capacity() {
 }
 /// 验证回复发送失败传播给调用方，而不是静默丢失或重试。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
@@ -400,10 +376,6 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
 
 /// 构造编排单元测试复用的固定角色实例。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 预设非 nil 的角色和会话身份。
@@ -415,10 +387,6 @@ fn instance() -> RoleInstance {
 }
 
 /// 验证无限并发 Authority 接收超过默认上限的任务并保持报告关联。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
@@ -472,10 +440,6 @@ async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associat
 }
 
 /// 验证多个 Authority 共享 Worker 时仍独立计算并发名额。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///

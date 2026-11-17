@@ -137,10 +137,6 @@ fn instance(id: u128) -> RoleInstance {
 }
 /// 构造供真实 Console 测试展示的一份 Worker 列表回复。
 ///
-/// # 参数
-///
-/// 无。
-///
 /// # 返回值
 ///
 /// 包含预设 Ready Worker 和文本倒序能力的 Outcome::Workers。
@@ -180,10 +176,6 @@ fn completed(text: &str) -> Outcome {
 }
 
 /// 验证真实 Console 同时提交多个请求，并按关联身份显示乱序结果和退出排空。
-///
-/// # 参数
-///
-/// 无。
 ///
 /// # 返回值
 ///
