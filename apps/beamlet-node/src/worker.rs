@@ -1,4 +1,4 @@
-//! Worker 只接收授权、执行业务并回报, 不持有 runtime.
+//! Worker 只接收授权、执行业务并回报, 不持有 ledger.
 
 use crate::{
     capabilities,

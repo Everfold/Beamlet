@@ -4,9 +4,9 @@
 
 ## 1. 职责与边界
 
-领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. Worker 不持有 runtime, 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
+领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. Worker 不持有 ledger, 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
 
-Operation 原始请求为 `Task { capability, text }`. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / runtime 的状态转换. [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs)仅共享消息结构、版本与 subject 编码, 不管理连接、选择策略或生命周期.
+Operation 原始请求为 `Task { capability, text }`. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs)仅共享消息结构、版本与 subject 编码, 不管理连接、选择策略或生命周期.
 
 node 的 ingress 接收本地终端和网络提交, 返回结构化请求与一次性回复入口. delivery 选择并向 Worker 发送一个调用, 返回完整 Report 或交付错误. channel 实现只用于测试, 不是生产回退路径.
 

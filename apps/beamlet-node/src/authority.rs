@@ -6,8 +6,8 @@ use crate::{
     settings::Authority,
 };
 use anyhow::{Context, Result, ensure};
+use beamlet_ledger::Ledger;
 use beamlet_protocol::{Outcome, RoleInstance, Submission};
-use beamlet_runtime::Runtime;
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
@@ -30,7 +30,7 @@ pub(crate) async fn run(
     } = config;
     let session_id = instance.session_id;
     let mut stopping = false;
-    let mut runtime = Runtime::new();
+    let mut ledger = Ledger::new();
     let mut replies: HashMap<String, (Reply, RoleInstance, String)> = HashMap::new();
     let mut deliveries: JoinSet<(String, Result<WorkerReport, DeliveryError>)> = JoinSet::new();
     let mut sends: JoinSet<Result<()>> = JoinSet::new();
@@ -69,7 +69,7 @@ pub(crate) async fn run(
                 let (id, outcome) = completed.context("缺少交付任务")?.context("交付任务异常退出")?;
                 let (reply, worker, attempt_id) = replies.remove(&id).context("缺少回复来源")?;
                 let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
-                let result = match finish(&mut runtime, &id, outcome) {
+                let result = match finish(&mut ledger, &id, outcome) {
                     Ok(result) => Outcome::Completed { operation_id: id.clone(), attempt_id: attempt_id.clone(), report_id: report_id.context("缺少报告身份")?, worker, result },
                     Err(error) => {
                         unresolved += 1;
@@ -112,9 +112,9 @@ pub(crate) async fn run(
             next_id = next_id.checked_add(1).context("操作身份已耗尽")?;
             let id = format!("{session_id}:operation:{next_id}");
 
-            runtime.create_operation(id.clone(), task.clone())?;
+            ledger.create_operation(id.clone(), task.clone())?;
             info!(event = "operation.created", operation_id = %id, "已创建 Operation");
-            let attempt = runtime.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
+            let attempt = ledger.create_attempt(&id, format!("{session_id}:attempt:{next_id}"))?;
             info!(
                 event = "attempt.created",
                 operation_id = %id,
@@ -164,7 +164,7 @@ pub(crate) async fn run(
 
 /// 只有关联正确的 Report 能推进生命周期; 交付错误不伪装成报告.
 fn finish<T>(
-    runtime: &mut Runtime<String, String, T>,
+    ledger: &mut Ledger<String, String, T>,
     id: &str,
     outcome: Result<WorkerReport, DeliveryError>,
 ) -> Result<String> {
@@ -182,9 +182,9 @@ fn finish<T>(
         "交付返回了其他 Operation 的报告"
     );
 
-    runtime.accept_report(&report)?;
+    ledger.accept_report(&report)?;
     info!(event = "report.accepted", "已接受 Report");
-    runtime.close(report.operation_id())?;
+    ledger.close(report.operation_id())?;
     info!(event = "operation.closed", "已关闭 Operation");
 
     Ok(report.into_result())
@@ -198,20 +198,20 @@ mod tests {
     #[test]
     fn errors_preserve_pending_attempt() {
         let id = "operation".to_owned();
-        let mut runtime = Runtime::new();
-        runtime
+        let mut ledger = Ledger::new();
+        ledger
             .create_operation(id.clone(), String::from("hello"))
             .unwrap();
-        let attempt = runtime.create_attempt(&id, "attempt".into()).unwrap();
+        let attempt = ledger.create_attempt(&id, "attempt".into()).unwrap();
 
         for error in [
             DeliveryError::NoReceiver,
             DeliveryError::NotDelivered("full".into()),
             DeliveryError::Unknown("timeout".into()),
         ] {
-            assert!(finish(&mut runtime, &id, Err(error)).is_err());
+            assert!(finish(&mut ledger, &id, Err(error)).is_err());
             assert_eq!(
-                runtime
+                ledger
                     .operation(&id)
                     .unwrap()
                     .pending_attempt_id()
@@ -226,9 +226,9 @@ mod tests {
                 Attempt::from_parts(operation.into(), attempt.into()),
                 "bad".into(),
             );
-            assert!(finish(&mut runtime, &id, Ok(report)).is_err());
+            assert!(finish(&mut ledger, &id, Ok(report)).is_err());
             assert_eq!(
-                runtime
+                ledger
                     .operation(&id)
                     .unwrap()
                     .pending_attempt_id()
@@ -238,14 +238,14 @@ mod tests {
         }
 
         let report = Report::new("good".into(), attempt, "olleh".into());
-        assert_eq!(finish(&mut runtime, &id, Ok(report)).unwrap(), "olleh");
-        assert!(runtime.create_attempt(&id, "new".into()).is_err());
+        assert_eq!(finish(&mut ledger, &id, Ok(report)).unwrap(), "olleh");
+        assert!(ledger.create_attempt(&id, "new".into()).is_err());
 
         let duplicate = Report::new(
             "good".into(),
             Attempt::from_parts(id.clone(), "attempt".into()),
             "olleh".into(),
         );
-        assert!(finish(&mut runtime, &id, Ok(duplicate)).is_err());
+        assert!(finish(&mut ledger, &id, Ok(duplicate)).is_err());
     }
 }

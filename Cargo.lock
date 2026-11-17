@@ -141,14 +141,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "beamlet-ledger"
+version = "0.1.0"
+dependencies = [
+ "beamlet-kernel",
+ "beamlet-primitives",
+]
+
+[[package]]
 name = "beamlet-node"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-nats",
+ "beamlet-ledger",
  "beamlet-primitives",
  "beamlet-protocol",
- "beamlet-runtime",
  "clap",
  "confy",
  "futures",
@@ -172,14 +180,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "uuid",
-]
-
-[[package]]
-name = "beamlet-runtime"
-version = "0.1.0"
-dependencies = [
- "beamlet-kernel",
- "beamlet-primitives",
 ]
 
 [[package]]

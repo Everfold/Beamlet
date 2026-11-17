@@ -1,9 +1,9 @@
 use std::{error::Error, fmt};
 
-/// 在线流程拒绝原因, 拒绝不会改变已有 Operation.
+/// 台账更新的拒绝原因, 拒绝不会改变已有 Operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RuntimeError {
+pub enum LedgerError {
     /// Operation 身份已注册.
     OperationExists,
     /// 找不到对应 Operation.
@@ -14,13 +14,13 @@ pub enum RuntimeError {
     NoPendingAttempt,
     /// Operation 已关闭.
     OperationClosed,
-    /// 本次运行已签发过此 Attempt 身份.
+    /// 此台账中已签发过此 Attempt 身份.
     AttemptIdReused,
     /// 报告关联不匹配.
     ReportMismatch,
 }
 
-impl fmt::Display for RuntimeError {
+impl fmt::Display for LedgerError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::OperationExists => "operation already exists",
@@ -34,7 +34,7 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-impl Error for RuntimeError {}
+impl Error for LedgerError {}
 
 /// 注册失败时保留调用者的非 Clone 请求与身份.
 #[derive(Debug)]
@@ -52,7 +52,7 @@ impl<O, P> CreateOperationError<O, P> {
 
 impl<O, P> fmt::Display for CreateOperationError<O, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        RuntimeError::OperationExists.fmt(f)
+        LedgerError::OperationExists.fmt(f)
     }
 }
 

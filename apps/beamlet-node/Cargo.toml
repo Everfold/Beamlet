@@ -8,9 +8,9 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+beamlet-ledger.workspace = true
 beamlet-primitives.workspace = true
 beamlet-protocol.workspace = true
-beamlet-runtime.workspace = true
 
 futures.workspace = true
 tokio.workspace = true
