@@ -41,9 +41,13 @@
 //! let _ = operation.accept_report(&report);
 //! ```
 
+/// 报告关联失败时保留原等待 Operation 的错误类型。
 mod accept_report_error;
+/// 内核合法状态转换图，以及无条件转换结果的内部校验。
 mod lifecycle;
+/// Operation 的身份、原始请求和 Ready/AwaitingReport/Closed 类型状态。
 mod operation;
+/// 恢复等待状态失败时归还全部输入的错误类型。
 mod restore_operation_error;
 
 pub use accept_report_error::AcceptReportError;

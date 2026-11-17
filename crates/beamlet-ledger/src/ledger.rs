@@ -2,11 +2,30 @@ use crate::{CreateOperationError, LedgerError};
 use beamlet_kernel::{AwaitingReport, Closed, Operation, OperationStatus};
 use beamlet_primitives::{Attempt, Report};
 
+/// 台账内部对不同生命周期 Operation 的统一存储表示。
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `A`：Attempt 身份类型。
+/// - `P`：原始请求类型。
 #[derive(Debug)]
 enum Managed<O, A, P> {
-    Ready(Operation<O, P>),
-    AwaitingReport(Operation<O, P, AwaitingReport<A>>),
-    Closed(Operation<O, P, Closed>),
+    /// 可创建新授权或结束操作的 Ready 对象。
+    Ready(
+        /// 保留原身份与请求的 Ready Operation。
+        Operation<O, P>,
+    ),
+    /// 正在等待特定授权报告的 Operation。
+    AwaitingReport(
+        /// 携带当前待处理 Attempt 身份的等待对象。
+        Operation<O, P, AwaitingReport<A>>,
+    ),
+    /// 已经结束且不可再签发授权的 Operation。
+    Closed(
+        /// 保留原身份与请求的 Closed Operation。
+        Operation<O, P, Closed>,
+    ),
 }
 
 impl<O, A, P> Managed<O, A, P> {
@@ -29,8 +48,16 @@ impl<O, A, P> Managed<O, A, P> {
 }
 
 /// 仅可读取的在线 Operation 视图, 不暴露内部可变对象.
+///
+/// # 泛型参数
+///
+/// - `'a`：台账的借用生命周期。
+/// - `O`：Operation 身份类型。
+/// - `A`：Attempt 身份类型。
+/// - `P`：原始请求类型。
 #[derive(Debug, Clone, Copy)]
 pub struct OperationView<'a, O, A, P> {
+    /// 台账内部对象的共享借用，只读且不能比台账活得更久。
     operation: &'a Managed<O, A, P>,
 }
 
@@ -103,9 +130,17 @@ impl<O, A, P> OperationView<'_, O, A, P> {
 ///
 /// O 为 Operation 身份, A 为 Attempt 身份, P 为请求. 查找使用线性比较,
 /// 不要求身份实现 Hash. 关闭对象与已用授权身份保留到此 Ledger 被释放.
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `A`：Attempt 身份类型。
+/// - `P`：原始请求类型。
 #[derive(Debug)]
 pub struct Ledger<O, A, P> {
+    /// 全部已注册 Operation 的当前状态，保留关闭对象，不承诺归档。
     operations: Vec<Managed<O, A, P>>,
+    /// 该台账已经签发过的 Attempt 身份，用于拒绝重复授权身份。
     used_attempts: Vec<A>,
 }
 

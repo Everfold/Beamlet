@@ -2,10 +2,19 @@ use crate::Attempt;
 use std::{error::Error, fmt};
 
 /// 恢复等待状态时的 Operation 关联错误, 保留全部输入.
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `P`：原始请求类型。
+/// - `A`：Attempt 身份类型。
 #[derive(Debug)]
 pub struct RestoreOperationError<O, P, A> {
+    /// Operation 的固定身份，恢复或重复创建失败时仍保留输入所有权。
     pub(crate) id: O,
+    /// Operation 的原始请求，不随生命周期转换改变。
     pub(crate) request: P,
+    /// 恢复失败时归还的原始授权。
     pub(crate) attempt: Attempt<O, A>,
 }
 

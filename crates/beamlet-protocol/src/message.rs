@@ -48,15 +48,22 @@ pub struct Submission {
 pub enum Command {
     /// 查询指定 pool 的 Worker, 可按能力过滤.
     Workers {
+        /// 本次请求与回复的关联 UUID，不是幂等键或 Operation 身份。
         request_id: Uuid,
+        /// 明确指定或实际应答的 Authority 角色与会话身份。
         authority: RoleInstance,
+        /// 本次查询或调用所属的 pool，按精确名称隔离。
         pool: Pool,
+        /// 可选的能力过滤条件；None 表示不按能力筛选。
         capability: Option<String>,
     },
     /// 请求 Authority 创建并执行 Operation.
     Submit {
+        /// 本次请求与回复的关联 UUID，不是幂等键或 Operation 身份。
         request_id: Uuid,
+        /// 明确指定或实际应答的 Authority 角色与会话身份。
         authority: RoleInstance,
+        /// 创建请求的 pool、Worker 选择与业务 Task；尚未签发授权。
         submission: Submission,
     },
 }
@@ -112,22 +119,37 @@ impl Command {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Outcome {
     /// 创建 Operation 前的拒绝, 或控制请求错误.
-    Rejected { reason: String },
+    Rejected {
+        /// 拒绝或无法确认执行结果的具体诊断原因。
+        reason: String,
+    },
     /// Worker 查询快照.
-    Workers { workers: Vec<WorkerView> },
+    Workers {
+        /// 该 Authority 观察到的 Worker 快照，可能包含 Draining、Offline 或过期记录。
+        workers: Vec<WorkerView>,
+    },
     /// 有效 Report 已接受且 Operation 已关闭.
     Completed {
+        /// Authority 为本次操作分配的 Operation 身份。
         operation_id: String,
+        /// Authority 已签发、与该操作关联的 Attempt 身份。
         attempt_id: String,
+        /// Worker 生成的 Report 身份，仅有效报告被接受后用于完成回复。
         report_id: String,
+        /// 指定或实际执行此调用的 Worker 角色与会话身份。
         worker: RoleInstance,
+        /// 执行产生的业务结果，不在协议层重新判断成功语义。
         result: String,
     },
     /// 已签发但未取得有效 Report, Operation 仍等待原授权.
     Unresolved {
+        /// Authority 为本次操作分配的 Operation 身份。
         operation_id: String,
+        /// Authority 已签发、与该操作关联的 Attempt 身份。
         attempt_id: String,
+        /// 指定或实际执行此调用的 Worker 角色与会话身份。
         worker: RoleInstance,
+        /// 拒绝或无法确认执行结果的具体诊断原因。
         reason: String,
     },
 }
@@ -182,16 +204,24 @@ pub struct ReportData {
 pub enum WorkerReply {
     /// 执行已结束的证据.
     Report {
+        /// 原 Worker 调用所属的 pool，用于回复关联校验。
         pool: Pool,
+        /// 指定或实际执行此调用的 Worker 角色与会话身份。
         worker: RoleInstance,
+        /// 完整报告的线格式字段，保留原授权与业务结果。
         report: ReportData,
     },
     /// 执行前拒绝, 不构造假的 Report.
     Rejected {
+        /// 被拒绝调用所在的 pool。
         pool: Pool,
+        /// 指定或实际执行此调用的 Worker 角色与会话身份。
         worker: RoleInstance,
+        /// Authority 为本次操作分配的 Operation 身份。
         operation_id: String,
+        /// Authority 已签发、与该操作关联的 Attempt 身份。
         attempt_id: String,
+        /// 拒绝或无法确认执行结果的具体诊断原因。
         reason: String,
     },
 }

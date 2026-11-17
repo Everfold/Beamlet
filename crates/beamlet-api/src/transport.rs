@@ -16,7 +16,10 @@ pub struct Connection {
 
 /// 共享的只读连接视图, 不暴露消息后端的通知原语.
 #[derive(Clone)]
-pub struct ConnectionView(Arc<dyn Fn() -> Connection + Send + Sync>);
+pub struct ConnectionView(
+    /// 线程安全的当前连接状态读取函数，克隆视图时共享。
+    Arc<dyn Fn() -> Connection + Send + Sync>,
+);
 impl ConnectionView {
     /// 注入读取当前连接状态的非阻塞函数。
     ///
@@ -63,7 +66,10 @@ impl fmt::Debug for ConnectionView {
 
 /// 传输入口或连接失败, 保留底层错误原因.
 #[derive(Debug)]
-pub struct TransportError(Box<dyn Error + Send + Sync>);
+pub struct TransportError(
+    /// 被包装的底层错误对象，通过 Error::source 保留原因链。
+    Box<dyn Error + Send + Sync>,
+);
 impl TransportError {
     /// 包装底层失败原因并保留错误链。
     ///
@@ -116,10 +122,16 @@ pub enum DeliveryError {
     NoReceiver,
     /// 有明确证据证明未交付.
     #[error("明确未交付: {0}")]
-    NotDelivered(String),
+    NotDelivered(
+        /// 有证据表明调用未交付时的具体原因。
+        String,
+    ),
     /// 无法确定执行结果, 不可自动重试.
     #[error("交付结果未知: {0}")]
-    Unknown(String),
+    Unknown(
+        /// 无法确认远端是否执行时的原因，不可据此自动重试。
+        String,
+    ),
 }
 
 /// 与角色绑定的接收许可, 不包含 Worker 选择策略.
@@ -180,6 +192,11 @@ impl WorkerBinding {
 }
 
 /// 一次调用与其独立的回复入口.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 #[derive(Debug)]
 pub struct Incoming<P = String, R = String> {
     /// 已签发的调用.
@@ -189,6 +206,13 @@ pub struct Incoming<P = String, R = String> {
 }
 
 /// Worker 接收端; stop 后保留已经接收的队列供排空.
+///
+/// receive 可安全取消；None 表示永久结束。stop 关闭新输入，保留已接收队列供排空。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub trait WorkerInbox<P = String, R = String>: Send {
     /// 接收一个带一次性回复入口的 Worker 调用。
     ///
@@ -215,6 +239,13 @@ pub trait WorkerInbox<P = String, R = String>: Send {
 }
 
 /// 向已选定实例交付一次, 不选人、不重试.
+///
+/// 校验报告来源和授权关联；超时只结束本地等待。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub trait Delivery<P = String, R = String>: Clone + Send + Sync + 'static {
     /// 向已指定的 Worker 实例交付一次调用并等待关联报告。
     ///
@@ -244,6 +275,8 @@ pub struct DiscoveryReply {
 }
 
 /// 逐条读取发现回复, 时间窗口与去重由调用者控制.
+///
+/// receive 可安全取消；None 表示入口永久结束。
 pub trait DiscoveryInbox: Send {
     /// 逐条接收一次发现查询的回复。
     ///
@@ -260,6 +293,13 @@ pub trait DiscoveryInbox: Send {
 }
 
 /// 调用客户端所需的两种交互, 不保存 UI 选择或自动重发.
+///
+/// 支持并发调用；关联校验由 Client 完成，取消等待不撤销远端任务。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub trait ClientTransport<P = String, R = String>: Clone + Send + Sync {
     /// 多回复接收入口.
     type Discovery: DiscoveryInbox;
@@ -298,27 +338,53 @@ pub trait ClientTransport<P = String, R = String>: Clone + Send + Sync {
 }
 
 /// Authority 控制入口的单个已解码事件.
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 #[derive(Debug)]
 pub enum AuthorityEvent<P = String, R = String> {
     /// 连接变化, 旧世代缓冲必须先丢弃.
-    Connection(Connection),
+    Connection(
+        /// 连接状态变化后的观测世代和 connected 状态。
+        Connection,
+    ),
     /// 路由匹配的完整 Worker 公告.
-    Presence { presence: Presence, epoch: u64 },
+    Presence {
+        /// Worker 自报的完整能力和运行状态快照。
+        presence: Presence,
+        /// 收到该公告时的连接世代，必须与当前连接视图一致。
+        epoch: u64,
+    },
     /// 一个 pool 的发现查询.
     Discovery {
+        /// 本次查询或调用所属的 pool，按精确名称隔离。
         pool: Pool,
+        /// 本次请求与回复的关联 UUID，不是幂等键或 Operation 身份。
         request_id: Uuid,
+        /// 发送 Authority 描述与请求 UUID 的一次性发现回复入口。
         reply: Responder<DiscoveryReply>,
     },
     /// 指向该实例的请求, 保留路由 pool 供角色校验.
     Request {
+        /// 消息实际到达的路由 pool，Authority 还需核对它与命令内部 pool 一致。
         pool: Pool,
+        /// 目标 Authority 的查询或提交命令。
         command: Command<P>,
+        /// 发送本次控制或业务结果的独立回复入口。
         reply: Responder<Reply<R>>,
     },
 }
 
 /// 独立于业务队列的控制入口, 不持有 Worker 登记表.
+///
+/// receive 可安全取消；重连须丢弃旧世代缓冲，登记与选人由 Authority 负责。
+///
+/// # 泛型参数
+///
+/// - `P`：业务输入类型，默认 String。
+/// - `R`：业务结果类型，默认 String。
 pub trait AuthorityInbox<P = String, R = String>: Send {
     /// 取得能够持续读取当前连接状态的视图。
     ///
@@ -360,10 +426,15 @@ pub enum PresenceEvent {
     /// 有 Authority 请求完整快照.
     Probe,
     /// 连接世代变化.
-    Connection(Connection),
+    Connection(
+        /// 连接状态变化后的观测世代和 connected 状态。
+        Connection,
+    ),
 }
 
 /// Worker 公告与探测通道, 心跳周期和状态由角色决定.
+///
+/// 角色负责心跳、序号和状态；通道只传递事件，刷新不代表远端已登记。
 pub trait PresenceChannel: Send + Sync {
     /// 读取公告通道的当前连接状态。
     ///

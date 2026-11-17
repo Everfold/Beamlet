@@ -1,6 +1,8 @@
 //! Console 与节点共用的 v3 线格式, 不持有连接或管理 Operation 生命周期.
 
+/// 泛型语义数据与 v3 文本 profile 之间的显式字段转换。
 mod conversion;
+/// v3 文本线格式的发现、请求、调用与报告消息。
 mod message;
 
 pub use message::{
@@ -17,16 +19,30 @@ pub const VERSION: u16 = 3;
 pub enum Error {
     /// JSON 消息无效.
     #[error("invalid protocol message: {0}")]
-    Json(#[from] serde_json::Error),
+    Json(
+        /// JSON 编码或解码的原始 serde_json 错误。
+        #[from]
+        serde_json::Error,
+    ),
     /// 不接受其他版本的消息.
     #[error("unsupported protocol version: {0}")]
-    Version(u16),
+    Version(
+        /// 报文携带但当前实现不支持的协议版本号。
+        u16,
+    ),
 }
 
+/// JSON 线协议的外层封装，将结构版本与消息体放在同一个报文中。
+///
+/// # 泛型参数
+///
+/// - `T`：协议消息体类型。
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Envelope<T> {
+    /// 报文结构版本，与业务能力版本独立。
     version: u16,
+    /// 当前版本对应的具体消息体。
     body: T,
 }
 

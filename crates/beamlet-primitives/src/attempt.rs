@@ -1,7 +1,14 @@
 /// 针对一个 Operation 的一次执行授权, 由外层保存.
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `A`：Attempt 身份类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Attempt<O, A> {
+    /// 本次执行授权的身份。
     id: A,
+    /// 该授权所属的 Operation 身份。
     operation_id: O,
 }
 

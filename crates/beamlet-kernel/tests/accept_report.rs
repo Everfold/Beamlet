@@ -1,13 +1,25 @@
 use beamlet_kernel::{AcceptReportError, Operation, Report};
 
+/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
 #[derive(Debug)]
-struct Request(String);
+struct Request(
+    /// 原始请求文本，失败时必须原样归还或继续保留。
+    String,
+);
 
+/// 报告接受测试中的自定义报告身份，避免把身份固定为字符串。
 #[derive(Debug)]
-struct ReportId(&'static str);
+struct ReportId(
+    /// 测试报告的静态名称。
+    &'static str,
+);
 
+/// 作为 Report 业务结果保存的失败值；业务失败不等于报告关联失败。
 #[derive(Debug, PartialEq, Eq)]
-struct Failure(&'static str);
+struct Failure(
+    /// 测试业务失败的说明文本。
+    &'static str,
+);
 
 /// 验证内核借用完整报告接受结果，无需克隆原请求或结果。
 ///

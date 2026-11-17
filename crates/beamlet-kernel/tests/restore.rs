@@ -1,14 +1,26 @@
 use beamlet_kernel::{AcceptReportError, Operation, OperationStatus};
 use beamlet_primitives::{Attempt, Report};
 
+/// 恢复测试的自定义身份，验证无需克隆输入也能重建状态。
 #[derive(Debug, PartialEq, Eq)]
-struct Identity(u64);
+struct Identity(
+    /// 身份的数值表示。
+    u64,
+);
 
+/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
 #[derive(Debug)]
-struct Request(String);
+struct Request(
+    /// 原始请求文本，失败时必须原样归还或继续保留。
+    String,
+);
 
+/// 不提供额外能力的不透明身份，用于验证 Closed 状态恢复。
 #[derive(Debug)]
-struct OpaqueIdentity(String);
+struct OpaqueIdentity(
+    /// 不透明身份拥有的文本数据。
+    String,
+);
 
 /// 验证从已保存授权恢复等待状态，不重新签发或克隆输入。
 ///

@@ -2,8 +2,12 @@ use beamlet_kernel::OperationStatus;
 use beamlet_ledger::{Ledger, LedgerError};
 use beamlet_primitives::{Attempt, Report};
 
+/// 内核或台账测试的原始请求，故意不实现 Clone，以验证所有权保留。
 #[derive(Debug)]
-struct Request(String);
+struct Request(
+    /// 原始请求文本，失败时必须原样归还或继续保留。
+    String,
+);
 
 /// 验证台账路由交错报告并保留各 Operation 的原始请求。
 ///

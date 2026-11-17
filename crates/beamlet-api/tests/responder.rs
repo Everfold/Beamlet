@@ -9,8 +9,12 @@ use std::{
 };
 use tokio::sync::oneshot;
 
+/// 回复入口测试的拥有所有权的数据，故意不实现 Clone。
 #[derive(Debug, PartialEq, Eq)]
-struct Answer(Vec<u8>);
+struct Answer(
+    /// 需要通过一次性回复移动的字节内容。
+    Vec<u8>,
+);
 
 /// 验证一次性回复可移动非 Clone 数据，并等待适配器发送完成。
 ///

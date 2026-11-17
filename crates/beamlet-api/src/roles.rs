@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 
 /// 持久角色身份与本次运行会话, 不根据 UUID 排序判断新旧.
+///
+/// 固定身份来自配置，会话身份每次运行生成；两者共同标识一次角色运行。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -40,6 +42,8 @@ pub enum PresenceState {
 }
 
 /// Worker 完整状态快照, 第一份心跳也可直接用于登记.
+///
+/// 序号在会话内递增；重复公告不续租，失联由接收方按本地时间判断。
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -79,5 +83,8 @@ pub enum Selection {
     /// 从指定 pool 的有效候选中选择一个.
     Any,
     /// 锁定角色与会话.
-    Exact(RoleInstance),
+    Exact(
+        /// 必须精确匹配的 Worker 角色与会话；失效后不回退其他会话。
+        RoleInstance,
+    ),
 }

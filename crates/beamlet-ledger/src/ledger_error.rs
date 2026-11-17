@@ -47,9 +47,16 @@ impl fmt::Display for LedgerError {
 impl Error for LedgerError {}
 
 /// 注册失败时保留调用者的非 Clone 请求与身份.
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `P`：原始请求类型。
 #[derive(Debug)]
 pub struct CreateOperationError<O, P> {
+    /// Operation 的固定身份，恢复或重复创建失败时仍保留输入所有权。
     pub(crate) id: O,
+    /// Operation 的原始请求，不随生命周期转换改变。
     pub(crate) request: P,
 }
 

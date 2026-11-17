@@ -1,6 +1,12 @@
 use std::{error::Error, fmt, future::Future, pin::Pin};
 
+/// 擦除具体 future 类型的一次性回复发送任务，完成时给出发送结果。
 type SendFuture = Pin<Box<dyn Future<Output = Result<(), ReplyError>> + Send>>;
+/// 拥有发送资源的一次性异步发送函数；消费回复值后生成 SendFuture。
+///
+/// # 泛型参数
+///
+/// - `T`：一次性回复数据类型。
 type SendReply<T> = Box<dyn FnOnce(T) -> SendFuture + Send>;
 
 /// 一次性异步回复入口, 隐藏传输地址并由适配器持有发送资源.
@@ -11,11 +17,16 @@ type SendReply<T> = Box<dyn FnOnce(T) -> SendFuture + Send>;
 /// ```compile_fail
 /// use beamlet_api::Responder;
 /// async fn twice(reply: Responder<String>) {
-///     reply.send(String::from("first")).await.unwrap();
-///     reply.send(String::from("second")).await.unwrap();
+/// reply.send(String::from("first")).await.unwrap();
+/// reply.send(String::from("second")).await.unwrap();
 /// }
 /// ```
+///
+/// # 泛型参数
+///
+/// - `T`：一次性回复数据类型。
 pub struct Responder<T> {
+    /// 消费唯一回复值的发送函数，同时拥有适配器需要的发送资源。
     send: SendReply<T>,
 }
 
@@ -76,6 +87,7 @@ impl<T> fmt::Debug for Responder<T> {
 /// 回复未完成发送, 保留适配器提供的原始原因.
 #[derive(Debug)]
 pub struct ReplyError {
+    /// 被包装的底层错误对象，通过 Error::source 保留原因链。
     source: Box<dyn Error + Send + Sync>,
 }
 

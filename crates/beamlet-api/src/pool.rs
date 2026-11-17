@@ -4,7 +4,10 @@ use std::{fmt, str::FromStr};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "String", into = "String"))]
-pub struct Pool(String);
+pub struct Pool(
+    /// 已校验的 pool 名称；不包含会拆分主题片段的字符。
+    String,
+);
 
 /// pool 名称为空、过长或包含主题分隔符等无效字符.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -12,6 +15,7 @@ pub struct Pool(String);
 pub struct InvalidPool;
 
 impl TryFrom<String> for Pool {
+    /// pool 名称不满足长度或字符约束时返回的校验错误。
     type Error = InvalidPool;
 
     /// 校验 pool 名称并构造可安全用于主题片段的标识。
@@ -37,6 +41,7 @@ impl TryFrom<String> for Pool {
 }
 
 impl FromStr for Pool {
+    /// pool 名称不满足长度或字符约束时返回的校验错误。
     type Err = InvalidPool;
     /// 校验 pool 名称并构造可安全用于主题片段的标识。
     ///

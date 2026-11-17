@@ -4,7 +4,10 @@ use std::{fmt, str::FromStr};
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(try_from = "String", into = "String"))]
-pub struct CapabilityId(String);
+pub struct CapabilityId(
+    /// 已校验且保留精确拼写的能力名称，长度为 1..=256 字节。
+    String,
+);
 
 /// 能力标识为空或超过允许的字节长度.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -47,6 +50,7 @@ impl CapabilityId {
 }
 
 impl TryFrom<String> for CapabilityId {
+    /// 能力名称为空或超过字节长度上限时返回的校验错误。
     type Error = InvalidCapabilityId;
     /// 校验并保存能力标识，保留输入的精确拼写。
     ///
@@ -63,6 +67,7 @@ impl TryFrom<String> for CapabilityId {
     }
 }
 impl FromStr for CapabilityId {
+    /// 能力名称为空或超过字节长度上限时返回的校验错误。
     type Err = InvalidCapabilityId;
     /// 校验并保存能力标识，保留输入的精确拼写。
     ///

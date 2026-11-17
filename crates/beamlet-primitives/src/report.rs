@@ -1,10 +1,20 @@
 use crate::Attempt;
 
 /// 一次 Attempt 执行结束后的结果证据, 身份和结果类型由调用者定义.
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `A`：Attempt 身份类型。
+/// - `R`：Report 身份类型。
+/// - `V`：报告业务结果类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Report<O, A, R, V> {
+    /// 本次报告的身份。
     id: R,
+    /// 已结束执行所对应的原始 Attempt。
     attempt: Attempt<O, A>,
+    /// 业务执行结果；其成功或失败语义由调用方解释。
     result: V,
 }
 

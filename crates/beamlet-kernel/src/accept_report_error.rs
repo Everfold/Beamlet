@@ -1,6 +1,10 @@
 use std::fmt;
 
 /// 报告关联不匹配的原因, T 为拒绝后可取回的 Operation.
+///
+/// # 泛型参数
+///
+/// - `T`：失败后可取回的 Operation 类型。
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum AcceptReportError<T> {

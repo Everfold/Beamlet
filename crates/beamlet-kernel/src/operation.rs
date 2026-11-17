@@ -14,28 +14,47 @@ pub enum OperationStatus {
 /// 没有等待报告的 Attempt, 可以创建授权或结束 Operation.
 #[derive(Debug)]
 pub struct Ready {
+    /// 底层状态机的 Ready 类型状态，保证只有合法操作可调用。
     machine: lifecycle::Lifecycle<(), lifecycle::Ready>,
 }
 
 /// 等待指定 Attempt 的报告, 只能接受报告后继续推进.
+///
+/// # 泛型参数
+///
+/// - `A`：Attempt 身份类型。
 #[derive(Debug)]
 pub struct AwaitingReport<A> {
+    /// 底层状态机的 AwaitingReport 类型状态。
     machine: lifecycle::Lifecycle<(), lifecycle::AwaitingReport>,
+    /// 当前唯一等待报告的 Attempt 身份。
     attempt_id: A,
 }
 
 /// Operation 已结束, 允许重复关闭.
 #[derive(Debug)]
 pub struct Closed {
+    /// 底层状态机的 Closed 终态。
     machine: lifecycle::Lifecycle<(), lifecycle::Closed>,
 }
 
 /// 身份与请求保持不变的 Operation, S 表达当前生命周期状态.
+///
+/// Ready 可签发或关闭；AwaitingReport 只接受匹配报告；Closed 不再执行。
+///
+/// # 泛型参数
+///
+/// - `O`：Operation 身份类型。
+/// - `P`：原始请求类型。
+/// - `S`：生命周期类型状态，默认 Ready。
 #[derive(Debug)]
 #[must_use]
 pub struct Operation<O, P, S = Ready> {
+    /// Operation 的固定身份，恢复或重复创建失败时仍保留输入所有权。
     id: O,
+    /// Operation 的原始请求，不随生命周期转换改变。
     request: P,
+    /// 当前生命周期的类型状态，决定可用的转换方法。
     state: S,
 }
 

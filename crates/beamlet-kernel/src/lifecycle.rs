@@ -1,5 +1,6 @@
 use state_machines::state_machine;
 
+// 授权/报告循环：Ready → AwaitingReport → Ready；关闭：Ready → Closed。
 state_machine! {
     name: Lifecycle,
     initial: Ready,
@@ -36,6 +37,7 @@ pub(crate) fn transition<T, E>(result: Result<T, E>) -> T {
     }
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/lifecycle.rs"]
 mod tests;
