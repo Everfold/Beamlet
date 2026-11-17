@@ -1,0 +1,22 @@
+[package]
+name = "beamlet-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+beamlet-api.workspace = true
+beamlet-primitives.workspace = true
+
+tokio.workspace = true
+
+tracing.workspace = true
+
+thiserror.workspace = true
+
+[dev-dependencies]
+beamlet-transport-local.workspace = true
+beamlet-transport-nats.workspace = true

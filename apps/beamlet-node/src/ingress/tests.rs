@@ -4,7 +4,7 @@ use super::{Ingress as _, channel};
 use crate::{
     authority,
     delivery::{Call, Delivery, DeliveryError, WorkerReport},
-    worker,
+    test_support,
 };
 use beamlet_api::{Outcome, Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
@@ -27,7 +27,9 @@ impl Work {
     async fn succeed(self) {
         let report_id = format!("report:{}", self.call.attempt.id());
         self.reply
-            .send(Ok(worker::execute(self.call, report_id).await.unwrap()))
+            .send(Ok(test_support::report(self.call, report_id)
+                .await
+                .unwrap()))
             .unwrap();
     }
 }

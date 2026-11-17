@@ -8,7 +8,9 @@ pub(crate) mod routed;
 mod tests;
 
 pub(crate) use beamlet_api::{Call, DeliveryError, WorkerReport};
-pub(crate) use contract::{Delivery, Inbox};
+pub(crate) use contract::Delivery;
+#[cfg(test)]
+pub(crate) use contract::Inbox;
 
 #[cfg(test)]
 pub(crate) use beamlet_api::Incoming;

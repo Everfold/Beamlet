@@ -173,6 +173,7 @@ dependencies = [
  "beamlet-protocol",
  "beamlet-transport-local",
  "beamlet-transport-nats",
+ "beamlet-worker",
  "clap",
  "confy",
  "futures",
@@ -218,6 +219,19 @@ dependencies = [
  "beamlet-primitives",
  "beamlet-protocol",
  "futures",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "beamlet-worker"
+version = "0.1.0"
+dependencies = [
+ "beamlet-api",
+ "beamlet-primitives",
+ "beamlet-transport-local",
+ "beamlet-transport-nats",
+ "thiserror",
  "tokio",
  "tracing",
 ]

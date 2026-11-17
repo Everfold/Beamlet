@@ -1,17 +1,16 @@
 //! 将一种角色的配置和基础设施装配为独立运行实例.
 use crate::{
-    authority, delivery, ingress, presence,
+    authority, delivery, ingress,
     registry::Registry,
     settings::{Role, RoleSettings},
     shutdown::Shutdown,
-    terminal, worker,
+    terminal,
 };
 use anyhow::{Context, Result};
-use beamlet_api::{AuthorityInfo, Presence, PresenceState, RoleInstance};
-use beamlet_api::{WorkerBinding, WorkerInbox};
+use beamlet_api::{AuthorityInfo, RoleInstance};
 use beamlet_transport_nats::Nats;
 use std::time::Duration;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
@@ -40,37 +39,58 @@ impl RunningRole {
             info!(event = "role.starting", "角色启动");
             let result = match settings.kind {
                 Role::Authority(config) => {
-                    let registry = Registry::new(config.pools.clone(), Duration::from_secs(config.worker_timeout_secs), infrastructure.connection());
-                    let info = AuthorityInfo { instance, label: settings.label, pools: config.pools.clone() };
-                    let input = ingress::live::Inputs::connect(infrastructure.bind_authority(&info).await?, info, registry.clone(), local, config.input_capacity).await?;
-                    let sender = delivery::routed::Routed::new(infrastructure.clone(), Duration::from_secs(config.report_timeout_secs), registry);
+                    let registry = Registry::new(
+                        config.pools.clone(),
+                        Duration::from_secs(config.worker_timeout_secs),
+                        infrastructure.connection(),
+                    );
+                    let info = AuthorityInfo {
+                        instance,
+                        label: settings.label,
+                        pools: config.pools.clone(),
+                    };
+                    let input = ingress::live::Inputs::connect(
+                        infrastructure.bind_authority(&info).await?,
+                        info,
+                        registry.clone(),
+                        local,
+                        config.input_capacity,
+                    )
+                    .await?;
+                    let sender = delivery::routed::Routed::new(
+                        infrastructure.clone(),
+                        Duration::from_secs(config.report_timeout_secs),
+                        registry,
+                    );
                     authority::run(input, sender, instance, config, shutdown.wait()).await?;
                     infrastructure.flush().await?;
                     Ok(())
                 }
                 Role::Worker(config) => {
-                    let (state, changes) = watch::channel(PresenceState::Ready);
-                    let (inbox, presence_channel) = infrastructure.bind_worker(WorkerBinding { pool: config.pool.clone(), instance, capabilities: config.capabilities.clone() }).await?;
-                    let inbox = AnnouncingInbox { inner: inbox, state: state.clone() };
-                    let snapshot = Presence { pool: config.pool, instance, label: settings.label, capabilities: config.capabilities, sequence: 0, state: PresenceState::Ready };
-                    let announcements = presence::announce(presence_channel, snapshot, Duration::from_secs(config.heartbeat_interval_secs), changes);
-                    tokio::pin!(announcements);
-                    let work = worker::run(inbox, instance.session_id.to_string(), config.max_concurrent_tasks, shutdown.wait());
-                    tokio::pin!(work);
-                    tokio::select! {
-                        result = &mut announcements => { result?; anyhow::bail!("Worker 心跳任务意外结束"); }
-                        result = &mut work => {
-                            state.send_replace(PresenceState::Offline);
-                            announcements.await?;
-                            result
-                        }
+                    let mut builder = beamlet_worker::Worker::builder(
+                        instance,
+                        crate::capabilities::registered()?,
+                    )
+                    .pool(config.pool.clone())
+                    .options((&config).into())
+                    .enabled(config.capabilities);
+                    if let Some(label) = settings.label {
+                        builder = builder.label(label);
                     }
+                    let worker = builder.build()?;
+                    let (inbox, presence) = infrastructure.bind_worker(worker.binding()).await?;
+                    worker
+                        .run(inbox, presence, shutdown.wait())
+                        .await
+                        .map_err(anyhow::Error::from)
                 }
             };
             result.with_context(|| format!("角色 {} 运行失败", instance.role_id))?;
             info!(event = "role.stopped", "角色已退出");
             Ok(())
-        }.instrument(span).await
+        }
+        .instrument(span)
+        .await
     }
     pub(crate) fn local_input(&self) -> (Option<terminal::Target>, terminal::Input) {
         let (send, receive) = mpsc::channel(match &self.settings.kind {
@@ -83,20 +103,6 @@ impl RunningRole {
             send,
         });
         (target, receive)
-    }
-}
-
-struct AnnouncingInbox<I> {
-    inner: I,
-    state: watch::Sender<PresenceState>,
-}
-impl<I: WorkerInbox> delivery::Inbox for AnnouncingInbox<I> {
-    async fn receive(&mut self) -> Result<Option<beamlet_api::Incoming>> {
-        Ok(self.inner.receive().await?)
-    }
-    async fn stop(&mut self) -> Result<()> {
-        self.state.send_replace(PresenceState::Draining);
-        Ok(self.inner.stop().await?)
     }
 }
 

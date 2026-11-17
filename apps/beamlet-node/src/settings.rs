@@ -84,6 +84,18 @@ pub(crate) struct Worker {
     /// 同时执行并发送报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
 }
+impl From<&Worker> for beamlet_worker::Options {
+    fn from(config: &Worker) -> Self {
+        Self {
+            concurrency: match config.max_concurrent_tasks {
+                0 => beamlet_worker::Concurrency::Unlimited,
+                limit => beamlet_worker::Concurrency::Limited(limit),
+            },
+            heartbeat_interval: std::time::Duration::from_secs(config.heartbeat_interval_secs),
+            ..Self::default()
+        }
+    }
+}
 impl Default for Worker {
     fn default() -> Self {
         Self {

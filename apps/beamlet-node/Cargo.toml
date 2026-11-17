@@ -12,6 +12,7 @@ beamlet-api = { workspace = true, features = ["serde"] }
 beamlet-ledger.workspace = true
 beamlet-primitives.workspace = true
 beamlet-transport-nats.workspace = true
+beamlet-worker.workspace = true
 
 futures.workspace = true
 tokio.workspace = true

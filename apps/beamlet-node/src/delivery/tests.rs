@@ -1,5 +1,5 @@
 use super::{Call, Delivery as _, DeliveryError, Inbox as _, Incoming, channel};
-use crate::{text_reverse::CAPABILITY as REVERSE, worker};
+use crate::{test_support, text_reverse::CAPABILITY as REVERSE};
 use beamlet_api::{Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
 use std::time::Duration;
@@ -92,7 +92,7 @@ async fn channel_contract() {
     second_call
         .reply
         .send(
-            worker::execute(second_call.call, "report-b".into())
+            test_support::report(second_call.call, "report-b".into())
                 .await
                 .unwrap(),
         )
@@ -107,7 +107,7 @@ async fn channel_contract() {
     first_call
         .reply
         .send(
-            worker::execute(first_call.call, "report-a".into())
+            test_support::report(first_call.call, "report-a".into())
                 .await
                 .unwrap(),
         )
@@ -130,7 +130,11 @@ async fn channel_contract() {
     // 超时不撤销已接收的调用, 迟到报告可以丢失, 但不能触发再次交付.
     let _ = late
         .reply
-        .send(worker::execute(late.call, "late".into()).await.unwrap())
+        .send(
+            test_support::report(late.call, "late".into())
+                .await
+                .unwrap(),
+        )
         .await;
     assert_empty(&mut a, &mut b, &mut c).await;
 
@@ -188,38 +192,6 @@ async fn channel_contract() {
 }
 
 #[tokio::test]
-async fn channel_backpressure_and_worker_drain() {
-    let mut sender = channel::Delivery::new(Duration::from_secs(2));
-    let mut inbox = sender.register(&[REVERSE], 1);
-
-    let first = sender.deliver(call("queued", REVERSE, "abc"));
-    tokio::pin!(first);
-    assert!(futures::poll!(&mut first).is_pending());
-    assert!(matches!(
-        sender.deliver(call("full", REVERSE, "x")).await,
-        Err(DeliveryError::NotDelivered(_))
-    ));
-
-    inbox.stop().await.unwrap();
-    let worker = tokio::spawn(worker::run(
-        inbox,
-        "worker".into(),
-        1,
-        std::future::pending(),
-    ));
-    assert_eq!(first.await.unwrap().result(), "cba");
-    worker.await.unwrap().unwrap();
-
-    assert_eq!(
-        sender
-            .deliver(call("closed", REVERSE, "x"))
-            .await
-            .unwrap_err(),
-        DeliveryError::NoReceiver
-    );
-}
-
-#[tokio::test]
 async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
     use uuid::Uuid;
     let mut sender = channel::Delivery::new(DEADLINE);
@@ -251,7 +223,11 @@ async fn exact_targets_do_not_fall_back_across_pools_or_sessions() {
     assert_eq!(received.call.worker, second);
     received
         .reply
-        .send(worker::execute(received.call, "r".into()).await.unwrap())
+        .send(
+            test_support::report(received.call, "r".into())
+                .await
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(pending.await.unwrap().unwrap().result(), "cba");

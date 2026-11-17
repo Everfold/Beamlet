@@ -615,6 +615,22 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         "STILL HERE",
     )?;
     cluster.stop(second_process).await?;
+    for process in [first_process, second_process] {
+        let log = fs::read_to_string(&cluster.processes[process].log)?;
+        for event in [
+            "operation.received",
+            "attempt.received",
+            "report.created",
+            "report.send_started",
+            "report.sent",
+            "worker.drained",
+        ] {
+            ensure!(
+                log.contains(&format!("event=\"{event}\"")),
+                "missing Worker event after crate extraction: {event}"
+            );
+        }
+    }
     ensure!(
         fs::read_to_string(cluster.root.path().join("composed.ron"))? == source,
         "config rewritten"

@@ -1,7 +1,7 @@
 //! 可控发送背压驱动真实 Authority, 验证其他交付、名额和停机仍可推进.
 use super::*;
 use crate::settings::Authority;
-use crate::{ingress::Ingress, text_reverse, worker};
+use crate::{ingress::Ingress, test_support, text_reverse};
 use beamlet_api::{Pool, Selection, Task};
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -36,7 +36,7 @@ impl Ingress for Input {
 struct Work(Call, oneshot::Sender<WorkerReport>);
 impl Work {
     async fn finish(self) {
-        let report = worker::execute(self.0, Uuid::new_v4().to_string())
+        let report = test_support::report(self.0, Uuid::new_v4().to_string())
             .await
             .unwrap();
         self.1.send(report).unwrap();

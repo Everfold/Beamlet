@@ -1,11 +1,15 @@
 //! 以可控异步挂起验证真实 Worker 循环, 不靠文本大小或执行耗时猜测并发.
-use super::*;
-use crate::{
-    delivery::{Delivery as _, DeliveryError, Incoming, channel},
-    text_reverse,
+use beamlet_api::Uuid;
+use beamlet_api::{
+    Call, Delivery, DeliveryError, Incoming, Pool, RoleInstance, TransportError, WorkerInbox,
+    WorkerReport,
 };
-use beamlet_api::{Pool, RoleInstance};
 use beamlet_primitives::Attempt;
+use beamlet_transport_local::{Local, WorkerEndpoint};
+use beamlet_worker::{
+    Capabilities, Concurrency, Context, ExecutionError, Options, RunError, Worker,
+};
+use std::future::Future;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
@@ -19,7 +23,6 @@ use tokio::{
     task::JoinHandle,
     time::timeout,
 };
-use uuid::Uuid;
 
 const DEADLINE: Duration = Duration::from_secs(8);
 
@@ -40,19 +43,19 @@ fn call(index: usize) -> Call {
             session_id: Uuid::from_u128(4),
         },
         attempt: Attempt::from_parts(index.to_string(), format!("attempt:{index}")),
-        capability: text_reverse::CAPABILITY.into(),
+        capability: "test.reverse/v1".into(),
         payload: format!("text:{index}"),
     }
 }
 struct ObservedInbox {
-    inner: channel::Inbox,
+    inner: WorkerEndpoint,
     stopped: Option<oneshot::Sender<()>>,
 }
-impl Inbox for ObservedInbox {
-    async fn receive(&mut self) -> Result<Option<Incoming>> {
+impl WorkerInbox for ObservedInbox {
+    async fn receive(&mut self) -> Result<Option<Incoming>, TransportError> {
         self.inner.receive().await
     }
-    async fn stop(&mut self) -> Result<()> {
+    async fn stop(&mut self) -> Result<(), TransportError> {
         self.inner.stop().await?;
         if let Some(stopped) = self.stopped.take() {
             let _ = stopped.send(());
@@ -77,28 +80,23 @@ struct Started {
     release: oneshot::Sender<Action>,
 }
 struct Harness {
-    delivery: channel::Delivery,
+    delivery: Local,
     responses: BTreeMap<usize, JoinHandle<Result<WorkerReport, DeliveryError>>>,
     started: mpsc::UnboundedReceiver<Started>,
     stop: oneshot::Sender<()>,
     stopped: oneshot::Receiver<()>,
-    running: JoinHandle<Result<()>>,
+    running: JoinHandle<Result<(), RunError>>,
     peak: Arc<AtomicUsize>,
 }
 fn start(limit: usize, count: usize) -> Harness {
-    let mut delivery = channel::Delivery::new(DEADLINE);
-    let inner = delivery.register(&[text_reverse::CAPABILITY], count);
+    let delivery = Local::new(count).unwrap();
     let (stop, signal) = oneshot::channel();
     let (stopped, observed) = oneshot::channel();
-    let inbox = ObservedInbox {
-        inner,
-        stopped: Some(stopped),
-    };
     let (send, started) = mpsc::unbounded_channel();
     let active = Arc::new(AtomicUsize::new(0));
     let peak = Arc::new(AtomicUsize::new(0));
     let highest = peak.clone();
-    let executor = move |call: Call, report_id| {
+    let executor = move |payload: String, context: Context| {
         let active = active.clone();
         let highest = highest.clone();
         let send = send.clone();
@@ -108,30 +106,44 @@ fn start(limit: usize, count: usize) -> Harness {
             highest.fetch_max(concurrent, Ordering::SeqCst);
             let (release, wait) = oneshot::channel();
             send.send(Started {
-                index: call.attempt.operation_id().parse().unwrap(),
+                index: context.operation_id().parse().unwrap(),
                 release,
             })
-            .map_err(|_| anyhow::anyhow!("test observer closed"))?;
-            match wait.await.context("test did not release execution")? {
-                Action::Execute => execute(call, report_id).await,
-                Action::Reject => anyhow::bail!("simulated capability rejection"),
+            .map_err(|_| ExecutionError::new("test observer closed"))?;
+            match wait.await.map_err(ExecutionError::new)? {
+                Action::Execute => Ok(payload.chars().rev().collect()),
+                Action::Reject => Err(ExecutionError::new("simulated capability rejection")),
                 Action::Panic => panic!("simulated execution panic"),
             }
         }
     };
-    let running = tokio::spawn(run_with(
-        inbox,
-        "session".into(),
-        limit,
-        async { signal.await.map_err(std::io::Error::other) },
-        executor,
-    ));
+    let mut capabilities = Capabilities::new();
+    capabilities.register("test.reverse/v1", executor).unwrap();
+    let worker = Worker::builder(call(0).worker, capabilities)
+        .options(Options {
+            concurrency: if limit == 0 {
+                Concurrency::Unlimited
+            } else {
+                Concurrency::Limited(limit)
+            },
+            ..Options::default()
+        })
+        .build()
+        .unwrap();
+    let (inner, presence) = delivery.bind_worker(worker.binding()).unwrap();
+    let inbox = ObservedInbox {
+        inner,
+        stopped: Some(stopped),
+    };
+    let running = tokio::spawn(worker.run(inbox, presence, async {
+        signal.await.map_err(std::io::Error::other)
+    }));
     let responses = (0..count)
         .map(|index| {
             let delivery = delivery.clone();
             (
                 index,
-                tokio::spawn(async move { delivery.deliver(call(index)).await }),
+                tokio::spawn(async move { delivery.deliver(call(index), DEADLINE).await }),
             )
         })
         .collect();
@@ -192,7 +204,7 @@ async fn finite_limits_gate_admission_and_drain_queued_and_running_work() {
             h.stopped.await.unwrap(); // shutdown is observable even while every slot is occupied
             assert!(!h.running.is_finished(), "worker stopped before draining");
             assert_eq!(
-                h.delivery.deliver(call(total)).await.unwrap_err(),
+                h.delivery.deliver(call(total), DEADLINE).await.unwrap_err(),
                 DeliveryError::NoReceiver
             );
             for task in blocked {
@@ -290,7 +302,7 @@ async fn execution_panic_is_propagated_to_role_supervision() {
             .send(Action::Panic)
             .unwrap();
         let error = h.running.await.unwrap().unwrap_err();
-        assert!(format!("{error:#}").contains("Worker 执行任务异常退出"));
+        assert!(matches!(error, RunError::Task(_)));
         for response in h.responses.into_values() {
             assert!(response.await.unwrap().is_err());
         }

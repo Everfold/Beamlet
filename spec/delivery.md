@@ -4,7 +4,7 @@
 
 ## 1. 职责与边界
 
-领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. Worker 不持有 ledger, 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
+领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. [beamlet-worker](../crates/beamlet-worker/src/lib.rs) 提供 Worker 执行、能力注册、报告创建和心跳驱动, 不持有 ledger; 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
 
 Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构与版本, 不管理连接、选择策略或生命周期.
 
@@ -22,6 +22,8 @@ Worker 配置的 `capabilities` 同时决定公告内容和执行许可, 空列�
 
 - `text.reverse/v1`: 按 Unicode 标量值倒写, 保留空白, 不保持组合字形或复合 emoji.
 - `text.uppercase/v1`: Rust Unicode 大写转换, 保留空白, 允许 `ß → SS` 这样的字符展开.
+
+嵌入方使用 `Capabilities::register` 注册异步处理器, 再通过 `Worker::builder(instance, capabilities).enabled(...).build()` 冻结启用集合. 未指定 enabled 时启用全部注册项; 空集合、未知能力、无效标识和重复注册均报错. Worker 的 `binding()`、公告以及执行校验共用此集合. 处理器接收业务输入和只读调用 Context, 不负责创建 Report 或选择回复地址. 本地输入/结果可以是普通 Rust 类型, 无 Clone、Debug、serde 要求; NATS 仍只使用 v3 文本格式.
 
 能力精确匹配, 没有隐式版本兼容或组合条件. 能力执行返回 Future, 可以使用异步 I/O; 现有文本能力将 CPU 计算放在阻塞任务中, 不阻塞异步心跳循环. 等待中的 Future 仍计入 Worker 并发上限.
 
@@ -70,7 +72,7 @@ Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能�
 | 已签发, 等待报告超时或报告关联错误 | `Unresolved`, Operation 保持 AwaitingReport |
 | 有效完整 Report | Authority 接受并关闭 Operation, 返回 `Completed` 及全部关联身份、执行 Worker 和结果 |
 
-Report 身份按接收顺序分配, 有效报告按完成顺序返回, 无需等待较早的慢任务. 执行拒绝和回复失败释放 Worker 名额, 不重试. 退出时停止新接收, 按配置并发排空队列并等待运行中任务, 受 Node 退出期限约束.
+Report 身份按接收顺序分配, 有效报告按完成顺序返回, 无需等待较早的慢任务. 执行拒绝和回复失败释放 Worker 名额, 不重试. 退出时停止新接收, 按配置并发排空队列并等待运行中任务, 受 Node 退出期限约束. 独立调用者直接管理 `Worker::run` 返回的 future 和停止信号, 不需要 Node 宿主. 库侧 Options 使用明确的 Limited / Unlimited 与 Duration; node 把原配置的 0 映射到 Unlimited, 不改变文件格式. 公告发送和刷新使用 `announcement_timeout` (库默认 1 秒), 包括启动、重连和退出刷新; 超时不会无限阻塞角色退出. 丢弃运行 future 会中止异步任务, 不承诺停止已开始的阻塞计算.
 
 Report 等待期限由 Authority 的 `report_timeout_secs` 指定 (默认 3 秒); Console 请求期限由 `request_timeout_secs` 指定 (默认 10 秒), 包含正常排队和回复开销. 校验与发送之间仍可能失联. 无论拒收、断线或超时, 均不取消已签发 Attempt、不换人重发、不伪造 Report、不强制关闭 Operation. 超时不取消 Worker 执行; 本版 request 超时后可能丢失迟到 Report, 不提供持续监听或恢复.
 
@@ -87,3 +89,5 @@ Node 将退出信号广播给所有角色. Authority 停止新接收、丢弃尚
 Console 的真实 NATS 并发验收使用 `cargo test -p beamlet-console --test concurrency -- --ignored --nocapture`, 同样需要 PATH 中的 `nats-server`. 普通 Console 测试通过可控 Future 验证多个请求、迟到回复隔离、容量限制、EOF / 退出排空和中止时释放 Future.
 
 NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test contract -- --include-ignored`, 需要 PATH 中的 `nats-server`. 无服务器的公开接口示例可以直接运行 `cargo run -p beamlet-transport-local --example typed_call`; 它只演示传输, 不代替 Authority 签发 Attempt 的领域职责.
+
+Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限. 可运行 `cargo run -p beamlet-worker --example local_worker` 验证独立非文本 Worker, 或 `cargo run -p beamlet-worker --example nats_worker -- nats://127.0.0.1:4222` 运行临时 echo Worker. 两个示例都不读取应用 RON 配置.

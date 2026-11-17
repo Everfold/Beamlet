@@ -3,14 +3,14 @@ mod capabilities;
 mod delivery;
 mod ingress;
 mod node;
-mod presence;
 mod registry;
 mod role;
 mod settings;
 mod shutdown;
 mod terminal;
+#[cfg(test)]
+mod test_support;
 mod text_reverse;
-mod worker;
 
 use clap::Parser;
 use settings::{Color, Settings};
@@ -35,7 +35,7 @@ async fn main() -> ExitCode {
 
     tracing_subscriber::fmt()
         .compact()
-        .with_env_filter("beamlet_node=info")
+        .with_env_filter("beamlet=info")
         .with_target(false)
         .with_ansi(color.enabled())
         .with_writer(std::io::stderr)
