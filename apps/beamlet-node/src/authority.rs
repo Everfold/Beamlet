@@ -3,12 +3,10 @@
 use crate::{
     delivery::{Call, Delivery, DeliveryError, WorkerReport},
     ingress::{Ingress, Reply, Request},
-    settings::Authority,
 };
 use anyhow::{Context, Result, ensure};
-use beamlet_api::RoleInstance;
+use beamlet_api::{Outcome, RoleInstance, Submission};
 use beamlet_ledger::Ledger;
-use beamlet_protocol::{Outcome, Submission};
 use std::{collections::HashMap, future::Future};
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
@@ -16,19 +14,29 @@ use tracing::{Instrument, info, info_span, warn};
 #[cfg(test)]
 mod response_tests;
 
+/// Authority 执行参数, 与配置文件和连接方式无关.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Options {
+    pub max_concurrent_tasks: usize,
+    pub max_concurrent_replies: usize,
+}
+
 /// 入口与交付分别注入; 每份交付独立等待, 不阻塞其他输入和报告.
 pub(crate) async fn run(
     mut ingress: impl Ingress,
     delivery: impl Delivery,
     instance: RoleInstance,
-    config: Authority,
+    options: impl Into<Options>,
     shutdown: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
-    let Authority {
+    let Options {
         max_concurrent_tasks,
         max_concurrent_replies,
-        ..
-    } = config;
+    } = options.into();
+    ensure!(
+        max_concurrent_replies > 0,
+        "max_concurrent_replies 必须大于 0"
+    );
     let session_id = instance.session_id;
     let mut stopping = false;
     let mut ledger = Ledger::new();
@@ -135,7 +143,7 @@ pub(crate) async fn run(
                 worker,
                 attempt,
                 capability: task.capability,
-                text: task.text,
+                payload: task.payload,
             };
 
             let delivery = delivery.clone();

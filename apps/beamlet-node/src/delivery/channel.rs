@@ -2,7 +2,6 @@
 use super::{Call, DeliveryError, Incoming, WorkerReport, contract};
 use anyhow::Result;
 use beamlet_api::{Pool, RoleInstance, Selection};
-
 use std::time::Duration;
 use tokio::{
     sync::{mpsc, oneshot},

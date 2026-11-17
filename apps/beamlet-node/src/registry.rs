@@ -1,5 +1,6 @@
 //! Authority 的本地租约视图; 不参与 Operation/Attempt 生命周期.
 
+use crate::infrastructure::Connection;
 use beamlet_api::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -7,8 +8,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::watch;
-
-use crate::infrastructure::Connection;
 
 struct Entry {
     presence: Presence,
@@ -51,7 +50,7 @@ impl Registry {
             || presence
                 .capabilities
                 .iter()
-                .any(|cap| cap.is_empty() || cap.len() > 256)
+                .any(|cap| beamlet_api::CapabilityId::validate(cap).is_err())
         {
             return false;
         }

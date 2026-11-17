@@ -1,9 +1,7 @@
 //! 发现收集多份回复; 提交只发送一次, 并校验回复关联.
 use anyhow::{Context, Result, ensure};
-use beamlet_api::{AuthorityInfo, Pool, RoleInstance};
-use beamlet_protocol::{
-    Command, Discovery, DiscoveryReply, Outcome, Reply, decode, encode, subject,
-};
+use beamlet_api::{AuthorityInfo, Command, Outcome, Pool, RoleInstance};
+use beamlet_protocol::{Discovery, DiscoveryReply, Reply, decode, encode, subject};
 use futures::StreamExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -66,7 +64,7 @@ pub(crate) async fn request(
         client.send_request(
             target,
             async_nats::Request::new()
-                .payload(encode(command)?.into())
+                .payload(encode(&beamlet_protocol::Command::from(command.clone()))?.into())
                 .timeout(Some(request_timeout)),
         ),
     )
@@ -78,5 +76,5 @@ pub(crate) async fn request(
         reply.request_id == request_id && reply.authority == command.authority(),
         "回复的请求或 Authority 会话不匹配"
     );
-    Ok(reply.outcome)
+    Ok(reply.outcome.into())
 }

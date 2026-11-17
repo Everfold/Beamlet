@@ -100,7 +100,7 @@ async fn run_with<F: Future<Output = Result<WorkerReport>> + Send + 'static>(
 }
 
 pub(crate) async fn execute(call: Call, report_id: String) -> Result<WorkerReport> {
-    let result = capabilities::execute(call.capability, call.text).await?;
+    let result = capabilities::execute(call.capability, call.payload).await?;
 
     let report = Report::new(report_id, call.attempt, result);
     info!(
@@ -135,7 +135,7 @@ mod tests {
             },
             attempt: Attempt::from_parts("o".into(), "a".into()),
             capability: "text.reverse/v2".into(),
-            text: "abc".into(),
+            payload: "abc".into(),
         };
         assert!(execute(unsupported, "r".into()).await.is_err());
     }

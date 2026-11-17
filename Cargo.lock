@@ -119,6 +119,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 name = "beamlet-api"
 version = "0.1.0"
 dependencies = [
+ "beamlet-primitives",
  "serde",
  "thiserror",
  "tokio",
@@ -189,6 +190,7 @@ name = "beamlet-protocol"
 version = "0.1.0"
 dependencies = [
  "beamlet-api",
+ "beamlet-primitives",
  "serde",
  "serde_json",
  "thiserror",

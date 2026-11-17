@@ -1,6 +1,5 @@
 use anyhow::Result;
-use beamlet_api::Responder;
-use beamlet_protocol::{Outcome, Submission};
+use beamlet_api::{Outcome, Responder, Submission};
 use std::future::Future;
 
 /// 入口交出已解析的任务与路由, 不创建领域身份.

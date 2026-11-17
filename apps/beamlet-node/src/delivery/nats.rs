@@ -1,5 +1,5 @@
 //! 定向交付到一个 pool 内的一个 Worker 会话; 不使用能力共享队列.
-use super::{Call, DeliveryError, Incoming, WorkerReport, contract, protocol};
+use super::{Call, DeliveryError, Incoming, WorkerReport, contract};
 use crate::registry::Registry;
 use anyhow::{Context, Result};
 use async_nats::{Client, RequestErrorKind};
@@ -73,11 +73,7 @@ impl super::Delivery for Delivery {
                 if report.report_id.is_empty() {
                     return Err(DeliveryError::Unknown("报告身份为空".into()));
                 }
-                contract::check_report(
-                    protocol::decode_report(report),
-                    &wire.operation_id,
-                    &wire.attempt_id,
-                )
+                contract::check_report(report.into(), &wire.operation_id, &wire.attempt_id)
             }
             WorkerReply::Rejected {
                 pool,
@@ -196,7 +192,7 @@ impl Reply {
         let reply = WorkerReply::Report {
             pool: self.pool,
             worker: self.worker,
-            report: protocol::encode_report(report),
+            report: report.into(),
         };
         self.client
             .publish(self.subject, encode(&reply)?.into())

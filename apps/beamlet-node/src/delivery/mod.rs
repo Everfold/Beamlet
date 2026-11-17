@@ -4,8 +4,8 @@
 pub(crate) mod channel;
 mod contract;
 pub(crate) mod nats;
-mod protocol;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use contract::{Call, Delivery, DeliveryError, Inbox, Incoming, WorkerReport};
+pub(crate) use beamlet_api::{Call, WorkerReport};
+pub(crate) use contract::{Delivery, DeliveryError, Inbox, Incoming};

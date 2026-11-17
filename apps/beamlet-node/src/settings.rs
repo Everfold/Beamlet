@@ -54,6 +54,14 @@ pub(crate) struct Authority {
     /// 同时交付并等待报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
 }
+impl From<Authority> for crate::authority::Options {
+    fn from(config: Authority) -> Self {
+        Self {
+            max_concurrent_tasks: config.max_concurrent_tasks,
+            max_concurrent_replies: config.max_concurrent_replies,
+        }
+    }
+}
 impl Default for Authority {
     fn default() -> Self {
         Self {

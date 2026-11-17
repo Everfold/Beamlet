@@ -2,10 +2,8 @@
 use super::{Ingress, Reply, Request};
 use crate::{infrastructure::Connection, registry::Registry, text_reverse};
 use anyhow::{Context, Result};
-use beamlet_api::{AuthorityInfo, Pool, Presence, Selection};
-use beamlet_protocol::{
-    Command, Discovery, DiscoveryReply, Outcome, Submission, Task, decode, encode, subject,
-};
+use beamlet_api::{AuthorityInfo, Command, Outcome, Pool, Presence, Selection, Submission, Task};
+use beamlet_protocol::{Discovery, DiscoveryReply, decode, encode, subject};
 use futures::{FutureExt, StreamExt, stream::SelectAll};
 use std::{collections::BTreeMap, time::Instant};
 use tokio::{
@@ -109,7 +107,7 @@ impl Ingress for Inputs {
                     } else if text == "/workers" {
                         info!(workers = ?self.registry.workers(&self.pool, None, Instant::now()), "Worker 列表");
                     } else {
-                        return Ok(Some(Request { submission: Submission { pool: self.pool.clone(), worker: Selection::Any, task: Task { capability: self.capability.clone(), text } }, reply: Reply::new(|outcome| async move {
+                        return Ok(Some(Request { submission: Submission { pool: self.pool.clone(), worker: Selection::Any, task: Task { capability: self.capability.clone(), payload: text } }, reply: Reply::new(|outcome| async move {
                             tracing::info!(event = "response.local", response = ?outcome, "本地结果");
                             Ok(())
                         }) }));
@@ -206,7 +204,7 @@ async fn control(
                 let Some(subject) = message.reply else {
                     continue;
                 };
-                let request: Command = match decode(&message.payload) {
+                let request: beamlet_protocol::Command = match decode(&message.payload) {
                     Ok(request) => request,
                     Err(error) => {
                         warn!(event = "request.rejected", %error, "忽略无效请求");
@@ -225,7 +223,7 @@ async fn control(
                         .await?;
                     continue;
                 }
-                match request {
+                match request.into() {
                     Command::Workers { capability, .. } => {
                         reply
                             .send(Outcome::Workers {
@@ -264,7 +262,7 @@ fn reply(
         let bytes = encode(&beamlet_protocol::Reply {
             request_id,
             authority,
-            outcome,
+            outcome: outcome.into(),
         })
         .map_err(beamlet_api::ReplyError::new)?;
         client

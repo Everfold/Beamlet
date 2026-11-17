@@ -20,7 +20,7 @@ fn call(operation: &str, capability: &str, text: &str) -> Call {
         },
         attempt: Attempt::from_parts(operation.into(), format!("{operation}:attempt")),
         capability: capability.into(),
-        text: text.into(),
+        payload: text.into(),
     }
 }
 

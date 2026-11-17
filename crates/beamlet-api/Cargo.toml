@@ -12,6 +12,8 @@ default = []
 serde = ["dep:serde", "uuid/serde"]
 
 [dependencies]
+beamlet-primitives.workspace = true
+
 uuid.workspace = true
 
 serde = { workspace = true, optional = true }

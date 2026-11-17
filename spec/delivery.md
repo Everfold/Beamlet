@@ -6,7 +6,7 @@
 
 领域原语仍只有 [Operation、Attempt、Report](kernel.md). Authority 创建 Operation、签发 Attempt、接受 Report 并关闭 Operation; Worker 执行收到的 Attempt 并创建 Report. Worker 不持有 ledger, 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
 
-Operation 原始请求为 `Task { capability, text }`. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、状态快照及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构、版本与 subject 编码, 不管理连接、选择策略或生命周期.
+Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构、版本与 subject 编码, 不管理连接、选择策略或生命周期.
 
 node 的 ingress 接收本地终端和网络提交, 返回结构化请求与一次性回复入口. delivery 选择并向 Worker 发送一个调用, 返回完整 Report 或交付错误. channel 实现只用于测试, 不是生产回退路径.
 

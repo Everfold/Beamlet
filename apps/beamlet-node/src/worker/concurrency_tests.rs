@@ -6,7 +6,6 @@ use crate::{
 };
 use beamlet_api::{Pool, RoleInstance};
 use beamlet_primitives::Attempt;
-
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
@@ -42,7 +41,7 @@ fn call(index: usize) -> Call {
         },
         attempt: Attempt::from_parts(index.to_string(), format!("attempt:{index}")),
         capability: text_reverse::CAPABILITY.into(),
-        text: format!("text:{index}"),
+        payload: format!("text:{index}"),
     }
 }
 struct ObservedInbox {

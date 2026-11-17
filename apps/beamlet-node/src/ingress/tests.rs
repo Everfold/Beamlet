@@ -6,9 +6,8 @@ use crate::{
     delivery::{Call, Delivery, DeliveryError, WorkerReport},
     worker,
 };
-use beamlet_api::{Pool, RoleInstance, Selection};
+use beamlet_api::{Outcome, Pool, RoleInstance, Selection};
 use beamlet_primitives::{Attempt, Report};
-use beamlet_protocol::Outcome;
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
@@ -71,10 +70,10 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
 
         let mut first = work.recv().await.unwrap();
         let mut second = work.recv().await.unwrap();
-        if first.call.text != "Hello 世界" {
+        if first.call.payload != "Hello 世界" {
             std::mem::swap(&mut first, &mut second);
         }
-        assert_eq!(first.call.text, "Hello 世界");
+        assert_eq!(first.call.payload, "Hello 世界");
         assert_ne!(first.call.attempt.id(), second.call.attempt.id());
         assert_ne!(
             first.call.attempt.operation_id(),
@@ -293,7 +292,7 @@ async fn channel_backpressure_cancellation_and_stopped_replies() {
         tokio::pin!(second);
         assert!(futures::poll!(&mut second).is_pending(), "入口必须有界");
         let accepted = input.receive().await.unwrap().unwrap();
-        assert_eq!(accepted.submission.task.text, "first");
+        assert_eq!(accepted.submission.task.payload, "first");
         let queued_response = second.await.unwrap();
 
         input.stop().await.unwrap();

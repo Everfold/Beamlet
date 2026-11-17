@@ -1,6 +1,6 @@
 # 可复用 crate 拆分计划
 
-状态: P0 基线通过; P1 已提取共享身份和一次性回复入口, 业务数据与运行参数解耦继续进行. Ledger 命名已采用. 本文制定目标结构、接口契约和迁移顺序, 不表示拟新增 crate 已经存在.
+状态: P0、P1 已完成; 后续从 P2 传输适配器提取继续. Ledger 命名已采用. 本文保留目标结构、接口契约和迁移顺序; 各阶段完成情况见下文.
 
 目标是让其他程序能够独立使用 Authority、Worker、调用客户端及运行监督, 自行选择消息后端、配置来源和交互方式. node / console 是这些库的组合应用. 本次以现有行为为基线, 不改变 [内核规范](kernel.md)、[交付契约](delivery.md) 和 [角色身份约定](node-composition.md).
 
@@ -34,7 +34,7 @@
 | **`beamlet-transport-local`** | 进程内端点、通道、发现及回复, 同时用于嵌入和契约测试 | api |
 | **`beamlet-host`** | 多个任务的共同启动监督、停止通知、退出期限、错误汇总 | api, 按实际需要 |
 
-加粗项为拟新增 crate. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
+`beamlet-api` 已实现; 其余加粗项为拟新增 crate. 首轮拆出前六个新增 crate; host 放在最后一个独立阶段, 等角色接口通过复用验收后再抽取. registry、presence、capabilities、identity、shutdown 先作为所属 crate 的模块, 不再各建一个包.
 
 依赖箭头表示“左方依赖右方”, 省略直接使用 primitives 的重复边:
 
@@ -105,7 +105,7 @@ subject 从 protocol 移到 NATS crate. 消息类型和报文编码可以被其�
 
 ### 3.3 消息接口按交互语义划分
 
-不要求所有后端伪装成一个具有字符串 topic 的通用消息总线. api 中以少量接口表达以下实际交互; 下表是方法职责, 具体 Rust 签名在 P1 以两个适配器验证后冻结.
+不要求所有后端伪装成一个具有字符串 topic 的通用消息总线. api 中以少量接口表达以下实际交互; 下表是方法职责, `Responder` 已通过现有 NATS / channel 实现验证; 其余端点接口在 P2 提取两种适配器时落实, 避免提前暴露未经使用验证的 trait.
 
 | 接口 | 最小职责 | 行为要求 |
 | --- | --- | --- |
@@ -179,8 +179,8 @@ let outcome = client.submit(&target, submission).await?;
 
 | 阶段 | 交付内容 | 验收重点 |
 | --- | --- | --- |
-| P0 行为基线 | 梳理公共使用场景, 固定当前交付、并发、身份和退出行为测试 | 明确配置不重写、Exact 不回退、超时不重试、控制处理不被业务满载阻断 |
-| P1 中立契约 | 新增 api; 提取共享语义类型、带单位的参数及可扩展回复入口; protocol 转为显式转换 | 原有 v3 wire 测试和应用构建通过; api 无消息客户端/配置/角色实现依赖 |
+| P0 行为基线（已完成） | 梳理公共使用场景, 固定当前交付、并发、身份和退出行为测试 | 明确配置不重写、Exact 不回退、超时不重试、控制处理不被业务满载阻断 |
+| P1 中立契约（已完成） | 新增 api; 提取共享语义类型、带单位的参数及可扩展回复入口; protocol 转为显式转换 | 原有 v3 wire 测试和应用构建通过; api 无消息客户端/配置/角色实现依赖 |
 | P2 两个适配器 | 提取 NATS 实现和 subject; 把测试 channel 升为 local 端点实现; 迁移共用协议校验 | 两个后端使用同一契约测试; local 可用于外部程序; 连接恢复不复活旧租约 |
 | P3 Worker 库 | 提取执行循环、能力注册和心跳驱动; 文本示例移到应用注册 | 单独启动 Worker; 非文本本地任务可运行; 依赖树无 kernel/ledger; 并发和排空语义不变 |
 | P4 Authority 库 | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
@@ -189,7 +189,7 @@ let outcome = client.submit(&target, submission).await?;
 
 P2 完成时适配器已经依赖 api. 尚未提取的角色在 apps 内实现新契约; 随 P3/P4 迁入角色库, 最终清除应用中暂存的策略实现. 不把 Registry 移进 NATS 再依靠反向依赖调用 Authority. 某阶段如无法独立编译, 合并最小相邻迁移提交, 不引入反向依赖的临时架构.
 
-P1 先验证接口能支持本地与 NATS 两种实现, 然后完成业务输入/输出泛型化. 每次公共接口变化都附可编译的外部使用示例, 不能只靠 crate 内单元测试证明可用.
+P1 已以原有本地通道和 NATS 实现验证一次性回复入口, 并完成业务输入/输出泛型化. 角色 Options 随其执行模块定义, 由应用文件配置转换; 当前 Authority 执行参数已独立于 settings. 每次公共接口变化都附可编译的外部使用示例, 不能只靠 crate 内单元测试证明可用.
 
 ## 5. 验收和测试
 
@@ -209,3 +209,10 @@ P1 先验证接口能支持本地与 NATS 两种实现, 然后完成业务输入
 Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本轮保留 ledger 的现有行为; 后续按 [持久化方案](persistence.md) 单独设计归档与身份历史保证, 不为了限制内存直接删除 used_attempts 或仍等待报告的 Operation. 该文档涉及的 persistence crate 当前不在 workspace 中, 本次不把它作为已有实现或前置依赖.
 
 新的消息后端、任意 payload 的网络编码、跨执行器运行、热更新配置、业务重试、执行幂等和持久队列确认分别定义语义后再扩展. 这些变化通过预留的实际接口进入, 不要求先建立统一插件框架、万能 Backend trait 或全局 service locator.
+
+## 7. P1 验证结果
+
+- `beamlet-api` 提供共享角色信息、Pool、CapabilityId、泛型 Task / Submission / Command / Outcome / Call / WorkerReport 及 Responder. 能力名称的字节长度校验由 CapabilityId 统一实现; 收到的未校验消息仍保留原始字符串, 在现有拒绝位置进行校验.
+- node 与 console 的业务代码使用 api 数据; protocol 保留 v3 文本 DTO, 通过显式转换接入 API, 不改变 `text` 字段或线上版本. 原语的字段拆解与重建集中在 protocol.
+- serde 是 api 的可选 feature. api 的正常依赖不包含 Tokio、NATS、confy、kernel 或 ledger. workspace 外的 consumer 已在关闭默认 feature 时编译通过, 请求和结果无需 Clone 或 serde.
+- 原有并发、退出、身份及交付测试通过; 真实 NATS 的多角色/连接、独立期限/队列、Console 并发三项集成测试通过. 新增测试覆盖一次性发送、错误 source、资源释放、自定义 payload 和 v3 报文转换.

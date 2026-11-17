@@ -1,8 +1,10 @@
 //! 普通行式交互, 编号只用于显示, 网络目标始终保存完整实例身份.
 use crate::{client, settings::Settings};
 use anyhow::{Context, Result, bail, ensure};
-use beamlet_api::{AuthorityInfo, Pool, PresenceState, RoleInstance, Selection, WorkerView};
-use beamlet_protocol::{Command, Outcome, Submission, Task};
+use beamlet_api::{
+    AuthorityInfo, Command, Outcome, Pool, PresenceState, RoleInstance, Selection, Submission,
+    Task, WorkerView,
+};
 use std::{collections::BTreeSet, future::Future, io::BufRead, time::Duration};
 use tokio::{sync::mpsc, task::JoinSet};
 use tracing::Instrument;
@@ -376,7 +378,7 @@ impl Session {
             worker: self.choice.worker.context("请先选择 Worker")?,
             task: Task {
                 capability: self.choice.capability.clone().context("请先选择能力")?,
-                text,
+                payload: text,
             },
         };
         Ok(Some(Action::Request {

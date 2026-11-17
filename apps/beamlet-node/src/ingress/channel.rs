@@ -2,8 +2,7 @@
 
 use super::{Ingress, Reply, Request};
 use anyhow::Result;
-use beamlet_api::{Pool, Selection};
-use beamlet_protocol::{Submission, Task};
+use beamlet_api::{Pool, Selection, Submission, Task};
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
@@ -27,7 +26,7 @@ impl Sender {
                     worker: Selection::Any,
                     task: Task {
                         capability: crate::text_reverse::CAPABILITY.into(),
-                        text,
+                        payload: text,
                     },
                 },
                 reply: reply(send),
@@ -60,7 +59,7 @@ impl Ingress for Input {
 
 fn reply(sender: oneshot::Sender<String>) -> Reply {
     Reply::new(move |outcome| async move {
-        use beamlet_protocol::Outcome;
+        use beamlet_api::Outcome;
         let text = match outcome {
             Outcome::Completed { result, .. } => result,
             Outcome::Unresolved { reason, .. } => {

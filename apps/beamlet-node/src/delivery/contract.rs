@@ -1,22 +1,6 @@
 use anyhow::Result;
-use beamlet_api::{Pool, RoleInstance, Selection};
-use beamlet_primitives::{Attempt, Report};
-
+use beamlet_api::{Call, Pool, RoleInstance, Selection, WorkerReport};
 use std::{fmt, future::Future};
-
-/// 交付元数据与既有授权同行, 不额外签发授权.
-#[derive(Debug)]
-pub(crate) struct Call {
-    pub pool: Pool,
-    pub authority: RoleInstance,
-    pub worker: RoleInstance,
-    pub attempt: Attempt<String, String>,
-    pub capability: String,
-    pub text: String,
-}
-
-/// 完整报告直接复用领域原语, 身份格式由 node 提供.
-pub(crate) type WorkerReport = Report<String, String, String, String>;
 
 /// 只描述有证据支持的交付结果, 不表示 Operation 的状态.
 #[derive(Debug, PartialEq, Eq)]
@@ -83,7 +67,7 @@ pub(super) fn check_report(
 
 /// 空能力标识不表示通配请求, 必须在发送前拒绝.
 pub(super) fn check_call(call: &Call) -> Result<(), DeliveryError> {
-    if call.capability.is_empty() || call.capability.len() > 256 {
+    if beamlet_api::CapabilityId::validate(&call.capability).is_err() {
         return Err(DeliveryError::NotDelivered(
             "能力标识长度必须为 1..=256 字节".into(),
         ));

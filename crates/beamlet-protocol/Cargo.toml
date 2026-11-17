@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 beamlet-api = { workspace = true, features = ["serde"] }
+beamlet-primitives.workspace = true
 
 uuid.workspace = true
 

@@ -94,7 +94,7 @@ fn submission_keeps_target_snapshot_and_late_rejection_preserves_new_choice() {
     };
     assert_eq!(*authority, instance(1));
     assert_eq!(submission.worker, Selection::Exact(instance(3)));
-    assert_eq!(submission.task.text, "first");
+    assert_eq!(submission.task.payload, "first");
     // 即使重新选择同一个 Worker, 旧拒绝也不能撤销这次明确选择.
     session.line("/worker 1".into()).unwrap();
     session
@@ -210,7 +210,7 @@ async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results()
                 ..
             } = &action
             {
-                submissions.insert(submission.task.text.clone());
+                submissions.insert(submission.task.payload.clone());
             }
             held.push((action, reply));
         }
@@ -226,7 +226,7 @@ async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results()
                 Action::Request {
                     command: Command::Submit { submission, .. },
                     ..
-                } => completed(&submission.task.text),
+                } => completed(&submission.task.payload),
                 _ => panic!("unexpected discovery"),
             };
             reply
