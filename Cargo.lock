@@ -134,6 +134,7 @@ dependencies = [
  "async-nats",
  "beamlet-api",
  "beamlet-protocol",
+ "beamlet-transport-nats",
  "confy",
  "futures",
  "serde",
@@ -170,6 +171,8 @@ dependencies = [
  "beamlet-ledger",
  "beamlet-primitives",
  "beamlet-protocol",
+ "beamlet-transport-local",
+ "beamlet-transport-nats",
  "clap",
  "confy",
  "futures",
@@ -195,6 +198,28 @@ dependencies = [
  "serde_json",
  "thiserror",
  "uuid",
+]
+
+[[package]]
+name = "beamlet-transport-local"
+version = "0.1.0"
+dependencies = [
+ "beamlet-api",
+ "beamlet-primitives",
+ "tokio",
+]
+
+[[package]]
+name = "beamlet-transport-nats"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "beamlet-api",
+ "beamlet-primitives",
+ "beamlet-protocol",
+ "futures",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

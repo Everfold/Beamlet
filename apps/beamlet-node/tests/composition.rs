@@ -7,8 +7,9 @@ use beamlet_api::{
     AuthorityInfo, Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView,
 };
 use beamlet_protocol::{
-    Command, Discovery, DiscoveryReply, Outcome, Submission, Task, decode, encode, subject,
+    Command, Discovery, DiscoveryReply, Outcome, Submission, Task, decode, encode,
 };
+use beamlet_transport_nats::subject;
 use futures::StreamExt;
 use std::{
     collections::{BTreeMap, BTreeSet},

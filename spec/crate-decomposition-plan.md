@@ -109,10 +109,10 @@ subject 从 protocol 移到 NATS crate. 消息类型和报文编码可以被其�
 
 | 接口 | 最小职责 | 行为要求 |
 | --- | --- | --- |
-| `Inbox<T, R>` | 接收带回复入口的请求, 停止接收 | 接收 future 可安全取消; 区分入口关闭和暂时没有消息; 停止后的排空行为明确 |
+| `WorkerInbox<P, R>` | 接收带回复入口的请求, 停止接收 | 接收 future 可安全取消; 区分入口关闭和暂时没有消息; 停止后的排空行为明确 |
 | `Responder<R>` | 消费自身并回复一次 | 不可 Clone, 不暴露 subject 或连接; 丢弃不等于远端取消 |
 | `Delivery<P, R>` | 向指定 Worker 实例交付 Call 并等待 Report | 不选人、不重试; 校验 pool、目标会话与报告关联 |
-| `PresenceSource` / `PresenceSink` | 接收完整快照及链路变化 / 发布快照 | 支持探测与重新同步信号; 明确观测失效时机 |
+| `AuthorityInbox` / `PresenceChannel` | 接收完整快照及链路变化 / 发布快照 | 支持探测与重新同步信号; 明确观测失效时机 |
 | `ClientTransport<P, R>` | 收集发现回复, 请求指定 Authority | 提供关联元数据和逐条发现结果; 不承诺请求取消或 exactly-once |
 
 停止接收与处理积压由两层配合: 端点先关闭新输入, Authority 丢弃尚未签发 Attempt 的排队提交并等待已签发工作结束; Worker 继续排空已接收调用. 这些差异由角色明确选择, 不由消息后端暗中决定. 丢弃等待中的客户端 future 只停止本地等待, 不能推断远端任务已取消.
@@ -181,7 +181,7 @@ let outcome = client.submit(&target, submission).await?;
 | --- | --- | --- |
 | P0 行为基线（已完成） | 梳理公共使用场景, 固定当前交付、并发、身份和退出行为测试 | 明确配置不重写、Exact 不回退、超时不重试、控制处理不被业务满载阻断 |
 | P1 中立契约（已完成） | 新增 api; 提取共享语义类型、带单位的参数及可扩展回复入口; protocol 转为显式转换 | 原有 v3 wire 测试和应用构建通过; api 无消息客户端/配置/角色实现依赖 |
-| P2 两个适配器 | 提取 NATS 实现和 subject; 把测试 channel 升为 local 端点实现; 迁移共用协议校验 | 两个后端使用同一契约测试; local 可用于外部程序; 连接恢复不复活旧租约 |
+| P2 两个适配器（已完成） | 提取 NATS 实现和 subject; 把测试 channel 升为 local 端点实现; 迁移共用协议校验 | 两个后端使用同一契约测试; local 可用于外部程序; 连接恢复不复活旧租约 |
 | P3 Worker 库 | 提取执行循环、能力注册和心跳驱动; 文本示例移到应用注册 | 单独启动 Worker; 非文本本地任务可运行; 依赖树无 kernel/ledger; 并发和排空语义不变 |
 | P4 Authority 库 | 提取编排、Registry、选择和独立控制处理; 以 Options 替代文件配置 | NATS/local 共用登记和选择实现; 满载时仍可发现/查询; 失败仍保留等待中的 Attempt |
 | P5 Client 库与薄应用 | 提取 SDK; node/console 只保留配置、装配、交互、输出初始化 | 自定义程序可发现/查询/提交; 不依赖 console; 旧 UI 结果不能覆盖新选择 |
@@ -216,3 +216,13 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - node 与 console 的业务代码使用 api 数据; protocol 保留 v3 文本 DTO, 通过显式转换接入 API, 不改变 `text` 字段或线上版本. 原语的字段拆解与重建集中在 protocol.
 - serde 是 api 的可选 feature. api 的正常依赖不包含 Tokio、NATS、confy、kernel 或 ledger. workspace 外的 consumer 已在关闭默认 feature 时编译通过, 请求和结果无需 Clone 或 serde.
 - 原有并发、退出、身份及交付测试通过; 真实 NATS 的多角色/连接、独立期限/队列、Console 并发三项集成测试通过. 新增测试覆盖一次性发送、错误 source、资源释放、自定义 payload 和 v3 报文转换.
+
+## 8. P2 验证结果
+
+- 新增 `beamlet-transport-nats` 和 `beamlet-transport-local`. 两者实现 api 的 WorkerInbox / Delivery、AuthorityInbox、PresenceChannel 和 ClientTransport; 接口不公开 NATS Message、Subscriber 或 Tokio 通道. NATS subject 从 protocol 移入适配器, v3 文本线格式保持不变.
+- node 的选择、租约、控制分类和有界业务队列继续由角色侧实施, console 继续负责发现去重及请求关联校验. 心跳周期、状态与序号由角色驱动; 连接视图只提供当前连接世代, 重连后的旧公告不能给新世代续租. Authority 排空后由装配层刷新连接, Node 退出前仍执行最终刷新.
+- local 提供独立消息空间、共享连接句柄、完整控制交互和有界调用队列; 重复绑定拒绝覆盖, Drop 解除绑定, stop 保留队列供排空. 请求与结果可以是无 Clone、无 serde 的自定义类型. 公告和发现仍允许丢失, 不承诺可靠队列或 exactly-once.
+- 两个后端执行同一份公开接口契约测试. local 增加队列满载、重复绑定和自定义数据验证; NATS 保留真实服务契约与 node/console 多进程验收. 独立使用示例见 [typed_call](../crates/beamlet-transport-local/examples/typed_call.rs).
+- `cargo test --workspace`、fmt、clippy（全部目标和 feature）及严格 rustdoc 检查通过; 5 项真实 NATS 验收通过. workspace 外 consumer 在 api 关闭默认 feature 时运行 typed_call 成功, 正常依赖树没有 kernel、ledger、应用或 confy.
+- 提交检查中的 `cargo deny` 许可证检查仍失败: 仓库现有白名单仅允许 Apache-2.0, 修改前 HEAD 和本次均有 52 项拒绝. 未调整许可证策略或外部依赖版本.
+- 下一阶段 P3 提取 Worker 执行、能力注册及心跳驱动; 当前应用中剩余角色代码尚未全部迁出.

@@ -9,12 +9,10 @@ license.workspace = true
 
 [dependencies]
 beamlet-api = { workspace = true, features = ["serde"] }
-beamlet-protocol.workspace = true
+beamlet-transport-nats.workspace = true
 
 futures.workspace = true
 tokio.workspace = true
-
-async-nats.workspace = true
 
 confy.workspace = true
 
@@ -28,4 +26,8 @@ tracing-subscriber.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]
+beamlet-protocol.workspace = true
+
+async-nats.workspace = true
+
 tempfile.workspace = true

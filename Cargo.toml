@@ -9,6 +9,8 @@ members = [
   "crates/beamlet-ledger",
   "crates/beamlet-primitives",
   "crates/beamlet-protocol",
+  "crates/beamlet-transport-local",
+  "crates/beamlet-transport-nats",
 ]
 
 [workspace.package]
@@ -25,6 +27,8 @@ beamlet-kernel = { path = "crates/beamlet-kernel" }
 beamlet-ledger = { path = "crates/beamlet-ledger" }
 beamlet-primitives = { path = "crates/beamlet-primitives" }
 beamlet-protocol = { path = "crates/beamlet-protocol" }
+beamlet-transport-local = { path = "crates/beamlet-transport-local" }
+beamlet-transport-nats = { path = "crates/beamlet-transport-nats" }
 
 futures = "0.3"
 rayon = "1.12"

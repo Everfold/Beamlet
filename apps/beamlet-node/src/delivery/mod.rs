@@ -3,9 +3,12 @@
 #[cfg(test)]
 pub(crate) mod channel;
 mod contract;
-pub(crate) mod nats;
+pub(crate) mod routed;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use beamlet_api::{Call, WorkerReport};
-pub(crate) use contract::{Delivery, DeliveryError, Inbox, Incoming};
+pub(crate) use beamlet_api::{Call, DeliveryError, WorkerReport};
+pub(crate) use contract::{Delivery, Inbox};
+
+#[cfg(test)]
+pub(crate) use beamlet_api::Incoming;

@@ -1,8 +1,7 @@
-//! Console 与节点共用的 v3 消息与主题, 不持有连接或管理 Operation 生命周期.
+//! Console 与节点共用的 v3 线格式, 不持有连接或管理 Operation 生命周期.
 
 mod conversion;
 mod message;
-pub mod subject;
 
 pub use message::{
     Command, Discovery, DiscoveryReply, Outcome, Reply, ReportData, Submission, Task, WorkerCall,

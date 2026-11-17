@@ -1,8 +1,6 @@
 //! 将一种角色的配置和基础设施装配为独立运行实例.
 use crate::{
-    authority, delivery,
-    infrastructure::Nats,
-    ingress, presence,
+    authority, delivery, ingress, presence,
     registry::Registry,
     settings::{Role, RoleSettings},
     shutdown::Shutdown,
@@ -10,6 +8,8 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use beamlet_api::{AuthorityInfo, Presence, PresenceState, RoleInstance};
+use beamlet_api::{WorkerBinding, WorkerInbox};
+use beamlet_transport_nats::Nats;
 use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tracing::{Instrument, info, info_span};
@@ -40,17 +40,20 @@ impl RunningRole {
             info!(event = "role.starting", "角色启动");
             let result = match settings.kind {
                 Role::Authority(config) => {
-                    let registry = Registry::new(config.pools.clone(), Duration::from_secs(config.worker_timeout_secs), infrastructure.status.clone());
+                    let registry = Registry::new(config.pools.clone(), Duration::from_secs(config.worker_timeout_secs), infrastructure.connection());
                     let info = AuthorityInfo { instance, label: settings.label, pools: config.pools.clone() };
-                    let input = ingress::live::Inputs::connect(infrastructure.client.clone(), info, registry.clone(), infrastructure.status, local, config.input_capacity).await?;
-                    let sender = delivery::nats::Delivery::new(infrastructure.client.clone(), Duration::from_secs(config.report_timeout_secs), registry);
-                    authority::run(input, sender, instance, config, shutdown.wait()).await
+                    let input = ingress::live::Inputs::connect(infrastructure.bind_authority(&info).await?, info, registry.clone(), local, config.input_capacity).await?;
+                    let sender = delivery::routed::Routed::new(infrastructure.clone(), Duration::from_secs(config.report_timeout_secs), registry);
+                    authority::run(input, sender, instance, config, shutdown.wait()).await?;
+                    infrastructure.flush().await?;
+                    Ok(())
                 }
                 Role::Worker(config) => {
                     let (state, changes) = watch::channel(PresenceState::Ready);
-                    let inbox = delivery::nats::Inbox::subscribe(infrastructure.client.clone(), config.pool.clone(), instance, config.capabilities.clone(), state.clone()).await?;
+                    let (inbox, presence_channel) = infrastructure.bind_worker(WorkerBinding { pool: config.pool.clone(), instance, capabilities: config.capabilities.clone() }).await?;
+                    let inbox = AnnouncingInbox { inner: inbox, state: state.clone() };
                     let snapshot = Presence { pool: config.pool, instance, label: settings.label, capabilities: config.capabilities, sequence: 0, state: PresenceState::Ready };
-                    let announcements = presence::announce(infrastructure.client.clone(), snapshot, Duration::from_secs(config.heartbeat_interval_secs), changes, infrastructure.status);
+                    let announcements = presence::announce(presence_channel, snapshot, Duration::from_secs(config.heartbeat_interval_secs), changes);
                     tokio::pin!(announcements);
                     let work = worker::run(inbox, instance.session_id.to_string(), config.max_concurrent_tasks, shutdown.wait());
                     tokio::pin!(work);
@@ -80,6 +83,20 @@ impl RunningRole {
             send,
         });
         (target, receive)
+    }
+}
+
+struct AnnouncingInbox<I> {
+    inner: I,
+    state: watch::Sender<PresenceState>,
+}
+impl<I: WorkerInbox> delivery::Inbox for AnnouncingInbox<I> {
+    async fn receive(&mut self) -> Result<Option<beamlet_api::Incoming>> {
+        Ok(self.inner.receive().await?)
+    }
+    async fn stop(&mut self) -> Result<()> {
+        self.state.send_replace(PresenceState::Draining);
+        Ok(self.inner.stop().await?)
     }
 }
 

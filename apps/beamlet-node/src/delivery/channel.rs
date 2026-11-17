@@ -1,19 +1,21 @@
-//! 测试用本地定向适配器, 与 NATS 共用交付及接收接口.
-use super::{Call, DeliveryError, Incoming, WorkerReport, contract};
+//! 测试用选择表; 实际收发使用公开的进程内适配器.
+use super::{Call, DeliveryError, Incoming, WorkerReport};
 use anyhow::Result;
-use beamlet_api::{Pool, RoleInstance, Selection};
-use std::time::Duration;
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::timeout,
+use beamlet_api::{Pool, RoleInstance, Selection, WorkerBinding, WorkerInbox};
+use beamlet_transport_local::Local;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
 #[derive(Clone)]
 struct Worker {
-    pool: Pool,
-    instance: RoleInstance,
-    capabilities: Vec<String>,
-    sender: mpsc::Sender<Incoming>,
+    binding: WorkerBinding,
+    transport: Local,
+    accepting: Arc<AtomicBool>,
 }
 #[derive(Clone)]
 pub(crate) struct Delivery {
@@ -46,14 +48,20 @@ impl Delivery {
         capabilities: &[&str],
         capacity: usize,
     ) -> Inbox {
-        let (sender, receiver) = mpsc::channel(capacity);
-        self.workers.push(Worker {
+        let binding = WorkerBinding {
             pool,
             instance,
             capabilities: capabilities.iter().map(|name| (*name).to_owned()).collect(),
-            sender,
+        };
+        let transport = Local::new(capacity).unwrap();
+        let (inner, _) = transport.bind_worker(binding.clone()).unwrap();
+        let accepting = Arc::new(AtomicBool::new(true));
+        self.workers.push(Worker {
+            binding,
+            transport,
+            accepting: accepting.clone(),
         });
-        Inbox(receiver)
+        Inbox { inner, accepting }
     }
 }
 impl super::Delivery for Delivery {
@@ -66,53 +74,44 @@ impl super::Delivery for Delivery {
         self.workers
             .iter()
             .find(|worker| {
-                &worker.pool == pool
-                    && !worker.sender.is_closed()
-                    && worker.capabilities.iter().any(|name| name == capability)
+                &worker.binding.pool == pool
+                    && worker.accepting.load(Ordering::Relaxed)
+                    && worker.binding.capabilities.contains(capability)
                     && match selection {
                         Selection::Any => true,
-                        Selection::Exact(instance) => worker.instance == instance,
+                        Selection::Exact(instance) => worker.binding.instance == instance,
                     }
             })
-            .map(|worker| worker.instance)
+            .map(|worker| worker.binding.instance)
             .ok_or(DeliveryError::NoReceiver)
     }
     async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
-        contract::check_call(&call)?;
+        beamlet_api::validation::check_call(&call)?;
         let target = self.select(&call.pool, Selection::Exact(call.worker), &call.capability)?;
-        let sender = &self
+        let transport = &self
             .workers
             .iter()
-            .find(|worker| worker.pool == call.pool && worker.instance == target)
+            .find(|worker| worker.binding.pool == call.pool && worker.binding.instance == target)
             .ok_or(DeliveryError::NoReceiver)?
-            .sender;
-        let operation_id = call.attempt.operation_id().clone();
-        let attempt_id = call.attempt.id().clone();
-        let (reply, receive) = oneshot::channel();
-        sender
-            .try_send(Incoming {
-                call,
-                reply: contract::Reply::new(move |report| async move {
-                    reply.send(report).map_err(|_| {
-                        beamlet_api::ReplyError::new(std::io::Error::other("报告接收端已关闭"))
-                    })
-                }),
-            })
-            .map_err(|error| DeliveryError::NotDelivered(error.to_string()))?;
-        let report = timeout(self.deadline, receive)
-            .await
-            .map_err(|_| DeliveryError::Unknown("等待报告超时".into()))?
-            .map_err(|_| DeliveryError::Unknown("接收者未返回报告".into()))?;
-        contract::check_report(report, &operation_id, &attempt_id)
+            .transport;
+        beamlet_api::Delivery::deliver(transport, call, self.deadline).await
     }
 }
-pub(crate) struct Inbox(mpsc::Receiver<Incoming>);
+pub(crate) struct Inbox {
+    inner: beamlet_transport_local::WorkerEndpoint,
+    accepting: Arc<AtomicBool>,
+}
+impl Drop for Inbox {
+    fn drop(&mut self) {
+        self.accepting.store(false, Ordering::Relaxed);
+    }
+}
 impl super::Inbox for Inbox {
     async fn receive(&mut self) -> Result<Option<Incoming>> {
-        Ok(self.0.recv().await)
+        Ok(self.inner.receive().await?)
     }
     async fn stop(&mut self) -> Result<()> {
-        self.0.close();
-        Ok(())
+        self.accepting.store(false, Ordering::Relaxed);
+        Ok(self.inner.stop().await?)
     }
 }

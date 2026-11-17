@@ -1,19 +1,16 @@
 //! 控制消息独立于 Authority 在途任务名额; 接收队列有界.
 use super::{Ingress, Reply, Request};
-use crate::{infrastructure::Connection, registry::Registry, text_reverse};
+use crate::{registry::Registry, text_reverse};
 use anyhow::{Context, Result};
-use beamlet_api::{AuthorityInfo, Command, Outcome, Pool, Presence, Selection, Submission, Task};
-use beamlet_protocol::{Discovery, DiscoveryReply, decode, encode, subject};
-use futures::{FutureExt, StreamExt, stream::SelectAll};
-use std::{collections::BTreeMap, time::Instant};
-use tokio::{
-    sync::{mpsc, watch},
-    task::JoinHandle,
+use beamlet_api::{
+    AuthorityEvent, AuthorityInbox, AuthorityInfo, Command, DiscoveryReply, Outcome, Pool,
+    Selection, Submission, Task,
 };
+use std::time::Instant;
+use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::{Instrument, info, warn};
 
 pub(crate) struct Inputs {
-    client: async_nats::Client,
     remote: mpsc::Receiver<Request>,
     local: mpsc::Receiver<std::io::Result<String>>,
     local_closed: bool,
@@ -26,47 +23,22 @@ pub(crate) struct Inputs {
 }
 impl Inputs {
     pub(crate) async fn connect(
-        client: async_nats::Client,
+        endpoint: impl AuthorityInbox + 'static,
         info: AuthorityInfo,
         registry: Registry,
-        connection: watch::Receiver<Connection>,
         local: crate::terminal::Input,
         input_capacity: usize,
     ) -> Result<Self> {
-        let mut subscriptions = SelectAll::new();
-        let mut routes = BTreeMap::new();
-        for pool in &info.pools {
-            for (subject, kind) in [
-                (subject::discovery(pool), Kind::Discovery),
-                (subject::presence(pool), Kind::Presence),
-                (subject::authority(pool, info.instance), Kind::Request),
-            ] {
-                subscriptions.push(client.subscribe(subject.clone()).await?);
-                routes.insert(subject, (pool.clone(), kind));
-            }
-        }
-        client.flush().await?;
-        probe(&client, &info).await?;
+        endpoint.probe().await?;
         let (send, remote) = mpsc::channel(input_capacity);
-        let control = tokio::spawn(
-            control(
-                client.clone(),
-                info.clone(),
-                registry.clone(),
-                connection,
-                subscriptions,
-                routes,
-                send,
-            )
-            .in_current_span(),
-        );
+        let control =
+            tokio::spawn(control(endpoint, info.clone(), registry.clone(), send).in_current_span());
         let pool = if info.pools.contains(&Pool::default()) {
             Pool::default()
         } else {
             info.pools.first().context("Authority 未配置 pool")?.clone()
         };
         Ok(Self {
-            client,
             remote,
             local,
             local_closed: false,
@@ -125,96 +97,60 @@ impl Ingress for Inputs {
         Ok(())
     }
     async fn flush(&mut self) -> Result<()> {
-        self.client.flush().await?;
         Ok(())
     }
 }
-#[derive(Clone, Copy)]
-enum Kind {
-    Discovery,
-    Presence,
-    Request,
-}
-async fn probe(client: &async_nats::Client, info: &AuthorityInfo) -> Result<()> {
-    for pool in &info.pools {
-        client
-            .publish(subject::probe(pool), Vec::new().into())
-            .await?;
-    }
-    Ok(())
-}
 async fn control(
-    client: async_nats::Client,
+    mut endpoint: impl AuthorityInbox,
     info: AuthorityInfo,
     registry: Registry,
-    mut connection: watch::Receiver<Connection>,
-    mut subscriptions: SelectAll<async_nats::Subscriber>,
-    routes: BTreeMap<String, (Pool, Kind)>,
     send: mpsc::Sender<Request>,
 ) -> Result<()> {
-    let mut epoch = connection.borrow_and_update().epoch;
     let mut cleanup = tokio::time::interval(std::time::Duration::from_secs(1));
     cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
-        let message = tokio::select! {
-            biased;
-            changed = connection.changed() => {
-                changed.context("连接状态入口已关闭")?;
-                let link = *connection.borrow_and_update();
-                epoch = link.epoch;
-                // 不把断线之前缓冲的心跳当作恢复连接后的存活证据.
-                while subscriptions.next().now_or_never().flatten().is_some() {}
-                if link.connected { client.flush().await?; probe(&client, &info).await?; }
-                continue;
-            }
+        let event = tokio::select! {
             _ = cleanup.tick() => { registry.expire(Instant::now()); continue; }
-            message = subscriptions.next() => message.context("Authority 订阅已关闭")?,
+            event = endpoint.receive() => event?.context("Authority 订阅已关闭")?,
         };
-        let Some((pool, kind)) = routes.get(message.subject.as_str()) else {
-            continue;
-        };
-        if !connection.borrow().connected {
-            continue;
-        }
-        match kind {
-            Kind::Presence => match decode::<Presence>(&message.payload) {
-                Ok(presence) if &presence.pool == pool => {
-                    registry.observe(presence, epoch, Instant::now());
+        match event {
+            AuthorityEvent::Connection(link) => {
+                if link.connected {
+                    endpoint.probe().await?;
                 }
-                _ => warn!(event = "heartbeat.rejected", %pool, "忽略无效心跳"),
-            },
-            Kind::Discovery => {
-                let (Some(reply), Ok(request)) =
-                    (message.reply, decode::<Discovery>(&message.payload))
-                else {
-                    continue;
-                };
-                client
-                    .publish(
-                        reply,
-                        encode(&DiscoveryReply {
-                            request_id: request.request_id,
-                            authority: info.clone(),
-                        })?
-                        .into(),
-                    )
+            }
+            AuthorityEvent::Presence { presence, epoch } => {
+                registry.observe(presence, epoch, Instant::now());
+            }
+            AuthorityEvent::Discovery {
+                request_id, reply, ..
+            } => {
+                reply
+                    .send(DiscoveryReply {
+                        request_id,
+                        authority: info.clone(),
+                    })
                     .await?;
             }
-            Kind::Request => {
-                let Some(subject) = message.reply else {
-                    continue;
-                };
-                let request: beamlet_protocol::Command = match decode(&message.payload) {
-                    Ok(request) => request,
-                    Err(error) => {
-                        warn!(event = "request.rejected", %error, "忽略无效请求");
-                        continue;
-                    }
-                };
-                let reply = reply(client.clone(), subject, request.request_id(), info.instance);
-                if request.authority() != info.instance
-                    || request.pool() != pool
-                    || request.request_id().is_nil()
+            AuthorityEvent::Request {
+                pool,
+                command,
+                reply,
+            } => {
+                let request_id = command.request_id();
+                let authority = info.instance;
+                let reply = Reply::new(move |outcome| async move {
+                    reply
+                        .send(beamlet_api::Reply {
+                            request_id,
+                            authority,
+                            outcome,
+                        })
+                        .await
+                });
+                if command.authority() != info.instance
+                    || command.pool() != &pool
+                    || request_id.is_nil()
                 {
                     reply
                         .send(Outcome::Rejected {
@@ -223,22 +159,22 @@ async fn control(
                         .await?;
                     continue;
                 }
-                match request.into() {
+                match command {
                     Command::Workers { capability, .. } => {
                         reply
                             .send(Outcome::Workers {
                                 workers: registry.workers(
-                                    pool,
+                                    &pool,
                                     capability.as_deref(),
                                     Instant::now(),
                                 ),
                             })
-                            .await?
+                            .await?;
                     }
                     Command::Submit { submission, .. } => {
                         if let Err(error) = send.try_send(Request { submission, reply }) {
-                            let request = error.into_inner();
-                            request
+                            error
+                                .into_inner()
                                 .reply
                                 .send(Outcome::Rejected {
                                     reason: "Authority 接收队列已满或正在停止".into(),
@@ -250,26 +186,4 @@ async fn control(
             }
         }
     }
-}
-
-fn reply(
-    client: async_nats::Client,
-    subject: async_nats::Subject,
-    request_id: uuid::Uuid,
-    authority: beamlet_api::RoleInstance,
-) -> Reply {
-    Reply::new(move |outcome| async move {
-        let bytes = encode(&beamlet_protocol::Reply {
-            request_id,
-            authority,
-            outcome: outcome.into(),
-        })
-        .map_err(beamlet_api::ReplyError::new)?;
-        client
-            .publish(subject, bytes.into())
-            .await
-            .map_err(beamlet_api::ReplyError::new)?;
-        tracing::info!(event = "response.sent", %request_id, "已回复远端请求");
-        Ok(())
-    })
 }

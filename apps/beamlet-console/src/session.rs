@@ -92,7 +92,7 @@ impl Action {
     }
     async fn execute(
         self,
-        client: async_nats::Client,
+        client: beamlet_transport_nats::Nats,
         request_timeout: Duration,
         discovery_window: Duration,
     ) -> Completion {
@@ -502,16 +502,14 @@ pub(crate) async fn run(settings: Settings) -> Result<()> {
     settings.validate()?;
     let connect_timeout = Duration::from_secs(settings.connect_timeout_secs);
     let request_timeout = Duration::from_secs(settings.request_timeout_secs);
-    let client = tokio::time::timeout(
-        connect_timeout,
-        async_nats::ConnectOptions::new()
-            .connection_timeout(connect_timeout)
-            .subscription_capacity(settings.subscription_capacity)
-            .request_timeout(Some(request_timeout))
-            .connect(settings.nats_url),
+    let client = beamlet_transport_nats::Nats::connect(
+        &settings.nats_url,
+        beamlet_transport_nats::Options {
+            connect_timeout,
+            subscription_capacity: settings.subscription_capacity,
+        },
     )
     .await
-    .context("连接 NATS 超时")?
     .context("连接 NATS 失败")?;
     let mut session = Session::new(settings.pools, settings.max_in_flight_requests);
     let discovery_window = Duration::from_millis(settings.discovery_window_ms);

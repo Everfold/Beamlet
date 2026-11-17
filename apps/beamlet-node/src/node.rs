@@ -1,11 +1,11 @@
 //! Node 负责装配、监督和统一退出; 角色保留独立的业务状态与身份.
 use crate::{
-    infrastructure::Nats,
     role::RunningRole,
     settings::{Infrastructure, Settings},
     shutdown, terminal,
 };
 use anyhow::{Context, Result};
+use beamlet_transport_nats::{Nats, Options};
 use std::{collections::BTreeMap, future::Future, time::Duration};
 use tokio::{
     sync::watch,
@@ -44,10 +44,18 @@ pub(crate) async fn run(
                     let deadline = Duration::from_secs(connect_timeout_secs);
                     timeout(
                         deadline,
-                        Nats::connect(&url, deadline, subscription_capacity).instrument(span),
+                        Nats::connect(
+                            &url,
+                            Options {
+                                connect_timeout: deadline,
+                                subscription_capacity,
+                            },
+                        )
+                        .instrument(span),
                     )
                     .await
-                    .context("连接基础设施超时")??
+                    .context("连接基础设施超时")?
+                    .context("连接 NATS 失败")?
                 }
             };
             info!(event = "infrastructure.ready", %name, "基础设施已就绪");
@@ -83,7 +91,7 @@ pub(crate) async fn run(
     )
     .await;
     for (name, infrastructure) in &infrastructures {
-        match timeout(Duration::from_secs(1), infrastructure.client.flush()).await {
+        match timeout(Duration::from_secs(1), infrastructure.flush()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 warn!(event = "infrastructure.flush_failed", %name, %error, "退出时刷新失败")

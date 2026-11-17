@@ -1,7 +1,6 @@
 mod authority;
 mod capabilities;
 mod delivery;
-mod infrastructure;
 mod ingress;
 mod node;
 mod presence;

@@ -1,13 +1,12 @@
 //! Authority 的本地租约视图; 不参与 Operation/Attempt 生命周期.
 
-use crate::infrastructure::Connection;
+use beamlet_api::ConnectionView;
 use beamlet_api::{Pool, Presence, PresenceState, RoleInstance, Selection, WorkerView};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tokio::sync::watch;
 
 struct Entry {
     presence: Presence,
@@ -21,14 +20,14 @@ pub(crate) struct Registry {
     entries: Arc<Mutex<BTreeMap<(Pool, RoleInstance), Entry>>>,
     pools: BTreeSet<Pool>,
     timeout: Duration,
-    connection: watch::Receiver<Connection>,
+    connection: ConnectionView,
 }
 
 impl Registry {
     pub(crate) fn new(
         pools: BTreeSet<Pool>,
         timeout: Duration,
-        connection: watch::Receiver<Connection>,
+        connection: ConnectionView,
     ) -> Self {
         Self {
             entries: Arc::default(),
@@ -39,7 +38,7 @@ impl Registry {
     }
 
     pub(crate) fn observe(&self, presence: Presence, epoch: u64, now: Instant) -> bool {
-        let link = *self.connection.borrow();
+        let link = self.connection.current();
         if !link.connected
             || link.epoch != epoch
             || !self.pools.contains(&presence.pool)
@@ -86,7 +85,7 @@ impl Registry {
 
     pub(crate) fn expire(&self, now: Instant) {
         let retention = self.timeout.saturating_mul(4);
-        let link = *self.connection.borrow();
+        let link = self.connection.current();
         self.entries.lock().expect("worker registry lock poisoned").retain(|_, entry| {
             let age = now.saturating_duration_since(entry.received);
             if !entry.stale_logged && (age >= self.timeout || entry.epoch != link.epoch || !link.connected) {
@@ -105,7 +104,7 @@ impl Registry {
         capability: Option<&str>,
         now: Instant,
     ) -> Vec<WorkerView> {
-        let link = *self.connection.borrow();
+        let link = self.connection.current();
         self.entries
             .lock()
             .expect("worker registry lock poisoned")
@@ -151,6 +150,8 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use beamlet_api::Connection;
+    use tokio::sync::watch;
     use uuid::Uuid;
 
     #[test]
@@ -163,7 +164,7 @@ mod tests {
         let registry = Registry::new(
             BTreeSet::from([pool.clone()]),
             Duration::from_secs(15),
-            receiver,
+            ConnectionView::new(move || *receiver.borrow()),
         );
         let now = Instant::now();
         let mut heartbeat = Presence {
