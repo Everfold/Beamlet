@@ -147,6 +147,7 @@ impl Nats {
         ConnectionView::new(move || *status.borrow())
     }
     /// 订阅 Authority 各个 pool 的控制主题并刷新订阅.
+    /// 同一会话的请求订阅共享队列组, 避免多连接重复处理.
     ///
     /// # 参数
     ///

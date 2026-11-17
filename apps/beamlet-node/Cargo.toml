@@ -12,6 +12,7 @@ beamlet-api = { workspace = true, features = ["serde"] }
 beamlet-authority.workspace = true
 beamlet-host.workspace = true
 beamlet-transport-nats.workspace = true
+beamlet-transport-local.workspace = true
 beamlet-worker.workspace = true
 
 futures.workspace = true

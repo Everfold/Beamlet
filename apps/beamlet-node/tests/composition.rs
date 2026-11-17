@@ -1,5 +1,5 @@
 //! 显式验收: cargo test -p beamlet-node --test composition -- --ignored --nocapture
-//! 要求 Unix 和 PATH 中的 nats-server; 普通 cargo test 不启动外部服务.
+//! 混合传输验收要求 Unix 和 nats-server; 普通测试仅运行纯 Local 场景.
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
@@ -142,6 +142,33 @@ impl Cluster {
             sleep(Duration::from_millis(40)).await;
         }
     }
+    /// 等待 process 的日志满足 check, 返回日志; 进程退出或超时返回错误.
+    async fn wait_log(&mut self, process: usize, check: impl Fn(&str) -> bool) -> Result<String> {
+        let deadline = Instant::now() + Duration::from_secs(8);
+        loop {
+            let record = &mut self.processes[process];
+            let text = fs::read_to_string(&record.log)?;
+            ensure!(record.child.try_wait()?.is_none(), "node stopped: {text}");
+            if check(&text) {
+                return Ok(text);
+            }
+            ensure!(Instant::now() < deadline, "expected log not found: {text}");
+            sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// 向 process 写入一条 line, 返回写入结果.
+    fn input(&mut self, process: usize, line: &str) -> Result<()> {
+        let stdin = self.processes[process]
+            .child
+            .stdin
+            .as_mut()
+            .context("node stdin closed")?;
+        writeln!(stdin, "{line}")?;
+        stdin.flush()?;
+        Ok(())
+    }
+
     /// 强制终止指定测试子进程并等待回收.
     ///
     /// # 参数
@@ -276,7 +303,7 @@ async fn connect(port: u16) -> Result<async_nats::Client> {
 /// 包含角色 UUID, 基础设施名称和角色种类配置的字符串.
 fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
     format!(
-        r#"(role_id: "{id}", label: Some("same label"), infrastructure: "{infrastructure}", kind: {kind})"#
+        r#"(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], kind: {kind})"#
     )
 }
 /// 生成 Authority 的 RON 配置片段.
@@ -1049,6 +1076,174 @@ async fn configured_report_deadlines_and_input_capacity_are_independent_per_auth
     ensure!(
         fs::read_to_string(cluster.root.path().join("deadlines-node.ron"))? == source,
         "config rewritten"
+    );
+    Ok(())
+}
+
+/// 纯 Local Node 可执行任务, 不同命名空间相互隔离, 配置不被写回.
+#[tokio::test]
+async fn local_only_node_runs_without_broker_and_keeps_spaces_isolated() -> Result<()> {
+    let mut cluster = Cluster::new()?;
+    let authority_id = Uuid::new_v4();
+    let inside = Uuid::new_v4();
+    let outside = Uuid::new_v4();
+    let source = config(
+        Uuid::new_v4(),
+        r#""inside": local(capacity: 3), "outside": local(capacity: 3)"#,
+        &[
+            role(authority_id, "inside", &authority(r#""blue""#, 5, 2)),
+            role(inside, "inside", &worker("text.reverse/v1", 1, 2)),
+            role(outside, "outside", &worker("text.uppercase/v1", 1, 2)),
+        ],
+    );
+    let (node, _) = cluster.node("local-only", &source, 3).await?;
+    cluster
+        .wait_log(node, |text| {
+            text.lines().any(|line| {
+                line.contains("event=\"worker.presence\"") && line.contains(&inside.to_string())
+            })
+        })
+        .await?;
+    cluster.input(node, "local-task")?;
+    cluster
+        .wait_log(node, |text| text.contains("result: \"ksat-lacol\""))
+        .await?;
+    cluster.input(node, "/capability text.uppercase/v1")?;
+    cluster.input(node, "unreachable")?;
+    cluster
+        .wait_log(node, |text| text.contains("response=Rejected"))
+        .await?;
+    cluster.input(node, "/workers")?;
+    let text = cluster
+        .wait_log(node, |text| text.contains("Worker 列表"))
+        .await?;
+    let line = text
+        .lines()
+        .find(|line| line.contains("Worker 列表"))
+        .context("worker query missing")?;
+    ensure!(
+        line.contains(&inside.to_string()) && !line.contains(&outside.to_string()),
+        "local spaces leaked: {line}"
+    );
+    cluster.stop(node).await?;
+    ensure!(
+        fs::read_to_string(cluster.root.path().join("local-only.ron"))? == source,
+        "configuration rewritten"
+    );
+    Ok(())
+}
+
+/// 混合传输共用一个 Authority, NATS 重复连接不重复执行, 断线期间 Local 仍可用.
+#[tokio::test]
+#[ignore = "requires nats-server; explicit mixed transport test"]
+async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Result<()> {
+    let mut cluster = Cluster::new()?;
+    let port = port()?;
+    let broker = cluster.broker(port, "mixed-broker")?;
+    let client = connect(port).await?;
+    let authority_id = Uuid::new_v4();
+    let local_worker = Uuid::new_v4();
+    let remote_worker = Uuid::new_v4();
+    let infrastructures = format!(
+        r#""local": local(capacity: 8), "remote": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote-alias": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 5, subscription_capacity: 16)"#
+    );
+    let authority_role = role(authority_id, "local", &authority(r#""blue""#, 10, 2)).replace(
+        r#"infrastructures: ["local"]"#,
+        r#"infrastructures: ["local", "remote", "remote-alias"]"#,
+    );
+    let source = config(
+        Uuid::new_v4(),
+        &infrastructures,
+        &[
+            authority_role,
+            role(local_worker, "local", &worker("text.reverse/v1", 1, 2)),
+            role(remote_worker, "remote", &worker("text.uppercase/v1", 1, 2)),
+        ],
+    );
+    let (node, instances) = cluster.node("mixed", &source, 3).await?;
+    let authority = instances[&authority_id];
+    let local_worker = instances[&local_worker];
+    let remote_worker = instances[&remote_worker];
+    let pool: Pool = "blue".parse()?;
+    wait_for_workers(&client, authority, &pool, &[local_worker, remote_worker]).await?;
+    ensure!(
+        workers(&client, authority, &pool).await?.len() == 2,
+        "duplicate worker rows"
+    );
+    ensure!(
+        discover(&client, &pool).await?.len() == 1,
+        "duplicate authority discovery"
+    );
+    for (index, (target, capability, expected)) in [
+        (local_worker, "text.reverse/v1", "telmaeB"),
+        (remote_worker, "text.uppercase/v1", "BEAMLET"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let operation = completed(
+            submit(&client, authority, &pool, target, capability, "Beamlet").await?,
+            target,
+            expected,
+        )?;
+        ensure!(
+            operation == format!("{}:operation:{}", authority.session_id, index + 1),
+            "separate ledgers or duplicate executions: {operation}"
+        );
+    }
+    cluster.kill(broker)?;
+    cluster
+        .wait_log(node, |text| {
+            text.lines()
+                .filter(|line| {
+                    line.contains("event=\"transport.connection\"")
+                        && line.contains("connected=false")
+                })
+                .count()
+                >= 2
+        })
+        .await?;
+    cluster.input(node, "offline-local")?;
+    cluster
+        .wait_log(node, |text| text.contains("result: \"lacol-enilffo\""))
+        .await?;
+    cluster.input(node, "/workers")?;
+    let text = cluster
+        .wait_log(node, |text| text.contains("Worker 列表"))
+        .await?;
+    let line = text
+        .lines()
+        .find(|line| line.contains("Worker 列表"))
+        .context("worker query missing")?;
+    ensure!(
+        line.contains("stale: true") && line.contains("stale: false"),
+        "connection state was not isolated: {line}"
+    );
+    cluster.broker(port, "mixed-restarted")?;
+    let client = connect(port).await?;
+    wait_for_workers(&client, authority, &pool, &[local_worker, remote_worker]).await?;
+    completed(
+        submit(
+            &client,
+            authority,
+            &pool,
+            remote_worker,
+            "text.uppercase/v1",
+            "restored",
+        )
+        .await?,
+        remote_worker,
+        "RESTORED",
+    )?;
+    cluster.stop(node).await?;
+    let text = fs::read_to_string(&cluster.processes[node].log)?;
+    ensure!(
+        text.matches("event=\"operation.created\"").count() == 4,
+        "duplicate submissions: {text}"
+    );
+    ensure!(
+        fs::read_to_string(cluster.root.path().join("mixed.ron"))? == source,
+        "configuration rewritten"
     );
     Ok(())
 }

@@ -48,6 +48,11 @@ impl Color {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Infrastructure {
+    /// 创建独立的进程内消息空间.
+    Local {
+        /// 每个本地有界通道的容量, 必须大于零.
+        capacity: usize,
+    },
     /// 建立一个 NATS 客户端连接, 不自动启动消息服务器.
     Nats {
         /// 该命名 NATS 实例连接的服务地址.
@@ -208,8 +213,8 @@ pub(crate) struct RoleSettings {
     pub role_id: Uuid,
     /// 可选的人类可读标签, 不参与身份比较或消息路由.
     pub label: Option<String>,
-    /// 此角色引用的基础设施名称, 必须存在于 Node 的映射中.
-    pub infrastructure: String,
+    /// 引用的基础设施名称; Authority 可多选, Worker 只能选一个.
+    pub infrastructures: BTreeSet<String>,
     /// 角色种类及其独立配置.
     pub kind: Role,
 }
@@ -244,7 +249,7 @@ impl Default for Settings {
             color: Color::Auto,
             shutdown_timeout_secs: 6,
             infrastructures: BTreeMap::from([(
-                "local".into(),
+                "nats".into(),
                 Infrastructure::Nats {
                     url: "nats://127.0.0.1:4222".into(),
                     connect_timeout_secs: 10,
@@ -255,13 +260,13 @@ impl Default for Settings {
                 RoleSettings {
                     role_id: Uuid::new_v4(),
                     label: Some("authority".into()),
-                    infrastructure: "local".into(),
+                    infrastructures: ["nats".into()].into(),
                     kind: Role::Authority(Authority::default()),
                 },
                 RoleSettings {
                     role_id: Uuid::new_v4(),
                     label: Some("worker".into()),
-                    infrastructure: "local".into(),
+                    infrastructures: ["nats".into()].into(),
                     kind: Role::Worker(Worker::default()),
                 },
             ],
@@ -331,6 +336,7 @@ impl Settings {
         for (name, infrastructure) in &self.infrastructures {
             ensure!(!name.trim().is_empty(), "基础设施名称不能为空");
             match infrastructure {
+                Infrastructure::Local { capacity } => validate_capacity(*capacity, "capacity")?,
                 Infrastructure::Nats {
                     url,
                     connect_timeout_secs,
@@ -351,11 +357,17 @@ impl Settings {
             ensure!(!role.role_id.is_nil(), "role_id 不能是 nil UUID");
             ensure!(ids.insert(role.role_id), "重复的 role_id: {}", role.role_id);
             ensure!(
-                self.infrastructures.contains_key(&role.infrastructure),
-                "角色 {} 引用了不存在的基础设施: {}",
-                role.role_id,
-                role.infrastructure
+                !role.infrastructures.is_empty(),
+                "角色 {} 至少需要一个基础设施",
+                role.role_id
             );
+            for name in &role.infrastructures {
+                ensure!(
+                    self.infrastructures.contains_key(name),
+                    "角色 {} 引用了不存在的基础设施: {name}",
+                    role.role_id
+                );
+            }
             match &role.kind {
                 Role::Authority(config) => {
                     validate_timeout(config.report_timeout_secs, "report_timeout_secs")?;
@@ -372,6 +384,11 @@ impl Settings {
                     );
                 }
                 Role::Worker(config) => {
+                    ensure!(
+                        role.infrastructures.len() == 1,
+                        "Worker {} 只能引用一个基础设施",
+                        role.role_id
+                    );
                     ensure!(
                         config.heartbeat_interval_secs > 0,
                         "heartbeat_interval_secs 必须大于 0"

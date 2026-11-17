@@ -27,7 +27,7 @@ cargo run -p beamlet-console
 
 构建与普通测试直接使用 Cargo, 不依赖 Nix. 配置文件位于**实际可执行文件旁**, 与当前工作目录无关. node 的 `--config/-c` 只接受文件名; 默认 `node.ron`. console 使用 `console.ron`.
 
-文件不存在时 confy 创建默认配置, 同时生成一个 Node UUID 和两个角色 UUID. 默认组合为一个 Authority、一个 Worker, 共享名为 `local` 的 NATS 连接, Worker 启用 `text.reverse/v1`.
+文件不存在时 confy 创建默认配置, 同时生成一个 Node UUID 和两个角色 UUID. 默认组合为一个 Authority、一个 Worker, 共享名为 `nats` 的 NATS 连接, Worker 启用 `text.reverse/v1`.
 
 已有配置只加载和校验, 不更新、不补写 UUID、不迁移. 后续添加角色时由用户填写新的 role_id; 删除或调整其他角色顺序不影响剩余角色身份. 缺失、nil 或同一个配置中重复的 role_id 都会在连接网络前报错. 所有会话 UUID 只存在内存中.
 
@@ -40,14 +40,15 @@ cargo run -p beamlet-console
     color: auto,
     shutdown_timeout_secs: 6,
     infrastructures: {
-        "local": nats(url: "nats://127.0.0.1:4222", connect_timeout_secs: 10, subscription_capacity: 16),
+        "local": local(capacity: 16),
+        "nats": nats(url: "nats://127.0.0.1:4222", connect_timeout_secs: 10, subscription_capacity: 16),
         "secondary": nats(url: "nats://127.0.0.1:4333", connect_timeout_secs: 10, subscription_capacity: 16),
     },
     roles: [
         (
             role_id: "3e8385b1-a50b-4cbd-a60f-8469e7e6ff3a",
             label: Some("协调者 A"),
-            infrastructure: "local",
+            infrastructures: ["local", "nats", "secondary"],
             kind: authority((
                 pools: ["blue", "green"],
                 worker_timeout_secs: 15,
@@ -60,7 +61,7 @@ cargo run -p beamlet-console
         (
             role_id: "99ab9db5-4b2e-4285-bad2-546a64d0baac",
             label: Some("协调者 B"),
-            infrastructure: "local",
+            infrastructures: ["nats"],
             kind: authority((
                 pools: ["blue"],
                 worker_timeout_secs: 20,
@@ -73,7 +74,7 @@ cargo run -p beamlet-console
         (
             role_id: "71d3e189-0478-4e8b-bfd2-93cdfd975dd7",
             label: Some("大写 Worker"),
-            infrastructure: "local",
+            infrastructures: ["local"],
             kind: worker((
                 pool: "blue",
                 capabilities: ["text.uppercase/v1"],
@@ -84,7 +85,7 @@ cargo run -p beamlet-console
         (
             role_id: "5c8fac39-1d02-49f9-8b2b-a21b5793a867",
             label: Some("倒写 Worker"),
-            infrastructure: "secondary",
+            infrastructures: ["secondary"],
             kind: worker((
                 pool: "blue",
                 capabilities: ["text.reverse/v1"],
@@ -96,9 +97,17 @@ cargo run -p beamlet-console
 )
 ```
 
-`infrastructures` 以名称标识实例, 当前实现 NATS 客户端连接. 相同类型可以配置多次, 指向同一服务器或不同服务器. 多个角色引用同一个名称时共享连接; 不同名称建立独立连接. 它不会自动启动 NATS 服务端. 此例中第二个 Worker 位于另一台 NATS, 要使用它, 需要在 `secondary` 上配置 Authority. 同名 pool 不能跨独立 NATS 自动互通.
+`infrastructures` 以名称标识实例, 支持 `local(capacity: N)` 和 `nats(...)`. 同名引用共享实例; 不同名称分别创建消息空间或 NATS 连接. Local 只在同一 Node 进程内通信, 即使两个进程配置了相同名称也不共享空间. NATS 不自动启动服务端.
 
-每个角色引用一个基础设施, 不做跨连接转发. 不存在的名称、空地址、空 Authority pools、未知 Worker 能力、零心跳间隔或零期限均为配置错误. pool 和能力去重只作用于内存. 日志颜色属于整个 Node 的终端输出设置, 使用 `auto/always/never`.
+角色使用 `infrastructures: [...]` 引用实例, 重复名称在内存中去重. Authority 至少引用一个实例, Worker 恰好引用一个. 所有引用必须存在; Local 的 `capacity` 必须为正且在通道支持范围内, 决定各本地有界通道的容量.
+
+同一个 Authority 可同时服务多个 Local/NATS 实例. 上例的协调者 A 可接受 NATS 提交并交付到 Local 或 secondary 上的 Worker; 协调者 B 仅使用 nats, 不会自动看见其他消息空间的 Worker. 各入口共用一个登记表, Operation 台账, 业务队列和并发上限, 回复仍经由原请求入口返回. Authority 不跨空间转发 Worker 心跳.
+
+Worker 必须属于 Authority 的一个 pool. 同一 pool/角色会话经多个入口出现时只展示一条记录, 各来源独立维护租约与连接世代. 某个 NATS 断线不会使 Local 或其他有效来源失效; 重连后仍需新心跳. 多个有效出口按基础设施名称顺序选择. 选择 Worker 时同时固定交付出口, 失败不换出口或重试. 同一 Authority 会话在同一 NATS 上的请求订阅共享队列组, 多连接不会重复执行一份提交.
+
+不存在的名称, 空引用列表, Worker 引用多个实例, 空地址, 空 Authority pools, 未知 Worker 能力, 零心跳间隔或零期限均为配置错误. 去重只作用于内存, 加载器不改写文件. 日志颜色属于整个 Node 的终端输出设置, 使用 `auto/always/never`.
+
+已有配置需要手动将角色的 `infrastructure: "name"` 改为 `infrastructures: ["name"]`. 不提供自动迁移. 例如同一进程的 A1 使用 `["local", "nats"]`, W1 使用 `["local"]`, W2 使用 `["nats"]`, 就可通过 A1 的 NATS 入口调用两个 Worker.
 
 ## 本地终端与 Console
 
@@ -135,7 +144,7 @@ kind: authority((
 )),
 ```
 
-该上限跨当前 Authority 的所有 pools 和 Worker 共享, 其他 Authority 有自己的名额. 满载时暂停从业务入口取出请求, 发现、心跳与 Worker 查询继续由独立控制循环处理. 报告可以乱序完成; 交付完成或失败后释放名额. 超时释放并发名额不表示取消 Attempt 或关闭 Operation: 原操作仍保持等待报告, 不自动重试.
+该上限跨当前 Authority 的所有传输, pools 和 Worker 共享, 其他 Authority 有自己的名额. 满载时暂停从业务入口取出请求, 发现、心跳与 Worker 查询继续由独立控制循环处理. 报告可以乱序完成; 交付完成或失败后释放名额. 超时释放并发名额不表示取消 Attempt 或关闭 Operation: 原操作仍保持等待报告, 不自动重试.
 
 Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 回复通过独立异步任务发送, 单个慢回复不占住主循环. 每个 Authority 通过 `max_concurrent_replies` 限制待发送的业务结果/拒绝回复, 默认 16; 达到该上限时暂停业务接收和报告收取, 等待发送释放容量, 不无限积压回复. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付和回复发送结束.
 
@@ -153,7 +162,7 @@ Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个�
 
 名额从取出调用开始占用, 到执行结束且报告发送完成或失败后释放. 达到正数上限时暂停取出下一条调用, 不额外创建大量等待名额的执行任务. 所有 Authority 发给该 Worker 的调用共用此上限; 其他 Worker 角色有自己的名额.
 
-能力执行接口返回 Future, I/O 能力可以直接异步等待; 现有文本能力自行将计算放入阻塞线程池. Worker 统一管理执行和报告发送, 挂起的任务仍占用并发名额, 心跳与控制循环继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 配置的在途上限和传输接收缓冲仍独立生效. Worker 接收缓冲由其 NATS 实例的 `subscription_capacity` 决定, 默认 16 条, 与执行并发数是不同设置.
+能力执行接口返回 Future, I/O 能力可以直接异步等待; 现有文本能力自行将计算放入阻塞线程池. Worker 统一管理执行和报告发送, 挂起的任务仍占用并发名额, 心跳与控制循环继续运行. `0` 不等于无限线程或硬件资源: Tokio 的线程池、系统资源、每个 Authority 配置的在途上限和传输接收缓冲仍独立生效. Worker 接收缓冲由其 NATS 实例的 `subscription_capacity` 或 Local 实例的 `capacity` 决定, 与执行并发数是不同设置.
 
 Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早的慢任务. 执行拒绝、报告发送失败都会释放名额, 不触发重新执行. 收到退出信号后停止新接收, 按当前并发上限排空已接收队列并等待运行中任务; 仍受 Node 的统一退出期限约束.
 
@@ -167,6 +176,12 @@ Node 先校验整个配置、生成各角色会话并连接基础设施, 再把�
 
 配置修改需要重启. 当前没有角色热增删、角色自动重启、动态插件或任意基础设施类型注册框架. 新角色类型通过带配置的枚举分支和角色运行入口扩展; 新基础设施实现通过对应配置和连接入口扩展.
 
+## 嵌入 Authority
+
+使用 `Authority::new(info, options)` 构造角色. 单个传输通过 `run((endpoint, delivery), shutdown)` 运行; 多个传输先创建 `Transports::new()`, 逐个 `add(endpoint, delivery)`, 再调用 `run(transports, shutdown)`. `run_with_local(transports, input, shutdown)` 可额外接入终端等结构化输入.
+
+所有端点必须绑定相同的 AuthorityInfo, 每对接收端和交付端必须属于同一消息空间. `add` 不启动任务, 不要求具体消息后端或序列化方式; `run` 负责控制任务生命周期, 调用方负责绑定及最终刷新. 空传输集合在运行时返回错误.
+
 ## 验证
 
 ```bash
@@ -179,7 +194,7 @@ cargo test -p beamlet-node --test composition -- --ignored --nocapture
 cargo test -p beamlet-console --test concurrency -- --ignored --nocapture
 ```
 
-组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端.
+组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端. 纯 Local 二进制测试验证执行和命名空间隔离; 混合验收覆盖 NATS 到 Local 的完整调用, 同服务器重复连接的单次执行, 断线时 Local 可用及重连恢复, 并检查配置不写回.
 
 Console 并发测试验证等待中的提交不阻止查询、目标快照、迟到结果隔离、容量拒绝、退出排空与中止等待. 真实 NATS 验收使用 Console 二进制和可控 Authority 回复, 验证多个提交和查询同时在途、乱序结果关联和配置不变. Authority 回复测试通过有界通道制造发送背压, 验证其他任务可继续、回复容量有限和停机排空.
 

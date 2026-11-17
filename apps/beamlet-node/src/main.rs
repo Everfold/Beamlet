@@ -1,6 +1,8 @@
 //! Node 入口: 加载配置, 装配角色并协调退出.
 /// Node 内置文本处理能力的注册, 校验与阻塞计算安排.
 mod capabilities;
+/// Local 与 NATS 基础设施创建及角色端点绑定.
+mod infrastructure;
 /// Node 终端到 Authority 结构化本地提交的转换.
 mod local;
 /// 节点基础设施与角色装配, 委托 Host 监督并处理连接收尾.

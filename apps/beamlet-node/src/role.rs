@@ -1,5 +1,6 @@
 //! 将一种角色的配置和基础设施装配为独立运行实例.
 use crate::{
+    infrastructure::Infrastructure,
     local,
     settings::{Role, RoleSettings},
     terminal,
@@ -7,7 +8,6 @@ use crate::{
 use anyhow::{Context, Result};
 use beamlet_api::{AuthorityInfo, RoleInstance};
 use beamlet_host::Shutdown;
-use beamlet_transport_nats::Nats;
 use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
@@ -41,7 +41,7 @@ impl RunningRole {
     /// # 参数
     ///
     /// - `self`: 当前 `RunningRole` 的值; 调用后转移其所有权(Copy 类型按值复制).
-    /// - `infrastructure`: 该角色使用的已连接 NATS 句柄, 可与其他角色共享.
+    /// - `infrastructures`: 该角色引用的已创建基础设施, 顺序固定.
     /// - `local`: 分配给该角色的本地终端队列; Worker 不使用文本提交.
     /// - `shutdown`: 停止通知或 future; 完成后停止新接收并按角色语义排空.
     ///
@@ -50,13 +50,13 @@ impl RunningRole {
     /// 正常停止返回 `Ok(())`; 绑定, 构造, 运行或必要的刷新失败时返回带角色上下文的错误.
     pub(crate) async fn run(
         self,
-        infrastructure: Nats,
+        infrastructures: Vec<Infrastructure>,
         local: terminal::Input,
         shutdown: Shutdown,
     ) -> Result<()> {
         let Self { settings, instance } = self;
         let span = info_span!("role", role_id = %instance.role_id, role_session_id = %instance.session_id,
-            kind = settings.kind.name(), label = settings.label.as_deref(), infrastructure = %settings.infrastructure);
+            kind = settings.kind.name(), label = settings.label.as_deref(), infrastructures = ?settings.infrastructures);
         async move {
             info!(event = "role.starting", "角色启动");
             let result = match settings.kind {
@@ -66,14 +66,19 @@ impl RunningRole {
                         label: settings.label,
                         pools: config.pools.clone(),
                     };
-                    let endpoint = infrastructure.bind_authority(&info).await?;
+                    let mut transports = beamlet_authority::Transports::new();
+                    for infrastructure in &infrastructures {
+                        infrastructure.attach(&info, &mut transports).await?;
+                    }
                     let authority =
                         beamlet_authority::Authority::new(info.clone(), (&config).into())?;
                     let input = local::Input::new(info, authority.directory(), local)?;
                     authority
-                        .run_with_local((endpoint, infrastructure.clone()), input, shutdown.wait())
+                        .run_with_local(transports, input, shutdown.wait())
                         .await?;
-                    infrastructure.flush().await?;
+                    for infrastructure in &infrastructures {
+                        infrastructure.flush().await?;
+                    }
                     Ok(())
                 }
                 Role::Worker(config) => {
@@ -88,11 +93,11 @@ impl RunningRole {
                         builder = builder.label(label);
                     }
                     let worker = builder.build()?;
-                    let (inbox, presence) = infrastructure.bind_worker(worker.binding()).await?;
-                    worker
-                        .run(inbox, presence, shutdown.wait())
+                    infrastructures
+                        .first()
+                        .context("Worker 缺少基础设施")?
+                        .run_worker(worker, shutdown)
                         .await
-                        .map_err(anyhow::Error::from)
                 }
             };
             result.with_context(|| format!("角色 {} 运行失败", instance.role_id))?;

@@ -52,18 +52,29 @@ impl AuthorityEndpoint {
         }
         let mut subscriptions = SelectAll::new();
         let mut routes = BTreeMap::new();
+        let queue = format!(
+            "beamlet-authority-{}-{}",
+            info.instance.role_id, info.instance.session_id
+        );
         for pool in &info.pools {
             for (subject, kind) in [
                 (subject::discovery(pool), Kind::Discovery),
                 (subject::presence(pool), Kind::Presence),
                 (subject::authority(pool, info.instance), Kind::Request),
             ] {
-                subscriptions.push(
-                    nats.client
-                        .subscribe(subject.clone())
-                        .await
-                        .map_err(TransportError::new)?,
-                );
+                // 同一会话的多个连接只分发一次请求; 公告仍向所有连接广播.
+                let subscription = match kind {
+                    Kind::Request => {
+                        nats.client
+                            .queue_subscribe(subject.clone(), queue.clone())
+                            .await
+                    }
+                    Kind::Discovery | Kind::Presence => {
+                        nats.client.subscribe(subject.clone()).await
+                    }
+                }
+                .map_err(TransportError::new)?;
+                subscriptions.push(subscription);
                 routes.insert(subject, (pool.clone(), kind));
             }
         }

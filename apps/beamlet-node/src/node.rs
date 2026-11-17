@@ -1,12 +1,7 @@
 //! Node 装配角色与基础设施, 委托 Host 监督; 角色保留独立状态与身份.
-use crate::{
-    role::RunningRole,
-    settings::{Infrastructure, Settings},
-    terminal,
-};
+use crate::{infrastructure::Infrastructure, role::RunningRole, settings::Settings, terminal};
 use anyhow::{Context, Result};
 use beamlet_host::Host;
-use beamlet_transport_nats::{Nats, Options};
 use std::{collections::BTreeMap, future::Future, time::Duration};
 use tokio::time::timeout;
 use tracing::{Instrument, info, warn};
@@ -38,36 +33,14 @@ pub(crate) async fn run(
     let roles: Vec<_> = settings.roles.into_iter().map(RunningRole::new).collect();
     for role in &roles {
         info!(event = "role.prepared", role_id = %role.instance.role_id, role_session_id = %role.instance.session_id,
-            kind = role.settings.kind.name(), label = role.settings.label.as_deref(), infrastructure = %role.settings.infrastructure, "已分配角色会话");
+            kind = role.settings.kind.name(), label = role.settings.label.as_deref(), infrastructures = ?role.settings.infrastructures, "已分配角色会话");
     }
     tokio::pin!(signal);
     let infrastructure = async {
         let mut connected = BTreeMap::new();
         for (name, config) in settings.infrastructures {
             let span = tracing::info_span!("infrastructure", name = %name);
-            let connection = match config {
-                Infrastructure::Nats {
-                    url,
-                    connect_timeout_secs,
-                    subscription_capacity,
-                } => {
-                    let deadline = Duration::from_secs(connect_timeout_secs);
-                    timeout(
-                        deadline,
-                        Nats::connect(
-                            &url,
-                            Options {
-                                connect_timeout: deadline,
-                                subscription_capacity,
-                            },
-                        )
-                        .instrument(span),
-                    )
-                    .await
-                    .context("连接基础设施超时")?
-                    .context("连接 NATS 失败")?
-                }
-            };
+            let connection = Infrastructure::connect(config).instrument(span).await?;
             info!(event = "infrastructure.ready", %name, "基础设施已就绪");
             connected.insert(name, connection);
         }
@@ -80,15 +53,22 @@ pub(crate) async fn run(
     let shutdown = host.shutdown();
     let mut targets = Vec::new();
     for role in roles {
-        let infrastructure = infrastructures
-            .get(&role.settings.infrastructure)
-            .context("已校验的基础设施缺失")?
-            .clone();
+        let connections = role
+            .settings
+            .infrastructures
+            .iter()
+            .map(|name| {
+                infrastructures
+                    .get(name)
+                    .cloned()
+                    .context("已校验的基础设施缺失")
+            })
+            .collect::<Result<Vec<_>>>()?;
         let (target, local) = role.local_input();
         targets.extend(target);
         host.add(
             role.instance.role_id.to_string(),
-            role.run(infrastructure, local, shutdown.clone())
+            role.run(connections, local, shutdown.clone())
                 .in_current_span(),
         );
     }

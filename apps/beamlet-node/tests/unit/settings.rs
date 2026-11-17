@@ -57,7 +57,7 @@ fn independently_configures_repeated_role_and_infrastructure_types() {
     );
     let mut extra = settings.roles[1].clone();
     extra.role_id = Uuid::new_v4();
-    extra.infrastructure = "secondary".into();
+    extra.infrastructures = ["secondary".into()].into();
     extra.kind = Role::Worker(Worker {
         pool: "other".parse().unwrap(),
         capabilities: BTreeSet::from([crate::capabilities::UPPERCASE.into()]),
@@ -104,7 +104,7 @@ fn invalid_or_missing_role_ids_are_not_generated_or_written_back() {
             &settings.roles[1].role_id.to_string(),
             &Uuid::nil().to_string(),
         ),
-        distinct.replace("infrastructure: \"local\"", "infrastructure: \"missing\""),
+        distinct.replace("\"nats\",", "\"missing\","),
         distinct.replace("heartbeat_interval_secs: 5", "heartbeat_interval_secs: 0"),
         distinct.replace("worker_timeout_secs: 15", "worker_timeout_secs: 0"),
         distinct.replace("text.reverse/v1", "text.reverse/v2"),
@@ -243,7 +243,7 @@ fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
             .contains("重复的 role_id")
     );
     settings.roles[1].role_id = Uuid::new_v4();
-    settings.roles[1].infrastructure = "not configured".into();
+    settings.roles[1].infrastructures = ["not configured".into()].into();
     assert!(
         settings
             .validate()
@@ -325,7 +325,10 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
         connect_timeout_secs,
         subscription_capacity,
         ..
-    } = settings.infrastructures.get_mut("local").unwrap();
+    } = settings.infrastructures.get_mut("nats").unwrap()
+    else {
+        panic!("expected NATS")
+    };
     *connect_timeout_secs = 20;
     *subscription_capacity = 128;
     confy::store_path(&path, &settings).unwrap();
@@ -344,7 +347,10 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
         connect_timeout_secs,
         subscription_capacity,
         ..
-    } = &loaded.infrastructures["local"];
+    } = &loaded.infrastructures["nats"]
+    else {
+        panic!("expected NATS")
+    };
     assert_eq!((*connect_timeout_secs, *subscription_capacity), (20, 128));
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
     for field in [
@@ -379,4 +385,59 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
             assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
         }
     }
+}
+
+/// Local 容量和角色引用在启动前校验, 重复引用去重且不写回配置.
+#[test]
+fn local_and_multiple_transports_are_validated_without_rewriting() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("node.ron");
+    let mut settings = Settings::default();
+    settings
+        .infrastructures
+        .insert("local".into(), Infrastructure::Local { capacity: 7 });
+    settings.roles[0].infrastructures.insert("local".into());
+    settings.roles[1].infrastructures = ["local".into()].into();
+    confy::store_path(&path, &settings).unwrap();
+    let source = fs::read_to_string(&path)
+        .unwrap()
+        .replace("infrastructures: [", "infrastructures: [\"local\", ");
+    fs::write(&path, &source).unwrap();
+    let loaded = Settings::from_file(&path).unwrap();
+    assert_eq!(loaded.roles[0].infrastructures.len(), 2);
+    assert_eq!(loaded.roles[1].infrastructures.len(), 1);
+    assert!(matches!(
+        loaded.infrastructures["local"],
+        Infrastructure::Local { capacity: 7 }
+    ));
+    assert_eq!(fs::read_to_string(&path).unwrap(), source);
+    for replacement in [
+        "capacity: 0".into(),
+        format!("capacity: {}", usize::MAX),
+        "".into(),
+    ] {
+        let invalid = source.replace("capacity: 7", &replacement);
+        fs::write(&path, &invalid).unwrap();
+        assert!(Settings::from_file(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
+    }
+    settings.roles[1].infrastructures.insert("nats".into());
+    assert!(
+        settings
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("只能引用一个基础设施")
+    );
+    settings.roles[1].infrastructures.clear();
+    assert!(
+        settings
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("至少需要一个基础设施")
+    );
+    settings.roles[1].infrastructures.insert("local".into());
+    settings.roles[0].infrastructures.clear();
+    assert!(settings.validate().is_err());
 }

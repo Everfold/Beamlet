@@ -206,6 +206,7 @@ dependencies = [
  "beamlet-authority",
  "beamlet-host",
  "beamlet-protocol",
+ "beamlet-transport-local",
  "beamlet-transport-nats",
  "beamlet-worker",
  "clap",
