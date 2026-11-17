@@ -23,12 +23,18 @@ use std::{
 use tokio::time::{Instant, sleep, timeout_at};
 use uuid::Uuid;
 
+/// 测试子进程及其输出日志位置，供验收等待和失败诊断使用。
 struct ProcessRecord {
+    /// 已启动的 Node 或 NATS 子进程句柄。
     child: Child,
+    /// 该进程标准输出和错误输出合并写入的日志路径。
     log: PathBuf,
 }
+/// 组合验收使用的临时 Node/NATS 集群，拥有子进程和文件清理责任。
 struct Cluster {
+    /// 存放临时二进制、配置和日志的目录，测试结束自动清理。
     root: tempfile::TempDir,
+    /// 测试启动的全部子进程及日志记录。
     processes: Vec<ProcessRecord>,
 }
 impl Cluster {

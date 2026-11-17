@@ -4,12 +4,16 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::{env, io::IsTerminal, path::Path};
 
+/// 终端 ANSI 颜色策略，由应用初始化日志输出时解释。
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Color {
+    /// 根据终端能力和 NO_COLOR 环境变量自动选择颜色。
     #[default]
     Auto,
+    /// 总是输出 ANSI 颜色，即使输出不是终端。
     Always,
+    /// 禁用 ANSI 颜色。
     Never,
 }
 
@@ -35,16 +39,25 @@ impl Color {
     }
 }
 
+/// Console 的 RON 配置布局，加载后分别转换为传输和 Client 的运行参数。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
+    /// 要连接的 NATS 服务地址，不能为空。
     pub nats_url: String,
+    /// 整个应用的终端日志颜色策略。
     pub color: Color,
+    /// Console 允许发现和选择的 pool 集合。
     pub pools: BTreeSet<Pool>,
+    /// 单次请求的总等待期限，单位为秒，必须为正。
     pub request_timeout_secs: u64,
+    /// 发现入口就绪后的回复收集窗口，单位为毫秒，短于总请求期限。
     pub discovery_window_ms: u64,
+    /// 终端网络动作的在途上限，包括发现、查询和提交，必须为正数。
     pub max_in_flight_requests: usize,
+    /// 首次连接的最长等待时长，单位为秒，必须为正。
     pub connect_timeout_secs: u64,
+    /// 每个 NATS 订阅的有界缓冲容量，不是所有订阅共享的总量。
     pub subscription_capacity: usize,
 }
 
@@ -159,6 +172,7 @@ impl Settings {
     }
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/settings.rs"]
 mod tests;

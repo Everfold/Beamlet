@@ -24,6 +24,7 @@ pub(crate) fn execute(capability: &str, text: &str) -> Result<String> {
     Ok(text.chars().rev().collect())
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/text_reverse.rs"]
 mod tests;

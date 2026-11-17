@@ -1,4 +1,7 @@
+//! Console 入口：发现角色、选择目标并提交任务。
+/// Console 的选择状态、输入解析、在途动作与结果展示。
 mod session;
+/// 应用 RON 配置的首次创建、加载与语义校验，不迁移已有文件。
 mod settings;
 
 use settings::{Color, Settings};

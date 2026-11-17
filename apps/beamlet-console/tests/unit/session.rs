@@ -390,7 +390,11 @@ async fn full_console_still_accepts_quit_and_does_not_send_excess_requests() {
 /// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn interrupting_console_drops_pending_futures() {
-    struct DropNotice(Option<oneshot::Sender<()>>);
+    /// 记录请求 future 是否被丢弃的测试通知 guard。
+    struct DropNotice(
+        /// 可取出并发送一次的资源释放通知。
+        Option<oneshot::Sender<()>>,
+    );
     impl Drop for DropNotice {
         /// 在测试 guard 被丢弃时记录 future 已释放。
         ///

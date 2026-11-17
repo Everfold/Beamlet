@@ -10,50 +10,86 @@ use tokio::{sync::mpsc, task::JoinSet};
 use tracing::Instrument;
 use uuid::Uuid;
 
+/// Console 当前选择的执行目标；可逐步选择，尚未指定的项为 None。
 #[derive(Default)]
 struct Choice {
+    /// 当前选定的 Authority 角色会话；None 表示尚未选择。
     authority: Option<RoleInstance>,
+    /// 当前选定的 pool；切换 Authority 后需要重新选择。
     pool: Option<Pool>,
+    /// 当前选定的能力名称，必须由可用 Worker 声明。
     capability: Option<String>,
+    /// 当前 Worker 选择策略；None 表示尚未明确选择。
     worker: Option<Selection>,
 }
+/// Console 的交互状态与在途请求关联信息；不持有 Operation 台账。
 struct Session {
+    /// Console 允许发现和选择的 pool 集合。
     pools: BTreeSet<Pool>,
+    /// 终端网络动作的在途上限，包括发现、查询和提交，必须为正数。
     max_in_flight_requests: usize,
+    /// 最近一次被接受的 Authority 发现列表。
     authorities: Vec<AuthorityInfo>,
+    /// 当前 Authority/pool 的最近一次有效 Worker 查询结果。
     workers: Vec<WorkerView>,
+    /// 从未过期 Ready Worker 汇总出的可选能力名称。
     capabilities: Vec<String>,
+    /// 当前交互选择，供下一次动作创建不可变目标快照。
     choice: Choice,
+    /// 动作创建时的选择版本；完成事件不能覆盖后来的选择。
     choice_revision: Uuid,
+    /// 最新发现动作的身份；只接受与它匹配的发现结果。
     discovery_request: Option<Uuid>,
+    /// 最新 Worker 查询身份；配合选择版本屏蔽迟到结果。
     workers_request: Option<Uuid>,
 }
 
+/// 尚未执行的 Console 网络动作，保存发起时的目标快照。
 enum Action {
+    /// 查询配置范围内可见的 Authority 实例。
     Discover {
+        /// Console 动作的关联 UUID，用于屏蔽旧结果。
         request_id: Uuid,
+        /// 本次 Console 刷新动作保存的发现 pool 范围。
         pools: BTreeSet<Pool>,
     },
+    /// 执行已保存目标快照的 Worker 查询或业务提交。
     Request {
+        /// 目标 Authority 的查询或提交命令。
         command: Command,
+        /// 动作创建时的选择版本；完成事件不能覆盖后来的选择。
         choice_revision: Uuid,
     },
 }
+/// 异步网络动作的完成事件；交互层按请求身份和选择版本决定是否应用结果。
 enum Completion {
+    /// 一次 Authority 发现完成，可能携带查询错误。
     Discovered {
+        /// Console 动作的关联 UUID，用于屏蔽旧结果。
         request_id: Uuid,
+        /// 发现得到的 Authority 列表，或该次调用错误。
         result: Result<Vec<AuthorityInfo>>,
     },
+    /// 一次 Worker 查询完成，保留当时的 Authority、pool 和选择版本。
     Workers {
+        /// Console 动作的关联 UUID，用于屏蔽旧结果。
         request_id: Uuid,
+        /// 明确指定或实际应答的 Authority 角色与会话身份。
         authority: RoleInstance,
+        /// 本次查询或调用所属的 pool，按精确名称隔离。
         pool: Pool,
+        /// 动作创建时的选择版本；完成事件不能覆盖后来的选择。
         choice_revision: Uuid,
+        /// Worker 快照列表，或查询失败原因。
         result: Result<Vec<WorkerView>>,
     },
+    /// 一次业务提交完成，保留请求身份和创建时的选择版本。
     Submitted {
+        /// Console 动作的关联 UUID，用于屏蔽旧结果。
         request_id: Uuid,
+        /// 动作创建时的选择版本；完成事件不能覆盖后来的选择。
         choice_revision: Uuid,
+        /// 提交的业务结果或客户端调用错误。
         result: Result<Outcome>,
     },
 }
@@ -751,6 +787,7 @@ async fn drive<F: Future<Output = Completion> + Send + 'static>(
     Ok(())
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/session.rs"]
 mod tests;

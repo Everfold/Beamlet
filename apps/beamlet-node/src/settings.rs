@@ -10,12 +10,16 @@ use std::{
 };
 use uuid::Uuid;
 
+/// 终端 ANSI 颜色策略，由应用初始化日志输出时解释。
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Color {
+    /// 根据终端能力和 NO_COLOR 环境变量自动选择颜色。
     #[default]
     Auto,
+    /// 总是输出 ANSI 颜色，即使输出不是终端。
     Always,
+    /// 禁用 ANSI 颜色。
     Never,
 }
 impl Color {
@@ -40,21 +44,30 @@ impl Color {
     }
 }
 
+/// Node 支持的基础设施连接配置；映射中每个名称对应一个独立实例。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Infrastructure {
+    /// 建立一个 NATS 客户端连接，不自动启动消息服务器。
     Nats {
+        /// 该命名 NATS 实例连接的服务地址。
         url: String,
+        /// 首次连接的最长等待时长，单位为秒，必须为正。
         connect_timeout_secs: u64,
+        /// 每个 NATS 订阅的有界缓冲容量，不是所有订阅共享的总量。
         subscription_capacity: usize,
     },
 }
 
+/// 单个 Authority 的文件配置，独立设置 pools、租约、报告期限与并发容量。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Authority {
+    /// 本 Authority 加入的非空 pool 集合；重复项按集合语义去重。
     pub pools: BTreeSet<Pool>,
+    /// Worker 完整公告的有效租约时长，单位为秒。
     pub worker_timeout_secs: u64,
+    /// 单次交付等待 Worker Report 的最长时长，单位为秒。
     pub report_timeout_secs: u64,
     /// 本地和远端业务入口各自的队列容量.
     pub input_capacity: usize,
@@ -104,11 +117,15 @@ impl Default for Authority {
     }
 }
 
+/// 单个 Worker 的文件配置，独立设置 pool、启用能力、心跳和并发上限。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Worker {
+    /// 该 Worker 唯一所属的 pool。
     pub pool: Pool,
+    /// 该角色实际注册并执行的能力名称集合，不能为空。
     pub capabilities: BTreeSet<String>,
+    /// 发送周期性完整心跳公告的间隔，单位为秒。
     pub heartbeat_interval_secs: u64,
     /// 同时执行并发送报告的任务上限; 0 不限制.
     pub max_concurrent_tasks: usize,
@@ -150,11 +167,20 @@ impl Default for Worker {
     }
 }
 
+/// 一个角色的种类及其专属配置；同一 Node 可装配多个相同种类的角色。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Role {
-    Authority(Authority),
-    Worker(Worker),
+    /// 管理 Operation、登记 Worker 并签发执行授权的协调角色。
+    Authority(
+        /// 当前 Authority 的专属配置。
+        Authority,
+    ),
+    /// 执行收到的授权并创建 Report 的工作角色。
+    Worker(
+        /// 当前 Worker 的专属配置。
+        Worker,
+    ),
 }
 impl Role {
     /// 取得角色种类的稳定名称，用于日志。
@@ -174,23 +200,35 @@ impl Role {
     }
 }
 
+/// 角色持久配置与基础设施引用，不保存每次运行生成的会话 UUID。
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RoleSettings {
+    /// 角色的持久 UUID；已有配置必须提供且同一 Node 内不能重复。
     pub role_id: Uuid,
+    /// 可选的人类可读标签，不参与身份比较或消息路由。
     pub label: Option<String>,
+    /// 此角色引用的基础设施名称，必须存在于 Node 的映射中。
     pub infrastructure: String,
+    /// 角色种类及其独立配置。
     pub kind: Role,
 }
 
+/// Node 的 RON 配置布局，组合固定节点身份、命名基础设施和多个角色。
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
+    /// Node 的持久 UUID，仅用于宿主识别和日志，不作为任务路由目标。
     pub node_id: Uuid,
+    /// 可选的人类可读标签，不参与身份比较或消息路由。
     pub label: Option<String>,
+    /// 整个应用的终端日志颜色策略。
     pub color: Color,
+    /// 全体角色从收到停止通知到排空结束的总期限，单位为秒。
     pub shutdown_timeout_secs: u64,
+    /// 名称到基础设施配置的映射；同名引用共享连接，不同名称独立连接。
     pub infrastructures: BTreeMap<String, Infrastructure>,
+    /// 需要装配的角色列表；可为空，也可包含多个同类型角色。
     pub roles: Vec<RoleSettings>,
 }
 impl Default for Settings {
@@ -385,6 +423,7 @@ fn validate_capacity(capacity: usize, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/settings.rs"]
 mod tests;

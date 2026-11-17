@@ -9,11 +9,16 @@ use tracing::{info, warn};
 /// 终端读取线程与路由循环之间的行缓冲, 独立于角色输入队列.
 const INPUT_CAPACITY: usize = 16;
 
+/// 终端行输入接收端；每项保留文本读取结果，发送端关闭表示 EOF。
 pub(crate) type Input = mpsc::Receiver<std::io::Result<String>>;
 
+/// 终端可选择的 Authority 目标及其有界文本输入发送端。
 pub(crate) struct Target {
+    /// 终端选择使用的完整 Authority 角色会话身份。
     pub instance: RoleInstance,
+    /// 可选的人类可读标签，不参与身份比较或消息路由。
     pub label: Option<String>,
+    /// 只向该目标发送文本或 I/O 错误的有界输入端。
     pub send: mpsc::Sender<std::io::Result<String>>,
 }
 
@@ -119,6 +124,7 @@ fn input() -> Input {
     recv
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/terminal.rs"]
 mod tests;

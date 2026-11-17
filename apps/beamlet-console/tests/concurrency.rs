@@ -20,7 +20,11 @@ use std::{
 use tokio::time::{Instant, sleep, timeout};
 use uuid::Uuid;
 
-struct ChildGuard(Child);
+/// 测试子进程的清理 guard；离开作用域时尽力终止并回收服务进程。
+struct ChildGuard(
+    /// 由当前测试启动并负责回收的子进程句柄。
+    Child,
+);
 impl Drop for ChildGuard {
     /// 结束测试服务子进程并回收其退出状态。
     ///

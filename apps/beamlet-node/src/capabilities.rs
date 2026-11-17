@@ -2,6 +2,7 @@
 use anyhow::{Context, Result, bail};
 use std::collections::BTreeSet;
 
+/// 内置 Unicode 大写能力的版本化名称，与配置启用项和调用标识保持一致。
 pub(crate) const UPPERCASE: &str = "text.uppercase/v1";
 
 /// 注册 node 自带的文本倒序和大写处理器。
@@ -76,6 +77,7 @@ pub(crate) async fn execute(capability: String, text: String) -> Result<String> 
     }
 }
 
+/// 当前模块关键行为与边界条件的单元测试，实现在 tests/unit 目录。
 #[cfg(test)]
 #[path = "../tests/unit/capabilities.rs"]
 mod tests;

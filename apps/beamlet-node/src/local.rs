@@ -5,11 +5,17 @@ use beamlet_api::{AuthorityInfo, Pool, Responder, Selection, Submission, Task, T
 use beamlet_authority::{Directory, LocalInbox, Request};
 use tracing::{info, warn};
 
+/// 把终端文本转换为 Authority 本地提交的适配器，并保存该角色的 pool 与能力选择。
 pub(crate) struct Input {
+    /// 终端路由到该 Authority 的文本输入队列。
     local: crate::terminal::Input,
+    /// 当前 Authority 的角色会话、标签和已加入 pools。
     info: AuthorityInfo,
+    /// 与当前 Authority 登记表共享状态的只读 Worker 查询句柄。
     directory: Directory,
+    /// 该 Authority 本地输入当前选定的 pool。
     pool: Pool,
+    /// 该 Authority 本地文本提交当前选定的能力。
     capability: String,
 }
 impl Input {

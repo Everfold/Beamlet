@@ -12,8 +12,11 @@ use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
+/// 单个角色的装配信息，包含持久配置和新生成的本次会话身份。
 pub(crate) struct RunningRole {
+    /// 该角色的持久配置及命名基础设施引用。
     pub settings: RoleSettings,
+    /// 由固定 role_id 和本次新 session_id 组成的运行身份。
     pub instance: RoleInstance,
 }
 impl RunningRole {
