@@ -6,6 +6,18 @@ use tokio::{
     time::{MissedTickBehavior, interval, timeout},
 };
 
+/// 响应周期、探测、连接和状态变化，发布递增序号的完整公告。
+///
+/// # 参数
+///
+/// - `channel`：Worker 的探测、连接变化和完整公告通道。
+/// - `snapshot`：Worker 初始完整公告；驱动循环更新其序号和状态。
+/// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+/// - `state`：执行循环与公告循环之间共享的 Worker 状态通知。
+///
+/// # 返回值
+///
+/// Offline 收尾完成返回 `Ok(())`；控制入口、序号耗尽或必要刷新失败返回 RunError；单次公告发送失败仅记录日志。
 pub(crate) async fn announce(
     mut channel: impl PresenceChannel,
     mut snapshot: Presence,
@@ -49,6 +61,16 @@ pub(crate) async fn announce(
     }
 }
 
+/// 在公告期限内刷新 Worker 的传输缓冲。
+///
+/// # 参数
+///
+/// - `channel`：Worker 的探测、连接变化和完整公告通道。
+/// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+///
+/// # 返回值
+///
+/// 成功返回 `Ok(())`；超时或刷新失败返回 RunError。
 async fn flush(channel: &impl PresenceChannel, options: Options) -> Result<(), RunError> {
     timeout(options.announcement_timeout, channel.flush())
         .await

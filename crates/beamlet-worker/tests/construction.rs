@@ -1,12 +1,30 @@
 use beamlet_api::{RoleInstance, Uuid};
 use beamlet_worker::{BuildError, Capabilities, CapabilityError, Concurrency, Options, Worker};
 use std::time::Duration;
+/// 为测试生成独立的角色 UUID 和会话 UUID。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 新的 RoleInstance，用于隔离测试绑定。
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     }
 }
+/// 构造带测试处理器的能力注册表。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 注册完成的 Capabilities；注册失败时 panic。
 fn capabilities() -> Capabilities {
     let mut capabilities = Capabilities::new();
     capabilities
@@ -17,6 +35,15 @@ fn capabilities() -> Capabilities {
         .unwrap();
     capabilities
 }
+/// 验证注册拒绝重复能力，构建 Worker 后只保留已知启用处理器。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn registry_rejects_duplicates_and_worker_freezes_only_known_enabled_handlers() {
     let mut registered = capabilities();
@@ -52,6 +79,15 @@ fn registry_rejects_duplicates_and_worker_freezes_only_known_enabled_handlers() 
         Err(BuildError::Capabilities(CapabilityError::Empty))
     ));
 }
+/// 验证直接构造 Worker 时在绑定传输前拒绝非法参数与 nil 身份。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn invalid_direct_options_and_nil_identity_are_rejected_before_transport_binding() {
     for options in [

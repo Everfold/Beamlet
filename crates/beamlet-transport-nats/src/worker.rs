@@ -22,6 +22,16 @@ pub struct PresenceEndpoint {
     probes: async_nats::Subscriber,
 }
 
+/// 订阅指定 Worker 会话的调用和探测主题。
+///
+/// # 参数
+///
+/// - `nats`：已连接的 NATS 客户端及连接状态句柄。
+/// - `binding`：Worker 的 pool、角色/会话身份和启用能力集合。
+///
+/// # 返回值
+///
+/// 成功返回 `(WorkerEndpoint, PresenceEndpoint)`；绑定、订阅或刷新失败返回 TransportError。
 pub(crate) async fn bind(
     nats: Nats,
     binding: WorkerBinding,
@@ -54,6 +64,15 @@ pub(crate) async fn bind(
     ))
 }
 impl WorkerInbox for WorkerEndpoint {
+    /// 解码 NATS Worker 调用，拒绝不匹配的目标后继续接收。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `WorkerEndpoint` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 有效调用为 `Ok(Some(Incoming))`；订阅结束为 `Ok(None)`；拒绝回复发送失败返回 TransportError。
     async fn receive(&mut self) -> Result<Option<Incoming>, TransportError> {
         while let Some(message) = self.subscription.next().await {
             let Some(subject) = message.reply else {
@@ -105,6 +124,15 @@ impl WorkerInbox for WorkerEndpoint {
         }
         Ok(None)
     }
+    /// 排空 Worker 的 NATS 订阅并刷新关闭请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `WorkerEndpoint` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 完成返回 `Ok(())`；订阅排空或刷新失败返回 TransportError，已接收缓冲仍由 Worker 消费。
     async fn stop(&mut self) -> Result<(), TransportError> {
         self.subscription
             .drain()
@@ -114,9 +142,27 @@ impl WorkerInbox for WorkerEndpoint {
     }
 }
 impl PresenceChannel for PresenceEndpoint {
+    /// 读取公告通道的当前连接状态。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `PresenceEndpoint` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 包含观测世代与是否已连接的 Connection 快照。
     fn connection(&self) -> Connection {
         *self.nats.status.borrow()
     }
+    /// 等待 Worker 探测请求或连接状态变化。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `PresenceEndpoint` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 Probe 或 Connection 事件；观察入口关闭或传输失败返回错误。
     async fn receive(&mut self) -> Result<PresenceEvent, TransportError> {
         tokio::select! {
             biased;
@@ -130,6 +176,16 @@ impl PresenceChannel for PresenceEndpoint {
             }
         }
     }
+    /// 校验公告与端点绑定一致后编码并发送到 NATS。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `PresenceEndpoint` 的共享引用。
+    /// - `presence`：Worker 的完整状态快照，包括 pool、角色会话、能力、序号和运行状态。
+    ///
+    /// # 返回值
+    ///
+    /// 传输接受公告返回 `Ok(())`；身份不匹配、编码或发布失败返回 TransportError。
     async fn publish(&self, presence: &Presence) -> Result<(), TransportError> {
         if presence.pool != self.pool || presence.instance != self.instance {
             return Err(TransportError::new("presence does not match binding"));
@@ -143,6 +199,15 @@ impl PresenceChannel for PresenceEndpoint {
             .await
             .map_err(TransportError::new)
     }
+    /// 等待传输缓冲完成刷新。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `PresenceEndpoint` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 刷新完成返回 `Ok(())`；失败返回 TransportError，成功不代表远端已接受业务。
     async fn flush(&self) -> Result<(), TransportError> {
         self.nats.flush().await
     }

@@ -23,6 +23,15 @@ pub struct Options {
     pub subscription_capacity: usize,
 }
 impl Default for Options {
+    /// 构造 NATS 默认连接期限和订阅容量。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 连接期限 10 秒、订阅容量 16 的 Options。
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(10),
@@ -38,7 +47,16 @@ pub struct Nats {
     status: watch::Receiver<Connection>,
 }
 impl Nats {
-    /// 建立连接并启用连接世代观测, 需要调用方的 Tokio 执行器.
+    /// 校验 NATS 选项并在连接期限内建立客户端连接。
+    ///
+    /// # 参数
+    ///
+    /// - `url`：NATS 服务地址，由调用方从任意配置来源提供。
+    /// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 Nats 句柄；参数非法、连接失败或超时返回 TransportError。
     ///
     /// # Errors
     /// 参数无效、连接失败或超过期限时返回错误.
@@ -110,12 +128,29 @@ impl Nats {
         });
         Ok(Self { client, status })
     }
-    /// 获取可共享的只读观测视图.
+    /// 取得能够持续读取当前连接状态的视图。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Nats` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 连接视图句柄；后续查询反映连接当前世代和状态。
     pub fn connection(&self) -> ConnectionView {
         let status = self.status.clone();
         ConnectionView::new(move || *status.borrow())
     }
-    /// 绑定 Authority 控制接收端, 同一连接可绑定多个实例.
+    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Nats` 的共享引用。
+    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 AuthorityEndpoint；绑定非法、订阅或刷新失败返回 TransportError。
     ///
     /// # Errors
     /// 身份或 pools 无效, 订阅或刷新失败时返回错误.
@@ -125,7 +160,16 @@ impl Nats {
     ) -> Result<AuthorityEndpoint, TransportError> {
         AuthorityEndpoint::bind(self.clone(), info).await
     }
-    /// 绑定调用与公告通道, 绑定完成后角色才可以公告 ready.
+    /// 订阅指定 Worker 会话的调用和探测主题。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Nats` 的共享引用。
+    /// - `binding`：Worker 的 pool、角色/会话身份和启用能力集合。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 `(WorkerEndpoint, PresenceEndpoint)`；绑定、订阅或刷新失败返回 TransportError。
     ///
     /// # Errors
     /// 身份或能力无效, 订阅或刷新失败时返回错误.
@@ -135,7 +179,15 @@ impl Nats {
     ) -> Result<(WorkerEndpoint, PresenceEndpoint), TransportError> {
         worker::bind(self.clone(), binding).await
     }
-    /// 等待缓冲发送完毕, 不保证远端业务接受.
+    /// 等待传输缓冲完成刷新。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Nats` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 刷新完成返回 `Ok(())`；失败返回 TransportError，成功不代表远端已接受业务。
     ///
     /// # Errors
     /// NATS 刷新失败时返回错误.

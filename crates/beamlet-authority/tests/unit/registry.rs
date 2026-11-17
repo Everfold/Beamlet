@@ -3,6 +3,15 @@ use beamlet_api::Connection;
 use beamlet_api::Uuid;
 use tokio::sync::watch;
 
+/// 验证租约按 pool/会话隔离、公告序号单调，重连后必须重新续租。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn leases_are_scoped_monotonic_and_require_fresh_heartbeats_after_reconnect() {
     let pool = Pool::default();

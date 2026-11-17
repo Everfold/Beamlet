@@ -37,6 +37,15 @@ pub struct Local<P = String, R = String> {
     capacity: usize,
 }
 impl<P, R> Clone for Local<P, R> {
+    /// 克隆本地传输句柄，共享消息空间而不创建新路由表。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 与原句柄共享 routes 和容量设置的 Local。
     fn clone(&self) -> Self {
         Self {
             routes: self.routes.clone(),
@@ -45,6 +54,16 @@ impl<P, R> Clone for Local<P, R> {
     }
 }
 impl<P, R> std::fmt::Debug for Local<P, R> {
+    /// 向格式化目标写入 `Local<P, R>` 的调试信息。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    /// - `f`：接收格式化文本的写入目标。
+    ///
+    /// # 返回值
+    ///
+    /// 写入成功返回 `Ok(())`；格式化目标拒绝写入时返回 `fmt::Error`。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Local")
             .field("capacity", &self.capacity)
@@ -52,7 +71,15 @@ impl<P, R> std::fmt::Debug for Local<P, R> {
     }
 }
 impl<P: Send + 'static, R: Send + 'static> Local<P, R> {
-    /// 创建本地消息空间, 每个绑定入口使用给定的缓冲容量.
+    /// 创建一个独立且有界的进程内消息空间。
+    ///
+    /// # 参数
+    ///
+    /// - `capacity`：有界接收队列的容量，必须大于零且不超过 Tokio 最大许可数。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 Local；容量为零或超出范围返回 TransportError。
     ///
     /// # Errors
     /// 容量为 0 或超过 Tokio 通道范围时返回错误.
@@ -68,14 +95,31 @@ impl<P: Send + 'static, R: Send + 'static> Local<P, R> {
             capacity,
         })
     }
-    /// 本地空间在对象存活期间始终连接, 端点另行关闭.
+    /// 取得能够持续读取当前连接状态的视图。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 连接视图句柄；后续查询反映连接当前世代和状态。
     pub fn connection(&self) -> ConnectionView {
         ConnectionView::new(|| Connection {
             epoch: 1,
             connected: true,
         })
     }
-    /// 绑定实例的控制入口, 不自动回答发现或查询.
+    /// 在本地消息空间为 Authority 的各个 pool 注册控制入口。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 AuthorityEndpoint；身份/pools 非法或已有相同绑定返回 TransportError。
     ///
     /// # Errors
     /// 空身份、空 pools 或重复绑定时返回错误, 不覆盖原入口.
@@ -85,7 +129,16 @@ impl<P: Send + 'static, R: Send + 'static> Local<P, R> {
     ) -> Result<AuthorityEndpoint<P, R>, TransportError> {
         authority::bind(self.clone(), info)
     }
-    /// 绑定显式 Worker 会话及能力, 返回调用和公告通道.
+    /// 注册本地 Worker 调用入口和探测/公告端点。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    /// - `binding`：Worker 的 pool、角色/会话身份和启用能力集合。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 `(WorkerEndpoint, PresenceEndpoint)`；绑定非法或重复返回 TransportError。
     ///
     /// # Errors
     /// 身份、能力或重复绑定无效时返回错误.
@@ -95,12 +148,29 @@ impl<P: Send + 'static, R: Send + 'static> Local<P, R> {
     ) -> Result<WorkerEndpoints<P, R>, TransportError> {
         worker::bind(self.clone(), binding)
     }
-    /// 本地发送直接入队, 没有额外刷新缓冲.
+    /// 完成本地传输刷新；本地通道不需要额外网络刷新。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Local<P, R>` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 始终返回 `Ok(())`。
     pub async fn flush(&self) -> Result<(), TransportError> {
         Ok(())
     }
 }
 
+/// 判断交互期限是否为零或超出时钟表示范围。
+///
+/// # 参数
+///
+/// - `deadline`：等待本次回复的最长时长，非绝对时间；超时不取消远端执行。
+///
+/// # 返回值
+///
+/// 期限非法返回 `true`，否则返回 `false`。
 fn invalid_deadline(deadline: Duration) -> bool {
     deadline.is_zero() || std::time::Instant::now().checked_add(deadline).is_none()
 }

@@ -2,6 +2,16 @@ use beamlet_api::{AuthorityInfo, Connection, ConnectionView, Pool, RoleInstance,
 use beamlet_authority::{Authority, BuildError, Concurrency, Options};
 use std::time::Duration;
 
+/// 用始终连接的视图尝试构造 Authority。
+///
+/// # 参数
+///
+/// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+/// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+///
+/// # 返回值
+///
+/// 构造成功返回 Authority；参数或身份非法时返回 BuildError。
 fn build(info: AuthorityInfo, options: Options) -> Result<Authority, BuildError> {
     Authority::new(
         info,
@@ -12,6 +22,15 @@ fn build(info: AuthorityInfo, options: Options) -> Result<Authority, BuildError>
         }),
     )
 }
+/// 构造 Authority 测试用身份与 pool 描述。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 带有效独立身份和非空 pools 的 AuthorityInfo。
 fn info() -> AuthorityInfo {
     AuthorityInfo {
         instance: RoleInstance {
@@ -23,6 +42,15 @@ fn info() -> AuthorityInfo {
     }
 }
 
+/// 验证直接构造 Authority 时拒绝非法身份、容量及期限。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn rejects_invalid_identity_and_parameters_before_runtime_resources_are_created() {
     for instance in [

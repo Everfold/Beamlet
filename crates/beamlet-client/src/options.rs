@@ -9,6 +9,15 @@ pub struct Options {
     pub discovery_window: Duration,
 }
 impl Default for Options {
+    /// 构造默认 Client 请求期限和发现窗口。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 请求期限 10 秒、发现窗口 1 秒的 Options。
     fn default() -> Self {
         Self {
             request_timeout: Duration::from_secs(10),
@@ -17,6 +26,15 @@ impl Default for Options {
     }
 }
 impl Options {
+    /// 校验 Client 期限非零、可表示且发现窗口短于请求期限。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Options` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    ///
+    /// # 返回值
+    ///
+    /// 合法返回 `Ok(())`，否则返回 BuildError。
     pub(crate) fn validate(self) -> Result<(), BuildError> {
         for (name, duration) in [
             ("request_timeout", self.request_timeout),

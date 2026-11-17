@@ -24,6 +24,16 @@ pub struct AuthorityEndpoint {
     epoch: u64,
 }
 impl AuthorityEndpoint {
+    /// 订阅 Authority 各个 pool 的控制主题并刷新订阅。
+    ///
+    /// # 参数
+    ///
+    /// - `nats`：已连接的 NATS 客户端及连接状态句柄。
+    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 AuthorityEndpoint；绑定非法、订阅或刷新失败返回 TransportError。
     pub(crate) async fn bind(mut nats: Nats, info: &AuthorityInfo) -> Result<Self, TransportError> {
         if info.instance.role_id.is_nil()
             || info.instance.session_id.is_nil()
@@ -60,9 +70,27 @@ impl AuthorityEndpoint {
     }
 }
 impl AuthorityInbox for AuthorityEndpoint {
+    /// 取得能够持续读取当前连接状态的视图。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `AuthorityEndpoint` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 连接视图句柄；后续查询反映连接当前世代和状态。
     fn connection(&self) -> ConnectionView {
         self.nats.connection()
     }
+    /// 合并 NATS 控制订阅与连接变化，丢弃重连前的旧缓冲。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `AuthorityEndpoint` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 有有效事件返回 `Ok(Some(event))`；订阅结束返回 `Ok(None)`；连接观察失败返回错误。
     async fn receive(&mut self) -> Result<Option<AuthorityEvent>, TransportError> {
         loop {
             let message = tokio::select! {
@@ -155,6 +183,15 @@ impl AuthorityInbox for AuthorityEndpoint {
             }
         }
     }
+    /// 请求所绑定 pools 中的 Worker 重新发布完整快照。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `AuthorityEndpoint` 的共享引用。
+    ///
+    /// # 返回值
+    ///
+    /// 发送/通知完成返回 `Ok(())`；传输失败返回错误，不保证 Worker 已回复。
     async fn probe(&self) -> Result<(), TransportError> {
         self.nats.flush().await?;
         for pool in &self.pools {

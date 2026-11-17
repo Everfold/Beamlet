@@ -6,6 +6,15 @@ use beamlet_api::{
 use beamlet_client::{Client, Error, Options};
 use std::time::Duration;
 
+/// 使用指定业务数据构造精确目标的测试提交。
+///
+/// # 参数
+///
+/// - `payload`：待移动进提交的自定义测试业务数据。
+///
+/// # 返回值
+///
+/// 保留 payload 所有权的 `Submission<P>`。
 fn submission<P>(payload: P) -> Submission<P> {
     Submission {
         pool: Pool::default(),
@@ -16,6 +25,15 @@ fn submission<P>(payload: P) -> Submission<P> {
         },
     }
 }
+/// 把自定义业务结果包装为测试完成结果。
+///
+/// # 参数
+///
+/// - `result`：要保留所有权的自定义业务结果。
+///
+/// # 返回值
+///
+/// 含预设非空关联身份和 Worker 的 Outcome::Completed。
 fn completed<R>(result: R) -> Outcome<R> {
     Outcome::Completed {
         operation_id: "op".into(),
@@ -28,6 +46,15 @@ fn completed<R>(result: R) -> Outcome<R> {
 // 故意不实现 Clone、Debug、Serialize; Cell 同时证明无需 Sync.
 struct Input(std::cell::Cell<usize>);
 struct Output(usize);
+/// 验证 Client 并发移动自定义数据、保持乱序关联且没有隐藏并发上限。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn concurrent_calls_move_custom_data_and_keep_replies_without_hidden_capacity() {
     tokio::time::timeout(Duration::from_secs(3), async {
@@ -90,6 +117,15 @@ async fn concurrent_calls_move_custom_data_and_keep_replies_without_hidden_capac
     .await
     .unwrap();
 }
+/// 验证错误请求/会话关联、结果类型或 Exact Worker 会话被拒绝且不重试。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test(start_paused = true)]
 async fn correlation_kind_and_exact_worker_mismatches_are_errors_without_retry() {
     for case in 0..7 {
@@ -153,6 +189,15 @@ async fn correlation_kind_and_exact_worker_mismatches_are_errors_without_retry()
         assert!(events.try_recv().is_err(), "unexpected retry");
     }
 }
+/// 验证超时、取消和传输错误会释放等待且不会自动重发。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test(start_paused = true)]
 async fn timeout_cancellation_and_transport_errors_release_waiting_without_retry() {
     for case in 0..3 {
@@ -195,6 +240,15 @@ async fn timeout_cancellation_and_transport_errors_release_waiting_without_retry
         assert!(events.try_recv().is_err(), "unexpected retry");
     }
 }
+/// 验证 Worker 查询拒绝和错误结果类型返回可判别错误。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn worker_query_rejection_and_wrong_result_kind_are_typed_errors() {
     for outcome in [
@@ -234,6 +288,15 @@ async fn worker_query_rejection_and_wrong_result_kind_are_typed_errors() {
     }
 }
 
+/// 验证 Worker 快照符合 pool/能力过滤，同时允许返回失联记录。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn worker_snapshots_must_match_pool_and_filter_but_can_be_stale() {
     use beamlet_api::{Presence, PresenceState, WorkerView};

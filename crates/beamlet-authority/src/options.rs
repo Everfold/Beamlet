@@ -9,17 +9,45 @@ pub enum Concurrency {
     Limited(usize),
 }
 impl Default for Concurrency {
+    /// 构造 Authority 默认的有限任务并发。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// `Concurrency::Limited(16)`。
     fn default() -> Self {
         Self::Limited(16)
     }
 }
 impl Concurrency {
+    /// 判断当前活动任务数是否允许再接收一项任务。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Concurrency` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    /// - `active`：当前占用执行名额的任务数量。
+    ///
+    /// # 返回值
+    ///
+    /// 无限模式始终返回 `true`；有限模式仅在 active 小于上限时返回 `true`。
     pub(crate) fn admits(self, active: usize) -> bool {
         match self {
             Self::Unlimited => true,
             Self::Limited(limit) => active < limit,
         }
     }
+    /// 把并发策略转换为日志使用的数值。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Concurrency` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    ///
+    /// # 返回值
+    ///
+    /// 有限模式返回上限；无限模式返回约定的零值。
     pub(crate) fn display_limit(self) -> usize {
         match self {
             Self::Unlimited => 0,
@@ -43,6 +71,15 @@ pub struct Options {
     pub report_timeout: Duration,
 }
 impl Default for Options {
+    /// 构造默认 Authority 运行参数。
+    ///
+    /// # 参数
+    ///
+    /// 无。
+    ///
+    /// # 返回值
+    ///
+    /// 任务/回复/输入容量各 16，Worker 超时 15 秒，报告等待 3 秒的 Options。
     fn default() -> Self {
         Self {
             concurrency: Concurrency::default(),
@@ -54,6 +91,15 @@ impl Default for Options {
     }
 }
 impl Options {
+    /// 校验 Authority 并发、队列容量和期限。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Options` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    ///
+    /// # 返回值
+    ///
+    /// 合法返回 `Ok(())`；有限并发为零、容量或时钟期限非法时返回 BuildError。
     pub(crate) fn validate(self) -> Result<(), BuildError> {
         if self.concurrency == Concurrency::Limited(0) {
             return Err(BuildError::ZeroConcurrency);

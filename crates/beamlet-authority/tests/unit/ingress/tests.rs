@@ -8,7 +8,15 @@ use beamlet_primitives::{Attempt, Report};
 use std::{future::Future, time::Duration};
 use tokio::sync::{mpsc, oneshot};
 
-/// 所有等待都有上限, 回归时不让测试挂住.
+/// 给异步测试步骤施加整体等待期限，防止回归时永久挂起。
+///
+/// # 参数
+///
+/// - `future`：需要在测试期限内完成的异步步骤。
+///
+/// # 返回值
+///
+/// future 的原始输出；超过测试期限会 panic 并使测试失败。
 async fn within<F: Future>(future: F) -> F::Output {
     tokio::time::timeout(Duration::from_secs(5), future)
         .await
@@ -21,6 +29,15 @@ struct Work {
 }
 
 impl Work {
+    /// 为受控交付生成倒序结果，并发送完整报告。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Work` 的值；调用后转移其所有权（Copy 类型按值复制）。
+    ///
+    /// # 返回值
+    ///
+    /// `()`；回复端关闭或报告构造不符预期时 panic。
     async fn succeed(self) {
         let report_id = format!("report:{}", self.call.attempt.id());
         self.reply
@@ -35,10 +52,32 @@ impl Work {
 struct ControlledDelivery(mpsc::Sender<Work>);
 
 impl Delivery for ControlledDelivery {
+    /// 为编排测试返回预设 Worker，跳过登记选择。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `ControlledDelivery` 的共享引用。
+    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
+    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
+    /// - `_`：为满足测试接口签名保留的占位参数，本实现不读取该值。
+    ///
+    /// # 返回值
+    ///
+    /// 始终为 `Ok(预设 RoleInstance)`；pool、选择和能力参数不参与判断。
     fn select(&self, _: &Pool, _: Selection, _: &str) -> Result<RoleInstance, DeliveryError> {
         Ok(instance())
     }
 
+    /// 把交付交给测试观察者，由观察者决定报告或错误。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `ControlledDelivery` 的共享引用。
+    /// - `call`：已指定 pool、Authority 和 Worker 会话的调用，包含 Attempt、能力及业务输入。
+    ///
+    /// # 返回值
+    ///
+    /// 观察者给出的 WorkerReport 或 DeliveryError；测试控制通道意外关闭时 panic。
     async fn deliver(&self, call: Call) -> Result<WorkerReport, DeliveryError> {
         let (reply, response) = oneshot::channel();
         self.0.send(Work { call, reply }).await.unwrap();
@@ -46,11 +85,29 @@ impl Delivery for ControlledDelivery {
     }
 }
 
+/// 创建用于暂停与释放交付的测试通道。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 二元组 `(ControlledDelivery, 工作接收端)`。
 fn controlled_delivery() -> (ControlledDelivery, mpsc::Receiver<Work>) {
     let (send, recv) = mpsc::channel(16);
     (ControlledDelivery(send), recv)
 }
 
+/// 验证并发请求在报告乱序完成时仍对应各自的回复入口。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
     within(async {
@@ -100,6 +157,15 @@ async fn concurrent_requests_keep_replies_when_reports_arrive_out_of_order() {
     .await;
 }
 
+/// 验证交付错误和无效报告产生未解决回复，不重复执行。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
     within(async {
@@ -163,6 +229,15 @@ async fn delivery_errors_and_invalid_reports_reply_without_retrying() {
     .await;
 }
 
+/// 验证满载退出丢弃未签发请求，并等待已签发工作结束。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_work() {
     for limit in [1, 3, 32] {
@@ -220,6 +295,15 @@ async fn shutdown_at_capacity_discards_unissued_requests_and_waits_for_issued_wo
         .await;
     }
 }
+/// 验证交付成功或失败都会释放 Authority 的并发准入名额。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn delivery_completion_releases_admission_capacity() {
     for limit in [1, 3, 32] {
@@ -275,6 +359,15 @@ async fn delivery_completion_releases_admission_capacity() {
         .await;
     }
 }
+/// 验证回复发送失败传播给调用方，而不是静默丢失或重试。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn reply_failure_is_returned_instead_of_silently_retrying() {
     within(async {
@@ -305,6 +398,15 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
     .await;
 }
 
+/// 构造编排单元测试复用的固定角色实例。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 预设非 nil 的角色和会话身份。
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: beamlet_api::Uuid::from_u128(1),
@@ -312,6 +414,15 @@ fn instance() -> RoleInstance {
     }
 }
 
+/// 验证无限并发 Authority 接收超过默认上限的任务并保持报告关联。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associations() {
     within(async {
@@ -360,6 +471,15 @@ async fn unlimited_authority_accepts_more_than_default_and_keeps_report_associat
     .await;
 }
 
+/// 验证多个 Authority 共享 Worker 时仍独立计算并发名额。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn authority_limits_are_independent_even_when_deliveries_share_a_worker() {
     within(async {

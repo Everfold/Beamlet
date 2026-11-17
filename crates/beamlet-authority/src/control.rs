@@ -18,6 +18,19 @@ pub(crate) struct Inputs<P, R, L> {
     control: JoinHandle<Result<(), RunError>>,
 }
 impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Inputs<P, R, L> {
+    /// 探测现有 Worker，并创建独立控制任务与业务输入队列。
+    ///
+    /// # 参数
+    ///
+    /// - `endpoint`：属于当前 Authority 身份和 pools 的控制事件接收端。
+    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    /// - `registry`：当前 Authority 独立维护的 Worker 登记视图。
+    /// - `local`：本地输入来源，提供尚未签发授权的业务提交。
+    /// - `capacity`：远端业务提交队列的容量，由已验证的 Authority Options 提供。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回合并本地/远端输入的 Inputs；初始探测失败返回 RunError。
     pub(crate) async fn connect(
         endpoint: impl AuthorityInbox<P, R> + 'static,
         info: AuthorityInfo,
@@ -38,11 +51,29 @@ impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Inputs<P, R, L> 
     }
 }
 impl<P, R, L> Drop for Inputs<P, R, L> {
+    /// 丢弃输入组合时中止所属控制任务。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Inputs<P, R, L>` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// `()`；向控制任务发出中止请求，不阻塞等待。
     fn drop(&mut self) {
         self.control.abort();
     }
 }
 impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Ingress<P, R> for Inputs<P, R, L> {
+    /// 合并本地和远端业务请求，检测控制任务异常结束。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Inputs<P, R, L>` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 收到提交返回 `Ok(Some(Request))`；已停止返回 `Ok(None)`；输入或控制任务失败返回 RunError。
     async fn receive(&mut self) -> Result<Option<Request<P, R>>, RunError> {
         while !self.stopped {
             tokio::select! {
@@ -58,6 +89,15 @@ impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Ingress<P, R> fo
         }
         Ok(None)
     }
+    /// 停止 Authority 控制接收并丢弃未签发的排队请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Inputs<P, R, L>` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 停止本地输入成功返回 `Ok(())`；本地停止失败返回 RunError。
     async fn stop(&mut self) -> Result<(), RunError> {
         self.stopped = true;
         self.control.abort();
@@ -67,6 +107,18 @@ impl<P: Send + 'static, R: Send + 'static, L: LocalInbox<P, R>> Ingress<P, R> fo
         Ok(())
     }
 }
+/// 独立处理发现、Worker 公告和查询，将提交分类到有界队列。
+///
+/// # 参数
+///
+/// - `endpoint`：属于当前 Authority 身份和 pools 的控制事件接收端。
+/// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+/// - `registry`：当前 Authority 独立维护的 Worker 登记视图。
+/// - `send`：把已分类的远端提交交给业务循环的有界发送端；满时明确拒绝。
+///
+/// # 返回值
+///
+/// 持续运行直到输入关闭或处理出错并返回 RunError；任务通常由上层中止。
 async fn control<P: Send + 'static, R: Send + 'static>(
     mut endpoint: impl AuthorityInbox<P, R>,
     info: AuthorityInfo,

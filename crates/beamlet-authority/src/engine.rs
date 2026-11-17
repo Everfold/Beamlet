@@ -14,16 +14,56 @@ use tracing::{Instrument, info, info_span, warn};
 
 pub(crate) type Reply<R = String> = Responder<Outcome<R>>;
 pub(crate) trait Ingress<P = String, R = String>: Send {
+    /// 向编排循环提供下一份结构化业务请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ingress` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 返回 future；等待完成后，future 返回 `Ok(Some(Request))`；入口结束返回 `Ok(None)`，失败返回 RunError。
     fn receive(&mut self) -> impl Future<Output = Result<Option<Request<P, R>>, RunError>> + Send;
+    /// 停止业务入口并丢弃未交出的请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Ingress` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 返回 future；等待完成后，future 停止成功返回 `Ok(())`，输入收尾失败返回 RunError。
     fn stop(&mut self) -> impl Future<Output = Result<(), RunError>> + Send;
 }
 pub(crate) trait Dispatch<P = String, R = String>: Clone + Send + Sync + 'static {
+    /// 按 pool、能力和选择约束选定一个可用 Worker 会话。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Dispatch` 的共享引用。
+    /// - `pool`：查询、候选选择或主题构造的目标 pool。
+    /// - `selection`：Worker 选择约束：Any 选择可用候选，Exact 锁定角色与会话且不回退。
+    /// - `capability`：要调用或匹配的能力标识，保留精确拼写。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 RoleInstance；无匹配候选时返回 NoReceiver，Exact 不回退。
     fn select(
         &self,
         pool: &Pool,
         selection: Selection,
         capability: &str,
     ) -> Result<RoleInstance, DeliveryError>;
+    /// 交付已经签发且已确定 Worker 的调用。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Dispatch` 的共享引用。
+    /// - `call`：已指定 pool、Authority 和 Worker 会话的调用，包含 Attempt、能力及业务输入。
+    ///
+    /// # 返回值
+    ///
+    /// 返回 future；等待完成后，成功返回完整报告；失败返回 DeliveryError，不重新选择或重试。
     fn deliver(
         &self,
         call: Call<P>,
@@ -36,6 +76,18 @@ pub(crate) struct Routed<T> {
     pub deadline: Duration,
 }
 impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
+    /// 按 pool、能力和选择约束选定一个可用 Worker 会话。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Routed<T>` 的共享引用。
+    /// - `pool`：查询、候选选择或主题构造的目标 pool。
+    /// - `selection`：Worker 选择约束：Any 选择可用候选，Exact 锁定角色与会话且不回退。
+    /// - `capability`：要调用或匹配的能力标识，保留精确拼写。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 RoleInstance；无匹配候选时返回 NoReceiver，Exact 不回退。
     fn select(
         &self,
         pool: &Pool,
@@ -46,6 +98,16 @@ impl<P: Send, R, T: beamlet_api::Delivery<P, R>> Dispatch<P, R> for Routed<T> {
             .select(pool, selection, capability, Instant::now())
             .ok_or(DeliveryError::NoReceiver)
     }
+    /// 交付已经签发且已确定 Worker 的调用。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Routed<T>` 的共享引用。
+    /// - `call`：已指定 pool、Authority 和 Worker 会话的调用，包含 Attempt、能力及业务输入。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回完整报告；失败返回 DeliveryError，不重新选择或重试。
     async fn deliver(&self, call: Call<P>) -> Result<WorkerReport<R>, DeliveryError> {
         self.transport.deliver(call, self.deadline).await
     }
@@ -59,7 +121,19 @@ enum FinishError {
     #[error("交付返回了不匹配或空身份的报告")]
     Mismatch,
 }
-/// 入口与交付分别注入; 每份交付独立等待, 不阻塞其他输入和报告.
+/// 维护执行台账并并发等待交付和回复发送。
+///
+/// # 参数
+///
+/// - `ingress`：提供业务请求和一次性回复入口的输入实现。
+/// - `delivery`：向已选定 Worker 交付 Call 并等待 Report 的实现。
+/// - `instance`：当前角色的固定 UUID 和本次运行会话 UUID；不会在此重新生成。
+/// - `options`：当前模块的运行参数；期限使用 Duration，容量/并发由对应字段约束。
+/// - `shutdown`：停止通知或 future；完成后停止新接收并按角色语义排空。
+///
+/// # 返回值
+///
+/// 入口结束或停止后排空完成返回 `Ok(())`；输入、回复、任务或台账错误返回 RunError。
 pub(crate) async fn run<P, R, E>(
     mut ingress: impl Ingress<P, R>,
     delivery: impl Dispatch<P, R>,
@@ -211,7 +285,17 @@ where
     Ok(())
 }
 
-/// 只有关联正确的 Report 能推进生命周期; 交付错误不伪装成报告.
+/// 接受关联正确的报告并关闭对应 Operation。
+///
+/// # 参数
+///
+/// - `ledger`：维护原始请求、当前状态和已用授权身份的执行台账。
+/// - `id`：本次交付原先签发的 Operation 身份，用于核对报告关联。
+/// - `outcome`：交付返回的完整报告或失败原因；失败不会伪造 Report。
+///
+/// # 返回值
+///
+/// 成功返回报告业务结果的所有权；交付、关联或台账失败返回 FinishError。
 fn finish<T, R>(
     ledger: &mut Ledger<String, String, T>,
     id: &str,

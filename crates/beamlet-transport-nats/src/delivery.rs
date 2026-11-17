@@ -6,6 +6,17 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 impl Delivery for Nats {
+    /// 把调用编码并发往指定 Worker 的 NATS 主题，验证返回报告。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Nats` 的共享引用。
+    /// - `call`：已指定 pool、Authority 和 Worker 会话的调用，包含 Attempt、能力及业务输入。
+    /// - `deadline`：等待本次回复的最长时长，非绝对时间；超时不取消远端执行。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回 WorkerReport；无接收者、未交付或交付结果未知按 DeliveryError 区分。
     async fn deliver(&self, call: Call, deadline: Duration) -> Result<WorkerReport, DeliveryError> {
         validation::check_call(&call)?;
         if deadline.is_zero() || std::time::Instant::now().checked_add(deadline).is_none() {

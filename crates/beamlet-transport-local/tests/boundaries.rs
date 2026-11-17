@@ -11,12 +11,30 @@ use std::{
     time::Duration,
 };
 
+/// 为测试生成独立的角色 UUID 和会话 UUID。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 新的 RoleInstance，用于隔离测试绑定。
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     }
 }
+/// 构造本地传输测试的默认 Worker 绑定。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 默认 pool、测试身份和 sum/v1 能力集合的 WorkerBinding。
 fn binding() -> WorkerBinding {
     WorkerBinding {
         pool: Pool::default(),
@@ -24,6 +42,16 @@ fn binding() -> WorkerBinding {
         capabilities: ["sum/v1".into()].into(),
     }
 }
+/// 为指定 Worker 构造带序号关联的测试调用。
+///
+/// # 参数
+///
+/// - `worker`：待判断可用性的 Worker 快照。
+/// - `index`：测试调用序号，用于关联 Operation、Attempt 和业务数据。
+///
+/// # 返回值
+///
+/// 携带对应 Operation/Attempt 身份和 payload 的 Call。
 fn call(worker: RoleInstance, index: u8) -> Call {
     Call {
         pool: Pool::default(),
@@ -35,6 +63,15 @@ fn call(worker: RoleInstance, index: u8) -> Call {
     }
 }
 
+/// 验证本地队列满时明确未交付，停止后排空已经接收的调用。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn full_queue_is_not_delivered_and_stop_drains_accepted_work() {
     let local: Local = Local::new(1).unwrap();
@@ -69,6 +106,15 @@ async fn full_queue_is_not_delivered_and_stop_drains_accepted_work() {
     assert!(matches!(request.await, Err(DeliveryError::Unknown(_))));
 }
 
+/// 验证重复绑定不覆盖现有路由，丢弃端点后释放全部 pools。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[test]
 fn duplicate_binding_never_overwrites_and_drop_releases_all_pools() {
     let local: Local = Local::new(2).unwrap();
@@ -90,6 +136,15 @@ fn duplicate_binding_never_overwrites_and_drop_releases_all_pools() {
     assert!(Local::<String, String>::new(usize::MAX).is_err());
 }
 
+/// 验证本地命令和结果能够移动无 Clone/serde 的自定义数据。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn commands_and_outcomes_move_custom_data_without_clone_or_serialization() {
     struct Payload(Vec<u8>);

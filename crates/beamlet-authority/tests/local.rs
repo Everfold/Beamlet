@@ -9,17 +9,44 @@ use beamlet_transport_local::Local;
 use std::{future::Future, time::Duration};
 use tokio::{sync::oneshot, time::timeout};
 const DEADLINE: Duration = Duration::from_secs(3);
+/// 为测试生成独立的角色 UUID 和会话 UUID。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 新的 RoleInstance，用于隔离测试绑定。
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: Uuid::new_v4(),
         session_id: Uuid::new_v4(),
     }
 }
+/// 限制异步测试步骤的等待时长。
+///
+/// # 参数
+///
+/// - `future`：需要在测试期限内完成的异步步骤。
+///
+/// # 返回值
+///
+/// 原 future 的输出；未在测试期限内完成时 panic。
 async fn within<T>(future: impl Future<Output = T>) -> T {
     timeout(DEADLINE, future)
         .await
         .expect("authority contract stalled")
 }
+/// 构造 Authority 测试用身份与 pool 描述。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 带有效独立身份和非空 pools 的 AuthorityInfo。
 fn info() -> AuthorityInfo {
     AuthorityInfo {
         instance: instance(),
@@ -27,6 +54,17 @@ fn info() -> AuthorityInfo {
         pools: [Pool::default(), "other".parse().unwrap()].into(),
     }
 }
+/// 构造给指定 Authority 的测试文本提交命令。
+///
+/// # 参数
+///
+/// - `authority`：明确选定的 Authority 角色与会话 UUID。
+/// - `worker`：测试提交的 Any 或 Exact 选择约束。
+/// - `text`：作为任务 payload 的测试文本。
+///
+/// # 返回值
+///
+/// 含新请求 UUID、默认 pool 和指定 Worker 选择的 Command::Submit。
 fn submit(authority: RoleInstance, worker: Selection, text: &str) -> Command {
     Command::Submit {
         request_id: Uuid::new_v4(),
@@ -41,6 +79,16 @@ fn submit(authority: RoleInstance, worker: Selection, text: &str) -> Command {
         },
     }
 }
+/// 通过真实本地传输查询 Authority 的 Worker 视图。
+///
+/// # 参数
+///
+/// - `local`：用于发送查询的真实本地传输句柄。
+/// - `authority`：明确选定的 Authority 角色与会话 UUID。
+///
+/// # 返回值
+///
+/// 当前 WorkerView 列表；请求失败或结果类型不符时 panic。
 async fn workers(local: &Local, authority: RoleInstance) -> Vec<beamlet_api::WorkerView> {
     let reply = local
         .request(
@@ -59,6 +107,15 @@ async fn workers(local: &Local, authority: RoleInstance) -> Vec<beamlet_api::Wor
     };
     workers
 }
+/// 验证 Authority 满载时控制处理仍推进，Exact 失效不回退。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn control_progresses_at_capacity_and_exact_never_falls_back() {
     let scenario = async {
@@ -203,6 +260,15 @@ async fn control_progresses_at_capacity_and_exact_never_falls_back() {
 #[derive(Clone)]
 struct Numbers(Vec<u32>);
 struct Sum(u32);
+/// 验证真实 Authority、Worker 与本地客户端使用自定义数据完成完整调用。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn generic_authority_worker_and_client_use_public_interfaces_only() {
     let scenario = async {
@@ -287,11 +353,29 @@ async fn generic_authority_worker_and_client_use_public_interfaces_only() {
 
 struct LocalRequests(tokio::sync::mpsc::Receiver<beamlet_authority::Request>);
 impl beamlet_authority::LocalInbox for LocalRequests {
+    /// 从测试通道读取下一份结构化 Authority 提交。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `LocalRequests` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 有请求返回 `Ok(Some(Request))`，入口关闭且排空后返回 `Ok(None)`。
     async fn receive(
         &mut self,
     ) -> Result<Option<beamlet_authority::Request>, beamlet_api::TransportError> {
         Ok(self.0.recv().await)
     }
+    /// 停止测试输入，丢弃尚未交出的业务请求。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `LocalRequests` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 返回 `Ok(())`；有停止观察者时通知它已执行关闭。
     async fn stop(&mut self) -> Result<(), beamlet_api::TransportError> {
         self.0.close();
         while self.0.try_recv().is_ok() {}
@@ -299,6 +383,15 @@ impl beamlet_authority::LocalInbox for LocalRequests {
     }
 }
 
+/// 验证本地输入 EOF 后 Authority 仍接收远端请求。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn local_eof_leaves_remote_requests_running() {
     let scenario = async {
@@ -350,11 +443,31 @@ struct PendingDelivery {
 }
 struct DropNotice(std::sync::Arc<tokio::sync::Notify>);
 impl Drop for DropNotice {
+    /// 在测试资源被释放时发送一次 Drop 通知。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `DropNotice` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// `()`；唤醒正在检查清理行为的观察者。
     fn drop(&mut self) {
         self.0.notify_one();
     }
 }
 impl beamlet_api::Delivery for PendingDelivery {
+    /// 模拟一个已开始但永远不主动完成的交付。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `PendingDelivery` 的共享引用。
+    /// - `_call`：占位调用；该测试交付只模拟挂起，不执行 payload。
+    /// - `_deadline`：占位期限；该测试交付保持挂起，由外层取消。
+    ///
+    /// # 返回值
+    ///
+    /// 不会正常返回；取消 future 时通过 guard 通知资源已释放。
     async fn deliver(
         &self,
         _call: beamlet_api::Call,
@@ -366,6 +479,15 @@ impl beamlet_api::Delivery for PendingDelivery {
     }
 }
 
+/// 验证取消 Authority 运行会释放交付等待和控制端点。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn cancelling_authority_releases_delivery_and_control_endpoint() {
     let scenario = async {
