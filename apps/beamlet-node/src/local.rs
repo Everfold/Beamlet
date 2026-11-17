@@ -13,6 +13,17 @@ pub(crate) struct Input {
     capability: String,
 }
 impl Input {
+    /// 把终端入口装配为指定 Authority 的本地输入。
+    ///
+    /// # 参数
+    ///
+    /// - `info`：Authority 的角色/会话身份、标签及其加入的 pools。
+    /// - `directory`：当前 Authority 的只读 Worker 查询句柄。
+    /// - `local`：终端路由到该 Authority 的文本行接收端。
+    ///
+    /// # 返回值
+    ///
+    /// 成功返回使用默认 pool 或首个已配置 pool 的输入；Authority 未配置 pool 时返回错误。
     pub(crate) fn new(
         info: AuthorityInfo,
         directory: Directory,
@@ -33,6 +44,15 @@ impl Input {
     }
 }
 impl LocalInbox for Input {
+    /// 处理本地选择命令，直到收到需要提交的文本或输入结束。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Input` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 有效文本返回 `Ok(Some(Request))`，EOF 返回 `Ok(None)`；读取失败时返回错误。
     async fn receive(&mut self) -> Result<Option<Request>, TransportError> {
         loop {
             let Some(line) = self.local.recv().await else {
@@ -70,6 +90,15 @@ impl LocalInbox for Input {
             }
         }
     }
+    /// 关闭本地输入并丢弃尚未签发的排队文本。
+    ///
+    /// # 参数
+    ///
+    /// - `self`：当前 `Input` 的可变引用。
+    ///
+    /// # 返回值
+    ///
+    /// 返回 `Ok(())`；不把剩余输入转换为任务。
     async fn stop(&mut self) -> Result<(), TransportError> {
         self.local.close();
         while self.local.try_recv().is_ok() {}

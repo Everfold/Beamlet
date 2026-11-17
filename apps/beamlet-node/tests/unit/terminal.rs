@@ -1,6 +1,15 @@
 use super::*;
 use uuid::Uuid;
 
+/// 验证终端文本只发给选中角色，EOF 不广播或提交额外文本。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// `()`；全部断言通过时正常结束，断言失败或未预期错误会使测试失败。
 #[tokio::test]
 async fn terminal_sends_to_one_selected_role_and_eof_does_not_broadcast() {
     let (send, input) = mpsc::channel(8);

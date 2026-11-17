@@ -4,7 +4,15 @@ use std::collections::BTreeSet;
 
 pub(crate) const UPPERCASE: &str = "text.uppercase/v1";
 
-/// 示例能力由应用注册, 库不包含文本白名单或处理规则.
+/// 注册 node 自带的文本倒序和大写处理器。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 成功返回能力注册表；能力注册失败时返回错误。
 pub(crate) fn registered() -> Result<beamlet_worker::Capabilities> {
     let mut capabilities = beamlet_worker::Capabilities::new();
     for id in [crate::text_reverse::CAPABILITY, UPPERCASE] {
@@ -16,6 +24,15 @@ pub(crate) fn registered() -> Result<beamlet_worker::Capabilities> {
     }
     Ok(capabilities)
 }
+/// 检查 Worker 配置的启用集合是否非空且均有处理器。
+///
+/// # 参数
+///
+/// - `enabled`：需要启用的能力名称；按集合语义处理，不隐式注册未知能力。
+///
+/// # 返回值
+///
+/// 合法时返回 `Ok(())`；集合为空或存在未知能力时返回错误。
 pub(crate) fn validate(enabled: &BTreeSet<String>) -> Result<()> {
     registered()?
         .validate_enabled(enabled.iter().map(String::as_str))
@@ -28,7 +45,16 @@ pub(crate) fn validate(enabled: &BTreeSet<String>) -> Result<()> {
         })
 }
 
-/// 能力自行选择异步 I/O 或阻塞计算, Worker 只等待执行结果.
+/// 按能力执行文本倒序或大写转换，将计算移交阻塞线程池。
+///
+/// # 参数
+///
+/// - `capability`：要调用或匹配的能力标识，保留精确拼写。
+/// - `text`：待转换的原始文本，包含需要保留的空白字符。
+///
+/// # 返回值
+///
+/// 成功返回转换后的文本；能力不支持或计算任务取消时返回错误，计算 panic 继续向上传播。
 pub(crate) async fn execute(capability: String, text: String) -> Result<String> {
     match capability.as_str() {
         crate::text_reverse::CAPABILITY | UPPERCASE => {

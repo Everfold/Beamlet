@@ -17,6 +17,16 @@ pub(crate) struct Target {
     pub send: mpsc::Sender<std::io::Result<String>>,
 }
 
+/// 为 Authority 终端目标启动统一 stdin 路由。
+///
+/// # 参数
+///
+/// - `targets`：终端可选择的 Authority 目标列表及各自的输入发送端。
+/// - `shutdown`：停止通知或 future；完成后停止新接收并按角色语义排空。
+///
+/// # 返回值
+///
+/// 无目标、EOF 或正常停止返回 `Ok(())`；输入处理失败返回错误。
 pub(crate) async fn run(targets: Vec<Target>, shutdown: Shutdown) -> Result<()> {
     if targets.is_empty() {
         return Ok(());
@@ -24,6 +34,17 @@ pub(crate) async fn run(targets: Vec<Target>, shutdown: Shutdown) -> Result<()> 
     route(targets, input(), shutdown).await
 }
 
+/// 处理终端角色选择，并把其他行发给唯一选中的 Authority。
+///
+/// # 参数
+///
+/// - `targets`：终端可选择的 Authority 目标列表及各自的输入发送端。
+/// - `input`：统一 stdin 读取入口产生的文本或 I/O 错误队列。
+/// - `shutdown`：停止通知或 future；完成后停止新接收并按角色语义排空。
+///
+/// # 返回值
+///
+/// EOF 或停止通知后返回 `Ok(())`；读取失败返回错误；队列满只记录拒绝并继续。
 async fn route(targets: Vec<Target>, mut input: Input, shutdown: Shutdown) -> Result<()> {
     let mut selected = (targets.len() == 1).then_some(0);
     show(&targets);
@@ -66,12 +87,30 @@ async fn route(targets: Vec<Target>, mut input: Input, shutdown: Shutdown) -> Re
         }
     }
 }
+/// 输出终端可选择的 Authority 角色列表。
+///
+/// # 参数
+///
+/// - `targets`：终端可选择的 Authority 目标列表及各自的输入发送端。
+///
+/// # 返回值
+///
+/// `()`；逐项输出编号、角色和会话 UUID、标签及选择提示。
 fn show(targets: &[Target]) {
     for (index, target) in targets.iter().enumerate() {
         info!(index = index + 1, role_id = %target.instance.role_id, role_session_id = %target.instance.session_id,
             label = target.label.as_deref(), "本地 Authority; /authority <编号或角色 UUID> 选择, /roles 列出");
     }
 }
+/// 启动标准输入读取线程，逐行转发读取结果。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 有界行输入接收端；每项是文本或读取错误，EOF 后通道关闭。
 fn input() -> Input {
     let (send, recv) = mpsc::channel(INPUT_CAPACITY);
     std::thread::spawn(move || {

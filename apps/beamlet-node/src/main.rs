@@ -19,6 +19,15 @@ struct Args {
     config: PathBuf,
 }
 
+/// 解析配置文件名、初始化节点日志并启动 Node。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 正常结束返回 `ExitCode::SUCCESS`；配置或运行失败返回 `ExitCode::FAILURE`。
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let args = Args::parse();

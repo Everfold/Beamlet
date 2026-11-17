@@ -5,6 +5,15 @@ use settings::{Color, Settings};
 use std::process::ExitCode;
 use tracing::{Instrument, error, info_span};
 
+/// 加载 Console 配置、初始化日志并运行交互会话。
+///
+/// # 参数
+///
+/// 无。
+///
+/// # 返回值
+///
+/// 正常结束返回 `ExitCode::SUCCESS`；配置或运行失败时记录错误并返回 `ExitCode::FAILURE`。
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let settings = Settings::load();
