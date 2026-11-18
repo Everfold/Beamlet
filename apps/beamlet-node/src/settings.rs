@@ -379,7 +379,7 @@ impl Settings {
     /// # 返回值
     ///
     /// 所有约束满足时返回 `Ok(())`; 重复/无效身份, 未知引用或非法参数返回错误.
-    pub(crate) fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         validate_timeout(self.node.shutdown_timeout_secs, "shutdown_timeout_secs")?;
         ensure!(!self.node.node_id.is_nil(), "node_id 不能是 nil UUID");
         ensure!(!self.infrastructures.is_empty(), "至少需要一个基础设施实例");
@@ -402,6 +402,7 @@ impl Settings {
             }
         }
         // 允许只配置基础设施的 Node, 为后续基础设施类型保留相同装配方式.
+        let builtins = crate::capabilities::registered()?;
         let mut ids = BTreeSet::new();
         for role in &self.roles {
             ensure!(!role.id().is_nil(), "role_id 不能是 nil UUID");
@@ -446,7 +447,7 @@ impl Settings {
                         role.id()
                     );
                     validate_timeout(*heartbeat_interval_secs, "heartbeat_interval_secs")?;
-                    crate::capabilities::validate(capabilities)
+                    crate::capabilities::validate(&builtins, capabilities)
                         .with_context(|| format!("Worker {} 能力配置无效", role.id()))?;
                 }
             }

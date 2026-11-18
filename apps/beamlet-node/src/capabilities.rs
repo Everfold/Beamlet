@@ -23,13 +23,17 @@ pub(crate) fn registered() -> Result<beamlet_worker::Capabilities> {
 ///
 /// # 参数
 ///
+/// - `builtins`: 节点已注册的内置能力.
 /// - `enabled`: 需要启用的能力名称; 按集合语义处理, 不隐式注册未知能力.
 ///
 /// # 返回值
 ///
 /// 合法时返回 `Ok(())`; 集合为空或存在未知能力时返回错误.
-pub(crate) fn validate(enabled: &BTreeSet<String>) -> Result<()> {
-    registered()?
+pub(crate) fn validate(
+    builtins: &beamlet_worker::Capabilities,
+    enabled: &BTreeSet<String>,
+) -> Result<()> {
+    builtins
         .validate_enabled(enabled.iter().map(String::as_str))
         .map_err(|error| match error {
             beamlet_worker::CapabilityError::Empty => {

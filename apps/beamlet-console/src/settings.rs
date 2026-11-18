@@ -189,7 +189,7 @@ impl Settings {
     /// # 返回值
     ///
     /// 全部合法时返回 `Ok(())`; 任一约束不满足时返回带字段信息的错误.
-    pub(crate) fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<()> {
         ensure!(!self.client.pools.is_empty(), "Console 至少需要一个 pool");
         ensure!(!self.nats.url.trim().is_empty(), "nats.url 不能为空");
         for (name, seconds) in [

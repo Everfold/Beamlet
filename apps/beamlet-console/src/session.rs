@@ -698,14 +698,13 @@ fn index(input: &str) -> Result<usize> {
 ///
 /// # 参数
 ///
-/// - `settings`: 调用方提供的配置; 本函数按其身份, 期限和基础设施设置运行.
+/// - `settings`: 加载时已校验的应用配置.
 ///
 /// # 返回值
 ///
 /// 正常退出或停止等待返回 `Ok(())`; 配置, 连接, 输入, 任务或信号失败时返回错误.
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     tracing::info!(event = "console.starting", "Console 启动");
-    settings.validate()?;
     let connect_timeout = Duration::from_secs(settings.nats.connect_timeout_secs);
     let client_options = (&settings.client).into();
     let client = beamlet_transport_nats::Nats::connect(

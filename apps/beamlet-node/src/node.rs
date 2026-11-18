@@ -10,7 +10,7 @@ use tracing::{Instrument, info, warn};
 ///
 /// # 参数
 ///
-/// - `settings`: 调用方提供的配置; 本函数按其身份, 期限和基础设施设置运行.
+/// - `settings`: 加载时已校验的应用配置.
 /// - `signal`: 调用方提供的退出 future; 完成表示请求停止, 错误也会触发停止并被返回.
 ///
 /// # 返回值
@@ -20,7 +20,6 @@ pub(crate) async fn run(
     settings: Settings,
     signal: impl Future<Output = std::io::Result<()>>,
 ) -> Result<()> {
-    settings.validate()?;
     info!(
         event = "node.starting",
         roles = settings.roles.len(),
