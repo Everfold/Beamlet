@@ -378,10 +378,7 @@ impl Settings {
                         "Authority {} 至少需要一个 pool",
                         role.role_id
                     );
-                    ensure!(
-                        config.worker_timeout_secs > 0,
-                        "worker_timeout_secs 必须大于 0"
-                    );
+                    validate_timeout(config.worker_timeout_secs, "worker_timeout_secs")?;
                 }
                 Role::Worker(config) => {
                     ensure!(
@@ -389,10 +386,7 @@ impl Settings {
                         "Worker {} 只能引用一个基础设施",
                         role.role_id
                     );
-                    ensure!(
-                        config.heartbeat_interval_secs > 0,
-                        "heartbeat_interval_secs 必须大于 0"
-                    );
+                    validate_timeout(config.heartbeat_interval_secs, "heartbeat_interval_secs")?;
                     crate::capabilities::validate(&config.capabilities)
                         .with_context(|| format!("Worker {} 能力配置无效", role.role_id))?;
                 }

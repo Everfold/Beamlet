@@ -355,6 +355,8 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
     for field in [
         "shutdown_timeout_secs: 30",
+        "worker_timeout_secs: 15",
+        "heartbeat_interval_secs: 5",
         "report_timeout_secs: 25",
         "connect_timeout_secs: 20",
         "subscription_capacity: 128",
