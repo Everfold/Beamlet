@@ -4,18 +4,21 @@ members = [
   "apps/beamlet-console",
   "apps/beamlet-node",
 
-  "crates/beamlet-api",
-  "crates/beamlet-app-config",
-  "crates/beamlet-authority",
-  "crates/beamlet-client",
-  "crates/beamlet-host",
-  "crates/beamlet-kernel",
-  "crates/beamlet-ledger",
-  "crates/beamlet-primitives",
-  "crates/beamlet-protocol",
-  "crates/beamlet-transport-local",
-  "crates/beamlet-transport-nats",
-  "crates/beamlet-worker",
+  "crates/core/beamlet-api",
+  "crates/core/beamlet-kernel",
+  "crates/core/beamlet-ledger",
+  "crates/core/beamlet-primitives",
+
+  "crates/components/beamlet-authority",
+  "crates/components/beamlet-client",
+  "crates/components/beamlet-worker",
+
+  "crates/transports/beamlet-protocol",
+  "crates/transports/beamlet-transport-local",
+  "crates/transports/beamlet-transport-nats",
+
+  "crates/app-support/beamlet-app-config",
+  "crates/app-support/beamlet-host",
 ]
 
 [workspace.package]
@@ -27,18 +30,18 @@ repository = "https://github.com/Everfold/Beamlet"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-beamlet-api = { path = "crates/beamlet-api" }
-beamlet-app-config = { path = "crates/beamlet-app-config" }
-beamlet-authority = { path = "crates/beamlet-authority" }
-beamlet-client = { path = "crates/beamlet-client" }
-beamlet-host = { path = "crates/beamlet-host" }
-beamlet-kernel = { path = "crates/beamlet-kernel" }
-beamlet-ledger = { path = "crates/beamlet-ledger" }
-beamlet-primitives = { path = "crates/beamlet-primitives" }
-beamlet-protocol = { path = "crates/beamlet-protocol" }
-beamlet-transport-local = { path = "crates/beamlet-transport-local" }
-beamlet-transport-nats = { path = "crates/beamlet-transport-nats" }
-beamlet-worker = { path = "crates/beamlet-worker" }
+beamlet-api = { path = "crates/core/beamlet-api" }
+beamlet-app-config = { path = "crates/app-support/beamlet-app-config" }
+beamlet-authority = { path = "crates/components/beamlet-authority" }
+beamlet-client = { path = "crates/components/beamlet-client" }
+beamlet-host = { path = "crates/app-support/beamlet-host" }
+beamlet-kernel = { path = "crates/core/beamlet-kernel" }
+beamlet-ledger = { path = "crates/core/beamlet-ledger" }
+beamlet-primitives = { path = "crates/core/beamlet-primitives" }
+beamlet-protocol = { path = "crates/transports/beamlet-protocol" }
+beamlet-transport-local = { path = "crates/transports/beamlet-transport-local" }
+beamlet-transport-nats = { path = "crates/transports/beamlet-transport-nats" }
+beamlet-worker = { path = "crates/components/beamlet-worker" }
 
 futures = "0.3"
 rayon = "1.12"

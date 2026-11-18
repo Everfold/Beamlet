@@ -1,5 +1,5 @@
 /// 本后端与其他适配器共同执行的交付和控制契约测试.
-#[path = "../../../tests/support/transport_contract.rs"]
+#[path = "../../../../tests/support/transport_contract.rs"]
 mod contract;
 use beamlet_transport_local::Local;
 
