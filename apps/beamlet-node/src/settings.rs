@@ -44,10 +44,10 @@ impl Color {
     }
 }
 
-/// Node 支持的基础设施连接配置; 映射中每个名称对应一个独立实例.
+/// Node 支持的传输连接配置; 映射中每个名称对应一个独立实例.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum Infrastructure {
+pub(crate) enum Transport {
     /// 创建独立的进程内消息空间.
     Local {
         /// 每个本地有界通道的容量, 必须大于零.
@@ -96,8 +96,8 @@ pub(crate) enum Role {
         role_id: Uuid,
         /// 可选的显示名称.
         label: Option<String>,
-        /// 接收请求和交付任务的基础设施名称.
-        infrastructures: BTreeSet<String>,
+        /// 接收请求和交付任务的传输名称.
+        transports: BTreeSet<String>,
         /// Authority 加入的 pool 集合.
         pools: BTreeSet<Pool>,
         /// Worker 租约与报告期限.
@@ -111,8 +111,8 @@ pub(crate) enum Role {
         role_id: Uuid,
         /// 可选的显示名称.
         label: Option<String>,
-        /// Worker 绑定的唯一基础设施名称, 重复引用自动去重.
-        infrastructures: BTreeSet<String>,
+        /// Worker 绑定的唯一传输名称, 重复引用自动去重.
+        transports: BTreeSet<String>,
         /// Worker 所属的 pool.
         pool: Pool,
         /// 实际启用的能力名称.
@@ -138,15 +138,10 @@ impl Role {
         }
     }
 
-    /// 返回角色引用的基础设施名称集合.
-    pub(crate) fn infrastructures(&self) -> &BTreeSet<String> {
+    /// 返回角色引用的传输名称集合.
+    pub(crate) fn transports(&self) -> &BTreeSet<String> {
         match self {
-            Self::Authority {
-                infrastructures, ..
-            }
-            | Self::Worker {
-                infrastructures, ..
-            } => infrastructures,
+            Self::Authority { transports, .. } | Self::Worker { transports, .. } => transports,
         }
     }
 
@@ -173,14 +168,15 @@ pub(crate) struct Node {
     pub shutdown_timeout_secs: u64,
 }
 
-/// Node 的 RON 配置, 按宿主, 基础设施和角色分组.
+/// Node 的 RON 配置, 按宿主, 传输和角色分组.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
     /// 宿主身份和进程级设置.
     pub node: Node,
-    /// 名称到基础设施配置的映射; 同名引用共享连接, 不同名称独立连接.
-    pub infrastructures: BTreeMap<String, Infrastructure>,
+    /// 名称到传输配置的映射; 同名引用共享连接, 不同名称独立连接.
+    #[serde(default)]
+    pub transports: BTreeMap<String, Transport>,
     /// 需要装配的角色列表; 可为空, 也可包含多个同类型角色.
     pub roles: Vec<Role>,
 }
@@ -199,21 +195,18 @@ impl beamlet_app_config::Config for Settings {
             "node.shutdown_timeout_secs",
             "退出时等待角色结束的秒数 / Seconds to wait for roles to stop",
         ),
+        ("transports", "命名传输 / Named transports (local or nats)"),
         (
-            "infrastructures",
-            "命名传输 / Named transports (local or nats)",
-        ),
-        (
-            "infrastructures.capacity",
+            "transports.capacity",
             "每个本地通道缓冲的消息数 / Buffered messages per local channel",
         ),
-        ("infrastructures.url", "NATS 服务地址 / NATS server URL"),
+        ("transports.url", "NATS 服务地址 / NATS server URL"),
         (
-            "infrastructures.connect_timeout_secs",
+            "transports.connect_timeout_secs",
             "首次连接超时(秒) / Initial connection timeout (s)",
         ),
         (
-            "infrastructures.subscription_capacity",
+            "transports.subscription_capacity",
             "每个订阅缓冲的消息数 / Buffered messages per subscription",
         ),
         (
@@ -229,7 +222,7 @@ impl beamlet_app_config::Config for Settings {
             "显示名称 / Display name (Some(\"name\") | None)",
         ),
         (
-            "roles.infrastructures",
+            "roles.transports",
             "传输名称, Worker 选一个 / Named transports, exactly one per Worker",
         ),
         (
@@ -273,7 +266,7 @@ impl beamlet_app_config::Config for Settings {
 }
 
 impl Default for Settings {
-    /// 构造首次启动 Node 时的默认基础设施与两个角色.
+    /// 构造首次启动 Node 时的默认传输与两个角色.
     ///
     /// # 返回值
     ///
@@ -286,9 +279,9 @@ impl Default for Settings {
                 color: Color::Auto,
                 shutdown_timeout_secs: 6,
             },
-            infrastructures: BTreeMap::from([(
+            transports: BTreeMap::from([(
                 "nats".into(),
-                Infrastructure::Nats {
+                Transport::Nats {
                     url: "nats://127.0.0.1:4222".into(),
                     connect_timeout_secs: 10,
                     subscription_capacity: 16,
@@ -298,7 +291,7 @@ impl Default for Settings {
                 Role::Authority {
                     role_id: Uuid::new_v4(),
                     label: Some("authority".into()),
-                    infrastructures: ["nats".into()].into(),
+                    transports: ["nats".into()].into(),
                     pools: [Pool::default()].into(),
                     timeouts: Timeouts {
                         worker_timeout_secs: 15,
@@ -313,7 +306,7 @@ impl Default for Settings {
                 Role::Worker {
                     role_id: Uuid::new_v4(),
                     label: Some("worker".into()),
-                    infrastructures: ["nats".into()].into(),
+                    transports: ["nats".into()].into(),
                     pool: Pool::default(),
                     capabilities: [crate::text_reverse::CAPABILITY.into()].into(),
                     heartbeat_interval_secs: 5,
@@ -370,7 +363,7 @@ impl Settings {
             .with_context(|| format!("节点配置无效: {}", path.display()))?;
         Ok(settings)
     }
-    /// 校验节点身份, 基础设施引用及各角色独立配置.
+    /// 校验节点身份, 传输引用及各角色独立配置.
     ///
     /// # 参数
     ///
@@ -382,40 +375,35 @@ impl Settings {
     fn validate(&self) -> Result<()> {
         validate_timeout(self.node.shutdown_timeout_secs, "shutdown_timeout_secs")?;
         ensure!(!self.node.node_id.is_nil(), "node_id 不能是 nil UUID");
-        ensure!(!self.infrastructures.is_empty(), "至少需要一个基础设施实例");
-        for (name, infrastructure) in &self.infrastructures {
-            ensure!(!name.trim().is_empty(), "基础设施名称不能为空");
-            match infrastructure {
-                Infrastructure::Local { capacity } => validate_capacity(*capacity, "capacity")?,
-                Infrastructure::Nats {
+        for (name, transport) in &self.transports {
+            ensure!(!name.trim().is_empty(), "传输名称不能为空");
+            match transport {
+                Transport::Local { capacity } => validate_capacity(*capacity, "capacity")?,
+                Transport::Nats {
                     url,
                     connect_timeout_secs,
                     subscription_capacity,
                 } => {
-                    ensure!(
-                        !url.trim().is_empty(),
-                        "基础设施 {name} 的 NATS 地址不能为空"
-                    );
+                    ensure!(!url.trim().is_empty(), "传输 {name} 的 NATS 地址不能为空");
                     validate_timeout(*connect_timeout_secs, "connect_timeout_secs")?;
                     validate_capacity(*subscription_capacity, "subscription_capacity")?;
                 }
             }
         }
-        // 允许只配置基础设施的 Node, 为后续基础设施类型保留相同装配方式.
         let builtins = crate::capabilities::registered()?;
         let mut ids = BTreeSet::new();
         for role in &self.roles {
             ensure!(!role.id().is_nil(), "role_id 不能是 nil UUID");
             ensure!(ids.insert(role.id()), "重复的 role_id: {}", role.id());
             ensure!(
-                !role.infrastructures().is_empty(),
-                "角色 {} 至少需要一个基础设施",
+                !role.transports().is_empty(),
+                "角色 {} 至少需要一个传输",
                 role.id()
             );
-            for name in role.infrastructures() {
+            for name in role.transports() {
                 ensure!(
-                    self.infrastructures.contains_key(name),
-                    "角色 {} 引用了不存在的基础设施: {name}",
+                    self.transports.contains_key(name),
+                    "角色 {} 引用了不存在的传输: {name}",
                     role.id()
                 );
             }
@@ -442,8 +430,8 @@ impl Settings {
                     ..
                 } => {
                     ensure!(
-                        role.infrastructures().len() == 1,
-                        "Worker {} 只能引用一个基础设施",
+                        role.transports().len() == 1,
+                        "Worker {} 只能引用一个传输",
                         role.id()
                     );
                     validate_timeout(*heartbeat_interval_secs, "heartbeat_interval_secs")?;

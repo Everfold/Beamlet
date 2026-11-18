@@ -196,34 +196,28 @@ async fn connect(port: u16) -> Result<async_nats::Client> {
         sleep(Duration::from_millis(40)).await;
     }
 }
-/// 用 id, infrastructure, pools, 租约 timeout 和并发上限 concurrency 生成 Authority 配置.
-fn authority(
-    id: Uuid,
-    infrastructure: &str,
-    pools: &str,
-    timeout: u64,
-    concurrency: usize,
-) -> String {
+/// 构造测试 Authority 的角色配置.
+fn authority(id: Uuid, transport: &str, pools: &str, timeout: u64, concurrency: usize) -> String {
     format!(
-        r#"authority(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], pools: [{pools}], timeouts: (worker_timeout_secs: {timeout}, report_timeout_secs: 4), limits: (input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"#
+        r#"authority(role_id: "{id}", label: Some("same label"), transports: ["{transport}"], pools: [{pools}], timeouts: (worker_timeout_secs: {timeout}, report_timeout_secs: 4), limits: (input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"#
     )
 }
-/// 用 id, infrastructure, capability, 心跳间隔 interval 和并发上限 concurrency 生成 Worker 配置.
+/// 构造测试 Worker 的角色配置.
 fn worker(
     id: Uuid,
-    infrastructure: &str,
+    transport: &str,
     capability: &str,
     interval: u64,
     concurrency: usize,
 ) -> String {
     format!(
-        r#"worker(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency})"#
+        r#"worker(role_id: "{id}", label: Some("same label"), transports: ["{transport}"], pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency})"#
     )
 }
-/// 组合 Node 身份, 基础设施和角色列表生成完整 RON.
-fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {
+/// 组合 Node 身份, 传输和角色列表生成完整 RON.
+fn config(node_id: Uuid, transport: &str, roles: &[String]) -> String {
     format!(
-        r#"(node: (node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8), infrastructures: {{{infrastructure}}}, roles: [{}])"#,
+        r#"(node: (node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8), transports: {{{transport}}}, roles: [{}])"#,
         roles.join(",")
     )
 }
@@ -370,10 +364,10 @@ fn completed(outcome: Outcome, instance: RoleInstance, expected: &str) -> Result
     Ok(operation_id)
 }
 
-/// 验证真实多角色, 多基础设施的定向路由, 重启会话, 重连和独立排空.
+/// 验证真实多角色, 多传输的定向路由, 重启会话, 重连和独立排空.
 #[tokio::test]
 #[ignore = "requires nats-server; explicit multi-process integration test"]
-async fn multiple_roles_and_infrastructures_route_restart_and_drain_independently() -> Result<()> {
+async fn multiple_roles_and_transports_route_restart_and_drain_independently() -> Result<()> {
     let mut cluster = Cluster::new()?;
     let primary_port = port()?;
     let secondary_port = port()?;
@@ -384,7 +378,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     let pool: Pool = "blue".parse()?;
     let ids: Vec<_> = (0..6).map(|_| Uuid::new_v4()).collect();
     let node_id = Uuid::new_v4();
-    let infrastructure = format!(
+    let transport = format!(
         r#""primary": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "worker-connection": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "secondary": nats(url: "nats://127.0.0.1:{secondary_port}", connect_timeout_secs: 12, subscription_capacity: 32)"#
     );
     let roles = vec![
@@ -395,7 +389,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         authority(ids[4], "secondary", r#""blue""#, 3, 0),
         worker(ids[5], "secondary", "text.reverse/v1", 1, 0),
     ];
-    let source = config(node_id, &infrastructure, &roles);
+    let source = config(node_id, &transport, &roles);
     let (first_process, first) = cluster.node("composed", &source, 6).await?;
     ensure!(
         first
@@ -427,7 +421,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
     );
     ensure!(
         discover(&secondary, &pool).await?.len() == 1,
-        "infrastructure leaked"
+        "transport leaked"
     );
     ensure!(
         workers(&primary, first[&ids[0]], &pool).await?.len() == 2,
@@ -495,7 +489,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
             .await?,
             Outcome::Rejected { .. }
         ),
-        "cross infrastructure target accepted"
+        "cross transport target accepted"
     );
     let node_target = RoleInstance {
         role_id: node_id,
@@ -517,7 +511,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         "node UUID still routes tasks"
     );
 
-    // One failed broker does not shut down unrelated infrastructure/roles.
+    // One failed broker does not shut down unrelated transport/roles.
     cluster.kill(primary_broker)?;
     sleep(Duration::from_millis(250)).await;
     completed(
@@ -670,7 +664,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         "moved config rewritten"
     );
     println!(
-        "PASS: multiple roles, infrastructure isolation, exact role routing, independent sessions, reconnect and shutdown"
+        "PASS: multiple roles, transport isolation, exact role routing, independent sessions, reconnect and shutdown"
     );
     Ok(())
 }
@@ -926,16 +920,16 @@ async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Res
     let authority_id = Uuid::new_v4();
     let local_worker = Uuid::new_v4();
     let remote_worker = Uuid::new_v4();
-    let infrastructures = format!(
+    let transports = format!(
         r#""local": local(capacity: 8), "control": nats(url: "nats://127.0.0.1:{control_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote-alias": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16)"#
     );
     let authority_role = authority(authority_id, "local", r#""blue""#, 10, 2).replace(
-        r#"infrastructures: ["local"]"#,
-        r#"infrastructures: ["local", "control", "remote", "remote-alias"]"#,
+        r#"transports: ["local"]"#,
+        r#"transports: ["local", "control", "remote", "remote-alias"]"#,
     );
     let source = config(
         Uuid::new_v4(),
-        &infrastructures,
+        &transports,
         &[
             authority_role,
             worker(local_worker, "local", "text.reverse/v1", 1, 2),

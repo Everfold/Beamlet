@@ -44,15 +44,15 @@ fn first_start_creates_distinct_persistent_ids_and_reload_does_not_write() {
     assert_eq!(fs::read_to_string(&path).unwrap(), content);
 }
 
-/// 验证同类型角色和基础设施可多次配置且各自参数独立.
+/// 验证同类型角色和传输可多次配置且各自参数独立.
 #[test]
-fn independently_configures_repeated_role_and_infrastructure_types() {
+fn independently_configures_repeated_role_and_transport_types() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
     let mut settings = Settings::default();
-    settings.infrastructures.insert(
+    settings.transports.insert(
         "secondary".into(),
-        Infrastructure::Nats {
+        Transport::Nats {
             url: "nats://localhost:4333".into(),
             connect_timeout_secs: 20,
             subscription_capacity: 32,
@@ -61,7 +61,7 @@ fn independently_configures_repeated_role_and_infrastructure_types() {
     settings.roles.push(Role::Worker {
         role_id: Uuid::new_v4(),
         label: Some("secondary worker".into()),
-        infrastructures: ["secondary".into()].into(),
+        transports: ["secondary".into()].into(),
         pool: "other".parse().unwrap(),
         capabilities: BTreeSet::from([crate::capabilities::UPPERCASE.into()]),
         heartbeat_interval_secs: 1,
@@ -71,7 +71,7 @@ fn independently_configures_repeated_role_and_infrastructure_types() {
     let source = fs::read_to_string(&path).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
     assert_eq!(loaded.roles.len(), 3);
-    assert_eq!(loaded.infrastructures.len(), 2);
+    assert_eq!(loaded.transports.len(), 2);
     let Role::Worker {
         heartbeat_interval_secs,
         max_concurrent_tasks,
@@ -243,9 +243,9 @@ fn pool_duplicates_are_deduplicated_without_rewriting() {
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
 }
 
-/// 验证跨角色种类的重复 UUID 和未知基础设施引用被拒绝.
+/// 验证跨角色种类的重复 UUID 和未知传输引用被拒绝.
 #[test]
-fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
+fn duplicate_ids_across_role_types_and_unknown_transport_are_rejected() {
     let mut settings = Settings::default();
     let duplicate_id = settings.roles[0].id();
     let Role::Worker { role_id, .. } = &mut settings.roles[1] else {
@@ -261,23 +261,49 @@ fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
     );
     let Role::Worker {
         role_id,
-        infrastructures,
+        transports,
         ..
     } = &mut settings.roles[1]
     else {
         panic!("expected worker")
     };
     *role_id = Uuid::new_v4();
-    *infrastructures = ["not configured".into()].into();
+    *transports = ["not configured".into()].into();
     assert!(
         settings
             .validate()
             .unwrap_err()
             .to_string()
-            .contains("不存在的基础设施")
+            .contains("不存在的传输")
     );
     settings.roles.clear();
     settings.validate().unwrap();
+}
+
+/// 验证空角色列表可省略传输, 角色引用的传输必须存在.
+#[test]
+fn transports_can_be_omitted_when_no_roles_need_them() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("node.ron");
+    let settings = Settings::default();
+    let node_id = settings.node.node_id;
+    let role_id = settings.roles[0].id();
+    let worker = format!(
+        r#"worker(role_id: "{role_id}", label: None, transports: ["local"], pool: "default", capabilities: ["text.reverse/v1"], heartbeat_interval_secs: 5, max_concurrent_tasks: 1)"#
+    );
+    for roles in ["", &worker] {
+        let source = format!(
+            r#"(node: (node_id: "{node_id}", label: None, color: auto, shutdown_timeout_secs: 6), roles: [{roles}])"#
+        );
+        fs::write(&path, &source).unwrap();
+        let loaded = Settings::from_file(&path);
+        if roles.is_empty() {
+            assert!(loaded.unwrap().transports.is_empty());
+        } else {
+            assert!(format!("{:#}", loaded.unwrap_err()).contains("不存在的传输: local"));
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+    }
 }
 
 /// 验证同进程并发首次加载复用已写入的全部固定 UUID.
@@ -331,11 +357,11 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
     timeouts.report_timeout_secs = 25;
     limits.input_capacity = 7;
     limits.max_concurrent_replies = 3;
-    let Infrastructure::Nats {
+    let Transport::Nats {
         connect_timeout_secs,
         subscription_capacity,
         ..
-    } = settings.infrastructures.get_mut("nats").unwrap()
+    } = settings.transports.get_mut("nats").unwrap()
     else {
         panic!("expected NATS")
     };
@@ -356,11 +382,11 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
         (limits.input_capacity, limits.max_concurrent_replies),
         (7, 3)
     );
-    let Infrastructure::Nats {
+    let Transport::Nats {
         connect_timeout_secs,
         subscription_capacity,
         ..
-    } = &loaded.infrastructures["nats"]
+    } = &loaded.transports["nats"]
     else {
         panic!("expected NATS")
     };
@@ -409,33 +435,27 @@ fn local_and_multiple_transports_are_validated_without_rewriting() {
     let path = directory.path().join("node.ron");
     let mut settings = Settings::default();
     settings
-        .infrastructures
-        .insert("local".into(), Infrastructure::Local { capacity: 7 });
-    let Role::Authority {
-        infrastructures, ..
-    } = &mut settings.roles[0]
-    else {
+        .transports
+        .insert("local".into(), Transport::Local { capacity: 7 });
+    let Role::Authority { transports, .. } = &mut settings.roles[0] else {
         panic!("expected authority")
     };
-    infrastructures.insert("local".into());
-    let Role::Worker {
-        infrastructures, ..
-    } = &mut settings.roles[1]
-    else {
+    transports.insert("local".into());
+    let Role::Worker { transports, .. } = &mut settings.roles[1] else {
         panic!("expected worker")
     };
-    *infrastructures = ["local".into()].into();
+    *transports = ["local".into()].into();
     confy::store_path(&path, &settings).unwrap();
     let source = fs::read_to_string(&path)
         .unwrap()
-        .replace("infrastructures: [", "infrastructures: [\"local\", ");
+        .replace("transports: [", "transports: [\"local\", ");
     fs::write(&path, &source).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
-    assert_eq!(loaded.roles[0].infrastructures().len(), 2);
-    assert_eq!(loaded.roles[1].infrastructures().len(), 1);
+    assert_eq!(loaded.roles[0].transports().len(), 2);
+    assert_eq!(loaded.roles[1].transports().len(), 1);
     assert!(matches!(
-        loaded.infrastructures["local"],
-        Infrastructure::Local { capacity: 7 }
+        loaded.transports["local"],
+        Transport::Local { capacity: 7 }
     ));
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
     for replacement in [
@@ -450,20 +470,15 @@ fn local_and_multiple_transports_are_validated_without_rewriting() {
     }
     fs::write(&path, &source).unwrap();
     for (index, names, reason) in [
-        (1, vec!["local", "nats"], "只能引用一个基础设施"),
-        (1, vec![], "至少需要一个基础设施"),
-        (0, vec![], "至少需要一个基础设施"),
+        (1, vec!["local", "nats"], "只能引用一个传输"),
+        (1, vec![], "至少需要一个传输"),
+        (0, vec![], "至少需要一个传输"),
     ] {
         let mut settings = Settings::from_file(&path).unwrap();
-        let infrastructures = match &mut settings.roles[index] {
-            Role::Authority {
-                infrastructures, ..
-            }
-            | Role::Worker {
-                infrastructures, ..
-            } => infrastructures,
+        let transports = match &mut settings.roles[index] {
+            Role::Authority { transports, .. } | Role::Worker { transports, .. } => transports,
         };
-        *infrastructures = names.into_iter().map(String::from).collect();
+        *transports = names.into_iter().map(String::from).collect();
         assert!(
             settings
                 .validate()

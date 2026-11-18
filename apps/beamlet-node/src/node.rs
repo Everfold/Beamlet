@@ -1,12 +1,12 @@
-//! Node 装配角色与基础设施, 委托 Host 监督; 角色保留独立状态与身份.
-use crate::{infrastructure::Infrastructure, role::RunningRole, settings::Settings};
+//! Node 装配角色与传输, 委托 Host 监督; 角色保留独立状态与身份.
+use crate::{role::RunningRole, settings::Settings, transport::Transport};
 use anyhow::{Context, Result};
 use beamlet_host::Host;
 use std::{collections::BTreeMap, future::Future, time::Duration};
 use tokio::time::timeout;
 use tracing::{Instrument, info, warn};
 
-/// 装配基础设施和角色, 委托 Host 监督并在退出时刷新连接.
+/// 装配传输和角色, 委托 Host 监督并在退出时刷新连接.
 ///
 /// # 参数
 ///
@@ -23,7 +23,7 @@ pub(crate) async fn run(
     info!(
         event = "node.starting",
         roles = settings.roles.len(),
-        infrastructures = settings.infrastructures.len(),
+        transports = settings.transports.len(),
         "Node 启动"
     );
     let mut host = Host::new(beamlet_host::Options {
@@ -32,35 +32,30 @@ pub(crate) async fn run(
     let roles: Vec<_> = settings.roles.into_iter().map(RunningRole::new).collect();
     for role in &roles {
         info!(event = "role.prepared", role_id = %role.instance.role_id, role_session_id = %role.instance.session_id,
-            kind = role.settings.name(), label = role.settings.label(), infrastructures = ?role.settings.infrastructures(), "已分配角色会话");
+            kind = role.settings.name(), label = role.settings.label(), transports = ?role.settings.transports(), "已分配角色会话");
     }
     tokio::pin!(signal);
-    let infrastructure = async {
+    let connect_transports = async {
         let mut connected = BTreeMap::new();
-        for (name, config) in settings.infrastructures {
-            let span = tracing::info_span!("infrastructure", name = %name);
-            let connection = Infrastructure::connect(config).instrument(span).await?;
-            info!(event = "infrastructure.ready", %name, "基础设施已就绪");
+        for (name, config) in settings.transports {
+            let span = tracing::info_span!("transport", name = %name);
+            let connection = Transport::connect(config).instrument(span).await?;
+            info!(event = "transport.ready", %name, "传输已就绪");
             connected.insert(name, connection);
         }
         Ok::<_, anyhow::Error>(connected)
     };
-    let infrastructures = tokio::select! {
+    let transports = tokio::select! {
         result = &mut signal => { result?; return Ok(()); }
-        result = infrastructure => result?,
+        result = connect_transports => result?,
     };
     let shutdown = host.shutdown();
     for role in roles {
         let connections = role
             .settings
-            .infrastructures()
+            .transports()
             .iter()
-            .map(|name| {
-                infrastructures
-                    .get(name)
-                    .cloned()
-                    .context("已校验的基础设施缺失")
-            })
+            .map(|name| transports.get(name).cloned().context("已校验的传输缺失"))
             .collect::<Result<Vec<_>>>()?;
         host.add(
             role.instance.role_id.to_string(),
@@ -68,14 +63,14 @@ pub(crate) async fn run(
         );
     }
     let result = host.run(signal).await.map_err(anyhow::Error::from);
-    for (name, infrastructure) in &infrastructures {
-        match timeout(Duration::from_secs(1), infrastructure.flush()).await {
+    for (name, transport) in &transports {
+        match timeout(Duration::from_secs(1), transport.flush()).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
-                warn!(event = "infrastructure.flush_failed", %name, %error, "退出时刷新失败")
+                warn!(event = "transport.flush_failed", %name, %error, "退出时刷新失败")
             }
             Err(error) => {
-                warn!(event = "infrastructure.flush_failed", %name, %error, "退出时刷新超时")
+                warn!(event = "transport.flush_failed", %name, %error, "退出时刷新超时")
             }
         }
     }

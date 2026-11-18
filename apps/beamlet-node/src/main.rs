@@ -1,9 +1,7 @@
 //! Node 入口: 加载配置, 装配角色并协调退出.
 /// Node 内置文本处理能力的注册, 校验与阻塞计算安排.
 mod capabilities;
-/// Local 与 NATS 基础设施创建及角色端点绑定.
-mod infrastructure;
-/// 节点基础设施与角色装配, 委托 Host 监督并处理连接收尾.
+/// 节点传输与角色装配, 委托 Host 监督并处理连接收尾.
 mod node;
 /// 单个 Authority 或 Worker 配置与运行会话的装配.
 mod role;
@@ -11,6 +9,8 @@ mod role;
 mod settings;
 /// 内置 text.reverse/v1 能力的 Unicode 标量倒序处理.
 mod text_reverse;
+/// Local 与 NATS 传输创建及角色端点绑定.
+mod transport;
 
 use clap::Parser;
 use settings::{Color, Settings};

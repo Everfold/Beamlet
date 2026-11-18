@@ -9,9 +9,9 @@ use beamlet_transport_nats::Nats;
 use std::time::Duration;
 use tokio::time::timeout;
 
-/// 已创建的命名基础设施实例.
+/// 已创建的命名传输实例.
 #[derive(Clone)]
-pub(crate) enum Infrastructure {
+pub(crate) enum Transport {
     /// 进程内共享消息空间.
     Local(
         /// 克隆时共享路由和通道的句柄.
@@ -23,12 +23,12 @@ pub(crate) enum Infrastructure {
         Nats,
     ),
 }
-impl Infrastructure {
+impl Transport {
     /// 按 config 创建实例; 连接或容量无效时返回错误.
-    pub(crate) async fn connect(config: settings::Infrastructure) -> Result<Self> {
+    pub(crate) async fn connect(config: settings::Transport) -> Result<Self> {
         match config {
-            settings::Infrastructure::Local { capacity } => Ok(Self::Local(Local::new(capacity)?)),
-            settings::Infrastructure::Nats {
+            settings::Transport::Local { capacity } => Ok(Self::Local(Local::new(capacity)?)),
+            settings::Transport::Nats {
                 url,
                 connect_timeout_secs,
                 subscription_capacity,
@@ -45,7 +45,7 @@ impl Infrastructure {
                     ),
                 )
                 .await
-                .context("连接基础设施超时")?
+                .context("连接传输超时")?
                 .context("连接 NATS 失败")?;
                 Ok(Self::Nats(connection))
             }
