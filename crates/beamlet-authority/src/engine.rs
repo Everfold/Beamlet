@@ -5,7 +5,6 @@ use beamlet_api::{
 };
 use beamlet_ledger::Ledger;
 use std::{
-    collections::HashMap,
     future::Future,
     time::{Duration, Instant},
 };
@@ -18,6 +17,21 @@ use tracing::{Instrument, info, info_span, warn};
 ///
 /// - `R`: 业务结果类型, 默认 String.
 pub(crate) type Reply<R = String> = Responder<Outcome<R>>;
+
+/// 交付结束后回到 Authority 的结果及其一次性回复入口.
+struct FinishedDelivery<R> {
+    /// 本次签发的 Operation 身份.
+    operation_id: String,
+    /// 本次签发的 Attempt 身份.
+    attempt_id: String,
+    /// 接收交付的 Worker 会话.
+    worker: RoleInstance,
+    /// 向提交者发送最终状态的入口.
+    reply: Reply<R>,
+    /// 传输返回的报告或交付错误.
+    outcome: Result<WorkerReport<R>, DeliveryError>,
+}
+
 /// Authority 编排循环的内部业务输入约定, 隔离控制处理与业务准入.
 ///
 /// receive 可安全取消; stop 丢弃未签发请求, 已签发工作由编排循环排空.
@@ -185,8 +199,7 @@ where
     let session_id = instance.session_id;
     let mut stopping = false;
     let mut ledger = Ledger::new();
-    let mut replies: HashMap<String, (Reply<R>, RoleInstance, String)> = HashMap::new();
-    let mut deliveries: JoinSet<(String, Result<WorkerReport<R>, DeliveryError>)> = JoinSet::new();
+    let mut deliveries = JoinSet::<FinishedDelivery<R>>::new();
     let mut sends: JoinSet<Result<(), beamlet_api::ReplyError>> = JoinSet::new();
     let mut next_id = 0_u64;
     let mut unresolved = 0_usize;
@@ -220,15 +233,14 @@ where
             }
 
             completed = deliveries.join_next(), if !deliveries.is_empty() && sends.len() < max_concurrent_replies => {
-                let (id, outcome) = completed.expect("nonempty delivery task set").map_err(|error| RunError::Task(TransportError::new(error)))?;
-                let (reply, worker, attempt_id) = replies.remove(&id).ok_or(RunError::Invariant("缺少回复来源"))?;
-                let report_id = outcome.as_ref().ok().map(|report| report.id().clone());
-                let result = match finish(&mut ledger, &id, outcome) {
-                    Ok(result) => Outcome::Completed { operation_id: id.clone(), attempt_id: attempt_id.clone(), report_id: report_id.ok_or(RunError::Invariant("缺少报告身份"))?, worker, result },
+                let FinishedDelivery { operation_id, attempt_id, worker, reply, outcome } =
+                    completed.expect("nonempty delivery task set").map_err(|error| RunError::Task(TransportError::new(error)))?;
+                let result = match finish(&mut ledger, &operation_id, outcome) {
+                    Ok((report_id, result)) => Outcome::Completed { operation_id, attempt_id, report_id, worker, result },
                     Err(error) => {
                         unresolved += 1;
-                        warn!(event = "operation.unresolved", operation_id = %id, error = %error, "保持等待报告, 不重试");
-                        Outcome::Unresolved { operation_id: id.clone(), attempt_id, worker, reason: error.to_string() }
+                        warn!(event = "operation.unresolved", %operation_id, error = %error, "保持等待报告, 不重试");
+                        Outcome::Unresolved { operation_id, attempt_id, worker, reason: error.to_string() }
                     }
                 };
 
@@ -285,7 +297,7 @@ where
                 attempt_id = %attempt.id(),
             );
 
-            replies.insert(id.clone(), (reply, worker, attempt.id().clone()));
+            let attempt_id = attempt.id().clone();
             let call = Call {
                 pool,
                 authority: instance,
@@ -304,7 +316,7 @@ where
                     if let Err(error) = &outcome {
                         warn!(event = "attempt.delivery_failed", error = %error, "未取得有效 Report");
                     }
-                    (id, outcome)
+                    FinishedDelivery { operation_id: id, attempt_id, worker, reply, outcome }
                 }
                 .instrument(span),
             );
@@ -329,12 +341,12 @@ where
 ///
 /// # 返回值
 ///
-/// 成功返回报告业务结果的所有权; 交付, 关联或台账失败返回 FinishError.
+/// 成功返回报告身份和业务结果; 交付, 关联或台账失败返回 FinishError.
 fn finish<T, R>(
     ledger: &mut Ledger<String, String, T>,
     id: &str,
     outcome: Result<WorkerReport<R>, DeliveryError>,
-) -> Result<R, FinishError> {
+) -> Result<(String, R), FinishError> {
     let report = outcome?;
     let span = info_span!(
         "report",
@@ -353,7 +365,8 @@ fn finish<T, R>(
     ledger.close(report.operation_id())?;
     info!(event = "operation.closed", "已关闭 Operation");
 
-    Ok(report.into_result())
+    let (report_id, _, result) = report.into_parts();
+    Ok((report_id, result))
 }
 
 /// 当前模块关键行为与边界条件的单元测试, 实现在 tests/unit 目录.

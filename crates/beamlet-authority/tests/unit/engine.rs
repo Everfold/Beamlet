@@ -49,7 +49,10 @@ fn errors_preserve_pending_attempt() {
     }
 
     let report: WorkerReport = Report::new("good".into(), attempt, "olleh".into());
-    assert_eq!(finish(&mut ledger, &id, Ok(report)).unwrap(), "olleh");
+    assert_eq!(
+        finish(&mut ledger, &id, Ok(report)).unwrap(),
+        ("good".into(), "olleh".into())
+    );
     assert!(ledger.create_attempt(&id, "new".into()).is_err());
 
     let duplicate: WorkerReport = Report::new(
