@@ -453,7 +453,7 @@ async fn workers(
 ///
 /// # 返回值
 ///
-/// 满足条件返回 `Ok(())`; 查询失败或超过期限返回错误.
+/// 订阅就绪且所有 Worker 可用时返回 `Ok(())`, 超时或其他查询错误时失败.
 async fn wait_for_workers(
     client: &async_nats::Client,
     authority: RoleInstance,
@@ -462,19 +462,33 @@ async fn wait_for_workers(
 ) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(8);
     loop {
-        let view = workers(client, authority, pool).await?;
-        if expected.iter().all(|instance| {
-            view.iter().any(|item| {
-                item.presence.instance == *instance
-                    && !item.stale
-                    && item.presence.state == PresenceState::Ready
-            })
-        }) {
-            return Ok(());
+        match timeout_at(deadline, workers(client, authority, pool))
+            .await
+            .context("timed out waiting for worker registration")?
+        {
+            Ok(view) => {
+                if expected.iter().all(|instance| {
+                    view.iter().any(|item| {
+                        item.presence.instance == *instance
+                            && !item.stale
+                            && item.presence.state == PresenceState::Ready
+                    })
+                }) {
+                    return Ok(());
+                }
+            }
+            // broker 就绪后 Authority 可能仍在恢复订阅.
+            Err(error)
+                if error
+                    .downcast_ref::<async_nats::RequestError>()
+                    .is_some_and(|error| {
+                        error.kind() == async_nats::RequestErrorKind::NoResponders
+                    }) => {}
+            Err(error) => return Err(error),
         }
         ensure!(
             Instant::now() < deadline,
-            "workers not registered: {view:?}"
+            "workers not registered: {expected:?}"
         );
         sleep(Duration::from_millis(60)).await;
     }
