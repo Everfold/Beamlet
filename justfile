@@ -43,10 +43,10 @@ test:
     cargo nextest run --workspace
 
 check-kernel-model:
-    quint typecheck spec/kernel/tests.qnt
-    quint test spec/kernel/tests.qnt
-    quint run spec/kernel/tests.qnt --invariant=invariants --max-samples=1000 --max-steps=30 --seed=42 --verbosity=1
-    quint verify spec/kernel/tests.qnt --backend=tlc --invariant=invariants --max-steps=10 --verbosity=1
+    quint typecheck archive/spec/kernel/tests.qnt
+    quint test archive/spec/kernel/tests.qnt
+    quint run archive/spec/kernel/tests.qnt --invariant=invariants --max-samples=1000 --max-steps=30 --seed=42 --verbosity=1
+    quint verify archive/spec/kernel/tests.qnt --backend=tlc --invariant=invariants --max-steps=10 --verbosity=1
 
 doc:
     cargo doc --workspace --no-deps --document-private-items --open

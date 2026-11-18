@@ -140,7 +140,7 @@ Attempt::from_parts 用于还原已签发授权数据, 不代表新增授权, �
 
 ## Quint 模型
 
-模型位于 `spec/kernel/`, 独立于 Rust 库与类型状态表示.
+模型位于 `archive/spec/kernel/`, 独立于 Rust 库与类型状态表示.
 
 | 文件 | 职责 |
 | --- | --- |

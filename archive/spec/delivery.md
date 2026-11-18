@@ -4,11 +4,11 @@
 
 ## 1. 职责与边界
 
-领域原语仍只有 [Operation、Attempt、Report](kernel.md). [beamlet-authority](../crates/beamlet-authority/src/lib.rs) 提供 Authority 的 Operation 创建、Attempt 签发、Report 接受及 Operation 关闭; Worker 执行收到的 Attempt 并创建 Report. [beamlet-worker](../crates/beamlet-worker/src/lib.rs) 提供 Worker 执行、能力注册、报告创建和心跳驱动, 不持有 ledger; 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
+领域原语仍只有 [Operation、Attempt、Report](kernel.md). [beamlet-authority](../../crates/beamlet-authority/src/lib.rs) 提供 Authority 的 Operation 创建、Attempt 签发、Report 接受及 Operation 关闭; Worker 执行收到的 Attempt 并创建 Report. [beamlet-worker](../../crates/beamlet-worker/src/lib.rs) 提供 Worker 执行、能力注册、报告创建和心跳驱动, 不持有 ledger; 登记表不持有 Operation. 共享 Worker 不表示共享或接管其他 Authority 的 Operation.
 
-Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构与版本, 不管理连接、选择策略或生命周期.
+Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构与版本, 不管理连接、选择策略或生命周期.
 
-Node 上的 Authority 通过配置的传输端点接收结构化请求并回复. 嵌入方还可以为 Authority 库提供 LocalInbox. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. Node 按配置装配 Local 或 NATS, Console 使用 NATS.
+Node 上的 Authority 通过配置的传输端点接收结构化请求并回复. 嵌入方还可以为 Authority 库提供 LocalInbox. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. Node 按配置装配 Local 或 NATS, Console 使用 NATS.
 
 两种传输使用相同的 WorkerInbox、Delivery、AuthorityInbox、PresenceChannel 和 ClientTransport 契约. Authority 接收发现、请求、完整公告及连接变化事件, 自己实施查询、选择和业务准入; 适配器不保存 Worker 租约或 Operation. local 的每次 `new(capacity)` 创建隔离消息空间, clone 共享该空间, 重复绑定同一 pool/角色/会话返回错误. 有界调用队列满时可以明确返回 NotDelivered; 发现与公告允许丢失, 由调用者的发现窗口、探测和后续完整心跳恢复.
 
@@ -53,7 +53,7 @@ JSON 外层统一为 `{ "version": 3, "body": ... }`. 未知版本、格式错�
 | `beamlet.v3.<pool>.worker.probe` | 请求 Worker 立即发布快照 |
 | `beamlet.v3.<pool>.worker.<role_id>.<session_id>.calls` | 指定 Worker 会话的调用 |
 
-[beamlet-client](../crates/beamlet-client/src/lib.rs) 统一提供发现、Worker 查询和提交; Console 把配置的 pools 交给 Client 发出发现查询, 在 `discovery_window_ms` 指定的窗口内收集多份回复 (默认 1000 毫秒). 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
+[beamlet-client](../../crates/beamlet-client/src/lib.rs) 统一提供发现、Worker 查询和提交; Console 把配置的 pools 交给 Client 发出发现查询, 在 `discovery_window_ms` 指定的窗口内收集多份回复 (默认 1000 毫秒). 按 Authority 实例去重并保留 pool 信息; 发现不是只取首个回复的普通 request. 后续 Worker 查询和创建请求均发到选定 Authority 会话.
 
 Worker 选择为 `Any` 或 `Exact(instance)`. 两者都要求明确 pool 和能力. Authority 创建 Operation 前检查租约、状态、能力及会话. Any 选定一个实例后走与 Exact 相同的定向路径. 不承诺公平、轮询或负载均衡. Exact 失效时拒绝, 不回退到其他会话.
 
@@ -82,7 +82,7 @@ Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务�
 
 ## 6. 验证
 
-普通 `cargo test --workspace` 不需要 NATS. [登记测试](../crates/beamlet-authority/tests/unit/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [Authority 公开接口测试](../crates/beamlet-authority/tests/local.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../crates/beamlet-authority/tests/unit/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
+普通 `cargo test --workspace` 不需要 NATS. [登记测试](../../crates/beamlet-authority/tests/unit/registry.rs)使用可控时间验证期限、序号、会话隔离、重连与清理; [Authority 公开接口测试](../../crates/beamlet-authority/tests/local.rs)验证定向交付、无回退、容量与报告关联; [入口测试](../../crates/beamlet-authority/tests/unit/ingress/tests.rs)验证并发、满载、退出与失败语义. protocol 测试验证版本及 v3 文本格式; NATS crate 的 subject 测试验证路由隔离. 两个适配器运行[同一套公开接口契约测试](../../tests/support/transport_contract.rs), 覆盖会话/pool 路由、能力拒收、乱序与错误报告、超时不重发、停止排空、发现、请求及探测公告. local 另有容量/重复绑定/自定义数据测试.
 
 显式运行 `cargo test -p beamlet-node --test composition -- --ignored --nocapture` 可进行真实 NATS 组合验收. 测试要求 Unix 和 PATH 中的 `nats-server`, 使用临时配置、独立端口和子进程并自动回收. 覆盖一个进程内多个同类型角色、多连接共享/隔离、精确角色定向、同角色不同会话、跨 Node 运行、正常退出、重连和配置不变. 普通 Cargo 测试默认忽略该验收, 不依赖服务端. 这些检查不构成任意网络故障下的恰好一次证明.
 
@@ -90,10 +90,10 @@ Console 的真实 NATS 并发验收使用 `cargo test -p beamlet-console --test 
 
 NATS 适配器契约验收使用 `cargo test -p beamlet-transport-nats --test contract -- --include-ignored`, 需要 PATH 中的 `nats-server`.
 
-Worker 的[公开接口测试](../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限.
+Worker 的[公开接口测试](../../crates/beamlet-worker/tests/concurrency.rs)验证有限/无限并发、乱序报告、排空、处理失败和 panic; [生命周期测试](../../crates/beamlet-worker/tests/lifecycle.rs)验证独立心跳、探测、重连、报告背压、取消清理及公告期限.
 
 Authority 的公开接口测试同时验证业务满载时控制处理、本地 EOF 后继续远端接收、取消运行后释放端点与子任务, 以及自定义 Rust 输入/结果. Authority 运行参数以 Options 注入, 支持自定义 LocalInbox 和只读 Directory; 直接运行时由调用方管理停止信号及传输缓冲刷新.
 
-Client 的[公开接口测试](../crates/beamlet-client/tests/client.rs)验证发现去重、总期限与收集窗口、取消清理、并发及回复校验. `Client::new(transport, options)` 不依赖 console 或角色库; `discover`、`workers`、`submit` 自动分配请求身份, `request` 可使用调用方提供的 UUID. Client 不保存可变目标选择, 调用者传入完整快照. Request 只交给传输一次, 本地错误不会变成业务 Report; 超时和丢弃 future 不取消远端执行. Options 使用 Duration, console 继续转换已有字段且不重写文件.
+Client 的[公开接口测试](../../crates/beamlet-client/tests/client.rs)验证发现去重、总期限与收集窗口、取消清理、并发及回复校验. `Client::new(transport, options)` 不依赖 console 或角色库; `discover`、`workers`、`submit` 自动分配请求身份, `request` 可使用调用方提供的 UUID. Client 不保存可变目标选择, 调用者传入完整快照. Request 只交给传输一次, 本地错误不会变成业务 Report; 超时和丢弃 future 不取消远端执行. Options 使用 Duration, console 继续转换已有字段且不重写文件.
 
 测试实现在各包的 `tests/` 下. `tests/unit/` 保留需要访问私有状态的单元测试, 由 `src` 中的条件模块声明加载; 其余通过公开接口或真实二进制验证. 独立 examples 已删除, 不作为测试入口维护.

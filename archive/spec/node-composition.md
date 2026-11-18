@@ -160,7 +160,7 @@ Report 身份按接收顺序分配, 报告按完成顺序返回, 不等待更早
 
 ## 运行管理和退出
 
-Node 先校验整个配置、生成各角色会话并连接基础设施, 再把已装配的角色 future 交给 [beamlet-host](../crates/beamlet-host/src/lib.rs) 统一启动和监督. 每个 Authority 独立管理 Operation、登记表和在途上限; 每个 Worker 有自己的并发上限和有界接收队列. 基础设施共享不共享角色业务状态.
+Node 先校验整个配置、生成各角色会话并连接基础设施, 再把已装配的角色 future 交给 [beamlet-host](../../crates/beamlet-host/src/lib.rs) 统一启动和监督. 每个 Authority 独立管理 Operation、登记表和在途上限; 每个 Worker 有自己的并发上限和有界接收队列. 基础设施共享不共享角色业务状态.
 
 连接中断由对应 NATS 实例重连, 不终止其他基础设施的角色. 某个角色不可恢复地退出或启动失败时, Node 通知所有角色停止新接收并排空, 然后返回失败; 不在进程内偷偷重启角色. Ctrl+C 同样广播一次退出请求, 每个 Worker 独立公告 draining / offline. 按 `shutdown_timeout_secs` 等待角色排空, 默认 6 秒, 超时返回失败并停止等待; 已开始的阻塞执行不能强行取消, 任务也不会自动重试. 宿主汇总首次失败、排空期间的其他错误和超时未完成任务, 以角色 UUID 定位; 后续错误不重置排空期限. 库发送 `host.stopping` 日志, Node 保留 `node.stopped`. 退出时对每个连接最多等待 1 秒刷新, 刷新不保证远端已收到.
 

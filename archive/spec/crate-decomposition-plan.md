@@ -6,7 +6,7 @@
 
 ## 1. 现有问题和拆分原则
 
-目前适合保留的是从基础到编排的三层职责: `primitives`、`kernel`、`ledger`, 分别负责原语、单个 Operation 的合法转换、多个 Operation 的在线状态管理. Ledger 表示执行台账, 保存 Operation 当前状态及已使用的 Attempt 身份, 不承诺持久化或完整事件历史. 术语见 [领域词汇](../GLOSSARY.md).
+目前适合保留的是从基础到编排的三层职责: `primitives`、`kernel`、`ledger`, 分别负责原语、单个 Operation 的合法转换、多个 Operation 的在线状态管理. Ledger 表示执行台账, 保存 Operation 当前状态及已使用的 Attempt 身份, 不承诺持久化或完整事件历史. 术语见 [领域词汇](../../GLOSSARY.md).
 
 拆分前的耦合集中在应用代码:
 
@@ -267,7 +267,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 丢弃 Host 或运行 future 会通知停止并释放所拥有的 future; 已启动异步任务请求中止. 需要正常排空时必须完成停止信号并等待 run 返回. Shutdown 支持所有克隆及晚等待者; 不允许撤回停止通知.
 - node 删除自身的监督循环和 shutdown 模块, 保留 RON 校验、UUID 生成、基础设施连接/刷新与角色装配. 原 `shutdown_timeout_secs` 转为 Options 的 Duration, 配置格式与加载行为保持不变. 库输出 host.stopping, node 继续输出 node.stopped.
 - 本阶段已通过外部 consumer 嵌入 3 个 Authority、3 个 Worker 与两个隔离 local 消息空间, 通过 Client 完成 5 次定向调用并共同排空. 多角色组合和宿主生命周期分别由 Node 组合测试与 Host 公开接口测试持续验证.
-- 原应用监督/停止测试迁入[公开接口测试](../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、正常退出和配置不改写.
+- 原应用监督/停止测试迁入[公开接口测试](../../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、正常退出和配置不改写.
 - 验证通过: workspace 测试、9 项宿主公开接口测试及文档示例、全部目标/feature 的 clippy、严格 rustdoc. 两个 workspace 外 consumer 分别运行纯宿主自定义任务和完整多角色示例; 纯宿主正常依赖树没有其他 Beamlet crate、消息后端、serde 或配置库.
 - 最终验收同时通过 node/console 的真实 NATS 测试和 NATS 适配器契约测试. P0–P6 已完成, 后续持久化、自动重试或其他消息后端属于独立议题.
 
