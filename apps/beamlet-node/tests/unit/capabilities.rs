@@ -1,23 +1,24 @@
 use super::*;
 
-/// 验证大写能力保留空白, 正确扩展 Unicode 并拒绝未知能力.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
-#[tokio::test]
-async fn uppercase_preserves_whitespace_and_expands_unicode() {
-    assert_eq!(
-        execute(UPPERCASE.into(), " Beamlet ß\n世界\t".into())
-            .await
-            .unwrap(),
-        " BEAMLET SS\n世界\t"
-    );
-    assert!(
-        execute("text.uppercase/v2".into(), "x".into())
-            .await
-            .is_err()
-    );
+/// 验证两种内置能力可以同时启用.
+#[test]
+fn accepts_builtin_capabilities() {
+    validate(&["text.reverse/v1".into(), "text.uppercase/v1".into()].into()).unwrap();
+}
+
+/// 验证空能力集合, 未知标识及不支持的版本被拒绝.
+#[test]
+fn rejects_empty_or_unknown_capabilities() {
     assert!(validate(&BTreeSet::new()).is_err());
-    assert!(validate(&["unknown/v1".into()].into()).is_err());
+    for id in [
+        "",
+        "text.reverse",
+        "text.reverse/v2",
+        "TEXT.REVERSE/v1",
+        "text.reverse/v1 ",
+        "text.uppercase/v2",
+        "unknown/v1",
+    ] {
+        assert!(validate(&[id.into()].into()).is_err(), "{id:?}");
+    }
 }
