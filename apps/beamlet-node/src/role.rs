@@ -1,14 +1,11 @@
 //! 将一种角色的配置和基础设施装配为独立运行实例.
 use crate::{
     infrastructure::Infrastructure,
-    local,
     settings::{Role, RoleSettings},
-    terminal,
 };
 use anyhow::{Context, Result};
 use beamlet_api::{AuthorityInfo, RoleInstance};
 use beamlet_host::Shutdown;
-use tokio::sync::mpsc;
 use tracing::{Instrument, info, info_span};
 use uuid::Uuid;
 
@@ -42,7 +39,6 @@ impl RunningRole {
     ///
     /// - `self`: 当前 `RunningRole` 的值; 调用后转移其所有权(Copy 类型按值复制).
     /// - `infrastructures`: 该角色引用的已创建基础设施, 顺序固定.
-    /// - `local`: 分配给该角色的本地终端队列; Worker 不使用文本提交.
     /// - `shutdown`: 停止通知或 future; 完成后停止新接收并按角色语义排空.
     ///
     /// # 返回值
@@ -51,7 +47,6 @@ impl RunningRole {
     pub(crate) async fn run(
         self,
         infrastructures: Vec<Infrastructure>,
-        local: terminal::Input,
         shutdown: Shutdown,
     ) -> Result<()> {
         let Self { settings, instance } = self;
@@ -70,12 +65,8 @@ impl RunningRole {
                     for infrastructure in &infrastructures {
                         infrastructure.attach(&info, &mut transports).await?;
                     }
-                    let authority =
-                        beamlet_authority::Authority::new(info.clone(), (&config).into())?;
-                    let input = local::Input::new(info, authority.directory(), local)?;
-                    authority
-                        .run_with_local(transports, input, shutdown.wait())
-                        .await?;
+                    let authority = beamlet_authority::Authority::new(info, (&config).into())?;
+                    authority.run(transports, shutdown.wait()).await?;
                     for infrastructure in &infrastructures {
                         infrastructure.flush().await?;
                     }
@@ -106,26 +97,5 @@ impl RunningRole {
         }
         .instrument(span)
         .await
-    }
-    /// 按角色配置创建本地队列, Authority 同时提供终端路由目标.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `RunningRole` 的共享引用.
-    ///
-    /// # 返回值
-    ///
-    /// 二元组 `(目标, 接收端)`; Authority 的目标为 `Some`, Worker 的目标为 `None`.
-    pub(crate) fn local_input(&self) -> (Option<terminal::Target>, terminal::Input) {
-        let (send, receive) = mpsc::channel(match &self.settings.kind {
-            Role::Authority(config) => config.input_capacity,
-            Role::Worker(_) => 1,
-        });
-        let target = matches!(self.settings.kind, Role::Authority(_)).then(|| terminal::Target {
-            instance: self.instance,
-            label: self.settings.label.clone(),
-            send,
-        });
-        (target, receive)
     }
 }

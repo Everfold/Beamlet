@@ -157,18 +157,6 @@ impl Cluster {
         }
     }
 
-    /// 向 process 写入一条 line, 返回写入结果.
-    fn input(&mut self, process: usize, line: &str) -> Result<()> {
-        let stdin = self.processes[process]
-            .child
-            .stdin
-            .as_mut()
-            .context("node stdin closed")?;
-        writeln!(stdin, "{line}")?;
-        stdin.flush()?;
-        Ok(())
-    }
-
     /// 强制终止指定测试子进程并等待回收.
     ///
     /// # 参数
@@ -719,30 +707,6 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         "node UUID still routes tasks"
     );
 
-    // Local stdin is read once; only the chosen Authority may create the operation.
-    writeln!(
-        cluster.processes[first_process]
-            .child
-            .stdin
-            .as_mut()
-            .context("node stdin")?,
-        "/authority {}\n/pool blue\n/capability text.uppercase/v1\nlocal sample",
-        ids[1]
-    )?;
-    let deadline = Instant::now() + Duration::from_secs(4);
-    loop {
-        let log = fs::read_to_string(&cluster.processes[first_process].log)?;
-        if log.contains("LOCAL SAMPLE") {
-            break;
-        }
-        ensure!(
-            Instant::now() < deadline,
-            "local Authority selection did not execute"
-        );
-        sleep(Duration::from_millis(40)).await;
-    }
-    cluster.processes[first_process].child.stdin.take(); // EOF must leave all roles running.
-
     // One failed broker does not shut down unrelated infrastructure/roles.
     cluster.kill(primary_broker)?;
     sleep(Duration::from_millis(250)).await;
@@ -896,7 +860,7 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         "moved config rewritten"
     );
     println!(
-        "PASS: multiple roles, infrastructure isolation, exact role routing, independent sessions, reconnect, local selection and shutdown"
+        "PASS: multiple roles, infrastructure isolation, exact role routing, independent sessions, reconnect and shutdown"
     );
     Ok(())
 }
@@ -1094,7 +1058,7 @@ async fn configured_report_deadlines_and_input_capacity_are_independent_per_auth
     Ok(())
 }
 
-/// 纯 Local Node 可执行任务, 不同命名空间相互隔离, 配置不被写回.
+/// 验证纯 Local Node 忽略标准输入, 隔离 Worker 登记并正常退出.
 #[tokio::test]
 async fn local_only_node_runs_without_broker_and_keeps_spaces_isolated() -> Result<()> {
     let mut cluster = Cluster::new()?;
@@ -1118,28 +1082,25 @@ async fn local_only_node_runs_without_broker_and_keeps_spaces_isolated() -> Resu
             })
         })
         .await?;
-    cluster.input(node, "local-task")?;
-    cluster
-        .wait_log(node, |text| text.contains("result: \"ksat-lacol\""))
-        .await?;
-    cluster.input(node, "/capability text.uppercase/v1")?;
-    cluster.input(node, "unreachable")?;
-    cluster
-        .wait_log(node, |text| text.contains("response=Rejected"))
-        .await?;
-    cluster.input(node, "/workers")?;
-    let text = cluster
-        .wait_log(node, |text| text.contains("Worker 列表"))
-        .await?;
-    let line = text
-        .lines()
-        .find(|line| line.contains("Worker 列表"))
-        .context("worker query missing")?;
-    ensure!(
-        line.contains(&inside.to_string()) && !line.contains(&outside.to_string()),
-        "local spaces leaked: {line}"
-    );
+    let mut stdin = cluster.processes[node]
+        .child
+        .stdin
+        .take()
+        .context("node stdin")?;
+    writeln!(stdin, "/roles\n/workers\nlocal-task")?;
+    drop(stdin);
     cluster.stop(node).await?;
+    let log = fs::read_to_string(&cluster.processes[node].log)?;
+    ensure!(
+        !log.contains("/roles") && !log.contains("event=\"operation.created\""),
+        "node handled terminal input: {log}"
+    );
+    ensure!(
+        !log.lines()
+            .any(|line| line.contains("event=\"worker.presence\"")
+                && line.contains(&outside.to_string())),
+        "local spaces leaked: {log}"
+    );
     ensure!(
         fs::read_to_string(cluster.root.path().join("local-only.ron"))? == source,
         "configuration rewritten"
@@ -1152,18 +1113,21 @@ async fn local_only_node_runs_without_broker_and_keeps_spaces_isolated() -> Resu
 #[ignore = "requires nats-server; explicit mixed transport test"]
 async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Result<()> {
     let mut cluster = Cluster::new()?;
-    let port = port()?;
-    let broker = cluster.broker(port, "mixed-broker")?;
-    let client = connect(port).await?;
+    let worker_port = port()?;
+    let broker = cluster.broker(worker_port, "mixed-broker")?;
+    let control_port = port()?;
+    cluster.broker(control_port, "control-broker")?;
+    let control = connect(control_port).await?;
+    let client = connect(worker_port).await?;
     let authority_id = Uuid::new_v4();
     let local_worker = Uuid::new_v4();
     let remote_worker = Uuid::new_v4();
     let infrastructures = format!(
-        r#""local": local(capacity: 8), "remote": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote-alias": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 5, subscription_capacity: 16)"#
+        r#""local": local(capacity: 8), "control": nats(url: "nats://127.0.0.1:{control_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote-alias": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16)"#
     );
     let authority_role = role(authority_id, "local", &authority(r#""blue""#, 10, 2)).replace(
         r#"infrastructures: ["local"]"#,
-        r#"infrastructures: ["local", "remote", "remote-alias"]"#,
+        r#"infrastructures: ["local", "control", "remote", "remote-alias"]"#,
     );
     let source = config(
         Uuid::new_v4(),
@@ -1217,24 +1181,30 @@ async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Res
                 >= 2
         })
         .await?;
-    cluster.input(node, "offline-local")?;
-    cluster
-        .wait_log(node, |text| text.contains("result: \"lacol-enilffo\""))
-        .await?;
-    cluster.input(node, "/workers")?;
-    let text = cluster
-        .wait_log(node, |text| text.contains("Worker 列表"))
-        .await?;
-    let line = text
-        .lines()
-        .find(|line| line.contains("Worker 列表"))
-        .context("worker query missing")?;
+    let view = workers(&control, authority, &pool).await?;
     ensure!(
-        line.contains("stale: true") && line.contains("stale: false"),
-        "connection state was not isolated: {line}"
+        view.iter()
+            .any(|worker| worker.presence.instance == local_worker && !worker.stale)
+            && view
+                .iter()
+                .any(|worker| worker.presence.instance == remote_worker && worker.stale),
+        "connection state was not isolated: {view:?}"
     );
-    cluster.broker(port, "mixed-restarted")?;
-    let client = connect(port).await?;
+    completed(
+        submit(
+            &control,
+            authority,
+            &pool,
+            local_worker,
+            "text.reverse/v1",
+            "offline-local",
+        )
+        .await?,
+        local_worker,
+        "lacol-enilffo",
+    )?;
+    cluster.broker(worker_port, "mixed-restarted")?;
+    let client = connect(worker_port).await?;
     wait_for_workers(&client, authority, &pool, &[local_worker, remote_worker]).await?;
     completed(
         submit(

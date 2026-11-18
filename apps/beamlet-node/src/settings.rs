@@ -74,7 +74,7 @@ pub(crate) struct Authority {
     pub worker_timeout_secs: u64,
     /// 单次交付等待 Worker Report 的最长时长, 单位为秒.
     pub report_timeout_secs: u64,
-    /// 本地和远端业务入口各自的队列容量.
+    /// 各传输入口共用的业务队列容量.
     pub input_capacity: usize,
     /// 等待发送的结果/拒绝回复上限, 必须大于 0.
     pub max_concurrent_replies: usize,

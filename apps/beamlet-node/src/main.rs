@@ -3,16 +3,12 @@
 mod capabilities;
 /// Local 与 NATS 基础设施创建及角色端点绑定.
 mod infrastructure;
-/// Node 终端到 Authority 结构化本地提交的转换.
-mod local;
 /// 节点基础设施与角色装配, 委托 Host 监督并处理连接收尾.
 mod node;
 /// 单个 Authority 或 Worker 配置与运行会话的装配.
 mod role;
 /// 应用 RON 配置的首次创建, 加载与语义校验, 不迁移已有文件.
 mod settings;
-/// Node 唯一 stdin 读取入口与按 Authority 选择的本地文本路由.
-mod terminal;
 /// 内置 text.reverse/v1 能力的 Unicode 标量倒序处理.
 mod text_reverse;
 

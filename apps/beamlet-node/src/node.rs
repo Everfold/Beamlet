@@ -1,5 +1,5 @@
 //! Node 装配角色与基础设施, 委托 Host 监督; 角色保留独立状态与身份.
-use crate::{infrastructure::Infrastructure, role::RunningRole, settings::Settings, terminal};
+use crate::{infrastructure::Infrastructure, role::RunningRole, settings::Settings};
 use anyhow::{Context, Result};
 use beamlet_host::Host;
 use std::{collections::BTreeMap, future::Future, time::Duration};
@@ -51,7 +51,6 @@ pub(crate) async fn run(
         result = infrastructure => result?,
     };
     let shutdown = host.shutdown();
-    let mut targets = Vec::new();
     for role in roles {
         let connections = role
             .settings
@@ -64,18 +63,12 @@ pub(crate) async fn run(
                     .context("已校验的基础设施缺失")
             })
             .collect::<Result<Vec<_>>>()?;
-        let (target, local) = role.local_input();
-        targets.extend(target);
         host.add(
             role.instance.role_id.to_string(),
-            role.run(connections, local, shutdown.clone())
-                .in_current_span(),
+            role.run(connections, shutdown.clone()).in_current_span(),
         );
     }
-    let result = host
-        .run_with_background(signal, terminal::run(targets, shutdown))
-        .await
-        .map_err(anyhow::Error::from);
+    let result = host.run(signal).await.map_err(anyhow::Error::from);
     for (name, infrastructure) in &infrastructures {
         match timeout(Duration::from_secs(1), infrastructure.flush()).await {
             Ok(Ok(())) => {}
