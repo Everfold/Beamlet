@@ -74,7 +74,7 @@ fn workers() -> Vec<WorkerView> {
 fn selected() -> Session {
     let mut session = Session::new(
         BTreeSet::from([Pool::default()]),
-        Settings::default().max_in_flight_requests,
+        Settings::default().client.max_in_flight_requests,
     );
     session.discovered(authorities());
     session.line("/authority 1".into()).unwrap();

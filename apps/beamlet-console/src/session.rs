@@ -706,19 +706,22 @@ fn index(input: &str) -> Result<usize> {
 pub(crate) async fn run(settings: Settings) -> Result<()> {
     tracing::info!(event = "console.starting", "Console 启动");
     settings.validate()?;
-    let connect_timeout = Duration::from_secs(settings.connect_timeout_secs);
-    let client_options = (&settings).into();
+    let connect_timeout = Duration::from_secs(settings.nats.connect_timeout_secs);
+    let client_options = (&settings.client).into();
     let client = beamlet_transport_nats::Nats::connect(
-        &settings.nats_url,
+        &settings.nats.url,
         beamlet_transport_nats::Options {
             connect_timeout,
-            subscription_capacity: settings.subscription_capacity,
+            subscription_capacity: settings.nats.subscription_capacity,
         },
     )
     .await
     .context("连接 NATS 失败")?;
     let client = beamlet_client::Client::new(client, client_options)?;
-    let mut session = Session::new(settings.pools, settings.max_in_flight_requests);
+    let mut session = Session::new(
+        settings.client.pools,
+        settings.client.max_in_flight_requests,
+    );
     let work = drive(&mut session, terminal_input(), move |action| {
         action.execute(client.clone())
     });

@@ -43,35 +43,51 @@ impl Color {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Settings {
-    /// 要连接的 NATS 服务地址, 不能为空.
-    pub nats_url: String,
-    /// 整个应用的终端日志颜色策略.
+    /// 整个应用的日志颜色策略.
     pub color: Color,
-    /// Console 允许发现和选择的 pool 集合.
-    pub pools: BTreeSet<Pool>,
-    /// 单次请求的总等待期限, 单位为秒, 必须为正.
-    pub request_timeout_secs: u64,
-    /// 发现入口就绪后的回复收集窗口, 单位为毫秒, 短于总请求期限.
-    pub discovery_window_ms: u64,
-    /// 终端网络动作的在途上限, 包括发现, 查询和提交, 必须为正数.
-    pub max_in_flight_requests: usize,
-    /// 首次连接的最长等待时长, 单位为秒, 必须为正.
+    /// NATS 地址和订阅配置.
+    pub nats: NatsSettings,
+    /// 发现范围, 请求期限及在途上限.
+    pub client: ClientSettings,
+}
+
+/// Console 使用的 NATS 连接.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct NatsSettings {
+    /// NATS 服务地址.
+    pub url: String,
+    /// 首次连接期限, 单位为秒.
     pub connect_timeout_secs: u64,
-    /// 每个 NATS 订阅的有界缓冲容量, 不是所有订阅共享的总量.
+    /// 每个订阅的接收缓冲容量.
     pub subscription_capacity: usize,
 }
 
-impl From<&Settings> for beamlet_client::Options {
+/// Console 的发现与请求配置.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ClientSettings {
+    /// 允许发现和选择的 pool.
+    pub pools: BTreeSet<Pool>,
+    /// 单次请求总期限, 单位为秒.
+    pub request_timeout_secs: u64,
+    /// 发现回复收集窗口, 单位为毫秒.
+    pub discovery_window_ms: u64,
+    /// 同时在途的发现, 查询和提交总数.
+    pub max_in_flight_requests: usize,
+}
+
+impl From<&ClientSettings> for beamlet_client::Options {
     /// 将 Console 文件配置中的期限转换为 Client 运行参数.
     ///
     /// # 参数
     ///
-    /// - `settings`: 调用方提供的配置; 本函数按其身份, 期限和基础设施设置运行.
+    /// - `settings`: 发现窗口与请求期限.
     ///
     /// # 返回值
     ///
     /// 以 `Duration` 表达请求期限和发现窗口的 Options; 不修改配置或执行校验.
-    fn from(settings: &Settings) -> Self {
+    fn from(settings: &ClientSettings) -> Self {
         Self {
             request_timeout: std::time::Duration::from_secs(settings.request_timeout_secs),
             discovery_window: std::time::Duration::from_millis(settings.discovery_window_ms),
@@ -87,14 +103,18 @@ impl Default for Settings {
     /// 包含默认 NATS 地址, pool, 颜色和各项期限/容量的配置.
     fn default() -> Self {
         Self {
-            nats_url: "nats://127.0.0.1:4222".into(),
             color: Color::Auto,
-            pools: BTreeSet::from([Pool::default()]),
-            request_timeout_secs: 10,
-            discovery_window_ms: 1000,
-            max_in_flight_requests: 16,
-            connect_timeout_secs: 10,
-            subscription_capacity: 65536,
+            nats: NatsSettings {
+                url: "nats://127.0.0.1:4222".into(),
+                connect_timeout_secs: 10,
+                subscription_capacity: 65536,
+            },
+            client: ClientSettings {
+                pools: BTreeSet::from([Pool::default()]),
+                request_timeout_secs: 10,
+                discovery_window_ms: 1000,
+                max_in_flight_requests: 16,
+            },
         }
     }
 }
@@ -139,11 +159,11 @@ impl Settings {
     ///
     /// 全部合法时返回 `Ok(())`; 任一约束不满足时返回带字段信息的错误.
     pub(crate) fn validate(&self) -> Result<()> {
-        ensure!(!self.pools.is_empty(), "Console 至少需要一个 pool");
-        ensure!(!self.nats_url.trim().is_empty(), "nats_url 不能为空");
+        ensure!(!self.client.pools.is_empty(), "Console 至少需要一个 pool");
+        ensure!(!self.nats.url.trim().is_empty(), "nats.url 不能为空");
         for (name, seconds) in [
-            ("request_timeout_secs", self.request_timeout_secs),
-            ("connect_timeout_secs", self.connect_timeout_secs),
+            ("request_timeout_secs", self.client.request_timeout_secs),
+            ("connect_timeout_secs", self.nats.connect_timeout_secs),
         ] {
             ensure!(
                 seconds > 0
@@ -154,18 +174,18 @@ impl Settings {
             );
         }
         ensure!(
-            self.discovery_window_ms > 0
-                && std::time::Duration::from_millis(self.discovery_window_ms)
-                    < std::time::Duration::from_secs(self.request_timeout_secs),
+            self.client.discovery_window_ms > 0
+                && std::time::Duration::from_millis(self.client.discovery_window_ms)
+                    < std::time::Duration::from_secs(self.client.request_timeout_secs),
             "discovery_window_ms 必须大于 0 且小于 request_timeout_secs 指定的期限"
         );
         ensure!(
-            self.max_in_flight_requests > 0,
+            self.client.max_in_flight_requests > 0,
             "max_in_flight_requests 必须大于 0"
         );
         ensure!(
-            self.subscription_capacity > 0
-                && self.subscription_capacity <= tokio::sync::Semaphore::MAX_PERMITS,
+            self.nats.subscription_capacity > 0
+                && self.nats.subscription_capacity <= tokio::sync::Semaphore::MAX_PERMITS,
             "subscription_capacity 必须大于 0 且不超过通道容量范围"
         );
         Ok(())
