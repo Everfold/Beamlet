@@ -184,6 +184,94 @@ pub(crate) struct Settings {
     /// 需要装配的角色列表; 可为空, 也可包含多个同类型角色.
     pub roles: Vec<Role>,
 }
+impl beamlet_app_config::Config for Settings {
+    const COMMENTS: &[(&str, &str)] = &[
+        ("node.node_id", "固定节点 UUID / Persistent node UUID"),
+        (
+            "node.label",
+            "显示名称 / Display name (Some(\"name\") | None)",
+        ),
+        (
+            "node.color",
+            "终端颜色 / Terminal color (auto | always | never)",
+        ),
+        (
+            "node.shutdown_timeout_secs",
+            "退出时等待角色结束的秒数 / Seconds to wait for roles to stop",
+        ),
+        (
+            "infrastructures",
+            "命名传输 / Named transports (local or nats)",
+        ),
+        (
+            "infrastructures.capacity",
+            "每个本地通道缓冲的消息数 / Buffered messages per local channel",
+        ),
+        ("infrastructures.url", "NATS 服务地址 / NATS server URL"),
+        (
+            "infrastructures.connect_timeout_secs",
+            "首次连接超时(秒) / Initial connection timeout (s)",
+        ),
+        (
+            "infrastructures.subscription_capacity",
+            "每个订阅缓冲的消息数 / Buffered messages per subscription",
+        ),
+        (
+            "roles",
+            "可添加多个同类角色 / Multiple roles of each kind allowed",
+        ),
+        (
+            "roles.role_id",
+            "每个角色独有的固定 UUID / Unique persistent UUID per role",
+        ),
+        (
+            "roles.label",
+            "显示名称 / Display name (Some(\"name\") | None)",
+        ),
+        (
+            "roles.infrastructures",
+            "传输名称, Worker 选一个 / Named transports, exactly one per Worker",
+        ),
+        (
+            "roles.pools",
+            "Authority 服务的池 / Pools served by this Authority",
+        ),
+        (
+            "roles.timeouts.worker_timeout_secs",
+            "心跳过期时间(秒) / Worker heartbeat expiry (s)",
+        ),
+        (
+            "roles.timeouts.report_timeout_secs",
+            "等待单次报告的秒数 / Seconds to wait for an attempt report",
+        ),
+        (
+            "roles.limits.input_capacity",
+            "各传输共用的请求队列容量 / Request queue capacity across transports",
+        ),
+        (
+            "roles.limits.max_concurrent_replies",
+            "并发发送回复数, 至少 1 / Concurrent replies, minimum 1",
+        ),
+        (
+            "roles.limits.max_concurrent_tasks",
+            "同时等待报告的任务数, 0 表示无限 / Tasks awaiting reports, 0 = unlimited",
+        ),
+        ("roles.pool", "Worker 加入的池 / Pool this Worker joins"),
+        (
+            "roles.capabilities",
+            "启用的能力 / Enabled capabilities (text.reverse/v1, text.uppercase/v1)",
+        ),
+        (
+            "roles.heartbeat_interval_secs",
+            "心跳发送间隔(秒) / Seconds between heartbeats",
+        ),
+        (
+            "roles.max_concurrent_tasks",
+            "同时执行的任务数, 0 表示无限 / Concurrent tasks, 0 = unlimited",
+        ),
+    ];
+}
+
 impl Default for Settings {
     /// 构造首次启动 Node 时的默认基础设施与两个角色.
     ///
@@ -275,7 +363,7 @@ impl Settings {
             .with_context(|| format!("打开节点配置锁失败: {}", path.display()))?;
         lock.lock()
             .with_context(|| format!("锁定节点配置失败: {}", path.display()))?;
-        let settings: Self = confy::load_path(path)
+        let settings: Self = beamlet_app_config::load(path)
             .with_context(|| format!("加载节点配置失败: {}", path.display()))?;
         settings
             .validate()

@@ -95,6 +95,37 @@ impl From<&ClientSettings> for beamlet_client::Options {
     }
 }
 
+impl beamlet_app_config::Config for Settings {
+    const COMMENTS: &[(&str, &str)] = &[
+        ("color", "终端颜色 / Terminal color (auto | always | never)"),
+        ("nats.url", "NATS 服务地址 / NATS server URL"),
+        (
+            "nats.connect_timeout_secs",
+            "首次连接超时(秒) / Initial connection timeout (s)",
+        ),
+        (
+            "nats.subscription_capacity",
+            "每个订阅缓冲的消息数 / Buffered messages per subscription",
+        ),
+        (
+            "client.pools",
+            "发现 Authority 的池 / Pools to search for Authorities",
+        ),
+        (
+            "client.request_timeout_secs",
+            "单次请求总超时(秒) / Overall request timeout (s)",
+        ),
+        (
+            "client.discovery_window_ms",
+            "收集发现回复的毫秒数, 须短于请求超时 / Discovery window (ms), shorter than request timeout",
+        ),
+        (
+            "client.max_in_flight_requests",
+            "并发请求数, 至少 1 / Concurrent requests, minimum 1",
+        ),
+    ];
+}
+
 impl Default for Settings {
     /// 构造首次创建 Console 配置时使用的默认值.
     ///
@@ -142,7 +173,7 @@ impl Settings {
     ///
     /// 成功返回配置; 读取, 首次写入, 解析或语义校验失败时返回带文件路径的错误.
     fn from_file(path: &Path) -> Result<Self> {
-        let settings: Self = confy::load_path(path)
+        let settings: Self = beamlet_app_config::load(path)
             .with_context(|| format!("加载控制台配置失败: {}", path.display()))?;
         settings
             .validate()

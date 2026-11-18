@@ -77,7 +77,13 @@ fn creates_and_loads_config_on_first_start() {
     assert_eq!(settings.color, Color::Auto);
 
     let content = fs::read_to_string(&path).unwrap();
-    assert!(!content.is_empty(), "首次启动应创建配置文件");
+    let lines: Vec<_> = content.lines().map(str::trim).collect();
+    assert!(lines.windows(2).any(|pair| pair[0].starts_with("/// ")
+        && pair[0].contains("毫秒数")
+        && pair[0].contains("Discovery window (ms)")
+        && pair[1].starts_with("discovery_window_ms:")));
+    let content = format!("// 自定义备注 / My note\n{content}");
+    fs::write(&path, &content).unwrap();
     let reloaded = Settings::from_file(&path).unwrap();
     assert_eq!(reloaded.nats.url, settings.nats.url);
     assert_eq!(reloaded.color, settings.color);

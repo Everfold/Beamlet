@@ -5,6 +5,7 @@ members = [
   "apps/beamlet-node",
 
   "crates/beamlet-api",
+  "crates/beamlet-app-config",
   "crates/beamlet-authority",
   "crates/beamlet-client",
   "crates/beamlet-host",
@@ -27,6 +28,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 beamlet-api = { path = "crates/beamlet-api" }
+beamlet-app-config = { path = "crates/beamlet-app-config" }
 beamlet-authority = { path = "crates/beamlet-authority" }
 beamlet-client = { path = "crates/beamlet-client" }
 beamlet-host = { path = "crates/beamlet-host" }
@@ -62,6 +64,7 @@ wasmtime-wasi = "50"
 
 confy = { version = "2", default-features = false, features = ["ron_conf"] }
 diesel = { version = "2.4", features = ["sqlite"] }
+ron = "0.11"
 tempfile = "3.27"
 
 blake3 = { version = "1.8", features = ["rayon"] }

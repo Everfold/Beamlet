@@ -20,6 +20,25 @@ fn first_start_creates_distinct_persistent_ids_and_reload_does_not_write() {
     assert!(!ids.contains(&Uuid::nil()));
     let content = fs::read_to_string(&path).unwrap();
     assert!(!content.contains("session_id"));
+    let lines: Vec<_> = content.lines().map(str::trim).collect();
+    for (field, note, count) in [
+        ("role_id:", "固定 UUID / Unique persistent UUID", 2),
+        ("subscription_capacity:", "消息数 / Buffered messages", 1),
+        ("max_concurrent_tasks:", "0 = unlimited", 2),
+    ] {
+        assert_eq!(
+            lines
+                .windows(2)
+                .filter(|pair| pair[0].starts_with("/// ")
+                    && pair[0].contains(note)
+                    && pair[1].starts_with(field))
+                .count(),
+            count,
+            "{field}"
+        );
+    }
+    let content = format!("// 自定义备注 / My note\n{content}");
+    fs::write(&path, &content).unwrap();
     let again = Settings::from_file(&path).unwrap();
     assert_eq!(again.node.node_id, first.node.node_id);
     assert_eq!(

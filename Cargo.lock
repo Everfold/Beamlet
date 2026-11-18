@@ -127,6 +127,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "beamlet-app-config"
+version = "0.1.0"
+dependencies = [
+ "confy",
+ "ron",
+ "serde",
+]
+
+[[package]]
 name = "beamlet-authority"
 version = "0.1.0"
 dependencies = [
@@ -158,6 +167,7 @@ dependencies = [
  "anyhow",
  "async-nats",
  "beamlet-api",
+ "beamlet-app-config",
  "beamlet-client",
  "beamlet-protocol",
  "beamlet-transport-nats",
@@ -203,6 +213,7 @@ dependencies = [
  "anyhow",
  "async-nats",
  "beamlet-api",
+ "beamlet-app-config",
  "beamlet-authority",
  "beamlet-host",
  "beamlet-protocol",
