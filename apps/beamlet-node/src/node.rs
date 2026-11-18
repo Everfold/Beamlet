@@ -28,12 +28,12 @@ pub(crate) async fn run(
         "Node 启动"
     );
     let mut host = Host::new(beamlet_host::Options {
-        shutdown_timeout: Duration::from_secs(settings.shutdown_timeout_secs),
+        shutdown_timeout: Duration::from_secs(settings.node.shutdown_timeout_secs),
     })?;
     let roles: Vec<_> = settings.roles.into_iter().map(RunningRole::new).collect();
     for role in &roles {
         info!(event = "role.prepared", role_id = %role.instance.role_id, role_session_id = %role.instance.session_id,
-            kind = role.settings.kind.name(), label = role.settings.label.as_deref(), infrastructures = ?role.settings.infrastructures, "已分配角色会话");
+            kind = role.settings.name(), label = role.settings.label(), infrastructures = ?role.settings.infrastructures(), "已分配角色会话");
     }
     tokio::pin!(signal);
     let infrastructure = async {
@@ -54,7 +54,7 @@ pub(crate) async fn run(
     for role in roles {
         let connections = role
             .settings
-            .infrastructures
+            .infrastructures()
             .iter()
             .map(|name| {
                 infrastructures

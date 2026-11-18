@@ -11,28 +11,20 @@ fn first_start_creates_distinct_persistent_ids_and_reload_does_not_write() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
     let first = Settings::from_file(&path).unwrap();
-    assert_eq!(first.color, Color::Auto);
+    assert_eq!(first.node.color, Color::Auto);
     assert_eq!(first.roles.len(), 2);
-    let ids: BTreeSet<_> = std::iter::once(first.node_id)
-        .chain(first.roles.iter().map(|role| role.role_id))
+    let ids: BTreeSet<_> = std::iter::once(first.node.node_id)
+        .chain(first.roles.iter().map(Role::id))
         .collect();
     assert_eq!(ids.len(), 3);
     assert!(!ids.contains(&Uuid::nil()));
     let content = fs::read_to_string(&path).unwrap();
     assert!(!content.contains("session_id"));
     let again = Settings::from_file(&path).unwrap();
-    assert_eq!(again.node_id, first.node_id);
+    assert_eq!(again.node.node_id, first.node.node_id);
     assert_eq!(
-        again
-            .roles
-            .iter()
-            .map(|role| role.role_id)
-            .collect::<Vec<_>>(),
-        first
-            .roles
-            .iter()
-            .map(|role| role.role_id)
-            .collect::<Vec<_>>()
+        again.roles.iter().map(Role::id).collect::<Vec<_>>(),
+        first.roles.iter().map(Role::id).collect::<Vec<_>>()
     );
     assert_eq!(fs::read_to_string(&path).unwrap(), content);
 }
@@ -55,27 +47,32 @@ fn independently_configures_repeated_role_and_infrastructure_types() {
             subscription_capacity: 32,
         },
     );
-    let mut extra = settings.roles[1].clone();
-    extra.role_id = Uuid::new_v4();
-    extra.infrastructures = ["secondary".into()].into();
-    extra.kind = Role::Worker(Worker {
+    settings.roles.push(Role::Worker {
+        role_id: Uuid::new_v4(),
+        label: Some("secondary worker".into()),
+        infrastructures: ["secondary".into()].into(),
         pool: "other".parse().unwrap(),
         capabilities: BTreeSet::from([crate::capabilities::UPPERCASE.into()]),
         heartbeat_interval_secs: 1,
         max_concurrent_tasks: 4,
     });
-    settings.roles.push(extra);
     confy::store_path(&path, &settings).unwrap();
     let source = fs::read_to_string(&path).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
     assert_eq!(loaded.roles.len(), 3);
     assert_eq!(loaded.infrastructures.len(), 2);
-    let Role::Worker(worker) = &loaded.roles[2].kind else {
+    let Role::Worker {
+        heartbeat_interval_secs,
+        max_concurrent_tasks,
+        pool,
+        ..
+    } = &loaded.roles[2]
+    else {
         panic!("expected worker")
     };
-    assert_eq!(worker.heartbeat_interval_secs, 1);
-    assert_eq!(worker.max_concurrent_tasks, 4);
-    assert_eq!(worker.pool.to_string(), "other");
+    assert_eq!(*heartbeat_interval_secs, 1);
+    assert_eq!(*max_concurrent_tasks, 4);
+    assert_eq!(pool.to_string(), "other");
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
 }
 
@@ -89,19 +86,23 @@ fn invalid_or_missing_role_ids_are_not_generated_or_written_back() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
     let mut settings = Settings::default();
-    settings.roles[1].role_id = settings.roles[0].role_id;
+    let duplicate_id = settings.roles[0].id();
+    let Role::Worker { role_id, .. } = &mut settings.roles[1] else {
+        panic!("expected worker")
+    };
+    *role_id = duplicate_id;
     confy::store_path(&path, &settings).unwrap();
     let duplicate = fs::read_to_string(&path).unwrap();
     let distinct = duplicate.replacen(
-        &settings.roles[0].role_id.to_string(),
+        &settings.roles[0].id().to_string(),
         &Uuid::new_v4().to_string(),
         1,
     );
     for source in [
         duplicate,
-        distinct.replace(&format!("role_id: \"{}\",", settings.roles[1].role_id), ""),
+        distinct.replace(&format!("role_id: \"{}\",", settings.roles[1].id()), ""),
         distinct.replace(
-            &settings.roles[1].role_id.to_string(),
+            &settings.roles[1].id().to_string(),
             &Uuid::nil().to_string(),
         ),
         distinct.replace("\"nats\",", "\"missing\","),
@@ -134,17 +135,23 @@ fn authority_concurrency_is_independent_per_role_and_does_not_rewrite_config() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
     let mut settings = Settings::default();
-    let Role::Authority(default) = &settings.roles[0].kind else {
+    let Role::Authority {
+        limits: default, ..
+    } = &settings.roles[0]
+    else {
         panic!("expected authority")
     };
     assert_eq!(default.max_concurrent_tasks, 16);
     for limit in [0, 1, 32] {
         let mut role = settings.roles[0].clone();
-        role.role_id = Uuid::new_v4();
-        let Role::Authority(authority) = &mut role.kind else {
+        let Role::Authority {
+            limits, role_id, ..
+        } = &mut role
+        else {
             panic!("expected authority")
         };
-        authority.max_concurrent_tasks = limit;
+        *role_id = Uuid::new_v4();
+        limits.max_concurrent_tasks = limit;
         settings.roles.push(role);
     }
     confy::store_path(&path, &settings).unwrap();
@@ -153,10 +160,13 @@ fn authority_concurrency_is_independent_per_role_and_does_not_rewrite_config() {
     let limits: Vec<_> = loaded
         .roles
         .iter()
-        .filter_map(|role| match &role.kind {
-            Role::Authority(authority) => Some(authority.max_concurrent_tasks),
-            Role::Worker(worker) => {
-                assert_eq!(worker.max_concurrent_tasks, 1);
+        .filter_map(|role| match role {
+            Role::Authority { limits, .. } => Some(limits.max_concurrent_tasks),
+            Role::Worker {
+                max_concurrent_tasks,
+                ..
+            } => {
+                assert_eq!(*max_concurrent_tasks, 1);
                 None
             }
         })
@@ -175,17 +185,26 @@ fn worker_concurrency_is_loaded_per_role_including_unlimited_without_rewriting()
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
     let mut settings = Settings::default();
-    let Role::Worker(default) = &settings.roles[1].kind else {
+    let Role::Worker {
+        max_concurrent_tasks,
+        ..
+    } = &settings.roles[1]
+    else {
         panic!("expected default worker")
     };
-    assert_eq!(default.max_concurrent_tasks, 1);
+    assert_eq!(*max_concurrent_tasks, 1);
     for limit in [0, 4, 32] {
         let mut role = settings.roles[1].clone();
-        role.role_id = Uuid::new_v4();
-        let Role::Worker(worker) = &mut role.kind else {
+        let Role::Worker {
+            max_concurrent_tasks,
+            role_id,
+            ..
+        } = &mut role
+        else {
             panic!("expected worker")
         };
-        worker.max_concurrent_tasks = limit;
+        *role_id = Uuid::new_v4();
+        *max_concurrent_tasks = limit;
         settings.roles.push(role);
     }
     confy::store_path(&path, &settings).unwrap();
@@ -194,9 +213,12 @@ fn worker_concurrency_is_loaded_per_role_including_unlimited_without_rewriting()
     let limits: Vec<_> = loaded
         .roles
         .iter()
-        .filter_map(|role| match &role.kind {
-            Role::Worker(worker) => Some(worker.max_concurrent_tasks),
-            Role::Authority(_) => None,
+        .filter_map(|role| match role {
+            Role::Worker {
+                max_concurrent_tasks,
+                ..
+            } => Some(*max_concurrent_tasks),
+            Role::Authority { .. } => None,
         })
         .collect();
     assert_eq!(limits, [1, 0, 4, 32]);
@@ -219,10 +241,10 @@ fn pool_duplicates_are_deduplicated_without_rewriting() {
         .replace("pools: [", "pools: [\"default\", ");
     fs::write(&path, &source).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
-    let Role::Authority(authority) = &loaded.roles[0].kind else {
+    let Role::Authority { pools, .. } = &loaded.roles[0] else {
         panic!("expected authority")
     };
-    assert_eq!(authority.pools.len(), 1);
+    assert_eq!(pools.len(), 1);
     assert_eq!(fs::read_to_string(&path).unwrap(), source);
 }
 
@@ -234,7 +256,11 @@ fn pool_duplicates_are_deduplicated_without_rewriting() {
 #[test]
 fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
     let mut settings = Settings::default();
-    settings.roles[1].role_id = settings.roles[0].role_id;
+    let duplicate_id = settings.roles[0].id();
+    let Role::Worker { role_id, .. } = &mut settings.roles[1] else {
+        panic!("expected worker")
+    };
+    *role_id = duplicate_id;
     assert!(
         settings
             .validate()
@@ -242,8 +268,16 @@ fn duplicate_ids_across_role_types_and_unknown_infrastructure_are_rejected() {
             .to_string()
             .contains("重复的 role_id")
     );
-    settings.roles[1].role_id = Uuid::new_v4();
-    settings.roles[1].infrastructures = ["not configured".into()].into();
+    let Role::Worker {
+        role_id,
+        infrastructures,
+        ..
+    } = &mut settings.roles[1]
+    else {
+        panic!("expected worker")
+    };
+    *role_id = Uuid::new_v4();
+    *infrastructures = ["not configured".into()].into();
     assert!(
         settings
             .validate()
@@ -272,12 +306,8 @@ fn concurrent_first_starts_reuse_all_persisted_ids() {
                     barrier.wait();
                     let settings = Settings::from_file(&path).unwrap();
                     (
-                        settings.node_id,
-                        settings
-                            .roles
-                            .iter()
-                            .map(|role| role.role_id)
-                            .collect::<Vec<_>>(),
+                        settings.node.node_id,
+                        settings.roles.iter().map(Role::id).collect::<Vec<_>>(),
                     )
                 })
             })
@@ -311,16 +341,17 @@ fn reports_config_creation_failure_with_path() {
 fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("node.ron");
-    let mut settings = Settings {
-        shutdown_timeout_secs: 30,
-        ..Settings::default()
-    };
-    let Role::Authority(authority) = &mut settings.roles[0].kind else {
+    let mut settings = Settings::default();
+    settings.node.shutdown_timeout_secs = 30;
+    let Role::Authority {
+        limits, timeouts, ..
+    } = &mut settings.roles[0]
+    else {
         panic!("authority")
     };
-    authority.report_timeout_secs = 25;
-    authority.input_capacity = 7;
-    authority.max_concurrent_replies = 3;
+    timeouts.report_timeout_secs = 25;
+    limits.input_capacity = 7;
+    limits.max_concurrent_replies = 3;
     let Infrastructure::Nats {
         connect_timeout_secs,
         subscription_capacity,
@@ -334,13 +365,16 @@ fn deadlines_and_transport_limits_are_required_positive_and_not_written_back() {
     confy::store_path(&path, &settings).unwrap();
     let source = fs::read_to_string(&path).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
-    assert_eq!(loaded.shutdown_timeout_secs, 30);
-    let Role::Authority(authority) = &loaded.roles[0].kind else {
+    assert_eq!(loaded.node.shutdown_timeout_secs, 30);
+    let Role::Authority {
+        limits, timeouts, ..
+    } = &loaded.roles[0]
+    else {
         panic!("authority")
     };
-    assert_eq!(authority.report_timeout_secs, 25);
+    assert_eq!(timeouts.report_timeout_secs, 25);
     assert_eq!(
-        (authority.input_capacity, authority.max_concurrent_replies),
+        (limits.input_capacity, limits.max_concurrent_replies),
         (7, 3)
     );
     let Infrastructure::Nats {
@@ -398,16 +432,28 @@ fn local_and_multiple_transports_are_validated_without_rewriting() {
     settings
         .infrastructures
         .insert("local".into(), Infrastructure::Local { capacity: 7 });
-    settings.roles[0].infrastructures.insert("local".into());
-    settings.roles[1].infrastructures = ["local".into()].into();
+    let Role::Authority {
+        infrastructures, ..
+    } = &mut settings.roles[0]
+    else {
+        panic!("expected authority")
+    };
+    infrastructures.insert("local".into());
+    let Role::Worker {
+        infrastructures, ..
+    } = &mut settings.roles[1]
+    else {
+        panic!("expected worker")
+    };
+    *infrastructures = ["local".into()].into();
     confy::store_path(&path, &settings).unwrap();
     let source = fs::read_to_string(&path)
         .unwrap()
         .replace("infrastructures: [", "infrastructures: [\"local\", ");
     fs::write(&path, &source).unwrap();
     let loaded = Settings::from_file(&path).unwrap();
-    assert_eq!(loaded.roles[0].infrastructures.len(), 2);
-    assert_eq!(loaded.roles[1].infrastructures.len(), 1);
+    assert_eq!(loaded.roles[0].infrastructures().len(), 2);
+    assert_eq!(loaded.roles[1].infrastructures().len(), 1);
     assert!(matches!(
         loaded.infrastructures["local"],
         Infrastructure::Local { capacity: 7 }
@@ -423,23 +469,28 @@ fn local_and_multiple_transports_are_validated_without_rewriting() {
         assert!(Settings::from_file(&path).is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), invalid);
     }
-    settings.roles[1].infrastructures.insert("nats".into());
-    assert!(
-        settings
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("只能引用一个基础设施")
-    );
-    settings.roles[1].infrastructures.clear();
-    assert!(
-        settings
-            .validate()
-            .unwrap_err()
-            .to_string()
-            .contains("至少需要一个基础设施")
-    );
-    settings.roles[1].infrastructures.insert("local".into());
-    settings.roles[0].infrastructures.clear();
-    assert!(settings.validate().is_err());
+    fs::write(&path, &source).unwrap();
+    for (index, names, reason) in [
+        (1, vec!["local", "nats"], "只能引用一个基础设施"),
+        (1, vec![], "至少需要一个基础设施"),
+        (0, vec![], "至少需要一个基础设施"),
+    ] {
+        let mut settings = Settings::from_file(&path).unwrap();
+        let infrastructures = match &mut settings.roles[index] {
+            Role::Authority {
+                infrastructures, ..
+            }
+            | Role::Worker {
+                infrastructures, ..
+            } => infrastructures,
+        };
+        *infrastructures = names.into_iter().map(String::from).collect();
+        assert!(
+            settings
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains(reason)
+        );
+    }
 }

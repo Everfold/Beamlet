@@ -278,52 +278,28 @@ async fn connect(port: u16) -> Result<async_nats::Client> {
         sleep(Duration::from_millis(40)).await;
     }
 }
-/// 生成单个角色的 RON 配置片段.
-///
-/// # 参数
-///
-/// - `id`: 当前角色的固定 UUID.
-/// - `infrastructure`: 该角色引用的基础设施配置名称.
-/// - `kind`: 角色种类及其专属参数的 RON 片段.
-///
-/// # 返回值
-///
-/// 包含角色 UUID, 基础设施名称和角色种类配置的字符串.
-fn role(id: Uuid, infrastructure: &str, kind: &str) -> String {
+/// 用 id, infrastructure, pools, 租约 timeout 和并发上限 concurrency 生成 Authority 配置.
+fn authority(
+    id: Uuid,
+    infrastructure: &str,
+    pools: &str,
+    timeout: u64,
+    concurrency: usize,
+) -> String {
     format!(
-        r#"(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], kind: {kind})"#
+        r#"authority(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], pools: [{pools}], timeouts: (worker_timeout_secs: {timeout}, report_timeout_secs: 4), limits: (input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"#
     )
 }
-/// 生成 Authority 的 RON 配置片段.
-///
-/// # 参数
-///
-/// - `pools`: 已经按 RON 字符串列表格式准备的 pool 内容.
-/// - `timeout`: Worker 租约期限, 单位为秒.
-/// - `concurrency`: 测试角色的任务并发上限, 零表示无限.
-///
-/// # 返回值
-///
-/// 包含 pools, Worker 超时, 并发及测试容量设置的字符串.
-fn authority(pools: &str, timeout: u64, concurrency: usize) -> String {
+/// 用 id, infrastructure, capability, 心跳间隔 interval 和并发上限 concurrency 生成 Worker 配置.
+fn worker(
+    id: Uuid,
+    infrastructure: &str,
+    capability: &str,
+    interval: u64,
+    concurrency: usize,
+) -> String {
     format!(
-        "authority((pools: [{pools}], worker_timeout_secs: {timeout}, report_timeout_secs: 4, input_capacity: 7, max_concurrent_replies: 3, max_concurrent_tasks: {concurrency}))"
-    )
-}
-/// 生成 Worker 的 RON 配置片段.
-///
-/// # 参数
-///
-/// - `capability`: 该 Worker 配置启用的唯一能力标识.
-/// - `interval`: 测试 Worker 心跳周期, 单位为秒.
-/// - `concurrency`: 测试角色的任务并发上限, 零表示无限.
-///
-/// # 返回值
-///
-/// 包含固定 blue pool, 指定能力, 心跳和并发设置的字符串.
-fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
-    format!(
-        r#"worker((pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency}))"#
+        r#"worker(role_id: "{id}", label: Some("same label"), infrastructures: ["{infrastructure}"], pool: "blue", capabilities: ["{capability}"], heartbeat_interval_secs: {interval}, max_concurrent_tasks: {concurrency})"#
     )
 }
 /// 组合 Node 身份, 基础设施和角色列表生成完整 RON.
@@ -339,7 +315,7 @@ fn worker(capability: &str, interval: u64, concurrency: usize) -> String {
 /// 可写入临时文件的节点配置字符串.
 fn config(node_id: Uuid, infrastructure: &str, roles: &[String]) -> String {
     format!(
-        r#"(node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8, infrastructures: {{{infrastructure}}}, roles: [{}])"#,
+        r#"(node: (node_id: "{node_id}", label: Some("composed node"), color: never, shutdown_timeout_secs: 8), infrastructures: {{{infrastructure}}}, roles: [{}])"#,
         roles.join(",")
     )
 }
@@ -570,20 +546,12 @@ async fn multiple_roles_and_infrastructures_route_restart_and_drain_independentl
         r#""primary": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "worker-connection": nats(url: "nats://127.0.0.1:{primary_port}", connect_timeout_secs: 12, subscription_capacity: 32), "secondary": nats(url: "nats://127.0.0.1:{secondary_port}", connect_timeout_secs: 12, subscription_capacity: 32)"#
     );
     let roles = vec![
-        role(
-            ids[0],
-            "primary",
-            &authority(r#""blue", "red", "blue""#, 3, 1),
-        ),
-        role(ids[1], "primary", &authority(r#""blue""#, 5, 4)),
-        role(ids[2], "primary", &worker("text.uppercase/v1", 1, 4)),
-        role(
-            ids[3],
-            "worker-connection",
-            &worker("text.reverse/v1", 2, 1),
-        ),
-        role(ids[4], "secondary", &authority(r#""blue""#, 3, 0)),
-        role(ids[5], "secondary", &worker("text.reverse/v1", 1, 0)),
+        authority(ids[0], "primary", r#""blue", "red", "blue""#, 3, 1),
+        authority(ids[1], "primary", r#""blue""#, 5, 4),
+        worker(ids[2], "primary", "text.uppercase/v1", 1, 4),
+        worker(ids[3], "worker-connection", "text.reverse/v1", 2, 1),
+        authority(ids[4], "secondary", r#""blue""#, 3, 0),
+        worker(ids[5], "secondary", "text.reverse/v1", 1, 0),
     ];
     let source = config(node_id, &infrastructure, &roles);
     let (first_process, first) = cluster.node("composed", &source, 6).await?;
@@ -890,19 +858,17 @@ async fn configured_report_deadlines_and_input_capacity_are_independent_per_auth
         .subscribe(subject::worker(&pool, fake_worker))
         .await?;
     client.flush().await?;
-    let base = authority(r#""blue""#, 30, 1).replace("input_capacity: 7", "input_capacity: 1");
+    let base = |id| {
+        authority(id, "local", r#""blue""#, 30, 1).replace("input_capacity: 7", "input_capacity: 1")
+    };
     let source = config(
         Uuid::new_v4(),
         &format!(
             r#""local": nats(url: "nats://127.0.0.1:{port}", connect_timeout_secs: 9, subscription_capacity: 32)"#
         ),
         &[
-            role(
-                ids[0],
-                "local",
-                &base.replace("report_timeout_secs: 4", "report_timeout_secs: 1"),
-            ),
-            role(ids[1], "local", &base),
+            base(ids[0]).replace("report_timeout_secs: 4", "report_timeout_secs: 1"),
+            base(ids[1]),
         ],
     );
     let (process, roles) = cluster.node("deadlines-node", &source, 2).await?;
@@ -1069,9 +1035,9 @@ async fn local_only_node_runs_without_broker_and_keeps_spaces_isolated() -> Resu
         Uuid::new_v4(),
         r#""inside": local(capacity: 3), "outside": local(capacity: 3)"#,
         &[
-            role(authority_id, "inside", &authority(r#""blue""#, 5, 2)),
-            role(inside, "inside", &worker("text.reverse/v1", 1, 2)),
-            role(outside, "outside", &worker("text.uppercase/v1", 1, 2)),
+            authority(authority_id, "inside", r#""blue""#, 5, 2),
+            worker(inside, "inside", "text.reverse/v1", 1, 2),
+            worker(outside, "outside", "text.uppercase/v1", 1, 2),
         ],
     );
     let (node, _) = cluster.node("local-only", &source, 3).await?;
@@ -1125,7 +1091,7 @@ async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Res
     let infrastructures = format!(
         r#""local": local(capacity: 8), "control": nats(url: "nats://127.0.0.1:{control_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16), "remote-alias": nats(url: "nats://127.0.0.1:{worker_port}", connect_timeout_secs: 5, subscription_capacity: 16)"#
     );
-    let authority_role = role(authority_id, "local", &authority(r#""blue""#, 10, 2)).replace(
+    let authority_role = authority(authority_id, "local", r#""blue""#, 10, 2).replace(
         r#"infrastructures: ["local"]"#,
         r#"infrastructures: ["local", "control", "remote", "remote-alias"]"#,
     );
@@ -1134,8 +1100,8 @@ async fn one_authority_serves_local_and_nats_workers_across_disconnects() -> Res
         &infrastructures,
         &[
             authority_role,
-            role(local_worker, "local", &worker("text.reverse/v1", 1, 2)),
-            role(remote_worker, "remote", &worker("text.uppercase/v1", 1, 2)),
+            worker(local_worker, "local", "text.reverse/v1", 1, 2),
+            worker(remote_worker, "remote", "text.uppercase/v1", 1, 2),
         ],
     );
     let (node, instances) = cluster.node("mixed", &source, 3).await?;

@@ -38,7 +38,7 @@ async fn main() -> ExitCode {
     let settings = Settings::load(&args.config);
     let color = settings
         .as_ref()
-        .map_or(Color::Auto, |settings| settings.color);
+        .map_or(Color::Auto, |settings| settings.node.color);
 
     tracing_subscriber::fmt()
         .compact()
@@ -59,9 +59,9 @@ async fn main() -> ExitCode {
     let session_id = Uuid::new_v4();
     let span = info_span!(
         "node",
-        node_id = %settings.node_id,
+        node_id = %settings.node.node_id,
         node_session_id = %session_id,
-        label = settings.label.as_deref(),
+        label = settings.node.label.as_deref(),
     );
 
     async {
