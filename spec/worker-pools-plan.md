@@ -108,10 +108,8 @@ Authority 仍保留自己的在途限制. 公告、发现和查询不会因该�
 | P2 Worker 登记 | 在 node `delivery` 下增加登记模块; 实现公告应用、查询过滤、过期、清理和会话隔离; 注入时间供测试 | 重复公告不增加记录; 过期立即影响候选; 旧会话下线不删除新会话; 跨池记录不互相覆盖 | P0、P1 |
 | P3 公告与发现 | 接入 NATS 多 pool 普通订阅; Worker 上下线和周期快照; Authority 发现与 Worker 查询; 独立处理心跳和控制消息 | 同池多个 Authority 都收到心跳; 晚启动能重建列表; 满载仍可查询; 断开/重连及退出处理符合约定 | P2 |
 | P4 定向交付 | 扩展 delivery contract、NATS 和 channel 适配器; 增加 pool/目标实例; Any 选择后走 Exact 路径; 校验 Report 来源关联 | 指定实例单选、跨池隔离、无隐式回退; 多 Authority 使用同一 Worker 时容量有界; 失败不改变既有生命周期规则 | P3 |
-| P5 Console 与入口 | 将 ingress 请求/回复改为结构化数据; Authority 创建业务请求; Console 发现、过滤、编号选择和提交; 更新本地终端入口与测试适配器 | 能完成选择 Authority → pool → 能力 → Worker → 输入 → 结果; 展示实际执行身份; 选择过期时提示刷新并重新选择 | P4 |
+| P5 Console 与入口 | 将 ingress 请求/回复改为结构化数据; Authority 创建业务请求; Console 发现、过滤、编号选择和提交; 更新测试适配器 | 能完成选择 Authority → pool → 能力 → Worker → 输入 → 结果; 展示实际执行身份; 选择过期时提示刷新并重新选择 | P4 |
 | P6 联调与交付 | 补全场景测试、使用说明及按需运行的真实 NATS 验收脚本; 核对生命周期与登记日志 | 下述验收矩阵全部通过, 普通 Cargo 测试不依赖运行中的 NATS | P5 |
-
-本地 Authority 终端继续作为该 Authority 的输入入口: 通过简单命令选择已加入 pool 与能力, Worker 使用同一登记选择逻辑; 初始选择保持 default/reverse 的便捷体验, 配置不包含这些值时明确提示选择. 不继续走绕过 pool 校验的旧全局主题.
 
 Console 首版使用普通编号/命令交互即可, 不新增 TUI 框架. 多 pool 发现同一个 Authority 只展示一个实例, 选择后列出可用 pools. Worker 列表显示 label、节点/会话身份、pool、能力和状态; label 重复不影响选择正确性. 刷新后使用实例键保存选择, 不用列表序号作为网络身份.
 

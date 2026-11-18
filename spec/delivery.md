@@ -8,7 +8,7 @@
 
 Operation 原始请求为 `beamlet_api::Task<P> { capability, payload }`, 当前文本示例的 P 为 String; v3 线上消息仍使用 `Task { capability, text }`, 由 protocol 显式转换. pool、目标实例与请求关联信息是应用层路由上下文, 不改变 kernel / ledger 的状态转换. [beamlet-api](../crates/beamlet-api/src/lib.rs) 共享角色身份、pool、能力标识、状态快照、泛型业务数据及一次性回复入口; [beamlet-protocol](../crates/beamlet-protocol/src/lib.rs) 定义 v3 消息结构与版本, 不管理连接、选择策略或生命周期.
 
-Authority 库接收远端提交和可选的 LocalInbox, 共用结构化请求与一次性回复入口; node 把终端文本转换为本地提交. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. node/console 仍装配 NATS, 不自动回退到 local.
+Node 上的 Authority 通过配置的传输端点接收结构化请求并回复. 嵌入方还可以为 Authority 库提供 LocalInbox. 角色侧先从登记表选择 Worker, 再通过 `beamlet_api::Delivery` 向指定实例交付, 返回完整 Report 或交付错误. NATS 连接、subject、编解码及订阅生命周期由 [beamlet-transport-nats](../crates/beamlet-transport-nats/src/lib.rs) 管理. [beamlet-transport-local](../crates/beamlet-transport-local/src/lib.rs) 提供可供外部程序使用的进程内端点, 支持自定义 Rust 请求/结果类型; 不要求 serde. Node 按配置装配 Local 或 NATS, Console 使用 NATS.
 
 两种传输使用相同的 WorkerInbox、Delivery、AuthorityInbox、PresenceChannel 和 ClientTransport 契约. Authority 接收发现、请求、完整公告及连接变化事件, 自己实施查询、选择和业务准入; 适配器不保存 Worker 租约或 Operation. local 的每次 `new(capacity)` 创建隔离消息空间, clone 共享该空间, 重复绑定同一 pool/角色/会话返回错误. 有界调用队列满时可以明确返回 NotDelivered; 发现与公告允许丢失, 由调用者的发现窗口、探测和后续完整心跳恢复.
 
@@ -78,7 +78,7 @@ Report 等待期限由 Authority 的 `report_timeout_secs` 指定 (默认 3 秒)
 
 `request_id` 只用于请求/回复关联, 不提供重复创建幂等. Console 支持多个在途请求, 每次提交保存目标快照, 按完成顺序展示结果并标识 request_id. 发现和查询也独立等待, 迟到结果不能覆盖较新的选择或查询. Console 按 `max_in_flight_requests` 限制网络请求数 (默认 16), 满载的新请求明确拒绝; `/quit` / EOF 排空在途请求, Ctrl+C 停止本地等待. Console 超时不自动重发. 任何“已提交”日志仅说明传输接受提交, 不证明接收者已执行. 重试、持久化恢复及跨 Authority 接管不属于当前范围.
 
-Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务失败和排空超时. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 本地 stdin 统一读取并选择一个 Authority, EOF 不停止网络服务. 内存状态随进程退出丢失.
+Node 使用 beamlet-host 将退出请求广播给所有角色, 并汇总任务失败和排空超时. Authority 停止新接收、丢弃尚未签发的排队请求, 等待已签发交付和回复发送结束并刷新回复缓冲; Worker 排空各自队列. Node 的排空期限和失败处理见[角色装配](node-composition.md). 内存状态随进程退出丢失.
 
 ## 6. 验证
 

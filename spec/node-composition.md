@@ -109,21 +109,11 @@ Worker 必须属于 Authority 的一个 pool. 同一 pool/角色会话经多个�
 
 已有配置需要手动将角色的 `infrastructure: "name"` 改为 `infrastructures: ["name"]`. 不提供自动迁移. 例如同一进程的 A1 使用 `["local", "nats"]`, W1 使用 `["local"]`, W2 使用 `["nats"]`, 就可通过 A1 的 NATS 入口调用两个 Worker.
 
-## 本地终端与 Console
+## 使用 Console 交互
 
-一个 Node 只创建一个 stdin 读取入口. 只有一个 Authority 时自动选择它; 多个 Authority 时先明确选择:
+Node 作为服务运行, 通过配置的传输端点接收任务, 使用 Ctrl+C 停止并排空角色. 交互操作在独立的 `beamlet-console` 中进行. 要从 Console 调用进程内的 Local Worker, 让同一 Authority 同时绑定 Console 使用的 NATS 和 Worker 所在的 Local 实例.
 
-```text
-/roles
-/authority 2
-/pool blue
-/capability text.uppercase/v1
-Hello Beamlet
-```
-
-`/authority` 也接受完整 role_id. 之后的文本和 `/pool`、`/capability`、`/workers` 命令只交给选中的角色. 切换回来时各 Authority 保留自身的 pool / 能力选择. 本地 EOF 不结束网络服务. 接收队列满时该次本地输入明确拒绝, 不转交别的角色.
-
-Console 继续使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
+Console 使用 `/refresh`、`/authority <编号>`、`/pool <编号或名称>`、`/capability <编号或标识>`、`/worker <编号或 any>` 选择执行目标. 列表和执行结果展示 role_id 与角色会话; 同一个 Node 内的 Authority 不合并. Console 配置的 NATS 地址与 pools 决定发现范围.
 
 Console 将输入、发现、查询和提交结果作为独立事件处理, 等待执行结果时仍可提交新任务、查询或切换目标. 每次提交固定当时的 Authority、pool、能力和 Worker 选择, 结果按完成顺序展示并带 request_id. 旧提交的拒绝不会撤销后来的选择; 查询乱序完成时只采用当前目标的最新查询结果. Console 的 `max_in_flight_requests` 限制在途请求数, 默认 16 (包括发现和查询), 满载时明确拒绝新的网络请求, 本地选择、帮助和退出仍可使用. 此上限独立于 Authority / Worker 配置.
 
@@ -148,7 +138,7 @@ kind: authority((
 
 Operation 创建、报告接受和状态变更仍由 Authority 主循环逐个执行, 异步交付并发等待. 回复通过独立异步任务发送, 单个慢回复不占住主循环. 每个 Authority 通过 `max_concurrent_replies` 限制待发送的业务结果/拒绝回复, 默认 16; 达到该上限时暂停业务接收和报告收取, 等待发送释放容量, 不无限积压回复. 停止时不再签发新任务, 丢弃未签发的缓冲请求, 等待已经发出的交付和回复发送结束.
 
-每个 Authority 的本地和远端业务入口分别按 `input_capacity` 缓冲, 默认各 16 条, NATS 每个订阅的缓冲由 `subscription_capacity` 指定, 默认 16, 与执行并发设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
+每个 Authority 的传输入口共用一个业务队列, 容量由 `input_capacity` 指定, 默认 16 条, NATS 每个订阅的缓冲由 `subscription_capacity` 指定, 默认 16, 与执行并发设置无关; `0` 不把接收队列改为无界, 也不会取消 Worker 自己的执行限制. 已有配置需手动为每个 Authority 添加 `max_concurrent_tasks`, 重启生效, 加载器不补写文件.
 
 ## Worker 并发
 
@@ -194,7 +184,7 @@ cargo test -p beamlet-node --test composition -- --ignored --nocapture
 cargo test -p beamlet-console --test concurrency -- --ignored --nocapture
 ```
 
-组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、本地选择、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端. 纯 Local 二进制测试验证执行和命名空间隔离; 混合验收覆盖 NATS 到 Local 的完整调用, 同服务器重复连接的单次执行, 断线时 Local 可用及重连恢复, 并检查配置不写回.
+组合验收同时启动两台 NATS, 在一个 Node 中运行 3 个 Authority、3 个 Worker 和 3 个基础设施连接, 检查同类型多实例、角色定向、能力隔离、连接隔离、重连、角色跨 Node 运行、旧会话退出不影响新会话、所有角色排空和配置不变. 身份测试通过真实二进制验证重启前后各 UUID 的持久和临时边界. Worker 并发测试使用可控异步挂起验证串行、有限并发、无限模式、乱序报告、名额释放与退出排空. Authority 入口测试覆盖可配置有限上限、超过默认 16 的无限模式、角色名额隔离和失败后释放名额. 普通测试不需要 NATS 服务端. 纯 Local 二进制测试验证标准输入被忽略和 Worker 登记隔离; 混合验收覆盖 NATS 到 Local 的完整调用, 同服务器重复连接的单次执行, 断线时 Local 可用及重连恢复, 并检查配置不写回.
 
 Console 并发测试验证等待中的提交不阻止查询、目标快照、迟到结果隔离、容量拒绝、退出排空与中止等待. 真实 NATS 验收使用 Console 二进制和可控 Authority 回复, 验证多个提交和查询同时在途、乱序结果关联和配置不变. Authority 回复测试通过有界通道制造发送背压, 验证其他任务可继续、回复容量有限和停机排空.
 
@@ -206,7 +196,7 @@ Console 顶层 `request_timeout_secs` 默认 10, `connect_timeout_secs` 默认 1
 
 这些字段在首次生成配置时写入. 已有配置必须手动补全, 缺失或无效值会在启动前报错; 不迁移或改写已有配置.
 
-Authority 的 `input_capacity` 默认 16, 分别用于该角色的本地输入和远端业务队列; `max_concurrent_replies` 默认 16, 限制主循环已处理完毕但尚未发送完成的回复. 控制循环中的发现、查询和队列满拒绝仍直接发送, 不计入此回复上限. 两者均要求大于 0.
+Authority 的 `input_capacity` 默认 16, 用于该角色各传输入口共用的业务队列; `max_concurrent_replies` 默认 16, 限制主循环已处理完毕但尚未发送完成的回复. 控制循环中的发现、查询和队列满拒绝仍直接发送, 不计入此回复上限. 两者均要求大于 0.
 
 Console 的 `max_in_flight_requests` 默认 16, 要求大于 0; `discovery_window_ms` 默认 1000, 从发送完发现查询后开始收集回复, 必须大于 0 且小于 `request_timeout_secs` 的总期限, 给连接发送等步骤留出余量. 完整 Console 配置示例:
 
@@ -223,9 +213,9 @@ Console 的 `max_in_flight_requests` 默认 16, 要求大于 0; `discovery_windo
 )
 ```
 
-仅 Authority / Worker 的 `max_concurrent_tasks` 接受 `0 = 无限`. 输入队列、订阅缓冲、回复发送并发、Console 在途上限和超时均不采用无限语义. Node / Console 终端读取线程的缓冲仍固定 16 行; 心跳发送及退出刷新期限、登记清理频率和保留倍数、协议名称长度规则继续由内部控制.
+仅 Authority / Worker 的 `max_concurrent_tasks` 接受 `0 = 无限`. 输入队列、订阅缓冲、回复发送并发、Console 在途上限和超时均不采用无限语义. Console 终端读取线程的缓冲仍固定 16 行; 心跳发送及退出刷新期限、登记清理频率和保留倍数、协议名称长度规则继续由内部控制.
 
-配置期限的真实 NATS 测试覆盖不同 Authority 的独立 Report 期限、超过原 3 秒仍接受报告、短期限返回未解决且不重试、业务队列满拒绝和 Console 的非默认请求超时. 容量测试分别使用 1、3、32 验证本地输入队列、Authority 回复发送与 Console 在途请求的限流和恢复.
+配置期限的真实 NATS 测试覆盖不同 Authority 的独立 Report 期限、超过原 3 秒仍接受报告、短期限返回未解决且不重试、业务队列满拒绝和 Console 的非默认请求超时. 容量测试分别使用 1、3、32 验证 Authority 回复发送与 Console 在途请求的限流和恢复.
 
 ## 嵌入宿主
 

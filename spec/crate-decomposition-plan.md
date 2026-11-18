@@ -243,7 +243,7 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 
 - `beamlet-authority` 统一拥有 Operation 编排、Worker 登记与选择、控制处理和并发准入. `Authority::new` 校验身份与 Options, `run` 接收消息端点和交付实现; `run_with_local` 可额外注入结构化本地输入, `directory` 提供只读 Worker 视图.
 - NATS 与 local 共用同一个 Authority 实现. Registry 使用显式观测时间和中立 ConnectionView, 无 NATS 或 watch 依赖; 连接失效立即影响查询与选择. 业务满载仍可发现、查询和接收公告, Exact 不回退, 交付失败不关闭等待中的 Operation.
-- 输入 `P: Clone + Send` 使台账保留原始请求并向 Worker 交付数据; 输出 `R: Send` 无需 Clone、Debug 或 serde. 库不读取配置、不生成身份、不安装日志输出; node 保留文件参数转换、终端解析及装配.
+- 输入 `P: Clone + Send` 使台账保留原始请求并向 Worker 交付数据; 输出 `R: Send` 无需 Clone、Debug 或 serde. 库不读取配置、不生成身份、不安装日志输出; node 负责文件参数转换与角色装配.
 - 本阶段已通过外部 consumer 装配 Authority 与 Worker, 以自定义 Rust 数据完成求和并验证依赖声明; 此行为继续由 Authority 公开接口测试覆盖.
 - 原有并发、报告关联、回复背压和退出测试已迁入库. 公开接口测试补充满载控制处理、本地 EOF、取消清理和非文本任务; 旧 node 交付测试适配层由共享 transport 契约及 Authority 公开接口测试替代. 真实 NATS 组合验收继续覆盖多角色、多连接、重连与配置不变.
 - 验证通过: workspace 测试、全部目标/feature 的 clippy、rustdoc、独立 consumer 和 3 项 node/console 真实 NATS 验收. 提交检查包含 fmt、cargo deny、check、clippy 与 nextest; 外部 consumer 的正常依赖树无 serde、NATS、protocol、confy、clap 或应用 crate.
@@ -265,9 +265,9 @@ Operation 历史保留和持久化不是移动 crate 可以解决的问题. 本�
 - 任一任务错误、panic 或提前正常结束会通知同组停止; 停止信号和后台输入错误也传播. 后台 EOF 不停止服务, 空组仍等待外部信号. 不自动重启, 不添加任务数量上限.
 - 排空期限从第一次停止请求开始计算, 后续错误不延长它. RunError 保留按观测顺序发生的全部失败及 source, 同时报告期限内未收取完成的任务名称; 原始错误不会被超时覆盖. 超时中止异步任务并立即停止等待, 不承诺取消已开始的阻塞计算或远端任务.
 - 丢弃 Host 或运行 future 会通知停止并释放所拥有的 future; 已启动异步任务请求中止. 需要正常排空时必须完成停止信号并等待 run 返回. Shutdown 支持所有克隆及晚等待者; 不允许撤回停止通知.
-- node 删除自身的监督循环和 shutdown 模块, 保留 RON 校验、UUID 生成、基础设施连接/刷新、角色装配与终端交互. 原 `shutdown_timeout_secs` 转为 Options 的 Duration, 配置格式与加载行为保持不变. 库输出 host.stopping, node 继续输出 node.stopped.
+- node 删除自身的监督循环和 shutdown 模块, 保留 RON 校验、UUID 生成、基础设施连接/刷新与角色装配. 原 `shutdown_timeout_secs` 转为 Options 的 Duration, 配置格式与加载行为保持不变. 库输出 host.stopping, node 继续输出 node.stopped.
 - 本阶段已通过外部 consumer 嵌入 3 个 Authority、3 个 Worker 与两个隔离 local 消息空间, 通过 Client 完成 5 次定向调用并共同排空. 多角色组合和宿主生命周期分别由 Node 组合测试与 Host 公开接口测试持续验证.
-- 原应用监督/停止测试迁入[公开接口测试](../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、终端选择、正常退出和配置不改写.
+- 原应用监督/停止测试迁入[公开接口测试](../crates/beamlet-host/tests/lifecycle.rs), 覆盖聚合错误与来源、panic、意外退出、后台 EOF/失败、空组、有限排空、取消清理、晚等待者及组间隔离. 真实 NATS 组合验收通过, 继续检查多角色、多连接、重连、正常退出和配置不改写.
 - 验证通过: workspace 测试、9 项宿主公开接口测试及文档示例、全部目标/feature 的 clippy、严格 rustdoc. 两个 workspace 外 consumer 分别运行纯宿主自定义任务和完整多角色示例; 纯宿主正常依赖树没有其他 Beamlet crate、消息后端、serde 或配置库.
 - 最终验收同时通过 node/console 的真实 NATS 测试和 NATS 适配器契约测试. P0–P6 已完成, 后续持久化、自动重试或其他消息后端属于独立议题.
 
