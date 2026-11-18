@@ -11,19 +11,11 @@ use std::{
 use tokio::sync::oneshot;
 
 /// 创建使用默认退出期限的测试 Host.
-///
-/// # 返回值
-///
-/// 新的空 Host; 默认参数构造失败时 panic.
 fn host() -> Host {
     Host::new(Options::default()).unwrap()
 }
 
 /// 验证宿主构造和登记任务期间不轮询任务, 并校验退出期限.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn construction_validates_before_any_task_is_polled() {
     for timeout in [Duration::ZERO, Duration::MAX] {
@@ -42,10 +34,6 @@ fn construction_validates_before_any_task_is_polled() {
 }
 
 /// 验证任一任务失败会停止同组任务并汇总名称和原始错误来源.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn failure_stops_siblings_and_aggregates_errors_with_task_names_and_sources() {
     let mut host = host();
@@ -85,10 +73,6 @@ async fn failure_stops_siblings_and_aggregates_errors_with_task_names_and_source
 }
 
 /// 验证后台 EOF 不停止长期服务, 晚等待者也能观察停止通知.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn background_eof_keeps_services_running_and_stop_reaches_late_waiters() {
     let mut host = host();
@@ -115,10 +99,6 @@ async fn background_eof_keeps_services_running_and_stop_reaches_late_waiters() {
 }
 
 /// 验证空宿主继续等待外部信号并保留信号失败原因.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn empty_host_waits_for_signal_and_preserves_signal_failure() {
     let (signal, wait) = oneshot::channel::<()>();
@@ -133,10 +113,6 @@ async fn empty_host_waits_for_signal_and_preserves_signal_failure() {
 }
 
 /// 验证任务提前成功, panic 和后台错误都能触发组停止.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn early_success_panic_and_background_error_all_stop_the_group() {
     for case in 0..3 {
@@ -184,24 +160,12 @@ struct Dropped(
 );
 impl Drop for Dropped {
     /// 在测试资源被释放时发送一次 Drop 通知.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Dropped` 的可变引用.
-    ///
-    /// # 返回值
-    ///
-    /// `()`; 唤醒正在检查清理行为的观察者.
     fn drop(&mut self) {
         self.0.notify_one();
     }
 }
 
 /// 验证排空期限中止等待, 保留首次与后续错误且不延长期限.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test(start_paused = true)]
 async fn deadline_aborts_pending_work_and_preserves_first_failure() {
     for failed in [false, true] {
@@ -250,10 +214,6 @@ async fn deadline_aborts_pending_work_and_preserves_first_failure() {
 }
 
 /// 验证丢弃运行 future 释放任务和后台输入, 并通知停止观察者.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn dropping_run_cancels_owned_tasks_background_and_notifies_observers() {
     let mut host = host();
@@ -283,10 +243,6 @@ async fn dropping_run_cancels_owned_tasks_background_and_notifies_observers() {
 }
 
 /// 验证停止一个 Host 不影响另一个 Host.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn stopping_one_group_does_not_stop_another() {
     let first = host();
@@ -310,10 +266,6 @@ async fn stopping_one_group_does_not_stop_another() {
 }
 
 /// 验证开始停止时先丢弃后台输入, 避免服务排空依赖它而卡住.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn shutdown_drops_background_before_waiting_for_service_drain() {
     let mut host = host();

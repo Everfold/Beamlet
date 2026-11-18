@@ -4,10 +4,6 @@ mod contract;
 use beamlet_transport_local::Local;
 
 /// 用本地适配器验证共享的定向交付契约.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn delivery_contract() {
     let transport = Local::new(8).unwrap();
@@ -15,10 +11,6 @@ async fn delivery_contract() {
     contract::delivery(transport, inbox).await;
 }
 /// 用本地适配器验证共享的发现, 请求和公告控制契约.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn control_contract() {
     let transport = Local::new(8).unwrap();

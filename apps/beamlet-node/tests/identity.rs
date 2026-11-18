@@ -8,15 +8,6 @@ use std::{
 use uuid::Uuid;
 
 /// 从结构化日志行中提取命名 UUID 字段.
-///
-/// # 参数
-///
-/// - `line`: 包含结构化身份字段的一条日志.
-/// - `name`: 日志中要查找的 UUID 字段名.
-///
-/// # 返回值
-///
-/// 解析出的 UUID; 字段缺失或不是 UUID 时 panic.
 fn field(line: &str, name: &str) -> Uuid {
     line.split_whitespace()
         .find_map(|field| field.strip_prefix(&format!("{name}=")))
@@ -26,16 +17,6 @@ fn field(line: &str, name: &str) -> Uuid {
         .unwrap()
 }
 /// 启动用于身份验收的 Node, 并从预期连接失败日志提取会话.
-///
-/// # 参数
-///
-/// - `binary`: 已构建的 Node 可执行文件路径.
-/// - `cwd`: 运行测试子进程时的工作目录.
-/// - `args`: 传给测试二进制的命令行参数列表.
-///
-/// # 返回值
-///
-/// 三元组 `(日志, Node 会话 UUID, 角色到会话 UUID 映射)`; 进程或日志不符合预期时 panic.
 fn start(binary: &Path, cwd: &Path, args: &[&str]) -> (String, Uuid, BTreeMap<Uuid, Uuid>) {
     let output = Command::new(binary)
         .args(args)
@@ -61,10 +42,6 @@ fn start(binary: &Path, cwd: &Path, args: &[&str]) -> (String, Uuid, BTreeMap<Uu
 }
 
 /// 验证真实节点重启保留固定身份, 更新独立会话且不改写配置.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restarts_preserve_each_role_id_and_renew_separate_sessions_without_writing_config() {
     for (file_name, args) in [

@@ -2,10 +2,6 @@ use super::*;
 use std::fs;
 
 /// 验证已有 Console 配置被正确加载且文件内容不被改写.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn loads_existing_config_without_overwriting_it() {
     let directory = tempfile::tempdir().unwrap();
@@ -40,10 +36,6 @@ fn loads_existing_config_without_overwriting_it() {
 }
 
 /// 验证未知配置字段和非法 RON 会报错并保留原文件.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn rejects_unknown_fields_and_invalid_ron() {
     let directory = tempfile::tempdir().unwrap();
@@ -64,10 +56,6 @@ fn rejects_unknown_fields_and_invalid_ron() {
 }
 
 /// 验证首次启动创建 Console 配置, 后续加载复用原文件.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn creates_and_loads_config_on_first_start() {
     let directory = tempfile::tempdir().unwrap();
@@ -91,10 +79,6 @@ fn creates_and_loads_config_on_first_start() {
 }
 
 /// 验证首次创建配置失败时错误包含目标路径.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn reports_config_creation_failure_with_path() {
     let directory = tempfile::tempdir().unwrap();
@@ -105,10 +89,6 @@ fn reports_config_creation_failure_with_path() {
     assert!(error.to_string().contains(&path.display().to_string()));
 }
 /// 验证期限/容量字段缺失, 零值, 负值或溢出时拒绝配置且不写回.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn deadlines_and_capacity_reject_missing_zero_negative_and_overflow_without_rewriting() {
     let directory = tempfile::tempdir().unwrap();
@@ -148,10 +128,6 @@ fn deadlines_and_capacity_reject_missing_zero_negative_and_overflow_without_rewr
     }
 }
 /// 验证发现窗口严格小于总请求期限, 为通信准备留出时间.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn discovery_window_must_leave_time_for_network_setup() {
     let mut settings = Settings::default();

@@ -18,7 +18,7 @@ use tokio::sync::oneshot;
 /// 所有测试交付的等待期限.
 const DEADLINE: Duration = Duration::from_secs(2);
 
-/// 返回独立角色会话.
+/// 创建独立的测试角色会话.
 fn instance() -> RoleInstance {
     RoleInstance {
         role_id: Uuid::new_v4(),
@@ -26,7 +26,7 @@ fn instance() -> RoleInstance {
     }
 }
 
-/// 返回默认 pool 的 Authority 描述.
+/// 构造默认 pool 的 Authority 描述.
 fn info() -> AuthorityInfo {
     AuthorityInfo {
         instance: instance(),
@@ -35,7 +35,7 @@ fn info() -> AuthorityInfo {
     }
 }
 
-/// 向 authority 的指定 worker 提交 text, 返回命令.
+/// 构造定向提交给指定 Worker 的命令.
 fn submit(authority: RoleInstance, worker: RoleInstance, text: &str) -> Command {
     Command::Submit {
         request_id: Uuid::new_v4(),
@@ -51,7 +51,7 @@ fn submit(authority: RoleInstance, worker: RoleInstance, text: &str) -> Command 
     }
 }
 
-/// 在 local 上绑定 target 并公告, 返回工作接收端和公告端.
+/// 在本地传输上绑定并公告测试 Worker.
 async fn worker(local: &Local, target: RoleInstance) -> beamlet_transport_local::WorkerEndpoints {
     let binding = WorkerBinding {
         pool: Pool::default(),
@@ -124,7 +124,7 @@ struct Unknown(
     Arc<AtomicUsize>,
 );
 impl Delivery for Unknown {
-    /// 记录 call 的一次交付并返回 Unknown; deadline 不参与模拟.
+    /// 记录调用次数并模拟交付结果未知.
     async fn deliver(
         &self,
         _call: beamlet_api::Call,

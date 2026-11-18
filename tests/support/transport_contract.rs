@@ -11,14 +11,14 @@ use tokio::time::timeout;
 /// 单次契约交互的最长等待时间.
 const DEADLINE: Duration = Duration::from_secs(2);
 
-/// 以 base 和 base + 1 构造并返回固定角色会话.
+/// 构造可重复使用的测试角色会话.
 fn instance(base: u128) -> RoleInstance {
     RoleInstance {
         role_id: Uuid::from_u128(base),
         session_id: Uuid::from_u128(base + 1),
     }
 }
-/// 返回启用 echo/v1 的测试 Worker 绑定.
+/// 构造启用 echo/v1 的测试 Worker 绑定.
 pub fn binding() -> WorkerBinding {
     WorkerBinding {
         pool: Pool::default(),
@@ -26,7 +26,7 @@ pub fn binding() -> WorkerBinding {
         capabilities: ["echo/v1".into()].into(),
     }
 }
-/// 返回默认 pool 的测试 Authority.
+/// 构造默认 pool 的测试 Authority.
 pub fn authority() -> AuthorityInfo {
     AuthorityInfo {
         instance: instance(1),
@@ -34,7 +34,7 @@ pub fn authority() -> AuthorityInfo {
         pools: [Pool::default()].into(),
     }
 }
-/// 用 index 构造并返回一次可区分的调用.
+/// 为每次测试调用分配独立身份.
 fn call(index: usize) -> Call {
     Call {
         pool: Pool::default(),
@@ -45,7 +45,7 @@ fn call(index: usize) -> Call {
         payload: format!("输入 {index}"),
     }
 }
-/// 在期限内等待 future 并返回其结果, 超时则使测试失败.
+/// 限制测试异步操作的等待时间.
 async fn within<T>(future: impl Future<Output = T>) -> T {
     timeout(DEADLINE, future).await.expect("transport stalled")
 }
@@ -196,7 +196,7 @@ pub async fn delivery(transport: impl Delivery, mut inbox: impl WorkerInbox) {
     );
 }
 
-/// 从 endpoint 读取并返回下一个非连接事件.
+/// 跳过连接事件, 等待下一条业务事件.
 async fn next_event(endpoint: &mut impl AuthorityInbox) -> AuthorityEvent {
     loop {
         match within(endpoint.receive()).await.unwrap().unwrap() {

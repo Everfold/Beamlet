@@ -2,10 +2,6 @@ use beamlet_api::{Pool, RoleInstance, Uuid};
 use beamlet_transport_nats::subject;
 
 /// 验证非法 pool 不能突破主题片段隔离, 不同会话路由不同.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn pools_cannot_escape_subject_tokens_and_sessions_route_separately() {
     for invalid in ["", "a.b", "a*", ">", "a b", " a", "\n", "池"] {

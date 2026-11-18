@@ -4,10 +4,6 @@ use beamlet_client::{BuildError, Client, Error, Options};
 use std::time::Duration;
 
 /// 验证 Client 参数检查无需执行器即可拒绝非法期限.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn construction_checks_durations_without_needing_an_executor() {
     for duration in [Duration::ZERO, Duration::MAX] {
@@ -41,10 +37,6 @@ fn construction_checks_durations_without_needing_an_executor() {
     ));
 }
 /// 验证非法命令在进入传输前被拒绝.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn invalid_commands_are_rejected_before_transport() {
     let (transport, mut events) = support::pair::<String, String>();

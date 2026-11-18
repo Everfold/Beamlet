@@ -19,14 +19,6 @@ pub(crate) struct Input(
 );
 
 /// 创建供 Authority 单元测试使用的有界输入通道.
-///
-/// # 参数
-///
-/// - `capacity`: 有界接收队列的容量, 必须大于零且不超过 Tokio 最大许可数.
-///
-/// # 返回值
-///
-/// 二元组 `(提交发送端, 输入接收端)`.
 pub(crate) fn pair(capacity: usize) -> (Sender, Input) {
     let (send, recv) = mpsc::channel(capacity);
     (Sender(send), Input(Some(recv)))
@@ -34,15 +26,6 @@ pub(crate) fn pair(capacity: usize) -> (Sender, Input) {
 
 impl Sender {
     /// 把测试文本转换为结构化提交并分配独立回复通道.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Sender` 的共享引用.
-    /// - `text`: 提交给受控倒序处理器的原始测试文本.
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回结果文本的 oneshot 接收端; 业务输入关闭时返回错误.
     pub(crate) async fn submit(&self, text: String) -> Result<oneshot::Receiver<String>> {
         let (send, recv) = oneshot::channel();
         self.0
@@ -66,14 +49,6 @@ impl Sender {
 
 impl Ingress for Input {
     /// 从测试通道读取下一份结构化 Authority 提交.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Input` 的可变引用.
-    ///
-    /// # 返回值
-    ///
-    /// 有请求返回 `Ok(Some(Request))`, 入口关闭且排空后返回 `Ok(None)`.
     async fn receive(&mut self) -> Result<Option<Request>, crate::RunError> {
         Ok(match &mut self.0 {
             Some(input) => input.recv().await,
@@ -82,14 +57,6 @@ impl Ingress for Input {
     }
 
     /// 停止测试输入, 丢弃尚未交出的业务请求.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Input` 的可变引用.
-    ///
-    /// # 返回值
-    ///
-    /// 返回 `Ok(())`; 有停止观察者时通知它已执行关闭.
     async fn stop(&mut self) -> Result<(), crate::RunError> {
         // 未交出的请求不属于已签发任务, 直接丢弃而不是隐式排空执行.
         self.0 = None;
@@ -98,14 +65,6 @@ impl Ingress for Input {
 }
 
 /// 构造把 Authority 结果转换为测试文本的一次性回复入口.
-///
-/// # 参数
-///
-/// - `sender`: 一次性测试结果发送端.
-///
-/// # 返回值
-///
-/// Reply; 发送时完成/拒绝/未解决结果被转换为相应文本.
 fn reply(sender: oneshot::Sender<String>) -> Reply {
     Reply::new(move |outcome| async move {
         use beamlet_api::Outcome;

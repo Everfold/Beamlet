@@ -1,10 +1,6 @@
 use super::*;
 
 /// 验证倒序能力保留空白和空文本, 不先执行 trim.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn reverses_text_without_trimming() {
     for (input, expected) in [
@@ -19,10 +15,6 @@ fn reverses_text_without_trimming() {
 }
 
 /// 验证倒序按 Unicode 标量进行, 而不是按字素簇处理.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn reverses_scalars_not_graphemes() {
     for (input, expected) in [

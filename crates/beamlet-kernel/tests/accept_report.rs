@@ -22,10 +22,6 @@ struct Failure(
 );
 
 /// 验证内核借用完整报告接受结果, 无需克隆原请求或结果.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn accepts_complete_report_without_cloning_request_or_result() {
     let operation = Operation::new("operation-1", Request(String::from("request")));
@@ -50,10 +46,6 @@ fn accepts_complete_report_without_cloning_request_or_result() {
 }
 
 /// 验证 Operation 不匹配时错误归还原始等待对象.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn operation_mismatch_returns_original_operation() {
     let (operation, attempt) = Operation::new("operation-1", "request").create_attempt(1);
@@ -83,10 +75,6 @@ fn operation_mismatch_returns_original_operation() {
 }
 
 /// 验证一次报告接受后可再签发授权, 同时拒绝旧授权报告.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn retries_after_failure_and_rejects_old_report() {
     let (operation, first) = Operation::new("operation-1", "request").create_attempt(1);

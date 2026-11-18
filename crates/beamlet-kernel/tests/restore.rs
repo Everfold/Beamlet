@@ -23,10 +23,6 @@ struct OpaqueIdentity(
 );
 
 /// 验证从已保存授权恢复等待状态, 不重新签发或克隆输入.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
     let operation = Operation::restore_awaiting_report(
@@ -56,10 +52,6 @@ fn restores_waiting_without_minting_attempt_or_cloning_inputs() {
 }
 
 /// 验证恢复时身份不匹配会归还全部输入数据.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restore_mismatch_returns_all_owned_inputs() {
     let error = Operation::restore_awaiting_report(
@@ -77,10 +69,6 @@ fn restore_mismatch_returns_all_owned_inputs() {
 }
 
 /// 验证可以使用不透明身份恢复 Closed Operation.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restores_closed_with_opaque_identity() {
     let operation = Operation::restore_closed(
@@ -96,10 +84,6 @@ fn restores_closed_with_opaque_identity() {
 }
 
 /// 验证恢复后的等待对象拒绝旧报告后仍可接受正确报告.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn restored_waiting_rejects_stale_report_and_remains_usable() {
     let operation = Operation::restore_awaiting_report(1, "request", Attempt::from_parts(1, 7))

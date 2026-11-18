@@ -27,28 +27,12 @@ struct ChildGuard(
 );
 impl Drop for ChildGuard {
     /// 结束测试服务子进程并回收其退出状态.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `ChildGuard` 的可变引用.
-    ///
-    /// # 返回值
-    ///
-    /// `()`; 尽力终止和等待子进程, 不把清理错误向外传播.
     fn drop(&mut self) {
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
 }
 /// 在测试期限内反复连接本地 NATS 服务.
-///
-/// # 参数
-///
-/// - `port`: 测试 NATS 服务监听的本地 TCP 端口.
-///
-/// # 返回值
-///
-/// 成功返回 async_nats 客户端; 服务未及时启动时返回错误.
 async fn connect(port: u16) -> Result<async_nats::Client> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -60,15 +44,6 @@ async fn connect(port: u16) -> Result<async_nats::Client> {
     }
 }
 /// 等待测试日志中出现指定文本.
-///
-/// # 参数
-///
-/// - `path`: 测试进程输出的日志文件路径.
-/// - `expected`: 日志中需要出现的文本子串.
-///
-/// # 返回值
-///
-/// 成功返回当前完整日志; 文件读取失败或期限耗尽时返回错误.
 async fn output_contains(path: &Path, expected: &str) -> Result<String> {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -81,30 +56,12 @@ async fn output_contains(path: &Path, expected: &str) -> Result<String> {
     }
 }
 /// 在测试期限内读取 NATS 订阅的下一条消息.
-///
-/// # 参数
-///
-/// - `input`: 等待消息的测试 NATS 订阅.
-///
-/// # 返回值
-///
-/// 成功返回消息; 订阅结束或超时返回错误.
 async fn next(input: &mut async_nats::Subscriber) -> Result<async_nats::Message> {
     timeout(Duration::from_secs(5), input.next())
         .await?
         .context("subscription closed")
 }
 /// 按测试请求的回复地址发送关联正确的 v3 结果.
-///
-/// # 参数
-///
-/// - `client`: 已连接测试 NATS 服务的原生客户端.
-/// - `message`: 接收到的 Authority 请求消息, 其 reply 是回应地址.
-/// - `outcome`: 准备回应给本次请求的业务或查询结果.
-///
-/// # 返回值
-///
-/// 成功返回 `Ok(())`; 解码, 缺少回复地址, 编码或发送失败返回错误.
 async fn reply(
     client: &async_nats::Client,
     message: &async_nats::Message,
@@ -125,14 +82,6 @@ async fn reply(
     Ok(())
 }
 /// 用给定数值构造可重复的测试角色身份.
-///
-/// # 参数
-///
-/// - `id`: 确定性角色 UUID 的数值; 会话身份使用该值加 100.
-///
-/// # 返回值
-///
-/// 角色 UUID 使用 id, 会话 UUID 使用 id 加 100 的 RoleInstance.
 fn instance(id: u128) -> RoleInstance {
     RoleInstance {
         role_id: Uuid::from_u128(id),
@@ -140,10 +89,6 @@ fn instance(id: u128) -> RoleInstance {
     }
 }
 /// 构造供真实 Console 测试展示的一份 Worker 列表回复.
-///
-/// # 返回值
-///
-/// 包含预设 Ready Worker 和文本倒序能力的 Outcome::Workers.
 fn workers() -> Outcome {
     Outcome::Workers {
         workers: vec![WorkerView {
@@ -161,14 +106,6 @@ fn workers() -> Outcome {
     }
 }
 /// 构造带预设关联身份的已完成提交结果.
-///
-/// # 参数
-///
-/// - `text`: 作为成功业务结果展示的测试文本.
-///
-/// # 返回值
-///
-/// 携带输入文本作为业务结果的 Outcome::Completed.
 fn completed(text: &str) -> Outcome {
     Outcome::Completed {
         operation_id: format!("operation:{text}"),
@@ -180,10 +117,6 @@ fn completed(text: &str) -> Outcome {
 }
 
 /// 验证真实 Console 同时提交多个请求, 并按关联身份显示乱序结果和退出排空.
-///
-/// # 返回值
-///
-/// 所有断言通过时返回 `Ok(())`; I/O 或协议验证失败返回错误, 断言失败会使测试失败.
 #[tokio::test]
 #[ignore = "requires nats-server; explicit Console integration test"]
 async fn console_submits_concurrently_and_drains_correlated_results() -> Result<()> {

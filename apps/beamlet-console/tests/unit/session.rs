@@ -4,28 +4,12 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 
 /// 给异步测试步骤施加整体等待期限, 防止回归时永久挂起.
-///
-/// # 参数
-///
-/// - `future`: 需要在测试期限内完成的异步步骤.
-///
-/// # 返回值
-///
-/// future 的原始输出; 超过测试期限会 panic 并使测试失败.
 async fn within<F: Future>(future: F) -> F::Output {
     tokio::time::timeout(Duration::from_secs(5), future)
         .await
         .expect("console async test timed out")
 }
 /// 用给定数值构造可重复的测试角色身份.
-///
-/// # 参数
-///
-/// - `id`: 确定性角色 UUID 的数值; 会话身份使用该值加 100.
-///
-/// # 返回值
-///
-/// 角色 UUID 使用 id, 会话 UUID 使用 id 加 100 的 RoleInstance.
 fn instance(id: u128) -> RoleInstance {
     RoleInstance {
         role_id: Uuid::from_u128(id),
@@ -33,10 +17,6 @@ fn instance(id: u128) -> RoleInstance {
     }
 }
 /// 构造供终端选择测试使用的 Authority 列表.
-///
-/// # 返回值
-///
-/// 两个身份不同, 加入默认 pool 的 AuthorityInfo.
 fn authorities() -> Vec<AuthorityInfo> {
     [1, 2]
         .into_iter()
@@ -48,10 +28,6 @@ fn authorities() -> Vec<AuthorityInfo> {
         .collect()
 }
 /// 构造供会话选择测试使用的 Worker 快照.
-///
-/// # 返回值
-///
-/// 含预设 Ready Worker 和能力集合的 `Vec<WorkerView>`.
 fn workers() -> Vec<WorkerView> {
     vec![WorkerView {
         presence: Presence {
@@ -67,10 +43,6 @@ fn workers() -> Vec<WorkerView> {
     }]
 }
 /// 创建已经选择 Authority, pool, 能力和 Worker 的会话.
-///
-/// # 返回值
-///
-/// 完成测试选择步骤的 Session; 准备失败会使测试失败.
 fn selected() -> Session {
     let mut session = Session::new(
         BTreeSet::from([Pool::default()]),
@@ -85,15 +57,6 @@ fn selected() -> Session {
     session
 }
 /// 把测试网络动作和结果组合为会话完成事件.
-///
-/// # 参数
-///
-/// - `action`: 尚未执行的终端网络动作.
-/// - `result`: 模拟网络调用得到的 Outcome 或错误.
-///
-/// # 返回值
-///
-/// 与请求类型相符的 Completion; 传入发现动作会 panic.
 fn response(action: Action, result: Result<Outcome>) -> Completion {
     let Action::Request {
         command,
@@ -105,14 +68,6 @@ fn response(action: Action, result: Result<Outcome>) -> Completion {
     Completion::reply(command, choice_revision, result)
 }
 /// 构造带预设关联身份的已完成提交结果.
-///
-/// # 参数
-///
-/// - `text`: 作为成功业务结果展示的测试文本.
-///
-/// # 返回值
-///
-/// 携带输入文本作为业务结果的 Outcome::Completed.
 fn completed(text: &str) -> Outcome {
     Outcome::Completed {
         operation_id: text.into(),
@@ -123,14 +78,6 @@ fn completed(text: &str) -> Outcome {
     }
 }
 /// 为当前会话创建查询并记录它是最新一次 Worker 请求.
-///
-/// # 参数
-///
-/// - `session`: 需要更新的交互会话, 包括选择, 列表和最新查询身份.
-///
-/// # 返回值
-///
-/// 创建的查询 Action, 可用于随后构造完成事件.
 fn track_query(session: &mut Session) -> Action {
     let query = session.workers().unwrap();
     session.workers_request = Some(query.request_id());
@@ -138,10 +85,6 @@ fn track_query(session: &mut Session) -> Action {
 }
 
 /// 验证提交锁定目标快照, 旧拒绝不会覆盖新选择.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn submission_keeps_target_snapshot_and_late_rejection_preserves_new_choice() {
     let mut session = selected();
@@ -185,10 +128,6 @@ fn submission_keeps_target_snapshot_and_late_rejection_preserves_new_choice() {
 }
 
 /// 验证较旧的查询或发现完成事件不能替换新结果.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn older_queries_and_discovery_never_replace_newer_results() {
     let mut session = selected();
@@ -242,10 +181,6 @@ fn older_queries_and_discovery_never_replace_newer_results() {
 }
 
 /// 验证等待中的提交不阻塞查询, EOF 后按完成顺序排空.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results() {
     within(async {
@@ -320,10 +255,6 @@ async fn pending_submissions_allow_queries_and_eof_drains_out_of_order_results()
 }
 
 /// 验证 Console 满载时仍可处理退出, 且不发送超额请求.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn full_console_still_accepts_quit_and_does_not_send_excess_requests() {
     for limit in [1, 3, 32] {
@@ -384,10 +315,6 @@ async fn full_console_still_accepts_quit_and_does_not_send_excess_requests() {
 }
 
 /// 验证中断 Console 会释放尚未完成的请求 future.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[tokio::test]
 async fn interrupting_console_drops_pending_futures() {
     /// 记录请求 future 是否被丢弃的测试通知 guard.
@@ -397,14 +324,6 @@ async fn interrupting_console_drops_pending_futures() {
     );
     impl Drop for DropNotice {
         /// 在测试 guard 被丢弃时记录 future 已释放.
-        ///
-        /// # 参数
-        ///
-        /// - `self`: 当前 `DropNotice` 的可变引用.
-        ///
-        /// # 返回值
-        ///
-        /// `()`; 更新测试观察状态.
         fn drop(&mut self) {
             if let Some(send) = self.0.take() {
                 let _ = send.send(());

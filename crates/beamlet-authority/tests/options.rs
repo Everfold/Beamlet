@@ -2,24 +2,11 @@ use beamlet_api::{AuthorityInfo, Pool, RoleInstance, Uuid};
 use beamlet_authority::{Authority, BuildError, Concurrency, Options};
 use std::time::Duration;
 
-/// 按 info 和 options 尝试构造 Authority, 返回构造结果.
-///
-/// # 参数
-///
-/// - `info`: Authority 的角色/会话身份, 标签及其加入的 pools.
-/// - `options`: 当前模块的运行参数; 期限使用 Duration, 容量/并发由对应字段约束.
-///
-/// # 返回值
-///
-/// 构造成功返回 Authority; 参数或身份非法时返回 BuildError.
+/// 用指定配置测试 Authority 的构造.
 fn build(info: AuthorityInfo, options: Options) -> Result<Authority, BuildError> {
     Authority::new(info, options)
 }
 /// 构造 Authority 测试用身份与 pool 描述.
-///
-/// # 返回值
-///
-/// 带有效独立身份和非空 pools 的 AuthorityInfo.
 fn info() -> AuthorityInfo {
     AuthorityInfo {
         instance: RoleInstance {
@@ -32,10 +19,6 @@ fn info() -> AuthorityInfo {
 }
 
 /// 验证直接构造 Authority 时拒绝非法身份, 容量及期限.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn rejects_invalid_identity_and_parameters_before_runtime_resources_are_created() {
     for instance in [

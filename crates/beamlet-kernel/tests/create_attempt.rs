@@ -15,10 +15,6 @@ struct Request(
 );
 
 /// 验证创建 Attempt 保持授权身份, Operation 身份和原始请求关联.
-///
-/// # 返回值
-///
-/// `()`; 全部断言通过时正常结束, 断言失败或未预期错误会使测试失败.
 #[test]
 fn creates_attempt_with_bound_identity_and_request() {
     let operation = Operation::new(Identity("operation-1"), Request(String::from("request")));
