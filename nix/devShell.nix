@@ -22,6 +22,7 @@ pkgs.mkShell rec {
 
     quint
     temurin-bin
+    buf
 
     nats-server
     nats-top
