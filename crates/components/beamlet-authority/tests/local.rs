@@ -1,13 +1,17 @@
 use beamlet_api::{
-    AuthorityInfo, ClientTransport, Command, DeliveryError, DiscoveryInbox, Outcome, Pool,
-    Presence, PresenceChannel, PresenceState, RoleInstance, Selection, Submission, Task, Uuid,
-    WorkerBinding, WorkerInbox,
+    AuthorityEvent, AuthorityInbox, AuthorityInfo, ClientTransport, Command, Connection,
+    ConnectionView, DeliveryError, DiscoveryInbox, Outcome, Pool, Presence, PresenceChannel,
+    PresenceState, Reply, Responder, RoleInstance, Selection, Submission, Task, TransportError,
+    Uuid, WorkerBinding, WorkerInbox,
 };
 use beamlet_authority::{Authority, Concurrency, Options};
 use beamlet_primitives::Report;
 use beamlet_transport_local::Local;
-use std::{future::Future, time::Duration};
-use tokio::{sync::oneshot, time::timeout};
+use std::{collections::BTreeSet, future::Future, time::Duration};
+use tokio::{
+    sync::{mpsc, oneshot, watch},
+    time::timeout,
+};
 /// Authority 公开接口测试的等待期限: 3 秒, 回归时避免无限挂起.
 const DEADLINE: Duration = Duration::from_secs(3);
 /// 为测试生成独立的角色 UUID 和会话 UUID.
@@ -451,6 +455,226 @@ async fn cancelling_authority_releases_delivery_and_control_endpoint() {
             }
             tokio::task::yield_now().await;
         }
+    };
+    within(scenario).await;
+}
+
+/// 验证客户端提前丢弃发现入口或请求超时后，Authority 仍继续处理后续查询与提交。
+#[tokio::test]
+async fn abandoned_discovery_and_request_replies_keep_authority_running() {
+    let scenario = async {
+        let local = Local::new(8).unwrap();
+        let info = info();
+        let endpoint = local.bind_authority(&info).unwrap();
+        let authority = Authority::new(info.clone(), Options::default()).unwrap();
+        let (stop, shutdown) = oneshot::channel();
+        let running = tokio::spawn(authority.run((endpoint, local.clone()), shutdown));
+
+        let target = instance();
+        let binding = WorkerBinding {
+            pool: Pool::default(),
+            instance: target,
+            capabilities: ["echo/v1".into()].into(),
+        };
+        let (mut worker, presence) = local.bind_worker(binding.clone()).unwrap();
+        presence
+            .publish(&Presence {
+                pool: Pool::default(),
+                instance: target,
+                label: None,
+                capabilities: binding.capabilities,
+                sequence: 1,
+                state: PresenceState::Ready,
+            })
+            .await
+            .unwrap();
+        assert_eq!(workers(&local, info.instance).await.len(), 1);
+
+        // 放弃发现接收端后发送发现请求，触发控制面 ReplyError。
+        let abandoned_discovery = local.discover(&info.pools, Uuid::new_v4()).await.unwrap();
+        drop(abandoned_discovery);
+
+        // 请求在收到 Worker 报告前超时，触发业务面 ReplyError。
+        let timed_out = local.request(
+            submit(info.instance, Selection::Exact(target), "abandoned"),
+            Duration::from_millis(20),
+        );
+        tokio::pin!(timed_out);
+        let incoming = tokio::select! {
+            incoming = worker.receive() => incoming.unwrap().unwrap(),
+            _ = &mut timed_out => panic!("request finished before timeout"),
+        };
+        assert!(timed_out.await.is_err());
+        incoming
+            .reply
+            .send(Report::new(
+                "report-abandoned".into(),
+                incoming.call.attempt,
+                "ignored".into(),
+            ))
+            .await
+            .unwrap();
+
+        // 确认控制查询和后续正常提交均不受影响。
+        assert_eq!(workers(&local, info.instance).await.len(), 1);
+        let followup = local.request(
+            submit(info.instance, Selection::Exact(target), "healthy"),
+            DEADLINE,
+        );
+        tokio::pin!(followup);
+        let incoming = tokio::select! {
+            incoming = worker.receive() => incoming.unwrap().unwrap(),
+            _ = &mut followup => panic!("followup finished before worker reply"),
+        };
+        incoming
+            .reply
+            .send(Report::new(
+                "report-healthy".into(),
+                incoming.call.attempt,
+                "done".into(),
+            ))
+            .await
+            .unwrap();
+        assert!(
+            matches!(followup.await.unwrap().outcome, Outcome::Completed { result, .. } if result == "done")
+        );
+        assert!(!running.is_finished());
+
+        stop.send(()).unwrap();
+        running.await.unwrap().unwrap();
+    };
+    within(scenario).await;
+}
+
+/// 可注入控制事件并固定返回 probe 错误的测试 AuthorityInbox。
+struct StubAuthorityInbox {
+    /// 待投递给控制循环的自定义控制事件。
+    events: mpsc::Receiver<AuthorityEvent>,
+    /// 只读连接状态视图。
+    connection: ConnectionView,
+    /// 每次调用 probe 时通知测试观察者。
+    probed: mpsc::UnboundedSender<()>,
+}
+
+impl AuthorityInbox for StubAuthorityInbox {
+    /// 返回连接视图。
+    fn connection(&self) -> ConnectionView {
+        self.connection.clone()
+    }
+
+    /// 接收下一条注入的控制事件。
+    async fn receive(&mut self) -> Result<Option<AuthorityEvent>, TransportError> {
+        Ok(self.events.recv().await)
+    }
+
+    /// 记录探测触发并故意返回传输错误，用于验证探测失败容错。
+    async fn probe(&self) -> Result<(), TransportError> {
+        let _ = self.probed.send(());
+        Err(TransportError::new("probe unavailable"))
+    }
+}
+
+/// 验证阻塞的控制回复不会阻断心跳观测与后续查询，且重连 probe 失败不终止 Authority。
+#[tokio::test]
+async fn blocked_control_reply_and_probe_failure_do_not_stall_or_stop_authority() {
+    let scenario = async {
+        let local = Local::new(8).unwrap();
+        let info = info();
+        let authority = Authority::new(info.clone(), Options::default()).unwrap();
+        let directory = authority.directory();
+        let (conn_tx, conn_rx) = watch::channel(Connection {
+            epoch: 1,
+            connected: true,
+        });
+        let (events_tx, events_rx) = mpsc::channel(8);
+        let (probe_tx, mut probed) = mpsc::unbounded_channel();
+        let inbox = StubAuthorityInbox {
+            events: events_rx,
+            connection: ConnectionView::new(move || *conn_rx.borrow()),
+            probed: probe_tx,
+        };
+        let (stop, shutdown) = oneshot::channel();
+        let running = tokio::spawn(authority.run((inbox, local), shutdown));
+
+        // 启动时 probe 返回错误也不应终止 Authority。
+        probed.recv().await.unwrap();
+        assert!(!running.is_finished());
+
+        // 注入一条会挂起的 Workers 控制回复。
+        let (reply_started_tx, reply_started) = oneshot::channel();
+        let (release_reply_tx, release_reply) = oneshot::channel();
+        events_tx
+            .send(AuthorityEvent::Request {
+                pool: Pool::default(),
+                command: Command::Workers {
+                    request_id: Uuid::new_v4(),
+                    authority: info.instance,
+                    pool: Pool::default(),
+                    capability: None,
+                },
+                reply: Responder::new(move |_| async move {
+                    let _ = reply_started_tx.send(());
+                    let _ = release_reply.await;
+                    Ok(())
+                }),
+            })
+            .await
+            .unwrap();
+        reply_started.await.unwrap();
+
+        // 在上一条控制回复阻塞期间，心跳登记与新的控制查询仍可立即推进。
+        let target = instance();
+        events_tx
+            .send(AuthorityEvent::Presence {
+                presence: Presence {
+                    pool: Pool::default(),
+                    instance: target,
+                    label: None,
+                    capabilities: BTreeSet::from(["echo/v1".into()]),
+                    sequence: 1,
+                    state: PresenceState::Ready,
+                },
+                epoch: 1,
+            })
+            .await
+            .unwrap();
+        let (reply_tx, reply_rx) = oneshot::channel();
+        events_tx
+            .send(AuthorityEvent::Request {
+                pool: Pool::default(),
+                command: Command::Workers {
+                    request_id: Uuid::new_v4(),
+                    authority: info.instance,
+                    pool: Pool::default(),
+                    capability: None,
+                },
+                reply: Responder::new(move |reply| async move {
+                    let _ = reply_tx.send(reply);
+                    Ok(())
+                }),
+            })
+            .await
+            .unwrap();
+        let Reply { outcome, .. } = reply_rx.await.unwrap();
+        assert!(matches!(outcome, Outcome::Workers { workers } if workers.len() == 1));
+        assert_eq!(directory.workers(&Pool::default(), None).len(), 1);
+
+        // 连接重连后 probe 再次返回错误也不应停止 Authority。
+        let reconnected = Connection {
+            epoch: 2,
+            connected: true,
+        };
+        conn_tx.send_replace(reconnected);
+        events_tx
+            .send(AuthorityEvent::Connection(reconnected))
+            .await
+            .unwrap();
+        probed.recv().await.unwrap();
+        assert!(!running.is_finished());
+
+        release_reply_tx.send(()).unwrap();
+        stop.send(()).unwrap();
+        running.await.unwrap().unwrap();
     };
     within(scenario).await;
 }

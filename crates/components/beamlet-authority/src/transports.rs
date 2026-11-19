@@ -32,7 +32,7 @@ struct Binding<P, R> {
 
 /// 控制任务的启动函数.
 type Control<P, R> = Box<
-    dyn FnOnce(AuthorityInfo, Registry, Source, mpsc::Sender<Request<P, R>>) -> ControlFuture
+    dyn FnOnce(AuthorityInfo, Registry, Source, mpsc::Sender<Request<P, R>>, usize) -> ControlFuture
         + Send,
 >;
 /// 独立控制任务的运行结果.
@@ -92,9 +92,18 @@ impl<P: Send + 'static, R: Send + 'static> Transports<P, R> {
     ) {
         self.bindings.push(Binding {
             connection: endpoint.connection(),
-            control: Box::new(move |info, registry, source, send| {
-                Box::pin(control::control(endpoint, info, registry, source, send))
-            }),
+            control: Box::new(
+                move |info, registry, source, send, max_concurrent_replies| {
+                    Box::pin(control::control(
+                        endpoint,
+                        info,
+                        registry,
+                        source,
+                        send,
+                        max_concurrent_replies,
+                    ))
+                },
+            ),
             delivery: Sender(Arc::new(move |call, deadline| {
                 let delivery = delivery.clone();
                 Box::pin(async move { delivery.deliver(call, deadline).await })
@@ -102,12 +111,13 @@ impl<P: Send + 'static, R: Send + 'static> Transports<P, R> {
         });
     }
 
-    /// 为 info/registry 启动 controls, 向 send 提交请求, 返回按路由排序的出口.
+    /// 为 info/registry 启动 controls, 向 send 提交请求, 限制控制回复并发并返回按路由排序的出口.
     pub(crate) fn start(
         self,
         info: AuthorityInfo,
         registry: Registry,
         send: mpsc::Sender<Request<P, R>>,
+        max_concurrent_replies: usize,
         controls: &mut JoinSet<Result<(), RunError>>,
     ) -> Result<Deliveries<P, R>, RunError> {
         if self.bindings.is_empty() {
@@ -120,8 +130,14 @@ impl<P: Send + 'static, R: Send + 'static> Transports<P, R> {
                 connection: binding.connection,
             };
             controls.spawn(
-                (binding.control)(info.clone(), registry.clone(), source, send.clone())
-                    .in_current_span(),
+                (binding.control)(
+                    info.clone(),
+                    registry.clone(),
+                    source,
+                    send.clone(),
+                    max_concurrent_replies,
+                )
+                .in_current_span(),
             );
             deliveries.push(binding.delivery);
         }

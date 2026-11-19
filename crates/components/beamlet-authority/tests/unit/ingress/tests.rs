@@ -292,11 +292,11 @@ async fn delivery_completion_releases_admission_capacity() {
         .await;
     }
 }
-/// 验证回复发送失败传播给调用方, 而不是静默丢失或重试.
+/// 验证回复发送失败不会重试交付，也不会终止 Authority，后续请求仍可正常完成。
 #[tokio::test]
-async fn reply_failure_is_returned_instead_of_silently_retrying() {
+async fn reply_failure_does_not_stop_authority_or_retry() {
     within(async {
-        let (sender, input) = channel::pair(1);
+        let (sender, input) = channel::pair(2);
         let (delivery, mut work) = controlled_delivery();
         let authority = tokio::spawn(authority::run(
             input,
@@ -310,14 +310,16 @@ async fn reply_failure_is_returned_instead_of_silently_retrying() {
         drop(abandoned);
         work.recv().await.unwrap().succeed().await;
 
-        assert!(
-            authority
-                .await
-                .unwrap()
-                .unwrap_err()
-                .to_string()
-                .contains("请求回复端已关闭")
-        );
+        let next = sender.submit("def".into()).await.unwrap();
+        work.recv().await.unwrap().succeed().await;
+        assert_eq!(next.await.unwrap(), "fed");
+        assert!(matches!(
+            work.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+
+        drop(sender);
+        authority.await.unwrap().unwrap();
         assert!(work.recv().await.is_none());
     })
     .await;

@@ -235,6 +235,7 @@ impl Authority {
             self.directory.0.clone(),
             local,
             self.options.input_capacity,
+            self.options.max_concurrent_replies,
         )?;
         let dispatch = engine::Routed {
             transports: deliveries,

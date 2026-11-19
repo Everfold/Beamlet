@@ -181,7 +181,7 @@ enum FinishError {
 ///
 /// # 返回值
 ///
-/// 入口结束或停止后排空完成返回 `Ok(())`; 输入, 回复, 任务或台账错误返回 RunError.
+/// 入口结束或停止后排空完成返回 `Ok(())`; 单次回复发送失败仅记日志不终止 Authority; 输入, 停止信号, 任务或台账错误返回 RunError.
 pub(crate) async fn run<P, R, E>(
     mut ingress: impl Ingress<P, R>,
     delivery: impl Dispatch<P, R>,
@@ -228,7 +228,16 @@ where
             }
 
             sent = sends.join_next(), if !sends.is_empty() => {
-                sent.expect("nonempty reply task set").map_err(|error| RunError::Task(TransportError::new(error)))??;
+                if let Err(error) = sent
+                    .expect("nonempty reply task set")
+                    .map_err(|error| RunError::Task(TransportError::new(error)))?
+                {
+                    warn!(
+                        event = "response.send_failed",
+                        %error,
+                        "发送结果回复失败, 保持 Authority 继续运行"
+                    );
+                }
                 None
             }
 
