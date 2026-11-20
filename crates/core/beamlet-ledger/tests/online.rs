@@ -137,3 +137,53 @@ fn enforces_states_and_attempt_identity_uniqueness() {
     );
     assert!(ledger.create_attempt(&2, 9).is_ok());
 }
+
+/// 验证台账计数与大批量交错操作及重复拒绝语义.
+#[test]
+fn tracks_counts_and_handles_many_interleaved_operations() {
+    let mut ledger: Ledger<usize, usize, usize> = Ledger::new();
+    assert!(ledger.is_empty());
+    assert_eq!(ledger.len(), 0);
+
+    let count = 1000;
+    for id in 0..count {
+        ledger.create_operation(id, id * 10).unwrap();
+    }
+    assert!(!ledger.is_empty());
+    assert_eq!(ledger.len(), count);
+
+    let mut attempts = Vec::with_capacity(count);
+    for id in 0..count {
+        attempts.push(ledger.create_attempt(&id, id).unwrap());
+    }
+
+    // 逆序接受报告并验证已用 Attempt 拒绝与再次签发。
+    for (id, attempt) in attempts.into_iter().enumerate().rev() {
+        assert_eq!(
+            ledger.create_attempt(&id, count + id),
+            Err(LedgerError::AttemptPending)
+        );
+        ledger.accept_report(&Report::new(id, attempt, id)).unwrap();
+        assert_eq!(
+            ledger.create_attempt(&id, id),
+            Err(LedgerError::AttemptIdReused)
+        );
+
+        if id % 2 == 0 {
+            ledger.close(&id).unwrap();
+            assert_eq!(
+                ledger.operation(&id).unwrap().status(),
+                OperationStatus::Closed
+            );
+        } else {
+            let retry = ledger.create_attempt(&id, count + id).unwrap();
+            ledger
+                .accept_report(&Report::new(count + id, retry, id))
+                .unwrap();
+            ledger.close(&id).unwrap();
+        }
+        assert_eq!(ledger.operation(&id).unwrap().request(), &(id * 10));
+    }
+
+    assert_eq!(ledger.len(), count);
+}

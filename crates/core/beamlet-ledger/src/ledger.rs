@@ -1,6 +1,10 @@
 use crate::{CreateOperationError, LedgerError};
 use beamlet_kernel::{AwaitingReport, Closed, Operation, OperationStatus};
 use beamlet_primitives::{Attempt, Report};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 /// 台账内部对不同生命周期 Operation 的统一存储表示.
 ///
@@ -128,8 +132,8 @@ impl<O, A, P> OperationView<'_, O, A, P> {
 
 /// 一组 Operation 的执行台账, 维护当前状态与 Attempt 身份唯一性.
 ///
-/// O 为 Operation 身份, A 为 Attempt 身份, P 为请求. 查找使用线性比较,
-/// 不要求身份实现 Hash. 关闭对象与已用授权身份保留到此 Ledger 被释放.
+/// O 为 Operation 身份, A 为 Attempt 身份, P 为请求. 内部使用哈希表与哈希集合索引,
+/// 要求身份支持 Eq 与 Hash. 关闭对象与已用授权身份保留到此 Ledger 被释放.
 ///
 /// # 泛型参数
 ///
@@ -139,9 +143,9 @@ impl<O, A, P> OperationView<'_, O, A, P> {
 #[derive(Debug)]
 pub struct Ledger<O, A, P> {
     /// 全部已注册 Operation 的当前状态, 保留关闭对象, 不承诺归档.
-    operations: Vec<Managed<O, A, P>>,
+    operations: HashMap<O, Managed<O, A, P>>,
     /// 该台账已经签发过的 Attempt 身份, 用于拒绝重复授权身份.
-    used_attempts: Vec<A>,
+    used_attempts: HashSet<A>,
 }
 
 impl<O, A, P> Default for Ledger<O, A, P> {
@@ -163,13 +167,39 @@ impl<O, A, P> Ledger<O, A, P> {
     /// 独立的 Ledger, 尚未记录任何操作或 Attempt.
     pub fn new() -> Self {
         Self {
-            operations: Vec::new(),
-            used_attempts: Vec::new(),
+            operations: HashMap::new(),
+            used_attempts: HashSet::new(),
         }
+    }
+
+    /// 返回当前台账中已登记的 Operation 总数（包含已关闭对象）.
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 当前 `Ledger<O, A, P>` 的共享引用.
+    ///
+    /// # 返回值
+    ///
+    /// 台账中保留的 Operation 数量.
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+
+    /// 判断当前台账是否尚未登记任何 Operation.
+    ///
+    /// # 参数
+    ///
+    /// - `self`: 当前 `Ledger<O, A, P>` 的共享引用.
+    ///
+    /// # 返回值
+    ///
+    /// 台账为空时返回 `true`, 否则返回 `false`.
+    pub fn is_empty(&self) -> bool {
+        self.operations.is_empty()
     }
 }
 
-impl<O: Eq, A, P> Ledger<O, A, P> {
+impl<O: Eq + Hash + Clone, A, P> Ledger<O, A, P> {
     /// 向台账插入一个全新 Ready Operation.
     ///
     /// # 参数
@@ -190,16 +220,18 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
         id: O,
         request: P,
     ) -> Result<(), CreateOperationError<O, P>> {
-        if self.operations.iter().any(|o| o.id() == &id) {
+        if self.operations.contains_key(&id) {
             return Err(CreateOperationError { id, request });
         }
 
         self.operations
-            .push(Managed::Ready(Operation::new(id, request)));
+            .insert(id.clone(), Managed::Ready(Operation::new(id, request)));
 
         Ok(())
     }
+}
 
+impl<O: Eq + Hash, A, P> Ledger<O, A, P> {
     /// 按身份查询台账中的只读 Operation 视图.
     ///
     /// # 参数
@@ -212,26 +244,8 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
     /// 存在时返回 `Some(OperationView)`, 不存在时返回 `None`.
     pub fn operation(&self, id: &O) -> Option<OperationView<'_, O, A, P>> {
         self.operations
-            .iter()
-            .find(|o| o.id() == id)
+            .get(id)
             .map(|operation| OperationView { operation })
-    }
-
-    /// 定位 Operation 在内部存储中的索引.
-    ///
-    /// # 参数
-    ///
-    /// - `self`: 当前 `Ledger<O, A, P>` 的共享引用.
-    /// - `id`: Operation 的固定身份, 用于创建, 恢复或查询对应操作.
-    ///
-    /// # 返回值
-    ///
-    /// 成功返回零基位置; 不存在返回 OperationNotFound.
-    fn position(&self, id: &O) -> Result<usize, LedgerError> {
-        self.operations
-            .iter()
-            .position(|o| o.id() == id)
-            .ok_or(LedgerError::OperationNotFound)
     }
 
     /// 关闭台账中的 Ready Operation, 已关闭时保持幂等.
@@ -249,23 +263,28 @@ impl<O: Eq, A, P> Ledger<O, A, P> {
     ///
     /// 不存在或正在等待报告时拒绝, 原状态不变.
     pub fn close(&mut self, id: &O) -> Result<(), LedgerError> {
-        let index = self.position(id)?;
-        if matches!(&self.operations[index], Managed::AwaitingReport(_)) {
-            return Err(LedgerError::AttemptPending);
+        match self.operations.get(id) {
+            None => return Err(LedgerError::OperationNotFound),
+            Some(Managed::AwaitingReport(_)) => return Err(LedgerError::AttemptPending),
+            Some(Managed::Ready(_) | Managed::Closed(_)) => {}
         }
 
-        let closed = match self.operations.remove(index) {
+        let (key, managed) = self
+            .operations
+            .remove_entry(id)
+            .expect("operation existence checked above");
+        let closed = match managed {
             Managed::Ready(operation) => operation.close(),
             Managed::Closed(operation) => operation.close(),
             Managed::AwaitingReport(_) => unreachable!("等待状态已在移出前拒绝"),
         };
-        self.operations.insert(index, Managed::Closed(closed));
+        self.operations.insert(key, Managed::Closed(closed));
 
         Ok(())
     }
 }
 
-impl<O: Eq + Clone, A: Eq + Clone, P> Ledger<O, A, P> {
+impl<O: Eq + Hash + Clone, A: Eq + Hash + Clone, P> Ledger<O, A, P> {
     /// 为一个 Ready Operation 签发台账内未使用过的授权身份.
     ///
     /// # 参数
@@ -282,30 +301,34 @@ impl<O: Eq + Clone, A: Eq + Clone, P> Ledger<O, A, P> {
     ///
     /// 不存在, 等待中, 已关闭或授权身份重复时拒绝. 被拒绝的身份不会标记已使用.
     pub fn create_attempt(&mut self, id: &O, attempt_id: A) -> Result<Attempt<O, A>, LedgerError> {
-        let index = self.position(id)?;
-        match &self.operations[index] {
-            Managed::AwaitingReport(_) => return Err(LedgerError::AttemptPending),
-            Managed::Closed(_) => return Err(LedgerError::OperationClosed),
-            Managed::Ready(_) => {}
+        match self.operations.get(id) {
+            None => return Err(LedgerError::OperationNotFound),
+            Some(Managed::AwaitingReport(_)) => return Err(LedgerError::AttemptPending),
+            Some(Managed::Closed(_)) => return Err(LedgerError::OperationClosed),
+            Some(Managed::Ready(_)) => {}
         }
         if self.used_attempts.contains(&attempt_id) {
             return Err(LedgerError::AttemptIdReused);
         }
 
         let used_id = attempt_id.clone();
-        let Managed::Ready(operation) = self.operations.remove(index) else {
+        let (key, Managed::Ready(operation)) = self
+            .operations
+            .remove_entry(id)
+            .expect("ready operation existence checked above")
+        else {
             unreachable!("只有 Ready 能进入授权创建")
         };
         let (operation, attempt) = operation.create_attempt(attempt_id);
         self.operations
-            .insert(index, Managed::AwaitingReport(operation));
-        self.used_attempts.push(used_id);
+            .insert(key, Managed::AwaitingReport(operation));
+        self.used_attempts.insert(used_id);
 
         Ok(attempt)
     }
 }
 
-impl<O: Eq, A: Eq, P> Ledger<O, A, P> {
+impl<O: Eq + Hash, A: Eq, P> Ledger<O, A, P> {
     /// 用完整报告推进台账中对应 Operation 的生命周期.
     ///
     /// 业务失败结果仍可接受; 报告只借用, 不保存结果或自动关闭.
@@ -323,25 +346,29 @@ impl<O: Eq, A: Eq, P> Ledger<O, A, P> {
     ///
     /// 找不到 Operation, 非等待状态或报告关联错误时拒绝, 保留原对象.
     pub fn accept_report<R, V>(&mut self, report: &Report<O, A, R, V>) -> Result<(), LedgerError> {
-        let index = self.position(report.operation_id())?;
-        match &self.operations[index] {
-            Managed::Ready(_) => return Err(LedgerError::NoPendingAttempt),
-            Managed::Closed(_) => return Err(LedgerError::OperationClosed),
-            Managed::AwaitingReport(_) => {}
+        match self.operations.get(report.operation_id()) {
+            None => return Err(LedgerError::OperationNotFound),
+            Some(Managed::Ready(_)) => return Err(LedgerError::NoPendingAttempt),
+            Some(Managed::Closed(_)) => return Err(LedgerError::OperationClosed),
+            Some(Managed::AwaitingReport(_)) => {}
         }
 
-        let Managed::AwaitingReport(operation) = self.operations.remove(index) else {
+        let (key, Managed::AwaitingReport(operation)) = self
+            .operations
+            .remove_entry(report.operation_id())
+            .expect("awaiting operation existence checked above")
+        else {
             unreachable!("只有等待状态能进入报告接受")
         };
 
         match operation.accept_report(report) {
             Ok(operation) => {
-                self.operations.insert(index, Managed::Ready(operation));
+                self.operations.insert(key, Managed::Ready(operation));
                 Ok(())
             }
             Err(error) => {
                 self.operations
-                    .insert(index, Managed::AwaitingReport(error.into_operation()));
+                    .insert(key, Managed::AwaitingReport(error.into_operation()));
                 Err(LedgerError::ReportMismatch)
             }
         }
