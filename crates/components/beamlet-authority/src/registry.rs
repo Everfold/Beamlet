@@ -59,11 +59,20 @@ impl Entry {
     }
 }
 
+/// 登记表锁保护的内部状态, 维护登记条目与 Any 轮询游标.
+#[derive(Default)]
+struct State {
+    /// 按 pool 和角色会话去重的登记记录.
+    entries: BTreeMap<(Pool, RoleInstance), Entry>,
+    /// `Selection::Any` 的轮询游标.
+    next_pick: usize,
+}
+
 /// Authority 独立维护的 Worker 登记表, 克隆时共享.
 #[derive(Clone)]
 pub(crate) struct Registry {
-    /// 按 pool 和角色会话去重的登记记录.
-    entries: Arc<Mutex<BTreeMap<(Pool, RoleInstance), Entry>>>,
+    /// 按 pool 和角色会话去重的登记记录与轮询状态.
+    state: Arc<Mutex<State>>,
     /// 接受公告的 pool 集合.
     pools: BTreeSet<Pool>,
     /// 心跳租约时长.
@@ -73,7 +82,7 @@ impl Registry {
     /// 为 pools 创建空登记表, 租约长度为 timeout.
     pub(crate) fn new(pools: BTreeSet<Pool>, timeout: Duration) -> Self {
         Self {
-            entries: Arc::default(),
+            state: Arc::default(),
             pools,
             timeout,
         }
@@ -102,9 +111,9 @@ impl Registry {
         {
             return false;
         }
-        let mut entries = self.entries.lock().expect("worker registry lock poisoned");
+        let mut state = self.state.lock().expect("worker registry lock poisoned");
         let key = (presence.pool.clone(), presence.instance);
-        if let Some(entry) = entries.get(&key)
+        if let Some(entry) = state.entries.get(&key)
             && (presence.sequence < entry.presence.sequence
                 || (presence.sequence == entry.presence.sequence && presence != entry.presence)
                 || entry
@@ -114,7 +123,7 @@ impl Registry {
         {
             return false;
         }
-        let changed = entries.get(&key).is_none_or(|entry| {
+        let changed = state.entries.get(&key).is_none_or(|entry| {
             entry.presence.state != presence.state || entry.route(now, self.timeout).is_none()
         });
         if changed {
@@ -123,7 +132,7 @@ impl Registry {
                 label = presence.label.as_deref(), state = ?presence.state, "Worker 登记状态更新");
         }
         let sequence = presence.sequence;
-        let entry = entries.entry(key).or_insert_with(|| Entry {
+        let entry = state.entries.entry(key).or_insert_with(|| Entry {
             presence: presence.clone(),
             received: now,
             leases: BTreeMap::new(),
@@ -149,16 +158,20 @@ impl Registry {
     /// 在 now 标记失效记录并清理超过四倍租约的观测.
     pub(crate) fn expire(&self, now: Instant) {
         let retention = self.timeout.saturating_mul(4);
-        self.entries.lock().expect("worker registry lock poisoned").retain(|_, entry| {
-            if !entry.stale_logged && entry.route(now, self.timeout).is_none() {
-                tracing::info!(event = "worker.stale", pool = %entry.presence.pool,
-                    role_id = %entry.presence.instance.role_id, session_id = %entry.presence.instance.session_id,
-                    "Worker 登记已失效, 等待新心跳");
-                entry.stale_logged = true;
-            }
-            entry.leases.retain(|_, lease| now.saturating_duration_since(lease.received) < retention);
-            !entry.leases.is_empty()
-        });
+        self.state
+            .lock()
+            .expect("worker registry lock poisoned")
+            .entries
+            .retain(|_, entry| {
+                if !entry.stale_logged && entry.route(now, self.timeout).is_none() {
+                    tracing::info!(event = "worker.stale", pool = %entry.presence.pool,
+                        role_id = %entry.presence.instance.role_id, session_id = %entry.presence.instance.session_id,
+                        "Worker 登记已失效, 等待新心跳");
+                    entry.stale_logged = true;
+                }
+                entry.leases.retain(|_, lease| now.saturating_duration_since(lease.received) < retention);
+                !entry.leases.is_empty()
+            });
     }
 
     /// 按 pool 和可选 capability 查询去重快照, 在 now 计算租约状态.
@@ -168,9 +181,10 @@ impl Registry {
         capability: Option<&str>,
         now: Instant,
     ) -> Vec<WorkerView> {
-        self.entries
+        self.state
             .lock()
             .expect("worker registry lock poisoned")
+            .entries
             .values()
             .filter(|entry| {
                 &entry.presence.pool == pool
@@ -192,7 +206,7 @@ impl Registry {
             .collect()
     }
 
-    /// 在 now 按 pool, selection 和 capability 选定会话与出口; 无匹配则返回 None.
+    /// 在 now 按 pool, selection 和 capability 选定会话与出口; Exact 直接按键查询, Any 轮询分发.
     pub(crate) fn select(
         &self,
         pool: &Pool,
@@ -200,24 +214,41 @@ impl Registry {
         capability: &str,
         now: Instant,
     ) -> Option<(RoleInstance, usize)> {
-        self.entries
-            .lock()
-            .expect("worker registry lock poisoned")
-            .values()
-            .filter(|entry| {
-                &entry.presence.pool == pool
-                    && entry.presence.capabilities.contains(capability)
-                    && entry.presence.state == PresenceState::Ready
-                    && match selection {
-                        Selection::Any => true,
-                        Selection::Exact(instance) => instance == entry.presence.instance,
-                    }
-            })
-            .find_map(|entry| {
-                entry
-                    .route(now, self.timeout)
-                    .map(|route| (entry.presence.instance, route))
-            })
+        let mut state = self.state.lock().expect("worker registry lock poisoned");
+        let timeout = self.timeout;
+        match selection {
+            Selection::Exact(instance) => {
+                let entry = state.entries.get(&(pool.clone(), instance))?;
+                (entry.presence.capabilities.contains(capability)
+                    && entry.presence.state == PresenceState::Ready)
+                    .then(|| entry.route(now, timeout))
+                    .flatten()
+                    .map(|route| (instance, route))
+            }
+            Selection::Any => {
+                let mut eligible = state
+                    .entries
+                    .values()
+                    .filter(|entry| {
+                        &entry.presence.pool == pool
+                            && entry.presence.capabilities.contains(capability)
+                            && entry.presence.state == PresenceState::Ready
+                    })
+                    .filter_map(|entry| {
+                        entry
+                            .route(now, timeout)
+                            .map(|route| (entry.presence.instance, route))
+                    });
+                let count = eligible.clone().count();
+                if count == 0 {
+                    return None;
+                }
+                let index = state.next_pick % count;
+                let picked = eligible.nth(index);
+                state.next_pick = state.next_pick.wrapping_add(1);
+                picked
+            }
+        }
     }
 }
 

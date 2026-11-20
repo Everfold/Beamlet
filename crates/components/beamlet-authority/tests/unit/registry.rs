@@ -71,6 +71,113 @@ fn leases_are_scoped_monotonic_and_require_fresh_heartbeats_after_reconnect() {
     assert!(!registry.observe(&source, heartbeat, 3, now));
 }
 
+/// 验证 Selection::Any 对同池同能力 Worker 轮询分发，并在节点退场或过期时平滑跳过；Selection::Exact 不回退。
+#[test]
+fn select_any_round_robins_ready_workers_and_exact_never_falls_back() {
+    let pool = Pool::default();
+    let now = Instant::now();
+    let registry = Registry::new([pool.clone()].into(), Duration::from_secs(15));
+    let source = Source {
+        id: 0,
+        connection: ConnectionView::new(|| Connection {
+            epoch: 1,
+            connected: true,
+        }),
+    };
+    let workers: Vec<RoleInstance> = (1..=3_u128)
+        .map(|id| RoleInstance {
+            role_id: Uuid::from_u128(id),
+            session_id: Uuid::from_u128(id + 100),
+        })
+        .collect();
+    let mut snapshots: Vec<Presence> = workers
+        .iter()
+        .map(|&instance| Presence {
+            pool: pool.clone(),
+            instance,
+            label: None,
+            capabilities: ["echo/v1".into()].into(),
+            sequence: 1,
+            state: PresenceState::Ready,
+        })
+        .collect();
+    for snapshot in &snapshots {
+        assert!(registry.observe(&source, snapshot.clone(), 1, now));
+    }
+
+    // 三个就绪 Worker 连续 6 次 Selection::Any 应按轮询顺序各命中两次。
+    let picks: Vec<_> = (0..6)
+        .map(|_| {
+            registry
+                .select(&pool, Selection::Any, "echo/v1", now)
+                .unwrap()
+                .0
+        })
+        .collect();
+    assert_eq!(
+        picks,
+        vec![
+            workers[0], workers[1], workers[2], workers[0], workers[1], workers[2],
+        ]
+    );
+
+    // Exact 精确锁定第二个 Worker。
+    assert_eq!(
+        registry.select(&pool, Selection::Exact(workers[1]), "echo/v1", now),
+        Some((workers[1], 0))
+    );
+
+    // 第二个 Worker 变为 Draining：Exact 必须直接返回 None，Any 在剩余两个间继续轮询。
+    snapshots[1].sequence = 2;
+    snapshots[1].state = PresenceState::Draining;
+    assert!(registry.observe(&source, snapshots[1].clone(), 1, now));
+    assert_eq!(
+        registry.select(&pool, Selection::Exact(workers[1]), "echo/v1", now),
+        None
+    );
+    let remaining: Vec<_> = (0..4)
+        .map(|_| {
+            registry
+                .select(&pool, Selection::Any, "echo/v1", now)
+                .unwrap()
+                .0
+        })
+        .collect();
+    assert_eq!(
+        remaining,
+        vec![workers[0], workers[2], workers[0], workers[2]]
+    );
+
+    // 第一个 Worker 仅在 t=0 更新，第三个 Worker 在 t=10s 续租；t=15s 时仅剩第三个 Worker 有效。
+    snapshots[2].sequence = 2;
+    assert!(registry.observe(
+        &source,
+        snapshots[2].clone(),
+        1,
+        now + Duration::from_secs(10)
+    ));
+    let later = now + Duration::from_secs(15);
+    assert_eq!(
+        registry.select(&pool, Selection::Exact(workers[0]), "echo/v1", later),
+        None
+    );
+    assert_eq!(
+        registry.select(&pool, Selection::Any, "echo/v1", later),
+        Some((workers[2], 0))
+    );
+
+    // 全部过期后 Any 与 Exact 均安全返回 None。
+    let expired = now + Duration::from_secs(30);
+    assert_eq!(
+        registry.select(&pool, Selection::Any, "echo/v1", expired),
+        None
+    );
+    assert_eq!(
+        registry.select(&pool, Selection::Exact(workers[2]), "echo/v1", expired),
+        None
+    );
+}
+
 /// 同会话跨传输去重, 断线仅使所属租约失效, 重连必须接收新心跳.
 #[test]
 fn transports_have_independent_epochs_and_duplicates_do_not_renew_leases() {
