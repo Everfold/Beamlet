@@ -71,6 +71,19 @@ impl Delivery for Nats {
             {
                 Err(DeliveryError::NotDelivered(reason))
             }
+            WorkerReply::Failed {
+                pool,
+                worker,
+                operation_id,
+                attempt_id,
+                reason,
+            } if pool == wire.pool
+                && worker == wire.worker
+                && operation_id == wire.operation_id
+                && attempt_id == wire.attempt_id =>
+            {
+                Err(DeliveryError::Unknown(reason))
+            }
             _ => Err(DeliveryError::Unknown(
                 "报告的 pool/Worker/会话/调用关联不匹配".into(),
             )),

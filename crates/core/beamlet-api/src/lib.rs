@@ -17,7 +17,7 @@ mod transport;
 /// 各传输共享的能力标识和报告关联校验.
 pub mod validation;
 
-pub use call::{Call, WorkerReport};
+pub use call::{Call, WorkerReport, WorkerResponse};
 pub use capability_id::{CapabilityId, InvalidCapabilityId};
 pub use message::{Command, Outcome, Reply, Submission, Task};
 pub use pool::{InvalidPool, Pool};

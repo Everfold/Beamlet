@@ -224,4 +224,17 @@ pub enum WorkerReply {
         /// 拒绝或无法确认执行结果的具体诊断原因.
         reason: String,
     },
+    /// 执行期间失败且未生成 Report, 不构造假的 Report, 也不伪装为执行前拒绝.
+    Failed {
+        /// 执行该调用所在的 pool.
+        pool: Pool,
+        /// 指定或实际执行此调用的 Worker 角色与会话身份.
+        worker: RoleInstance,
+        /// Authority 为本次操作分配的 Operation 身份.
+        operation_id: String,
+        /// Authority 已签发, 与该操作关联的 Attempt 身份.
+        attempt_id: String,
+        /// 执行失败的具体诊断原因.
+        reason: String,
+    },
 }

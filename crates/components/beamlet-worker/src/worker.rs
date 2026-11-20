@@ -1,7 +1,7 @@
 use crate::{BuildError, Capabilities, Context, ExecutionError, Options, presence};
 use beamlet_api::{
     Pool, Presence, PresenceChannel, PresenceState, RoleInstance, TransportError, WorkerBinding,
-    WorkerInbox,
+    WorkerInbox, WorkerResponse,
 };
 use beamlet_primitives::Report;
 use std::{collections::BTreeSet, future::Future};
@@ -216,7 +216,7 @@ impl<P: Send + 'static, R: Send + 'static> Worker<P, R> {
     ///
     /// 接收端和公告通道必须来自使用 binding() 的同一次绑定. 运行在调用方的 Tokio
     /// 执行器上. 丢弃此 future 会中止异步子任务, 不承诺撤销已开始的阻塞计算.
-    /// 处理器错误与报告发送失败释放名额并记录日志; 不重试或生成替代报告.
+    /// 处理器错误与报告发送失败释放名额并记录日志; 处理器失败发送失败通知而不构造 Report.
     ///
     /// # 参数
     ///
@@ -356,14 +356,19 @@ impl<P: Send + 'static, R: Send + 'static> Worker<P, R> {
                     let span = info_span!("report", report_id = %report.id());
                     async {
                         info!(event = "report.send_started", "开始发送 Report");
-                        match incoming.reply.send(report).await {
+                        match incoming.reply.send(WorkerResponse::Report(report)).await {
                             Ok(()) => info!(event = "report.sent", "Report 已提交至传输层"),
                             // 原 Authority 已离线不应让这个 Worker 停止处理其他调用.
                             Err(error) => warn!(event = "report.send_failed", error = %error, "发送 Report 失败"),
                         }
                     }.instrument(span).await;
                 }
-                Err(error) => warn!(event = "attempt.rejected", error = %error, "拒绝执行 Attempt"),
+                Err(error) => {
+                    warn!(event = "attempt.failed", error = %error, "执行 Attempt 失败, 未生成 Report");
+                    if let Err(error) = incoming.reply.send(WorkerResponse::Failed(error.to_string())).await {
+                        warn!(event = "report.send_failed", error = %error, "发送执行失败通知失败");
+                    }
+                }
             }
         }.instrument(span));
         }

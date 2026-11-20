@@ -30,3 +30,39 @@ pub struct Call<P = String> {
 ///
 /// - `R`: 业务结果类型, 默认 String.
 pub type WorkerReport<R = String> = Report<String, String, String, R>;
+
+/// Worker 对已接收调用的一次性响应, 区分完整报告与执行期失败.
+///
+/// 执行期失败不证明远端未产生副作用, 不可伪装为 NotDelivered.
+///
+/// # 泛型参数
+///
+/// - `R`: 业务结果类型, 默认 String.
+#[derive(Debug)]
+pub enum WorkerResponse<R = String> {
+    /// 执行结束并生成完整 Report.
+    Report(
+        /// 关联原 Attempt 与业务结果的完整报告.
+        WorkerReport<R>,
+    ),
+    /// 执行期间失败且未生成 Report, 仅携带诊断原因.
+    Failed(
+        /// 处理器执行失败的诊断原因.
+        String,
+    ),
+}
+
+impl<R> From<WorkerReport<R>> for WorkerResponse<R> {
+    /// 把完整报告包装为 `WorkerResponse::Report`.
+    ///
+    /// # 参数
+    ///
+    /// - `report`: 关联原 Attempt 与业务结果的完整报告.
+    ///
+    /// # 返回值
+    ///
+    /// 包含传入报告的 `WorkerResponse::Report`.
+    fn from(report: WorkerReport<R>) -> Self {
+        Self::Report(report)
+    }
+}

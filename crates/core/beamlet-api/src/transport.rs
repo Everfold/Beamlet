@@ -1,7 +1,7 @@
 //! 消息交互契约, 只描述收发与连接观测, 不决定角色调度或生命周期.
 use crate::{
     AuthorityInfo, Call, Command, Pool, Presence, Reply, Responder, RoleInstance, Uuid,
-    WorkerReport,
+    WorkerReport, WorkerResponse,
 };
 use std::{collections::BTreeSet, error::Error, fmt, future::Future, sync::Arc, time::Duration};
 
@@ -201,8 +201,8 @@ impl WorkerBinding {
 pub struct Incoming<P = String, R = String> {
     /// 已签发的调用.
     pub call: Call<P>,
-    /// 一次性报告回复.
-    pub reply: Responder<WorkerReport<R>>,
+    /// 一次性报告或执行失败回复.
+    pub reply: Responder<WorkerResponse<R>>,
 }
 
 /// Worker 接收端; stop 后保留已经接收的队列供排空.

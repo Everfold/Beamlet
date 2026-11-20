@@ -1,6 +1,6 @@
 use beamlet_api::{
     Call, Connection, Incoming, Pool, Presence, PresenceChannel, PresenceEvent, PresenceState,
-    Responder, RoleInstance, TransportError, Uuid, WorkerInbox,
+    Responder, RoleInstance, TransportError, Uuid, WorkerInbox, WorkerResponse,
 };
 use beamlet_primitives::Attempt;
 use beamlet_worker::{Capabilities, Concurrency, Options, RunError, Worker};
@@ -244,7 +244,9 @@ async fn heartbeats_probe_reconnect_and_draining_progress_while_execution_is_sus
     assert!(!h.task.is_finished());
     assert!(draining.sequence > resumed.sequence);
     release.send(()).unwrap();
-    let report = within(response).await.unwrap();
+    let WorkerResponse::Report(report) = within(response).await.unwrap() else {
+        panic!("expected worker report");
+    };
     assert_eq!(report.id(), &format!("{}:report:1", instance().session_id));
     assert_eq!(report.result(), "payload-1");
     let offline = loop {
@@ -355,7 +357,10 @@ async fn disabled_or_misrouted_calls_never_execute_and_reply_waiting_occupies_ca
     );
     release.send(()).unwrap();
     within(observed.recv()).await.unwrap();
-    assert_eq!(within(report).await.unwrap().attempt_id(), "attempt-2");
+    let WorkerResponse::Report(last_report) = within(report).await.unwrap() else {
+        panic!("expected worker report");
+    };
+    assert_eq!(last_report.attempt_id(), "attempt-2");
     h.stop.send(()).unwrap();
     within(h.task).await.unwrap().unwrap();
 }

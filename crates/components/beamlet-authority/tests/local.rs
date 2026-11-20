@@ -156,11 +156,7 @@ async fn control_progresses_at_capacity_and_exact_never_falls_back() {
         );
         incoming
             .reply
-            .send(Report::new(
-                "report-1".into(),
-                incoming.call.attempt,
-                "done".into(),
-            ))
+            .send(Report::new("report-1".into(), incoming.call.attempt, "done".into()).into())
             .await
             .unwrap();
         assert!(
@@ -507,11 +503,14 @@ async fn abandoned_discovery_and_request_replies_keep_authority_running() {
         assert!(timed_out.await.is_err());
         incoming
             .reply
-            .send(Report::new(
-                "report-abandoned".into(),
-                incoming.call.attempt,
-                "ignored".into(),
-            ))
+            .send(
+                Report::new(
+                    "report-abandoned".into(),
+                    incoming.call.attempt,
+                    "ignored".into(),
+                )
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -528,11 +527,14 @@ async fn abandoned_discovery_and_request_replies_keep_authority_running() {
         };
         incoming
             .reply
-            .send(Report::new(
-                "report-healthy".into(),
-                incoming.call.attempt,
-                "done".into(),
-            ))
+            .send(
+                Report::new(
+                    "report-healthy".into(),
+                    incoming.call.attempt,
+                    "done".into(),
+                )
+                .into(),
+            )
             .await
             .unwrap();
         assert!(

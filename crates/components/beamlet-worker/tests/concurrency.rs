@@ -297,7 +297,7 @@ async fn execution_rejection_and_abandoned_reply_release_capacity() {
         rejected.release.send(Action::Reject).unwrap();
         assert!(matches!(
             h.responses.remove(&rejected.index).unwrap().await.unwrap(),
-            Err(DeliveryError::Unknown(_))
+            Err(DeliveryError::Unknown(reason)) if reason.contains("simulated capability rejection")
         ));
         let abandoned = h.started.recv().await.unwrap();
         let response = h.responses.remove(&abandoned.index).unwrap();

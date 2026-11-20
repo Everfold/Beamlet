@@ -121,3 +121,40 @@ fn call_and_report_conversion_preserves_authorization_and_result() {
     assert_eq!(roundtrip.id(), "report");
     assert_eq!(roundtrip.result(), " 世界 ");
 }
+
+/// 验证 WorkerReply::Failed 的线协议往返保留关联身份与失败原因。
+#[test]
+fn worker_reply_failed_roundtrips_with_v3_envelope() {
+    let worker = RoleInstance {
+        role_id: Uuid::from_u128(10),
+        session_id: Uuid::from_u128(20),
+    };
+    let reply = protocol::WorkerReply::Failed {
+        pool: Pool::default(),
+        worker,
+        operation_id: "op-1".into(),
+        attempt_id: "att-1".into(),
+        reason: "handler failed".into(),
+    };
+    let bytes = protocol::encode(&reply).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["version"], 3);
+    assert_eq!(value["body"]["type"], "failed");
+    assert_eq!(value["body"]["reason"], "handler failed");
+
+    let decoded: protocol::WorkerReply = protocol::decode(&bytes).unwrap();
+    assert!(matches!(
+        decoded,
+        protocol::WorkerReply::Failed {
+            pool,
+            worker: decoded_worker,
+            operation_id,
+            attempt_id,
+            reason,
+        } if pool == Pool::default()
+            && decoded_worker == worker
+            && operation_id == "op-1"
+            && attempt_id == "att-1"
+            && reason == "handler failed"
+    ));
+}

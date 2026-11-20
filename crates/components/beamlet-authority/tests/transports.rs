@@ -100,7 +100,7 @@ async fn one_authority_routes_between_independent_spaces_and_releases_all_endpoi
             let incoming = tokio::select! { incoming = inbox.receive() => incoming.unwrap().unwrap(), _ = &mut request => panic!("request completed before execution") };
             assert_eq!(incoming.call.worker, workers[1 - index]);
             assert_eq!(incoming.call.authority, info.instance);
-            incoming.reply.send(Report::new(format!("report-{index}"), incoming.call.attempt, incoming.call.payload)).await.unwrap();
+            incoming.reply.send(Report::new(format!("report-{index}"), incoming.call.attempt, incoming.call.payload).into()).await.unwrap();
             let Outcome::Completed { operation_id, worker, result, .. } = request.await.unwrap().outcome else { panic!("expected completion") };
             assert_eq!(worker, workers[1 - index]);
             assert_eq!(result, "cross-space");

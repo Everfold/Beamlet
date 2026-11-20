@@ -2,7 +2,7 @@ use crate::{Key, Local, WorkerRoute, invalid_deadline};
 use beamlet_api::{
     AuthorityEvent, Connection, Delivery, DeliveryError, Incoming, Presence, PresenceChannel,
     PresenceEvent, ReplyError, Responder, TransportError, WorkerBinding, WorkerInbox, WorkerReport,
-    validation,
+    WorkerResponse, validation,
 };
 use std::time::Duration;
 use tokio::{
@@ -204,12 +204,12 @@ impl<P: Send + 'static, R: Send + 'static> Delivery<P, R> for Local<P, R> {
         };
         let operation_id = call.attempt.operation_id().clone();
         let attempt_id = call.attempt.id().clone();
-        let (send, receive) = oneshot::channel();
+        let (send, receive) = oneshot::channel::<WorkerResponse<R>>();
         sender
             .try_send(Incoming {
                 call,
-                reply: Responder::new(move |report| async move {
-                    send.send(report)
+                reply: Responder::new(move |response| async move {
+                    send.send(response)
                         .map_err(|_| ReplyError::new("报告接收端已关闭"))
                 }),
             })
@@ -219,11 +219,16 @@ impl<P: Send + 'static, R: Send + 'static> Delivery<P, R> for Local<P, R> {
                     DeliveryError::NotDelivered("接收队列已满".into())
                 }
             })?;
-        let report = timeout(deadline, receive)
+        let response = timeout(deadline, receive)
             .await
             .map_err(|_| DeliveryError::Unknown("等待报告超时".into()))?
             .map_err(|_| DeliveryError::Unknown("接收者未返回报告".into()))?;
-        validation::check_report(report, &operation_id, &attempt_id)
+        match response {
+            WorkerResponse::Report(report) => {
+                validation::check_report(report, &operation_id, &attempt_id)
+            }
+            WorkerResponse::Failed(reason) => Err(DeliveryError::Unknown(reason)),
+        }
     }
 }
 impl<P: Send + 'static, R: Send + 'static> PresenceChannel for PresenceEndpoint<P, R> {

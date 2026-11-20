@@ -1,7 +1,7 @@
 use crate::{Nats, subject};
 use beamlet_api::{
     Connection, Incoming, Presence, PresenceChannel, PresenceEvent, ReplyError, Responder,
-    TransportError, WorkerBinding, WorkerInbox,
+    TransportError, WorkerBinding, WorkerInbox, WorkerResponse,
 };
 use beamlet_protocol::{WorkerCall, WorkerReply, decode, encode};
 use futures::StreamExt;
@@ -114,13 +114,24 @@ impl WorkerInbox for WorkerEndpoint {
             let client = self.nats.client.clone();
             let pool = self.binding.pool.clone();
             let worker = self.binding.instance;
+            let operation_id = call.attempt.operation_id().clone();
+            let attempt_id = call.attempt.id().clone();
             return Ok(Some(Incoming {
                 call,
-                reply: Responder::new(move |report: beamlet_api::WorkerReport| async move {
-                    let reply = WorkerReply::Report {
-                        pool,
-                        worker,
-                        report: report.into(),
+                reply: Responder::new(move |response: WorkerResponse| async move {
+                    let reply = match response {
+                        WorkerResponse::Report(report) => WorkerReply::Report {
+                            pool,
+                            worker,
+                            report: report.into(),
+                        },
+                        WorkerResponse::Failed(reason) => WorkerReply::Failed {
+                            pool,
+                            worker,
+                            operation_id,
+                            attempt_id,
+                            reason,
+                        },
                     };
                     client
                         .publish(subject, encode(&reply).map_err(ReplyError::new)?.into())

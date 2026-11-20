@@ -3,6 +3,7 @@ use beamlet_api::{
     AuthorityEvent, AuthorityInbox, AuthorityInfo, Call, ClientTransport, Command, Delivery,
     DeliveryError, DiscoveryInbox, DiscoveryReply, Outcome, Pool, Presence, PresenceChannel,
     PresenceEvent, PresenceState, Reply, RoleInstance, Uuid, WorkerBinding, WorkerInbox,
+    WorkerResponse,
 };
 use beamlet_primitives::{Attempt, Report};
 use std::{future::Future, time::Duration};
@@ -67,19 +68,11 @@ pub async fn delivery(transport: impl Delivery, mut inbox: impl WorkerInbox) {
                 let a = inbox.receive().await.unwrap().unwrap();
                 let b = inbox.receive().await.unwrap().unwrap();
                 b.reply
-                    .send(Report::new(
-                        "report-b".into(),
-                        b.call.attempt,
-                        b.call.payload,
-                    ))
+                    .send(Report::new("report-b".into(), b.call.attempt, b.call.payload).into())
                     .await
                     .unwrap();
                 a.reply
-                    .send(Report::new(
-                        "report-a".into(),
-                        a.call.attempt,
-                        a.call.payload,
-                    ))
+                    .send(Report::new("report-a".into(), a.call.attempt, a.call.payload).into())
                     .await
                     .unwrap();
             }
@@ -154,12 +147,29 @@ pub async fn delivery(transport: impl Delivery, mut inbox: impl WorkerInbox) {
                 } else {
                     Report::new("report".into(), call(100).attempt, "invalid".into())
                 };
-                incoming.reply.send(report).await.unwrap();
+                incoming.reply.send(report.into()).await.unwrap();
             })
         })
         .await;
         assert!(matches!(result, Err(DeliveryError::Unknown(_))));
     }
+    // 执行期间失败应立即返回 Unknown(reason), 而不等到交付期限耗尽.
+    let (failed, ()) = timeout(Duration::from_millis(500), async {
+        tokio::join!(transport.deliver(call(9), Duration::from_secs(10)), async {
+            let incoming = inbox.receive().await.unwrap().unwrap();
+            incoming
+                .reply
+                .send(WorkerResponse::Failed("execution failed".into()))
+                .await
+                .unwrap();
+        })
+    })
+    .await
+    .expect("execution failure waited for delivery timeout");
+    assert_eq!(
+        failed,
+        Err(DeliveryError::Unknown("execution failed".into()))
+    );
     // 等待超时不撤销任务, 不重发. 超时后仍能取得调用并继续执行.
     let timed_out = transport.deliver(call(6), Duration::from_millis(30)).await;
     assert!(matches!(timed_out, Err(DeliveryError::Unknown(_))));
