@@ -67,7 +67,7 @@ wasmtime-wasi = "50"
 
 confy = { version = "2", default-features = false, features = ["ron_conf"] }
 diesel = { version = "2.4", features = ["sqlite"] }
-ron = "0.11"
+ron = "0.12"
 tempfile = "3.27"
 
 blake3 = { version = "1.8", features = ["rayon"] }

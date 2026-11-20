@@ -131,7 +131,7 @@ name = "beamlet-app-config"
 version = "0.1.0"
 dependencies = [
  "confy",
- "ron",
+ "ron 0.12.3",
  "serde",
 ]
 
@@ -397,7 +397,7 @@ checksum = "8807c397789cbe02bbdb1a27ea5f345584132808697b2a3f957c829829ee4814"
 dependencies = [
  "etcetera",
  "lazy_static",
- "ron",
+ "ron 0.11.0",
  "serde",
  "thiserror",
 ]
@@ -1243,6 +1243,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ron"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97b3fe97c18ff24299ea56f802c5693eb34266fb0bc8317f4e101debc8a3ceaf"
+dependencies = [
+ "bitflags",
+ "serde",
+ "serde_derive",
+ "typeid",
+ "unicode-ident",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1843,6 +1856,12 @@ dependencies = [
  "pin-project-lite",
  "tokio",
 ]
+
+[[package]]
+name = "typeid"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7d623258602320d5c55d1bc22793b57daff0ec7efc270ea7d55ce1d5f5471c"
 
 [[package]]
 name = "typenum"
