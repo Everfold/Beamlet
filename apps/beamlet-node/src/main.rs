@@ -32,7 +32,7 @@ struct Args {
 /// # 返回值
 ///
 /// 正常结束返回 `ExitCode::SUCCESS`; 配置或运行失败返回 `ExitCode::FAILURE`.
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> ExitCode {
     let args = Args::parse();
     let settings = Settings::load(&args.config);
