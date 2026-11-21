@@ -23,6 +23,7 @@ members = [
 
   "ui/xilem-ui-core",
   "ui/xilem-md3",
+  "ui/xilem-fluent",
 ]
 
 [workspace.package]
@@ -89,6 +90,7 @@ xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice
 usvg = "0.47"
 xilem-ui-core = { path = "ui/xilem-ui-core" }
 xilem-md3 = { path = "ui/xilem-md3" }
+xilem-fluent = { path = "ui/xilem-fluent" }
 
 foundations = "5.11"
 opentelemetry = "0.33"

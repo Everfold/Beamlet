@@ -5508,6 +5508,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xilem-fluent"
+version = "0.1.0"
+dependencies = [
+ "xilem",
+ "xilem-ui-core",
+]
+
+[[package]]
 name = "xilem-md3"
 version = "0.1.0"
 dependencies = [
