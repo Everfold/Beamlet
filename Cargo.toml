@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "apps/beamlet-console",
   "apps/beamlet-node",
+  "apps/everfold-desktop",
 
   "crates/core/beamlet-api",
   "crates/core/beamlet-kernel",
@@ -80,6 +81,8 @@ serde_json = "1"
 clap = { version = "4.6", features = ["derive", "string", "unicode"] }
 reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboard"] }
 tachyonfx = "0.25"
+
+xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
 
 foundations = "5.11"
 opentelemetry = "0.33"
