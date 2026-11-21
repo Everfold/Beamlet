@@ -1,0 +1,27 @@
+[package]
+name = "xilem-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[features]
+default = ["md3", "fluent", "hig", "adwaita"]
+md3 = ["dep:xilem-md3"]
+fluent = ["dep:xilem-fluent"]
+hig = ["dep:xilem-hig"]
+adwaita = ["dep:xilem-adwaita"]
+
+[dependencies]
+xilem.workspace = true
+xilem-ui-core.workspace = true
+xilem-md3 = { workspace = true, optional = true }
+xilem-fluent = { workspace = true, optional = true }
+xilem-hig = { workspace = true, optional = true }
+xilem-adwaita = { workspace = true, optional = true }
+
+[dev-dependencies]
+masonry_testing.workspace = true
+tokio.workspace = true

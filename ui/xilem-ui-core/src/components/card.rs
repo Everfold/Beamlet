@@ -2,11 +2,11 @@
 
 use std::marker::PhantomData;
 
+use xilem::WidgetView;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{CornerRadius, Padding};
+use xilem::masonry::properties::{Background, CornerRadius, Padding};
 use xilem::style::Style as _;
 use xilem::view::sized_box;
-use xilem::{AnyWidgetView, WidgetView};
 
 use crate::foundation::UiClassExt;
 use crate::style_engine::classes;
@@ -103,35 +103,62 @@ impl<V, State, Action> xilem::core::View<State, Action, xilem::ViewCtx>
 where
     State: 'static,
     Action: 'static,
-    V: WidgetView<State, Action> + Clone,
+    V: WidgetView<State, Action>,
 {
-    type Element = xilem::Pod<xilem::masonry::widgets::Passthrough>;
-    type ViewState = crate::style_engine::scope::SpecViewState<State, Action>;
+    type Element = xilem::Pod<xilem::masonry::widgets::SizedBox>;
+    type ViewState = V::ViewState;
 
     fn build(
         &self,
         ctx: &mut xilem::ViewCtx,
         app_state: &mut State,
     ) -> (Self::Element, Self::ViewState) {
-        crate::style_engine::scope::spec_view_build(ctx, app_state, |spec| {
-            self.render_with_spec(spec)
-        })
+        let spec = crate::style_engine::current_spec(ctx);
+        let p = &spec.palette;
+        let bg = self.elevation.tinted_surface(p.surface, p.accent);
+        let rad = self.radius.unwrap_or(spec.metrics.card_radius);
+        let pad = self.padding.unwrap_or(12.0);
+        let (child_pod, child_state) = self.child.build(ctx, app_state);
+        let mut pod = ctx.create_pod(xilem::masonry::widgets::SizedBox::new(
+            child_pod.new_widget.erased(),
+        ));
+        pod.new_widget.properties.insert(Background::Color(bg));
+        pod.new_widget
+            .properties
+            .insert(CornerRadius { radius: rad.px() });
+        pod.new_widget.properties.insert(Padding::all(pad.px()));
+        pod.new_widget
+            .properties
+            .insert(spec.box_shadow(self.elevation));
+        (pod, child_state)
     }
 
     fn rebuild(
         &self,
-        _prev: &Self,
+        prev: &Self,
         view_state: &mut Self::ViewState,
         ctx: &mut xilem::ViewCtx,
-        element: xilem::core::Mut<'_, Self::Element>,
+        mut element: xilem::core::Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        crate::style_engine::scope::spec_view_rebuild(
+        let spec = crate::style_engine::current_spec(ctx);
+        let p = &spec.palette;
+        let bg = self.elevation.tinted_surface(p.surface, p.accent);
+        let rad = self.radius.unwrap_or(spec.metrics.card_radius);
+        let pad = self.padding.unwrap_or(12.0);
+        element.insert_prop(Background::Color(bg));
+        element.insert_prop(CornerRadius { radius: rad.px() });
+        element.insert_prop(Padding::all(pad.px()));
+        element.insert_prop(spec.box_shadow(self.elevation));
+
+        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+            .expect("SurfaceBox SizedBox always holds a child");
+        self.child.rebuild(
+            &prev.child,
             view_state,
             ctx,
-            element,
+            child_dyn.downcast(),
             app_state,
-            |spec| self.render_with_spec(spec),
         );
     }
 
@@ -139,48 +166,33 @@ where
         &self,
         view_state: &mut Self::ViewState,
         ctx: &mut xilem::ViewCtx,
-        element: xilem::core::Mut<'_, Self::Element>,
+        mut element: xilem::core::Mut<'_, Self::Element>,
     ) {
-        crate::style_engine::scope::spec_view_teardown(view_state, ctx, element);
+        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+            .expect("SurfaceBox SizedBox always holds a child");
+        self.child.teardown(view_state, ctx, child_dyn.downcast());
     }
 
     fn message(
         &self,
         view_state: &mut Self::ViewState,
         message: &mut xilem::core::MessageCtx,
-        element: xilem::core::Mut<'_, Self::Element>,
+        mut element: xilem::core::Mut<'_, Self::Element>,
         app_state: &mut State,
     ) -> xilem::core::MessageResult<Action> {
-        crate::style_engine::scope::spec_view_message(view_state, message, element, app_state)
-    }
-}
-
-impl<V, State, Action> SurfaceBox<V, State, Action>
-where
-    State: 'static,
-    Action: 'static,
-    V: WidgetView<State, Action> + Clone,
-{
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>> {
-        let p = &spec.palette;
-        let bg = self.elevation.tinted_surface(p.surface, p.accent);
-        let rad = self.radius.unwrap_or(spec.metrics.card_radius);
-        let pad = self.padding.unwrap_or(12.0);
-        sized_box(self.child.clone())
-            .background_color(bg)
-            .corner_radius(rad.px())
-            .padding(Padding::all(pad.px()))
-            .box_shadow(spec.box_shadow(self.elevation))
-            .boxed()
+        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+            .expect("SurfaceBox SizedBox always holds a child");
+        self.child
+            .message(view_state, message, child_dyn.downcast(), app_state)
     }
 }
 
 /// Wraps `child` in a surface container with tonal elevation + shadow.
-pub fn surface_box<State: 'static, Action: 'static, V: WidgetView<State, Action> + Clone>(
+pub fn surface_box<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     elevation: ElevationLevel,
     child: V,
 ) -> SurfaceBox<V, State, Action> {
-    let _ = CornerRadius { radius: 0.px() };
+    let _ = DesignSpec::neutral_fallback;
     SurfaceBox {
         elevation,
         radius: None,
