@@ -14,14 +14,14 @@
 
 ### 不透明业务载荷与领域身份
 
-1. **业务载荷不透明性**：下层原语与传输契约**不得**解析业务请求或业务结果的内容。跨语言逻辑 IDL 使用 `OpaquePayload` 封套表示任意业务数据；具体绑定层（L4）**可以**将其特化为特定文本或二进制格式，但不改变下层状态转换判断规则。
+1. **业务载荷不透明性**：下层原语与协议契约**不得**解析业务请求或业务结果的内容。跨语言逻辑 IDL 使用 `OpaquePayload` 封套表示任意业务数据；具体绑定层（L4）**可以**将其特化为特定文本或二进制格式，但不改变下层状态转换判断规则。
 2. **领域身份不透明性**：`operation_id`、`attempt_id`、`report_id` 在 L1–L3 规范中均为不透明非空字符串标识，**必须**按精确相等语义比较；实现**不得**对这些字符串做空白修剪、大小写折叠、前缀解析或字典序大小推断新旧。
-3. **非空 UUID 约束**：凡标识角色或关联请求的 UUID 字段（`role_id`、`session_id`、`request_id`、`node_id`），**不得**使用全零 nil UUID（`00000000-0000-0000-0000-000000000000`）。
+3. **非空 UUID 约束**：凡标识角色身份的 UUID 字段（`role_id`、`session_id`），**不得**使用全零 nil UUID（`00000000-0000-0000-0000-000000000000`）。
 
 ### 时钟与租约时间模型
 
-1. **本地单调时钟（Monotonic Clock）**：所有持续时间期限（Timeout、TTL、发现窗口、排空倒计时）与心跳老化判断**必须**基于观测方自身的本地单调递增时钟计算，**不得**依赖发送方的墙上时钟时间戳或假设跨进程时钟同步。
-2. **明确的正数范围**：协议或配置层使用有限期限与缓冲容量时，**必须**在构造阶段拒绝零值或超出当前运行时时钟表示范围的期限。
+1. **本地单调时钟（Monotonic Clock）**：所有期限（Timeout、TTL、排空倒计时）与租约老化判断**必须**基于观测方自身的本地单调递增时钟计算，**不得**依赖发送方的墙上时钟时间戳或假设跨进程时钟同步。
+2. **明确的正数范围**：协议或实现层使用有限期限与缓冲容量时，**必须**在构造阶段拒绝零值或超出运行时时钟表示范围的期限。
 
 ### 逻辑 IDL 与线格式编码分离
 
@@ -48,48 +48,43 @@ Protobuf Edition 2026（`spec/proto/`）仅作为**逻辑数据结构契约**（
 | --- | --- |
 | `Ledger` | 维护多个在线 `Operation` 实例当前状态并全局防止 `Attempt` 身份重复使用的在线台账 |
 
-### L3 交互与角色术语
+### L3 分布式协议术语
 
 | 术语 | 精确定义 |
 | --- | --- |
-| `Authority` | 管理 `Operation` 生命周期、维护本地 `Worker` 登记视图、负责选人与交付编排的权威角色 |
-| `Worker` | 声明并执行已启用能力、生成 `Report` 并定期发布自身状态快照的执行角色 |
-| `Client` | 发起 `Authority` 发现、查询可用 `Worker` 列表及提交任务请求的调用方角色 |
+| `Authority` | 管理 `Operation` 生命周期、维护本地 `Worker` 租约视图并负责定向交付编排的权威角色 |
+| `Worker` | 声明并执行已启用能力、生成 `Report` 并发布单调状态快照的执行角色 |
 | `RoleInstance` | 由持久 `role_id` 与单次运行新生成的 `session_id` 构成的唯一角色运行实例身份 |
 | `Pool` | 大小写敏感的精确路由与可见性隔离分组名称 |
 | `CapabilityId` | 带版本标识且按字节精确匹配的能力名称 |
 | `Presence` | `Worker` 向所属 `Pool` 发布的完整自报状态快照 |
-| `PresenceState` | `Worker` 自报接收状态枚举：`Ready`、`Draining`（停止新接收并排空）、`Offline`（正常退出） |
-| `Stale` | `Authority` 依据本地时钟或连接重连状态计算出的租约失效标记，用于排除候选调度 |
+| `PresenceState` | `Worker` 单会话内的单调状态格：`Ready` → `Draining` → `Offline`（不可逆） |
+| `Stale` | `Authority` 依据本地单调时钟或连接重连状态计算出的租约失效标记，用于排除候选调度 |
 | `Epoch` | 观测方维护的本地单调递增连接世代号；连接重连推进 `Epoch` 后旧世代租约立即作废 |
 | `Selection` | 提交请求中的 `Worker` 目标策略：`Any`（从有效候选中任选一次）或 `Exact`（锁定特定实例，不回退） |
-| `Responder` | 绑定到单次调用或请求的一次性异步回复句柄，消费自身发送唯一答复，不暴露底层连接 |
-| `Completed` | 任务提交结果之一：收到有效 `Report` 且被 `Authority` 接受并关闭了对应 `Operation` |
-| `Rejected` | 任务提交结果之一：在创建 `Operation` 或签发 `Attempt` 之前即被拒绝，未产生生命周期对象 |
-| `Unresolved` | 任务提交结果之一：已签发 `Attempt`，但未在期限内获得有效 `Report`，原 `Operation` 保持等待 |
+| `Completed` | 最终结果之一：收到有效 `Report` 且被 `Authority` 接受并关闭了对应 `Operation` |
+| `Rejected` | 最终结果之一：在创建 `Operation` 或签发 `Attempt` 之前即被拒绝，未产生生命周期对象 |
+| `Unresolved` | 最终结果之一：已签发 `Attempt`，但未在期限内获得有效 `Report`，原 `Operation` 保持等待 |
 
 ### L4 绑定与宿主术语
 
 | 术语 | 精确定义 |
 | --- | --- |
 | `Host` | 负责联合启动一组异步长期任务、广播一次性停止信号并协调有限排空的运行宿主 |
-| `Node` | 可同时承载并装配多个 `Authority`、`Worker` 实例及多条命名传输通道的宿主进程应用 |
-| `Console` | 面向交互终端的多在途任务控制客户端应用 |
 
 ## 追踪编号规则
 
 规范中的关键行为要求与形式化不变量使用统一追踪 ID，便于在文档、Quint 模型与多语言测试间交叉索引：
 
 - **安全不变量编号**：`INV-<MODULE>-<NN>`，直接对应 `spec/quint/` 中同前缀 `inv_*` 谓词并在模拟与 TLC 中验证。
-- **交互语义编号**：`SEM-<MODULE>-<NN>`，约束并发边界、超时行为、配置不可变性或传输契约。
+- **交互语义编号**：`SEM-<MODULE>-<NN>`，约束并发边界、超时行为或传输契约。
 
 | 模块缩写 | 对应规范层级 |
 | --- | --- |
 | `PRM` | L1 核心原语（[01-primitives.md](01-primitives.md)） |
 | `KRN` | L1 内核状态机（[02-kernel.md](02-kernel.md)） |
 | `LDG` | L2 在线台账（[03-ledger.md](03-ledger.md)） |
-| `INT` | L3 抽象交互契约（[04-interaction.md](04-interaction.md)） |
-| `REG` | L3 租约与 `Epoch` 协议（[05-roles.md](05-roles.md)） |
-| `DLV` | L3 定向交付与角色编排（[05-roles.md](05-roles.md)） |
-| `BND` | L4 NATS v3 传输绑定（[06-binding-nats-v3.md](06-binding-nats-v3.md)） |
-| `HST` | L4 宿主监督与装配绑定（[07-host-and-rust-binding.md](07-host-and-rust-binding.md)） |
+| `REG` | L3 租约与单调状态格（[04-protocol.md](04-protocol.md)） |
+| `DLV` | L3 定向交付与失败语义（[04-protocol.md](04-protocol.md)） |
+| `BND` | L4 NATS 传输绑定（[05-binding-nats.md](05-binding-nats.md)） |
+| `HST` | L4 宿主监督与参考映射（[06-host-and-rust.md](06-host-and-rust.md)） |

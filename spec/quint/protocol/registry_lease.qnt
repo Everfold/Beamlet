@@ -1,5 +1,5 @@
-// L3 Worker 登记表租约与连接世代协议模型.
-// 对应 05-roles.md 与 Authority Registry 逻辑: 单调 sequence, 本地时钟 TTL, 4x 保留期, 连接 epoch 隔离与多入口隔离.
+// L3 Worker 租约与单调状态格模型.
+// 对应 04-protocol.md: 单会话状态单调演进 (Ready -> Draining -> Offline), 本地单调时钟 TTL, 连接 epoch 隔离与多入口隔离.
 module registry_lease {
   type WorkerMode =
     | ModeReady
@@ -13,14 +13,12 @@ module registry_lease {
 
   type SourceLease =
     | NoLease
-    | ActiveLease({ epoch: int, receivedAt: int, leaseSeq: int })
+    | ActiveLease({ epoch: int, receivedAt: int })
 
   type RegistryEntry =
     | AbsentEntry
     | Entry({
         mode: WorkerMode,
-        maxSeq: int,
-        lastAcceptedAt: int,
         leases: int -> SourceLease,
       })
 
@@ -34,11 +32,20 @@ module registry_lease {
 
   pure val WORKERS = Set(1)
   pure val SOURCES = Set(1, 2)
-  pure val SEQS = Set(1, 2, 3)
   pure val MAX_EPOCHS = 2
   pure val MAX_NOW = 4
   pure val LEASE_TIMEOUT = 2
-  pure val RETENTION = 4
+
+  // 单调状态格序: Ready(1) < Draining(2) < Offline(3).
+  pure def modeRank(mode: WorkerMode): int =
+    match mode {
+      | ModeReady => 1
+      | ModeDraining => 2
+      | ModeOffline => 3
+    }
+
+  pure def joinMode(current: WorkerMode, incoming: WorkerMode): WorkerMode =
+    if (modeRank(incoming) > modeRank(current)) incoming else current
 
   // 判断某来源上的单条租约在当前连接状态和本地时间下是否新鲜有效.
   pure def leaseIsFresh(
@@ -104,34 +111,10 @@ module registry_lease {
         }
     }
 
-  // 判断给定来源上的 presence 公告在当前连接世代与序号规则下是否可被接受.
-  pure def canObserve(
-    link: LinkState,
-    entry: RegistryEntry,
-    observedEpoch: int,
-    seq: int,
-    mode: WorkerMode,
-    src: int
-  ): bool =
-    if (not(link.connected) or link.epoch != observedEpoch or seq <= 0) false
-    else
-      match entry {
-        | AbsentEntry => true
-        | Entry(e) =>
-            if (seq < e.maxSeq) false
-            else if (seq == e.maxSeq and mode != e.mode) false
-            else
-              match e.leases.get(src) {
-                | NoLease => true
-                | ActiveLease(l) => seq > l.leaseSeq
-              }
-      }
-
-  // 应用一条已通过校验的 presence 公告: 相同序号不延长 lastAcceptedAt.
+  // 应用一条在连接在线且世代匹配时收到的 Presence 公告 (单调状态合流).
   pure def applyObserve(
     entry: RegistryEntry,
     observedEpoch: int,
-    seq: int,
     mode: WorkerMode,
     src: int,
     currentTime: int
@@ -140,92 +123,66 @@ module registry_lease {
       | AbsentEntry =>
           Entry({
             mode: mode,
-            maxSeq: seq,
-            lastAcceptedAt: currentTime,
             leases: SOURCES.mapBy(s =>
-              if (s == src)
-                ActiveLease({ epoch: observedEpoch, receivedAt: currentTime, leaseSeq: seq })
+              if (s == src and mode == ModeReady)
+                ActiveLease({ epoch: observedEpoch, receivedAt: currentTime })
               else NoLease
             ),
           })
       | Entry(e) => {
-          val nextReceived = if (seq > e.maxSeq) currentTime else e.lastAcceptedAt
+          val nextMode = joinMode(e.mode, mode)
+          val nextLeases =
+            if (nextMode == ModeReady)
+              e.leases.put(src, ActiveLease({ epoch: observedEpoch, receivedAt: currentTime }))
+            else e.leases
           Entry({
-            mode: mode,
-            maxSeq: seq,
-            lastAcceptedAt: nextReceived,
-            leases: e.leases.put(
-              src,
-              ActiveLease({ epoch: observedEpoch, receivedAt: nextReceived, leaseSeq: seq })
-            ),
+            mode: nextMode,
+            leases: nextLeases,
           })
         }
     }
 
-  // 清理超过 4x 保留期的单来源租约; 若某 Worker 所有租约均已清空则移除其条目.
-  pure def expireEntry(entry: RegistryEntry, currentTime: int): RegistryEntry =
-    match entry {
-      | AbsentEntry => AbsentEntry
-      | Entry(e) => {
-          val nextLeases = SOURCES.mapBy(s =>
-            match e.leases.get(s) {
-              | NoLease => NoLease
-              | ActiveLease(l) =>
-                  if (currentTime - l.receivedAt < RETENTION) ActiveLease(l) else NoLease
-            }
-          )
-          val anyLeft = SOURCES.exists(s => nextLeases.get(s) != NoLease)
-          if (anyLeft) Entry({ ...e, leases: nextLeases }) else AbsentEntry
-        }
-    }
-
-  // --- 状态机变量与辅助历史 ---
+  // --- 状态机变量 ---
 
   var links: int -> LinkState
   var entries: int -> RegistryEntry
   var now: int
   var lastSelection: SelectionOutcome
-  // 跟踪在条目未被清理期间的最小应有 seq 与曾见过的非 Ready 最高 seq.
-  var retainedMinSeq: int -> int
-  var retainedNonReadyMaxSeq: int -> int
+  var everMaxRank: int -> int
 
   action init: bool = all {
     links' = SOURCES.mapBy(_ => { epoch: 1, connected: true }),
     entries' = WORKERS.mapBy(_ => AbsentEntry),
     now' = 0,
     lastSelection' = NoneSelected,
-    retainedMinSeq' = WORKERS.mapBy(_ => 0),
-    retainedNonReadyMaxSeq' = WORKERS.mapBy(_ => 0),
+    everMaxRank' = WORKERS.mapBy(_ => 0),
   }
 
-  // 观察 Worker 公告 (允许旧 epoch 或旧 seq 到达以验证拒绝与防复活).
+  // 观察 Worker 公告 (允许旧 epoch 或乱序 Ready 到达以验证隔离与单调性).
   action observePresence(
     src: int,
     observedEpoch: int,
     w: int,
-    seq: int,
     mode: WorkerMode
   ): bool = {
     val link = links.get(src)
+    val accepted = link.connected and link.epoch == observedEpoch
     val oldEntry = entries.get(w)
-    val accepted = canObserve(link, oldEntry, observedEpoch, seq, mode, src)
     val nextEntry =
-      if (accepted) applyObserve(oldEntry, observedEpoch, seq, mode, src, now)
+      if (accepted) applyObserve(oldEntry, observedEpoch, mode, src, now)
       else oldEntry
-    val nextNonReady =
-      if (accepted) {
-        if (mode == ModeOffline or mode == ModeDraining) seq
-        else retainedNonReadyMaxSeq.get(w)
-      } else retainedNonReadyMaxSeq.get(w)
+    val nextRank = match nextEntry {
+      | AbsentEntry => everMaxRank.get(w)
+      | Entry(e) =>
+          if (modeRank(e.mode) > everMaxRank.get(w)) modeRank(e.mode)
+          else everMaxRank.get(w)
+    }
     all {
       entries' = entries.put(w, nextEntry),
       links' = links,
       now' = now,
       lastSelection' = NoneSelected,
-      retainedMinSeq' =
-        if (accepted) retainedMinSeq.put(w, seq)
-        else retainedMinSeq,
-      retainedNonReadyMaxSeq' = retainedNonReadyMaxSeq.put(w, nextNonReady),
+      everMaxRank' = everMaxRank.put(w, nextRank),
     }
   }
 
@@ -237,8 +194,7 @@ module registry_lease {
       entries' = entries,
       now' = now,
       lastSelection' = NoneSelected,
-      retainedMinSeq' = retainedMinSeq,
-      retainedNonReadyMaxSeq' = retainedNonReadyMaxSeq,
+      everMaxRank' = everMaxRank,
     }
   }
 
@@ -251,48 +207,35 @@ module registry_lease {
       entries' = entries,
       now' = now,
       lastSelection' = NoneSelected,
-      retainedMinSeq' = retainedMinSeq,
-      retainedNonReadyMaxSeq' = retainedNonReadyMaxSeq,
+      everMaxRank' = everMaxRank,
     }
   }
 
-  action advanceClock: bool = {
-    val nextNow = now + 1
-    val nextEntries = WORKERS.mapBy(w => expireEntry(entries.get(w), nextNow))
-    all {
-      now < MAX_NOW,
-      now' = nextNow,
-      entries' = nextEntries,
-      links' = links,
-      lastSelection' = NoneSelected,
-      retainedMinSeq' = WORKERS.mapBy(w =>
-        if (nextEntries.get(w) == AbsentEntry) 0 else retainedMinSeq.get(w)
-      ),
-      retainedNonReadyMaxSeq' = WORKERS.mapBy(w =>
-        if (nextEntries.get(w) == AbsentEntry) 0 else retainedNonReadyMaxSeq.get(w)
-      ),
-    }
+  action advanceClock: bool = all {
+    now < MAX_NOW,
+    now' = now + 1,
+    entries' = entries,
+    links' = links,
+    lastSelection' = NoneSelected,
+    everMaxRank' = everMaxRank,
   }
 
-  // 在当前视图上执行一次选择观测 (常可触发, 避免时钟到达上界后死锁).
   action selectAction(target: TargetSelection): bool = all {
     lastSelection' = evalSelect(links, entries, now, target),
     links' = links,
     entries' = entries,
     now' = now,
-    retainedMinSeq' = retainedMinSeq,
-    retainedNonReadyMaxSeq' = retainedNonReadyMaxSeq,
+    everMaxRank' = everMaxRank,
   }
 
   action step: bool = {
     nondet src = SOURCES.oneOf()
     nondet w = WORKERS.oneOf()
-    nondet seq = SEQS.oneOf()
     nondet ep = 1.to(MAX_EPOCHS).oneOf()
     nondet mode = Set(ModeReady, ModeDraining, ModeOffline).oneOf()
     nondet target = Set(AnyWorker, ExactWorker(1)).oneOf()
     any {
-      observePresence(src, ep, w, seq, mode),
+      observePresence(src, ep, w, mode),
       disconnectLink(src),
       reconnectLink(src),
       advanceClock,
@@ -300,9 +243,9 @@ module registry_lease {
     }
   }
 
-  // --- 安全不变量 (对应 05-roles.md 中的 INV-REG-*) ---
+  // --- 安全不变量 (对应 04-protocol.md 中的 INV-REG-*) ---
 
-  // INV-REG-01: 任意被判定为可路由或被选中的 (worker, source) 必须满足连接在线, 世代匹配, 未超时且状态为 Ready.
+  // INV-REG-01: 任意可路由或被选中的 (worker, source) 必须满足链路在线, 世代匹配, 未超时且状态为 Ready.
   val inv_reg_01_epoch_and_connection_isolation: bool = and {
     match lastSelection {
       | NoneSelected => true
@@ -326,22 +269,20 @@ module registry_lease {
     )),
   }
 
-  // INV-REG-02: 保留期内 sequence 单调不降, 非 Ready 记录不会被更旧或相同 seq 的 Ready 复活.
-  val inv_reg_02_monotonic_seq_blocks_stale_revival: bool =
+  // INV-REG-02: 单会话状态严格单调不可逆, 一旦进入 Draining 或 Offline 永不被乱序 Ready 复活.
+  val inv_reg_02_monotonic_mode_never_revives: bool =
     WORKERS.forall(w =>
       match entries.get(w) {
         | AbsentEntry => true
         | Entry(e) => and {
-            e.maxSeq >= retainedMinSeq.get(w),
-            (e.mode == ModeOffline or e.mode == ModeDraining) implies
-              SOURCES.forall(src => not(isRoutable(links, entries, now, w, src))),
-            (retainedNonReadyMaxSeq.get(w) > 0 and e.maxSeq <= retainedNonReadyMaxSeq.get(w)) implies
+            modeRank(e.mode) >= everMaxRank.get(w),
+            (everMaxRank.get(w) >= 2) implies
               SOURCES.forall(src => not(isRoutable(links, entries, now, w, src))),
           }
       }
     )
 
-  // INV-REG-03: 多传输来源租约相互隔离, 任一来源断线不会使其他保持在线且有效世代上的来源失效.
+  // INV-REG-03: 多传输来源租约相互隔离, 任一来源断线不影响其他保持在线且有效世代上的来源.
   val inv_reg_03_multi_source_fault_isolation: bool =
     WORKERS.forall(w => SOURCES.forall(src =>
       match entries.get(w) {
@@ -361,7 +302,7 @@ module registry_lease {
 
   val invariants: bool = and {
     inv_reg_01_epoch_and_connection_isolation,
-    inv_reg_02_monotonic_seq_blocks_stale_revival,
+    inv_reg_02_monotonic_mode_never_revives,
     inv_reg_03_multi_source_fault_isolation,
   }
 

@@ -1,5 +1,5 @@
 // L3 定向交付与失败语义协议模型.
-// 对应 05-roles.md 与 Authority 编排: Exact 不回退, 超时返回 Unresolved 且保持 AwaitingReport, 仅接受真实匹配的 Report.
+// 对应 04-protocol.md 与 Authority 编排: Exact 不回退, 超时返回 Unresolved 且保持 AwaitingReport, 仅接受真实匹配的 Report.
 module delivery {
   type SelectionMode =
     | SelectAny
@@ -258,7 +258,7 @@ module delivery {
     }
   }
 
-  // --- 安全不变量 (对应 05-roles.md 中的 INV-DLV-*) ---
+  // --- 安全不变量 (对应 04-protocol.md 中的 INV-DLV-*) ---
 
   // INV-DLV-01: Exact 选择永不回退到其他 Worker, 拒绝时绝不创建 Operation.
   val inv_dlv_01_exact_never_falls_back: bool =
