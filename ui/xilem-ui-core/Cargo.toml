@@ -1,0 +1,16 @@
+[package]
+name = "xilem-ui-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+xilem.workspace = true
+usvg.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

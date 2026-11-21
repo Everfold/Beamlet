@@ -20,6 +20,8 @@ members = [
 
   "crates/app-support/beamlet-app-config",
   "crates/app-support/beamlet-host",
+
+  "ui/xilem-ui-core",
 ]
 
 [workspace.package]
@@ -83,6 +85,8 @@ reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboa
 tachyonfx = "0.25"
 
 xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
+usvg = "0.47"
+xilem-ui-core = { path = "ui/xilem-ui-core" }
 
 foundations = "5.11"
 opentelemetry = "0.33"
