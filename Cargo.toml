@@ -22,6 +22,7 @@ members = [
   "crates/app-support/beamlet-host",
 
   "ui/xilem-ui-core",
+  "ui/xilem-md3",
 ]
 
 [workspace.package]
@@ -87,6 +88,7 @@ tachyonfx = "0.25"
 xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
 usvg = "0.47"
 xilem-ui-core = { path = "ui/xilem-ui-core" }
+xilem-md3 = { path = "ui/xilem-md3" }
 
 foundations = "5.11"
 opentelemetry = "0.33"
