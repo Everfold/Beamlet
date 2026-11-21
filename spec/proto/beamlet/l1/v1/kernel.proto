@@ -1,0 +1,43 @@
+edition = "2026";
+
+package beamlet.l1.v1;
+
+import "beamlet/l1/v1/primitives.proto";
+
+// Operation 的生命周期状态标签.
+export enum OperationStatus {
+  OPERATION_STATUS_UNSPECIFIED = 0;
+  // 尚未结束且当前没有待处理 Attempt 的状态.
+  OPERATION_STATUS_READY = 1;
+  // 正在等待指定 Attempt 对应 Report 的状态.
+  OPERATION_STATUS_AWAITING_REPORT = 2;
+  // Operation 已显式结束, 允许幂等重复关闭.
+  OPERATION_STATUS_CLOSED = 3;
+}
+
+// Operation 的逻辑投影, 包含不可变身份, 原始请求及当前状态.
+export message Operation {
+  // Operation 的固定身份, 必须非空且唯一.
+  string operation_id = 1;
+  // Operation 的原始请求载荷, 不随生命周期转换而改变.
+  OpaquePayload request = 2;
+  // 当前生命周期状态.
+  OperationStatus status = 3;
+  // 当且仅当 status 为 OPERATION_STATUS_AWAITING_REPORT 时有效, 表示当前等待的 Attempt 身份.
+  string pending_attempt_id = 4;
+}
+
+// 内核状态转换被拒绝的抽象原因.
+export enum KernelRejectionReason {
+  KERNEL_REJECTION_REASON_UNSPECIFIED = 0;
+  // 当前处于 AwaitingReport 状态, 不允许创建新 Attempt 或关闭.
+  KERNEL_REJECTION_REASON_ATTEMPT_PENDING = 1;
+  // 当前处于 Closed 状态, 不允许创建新 Attempt 或接受 Report.
+  KERNEL_REJECTION_REASON_OPERATION_CLOSED = 2;
+  // 当前处于 Ready 状态, 不允许接受 Report.
+  KERNEL_REJECTION_REASON_NO_PENDING_ATTEMPT = 3;
+  // 输入引用所属的 Operation 身份与当前 Operation 不一致.
+  KERNEL_REJECTION_REASON_OPERATION_MISMATCH = 4;
+  // 输入 Report 的 Attempt 身份与当前等待的 Attempt 不一致.
+  KERNEL_REJECTION_REASON_ATTEMPT_MISMATCH = 5;
+}

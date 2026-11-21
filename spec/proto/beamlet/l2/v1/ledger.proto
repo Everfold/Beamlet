@@ -1,0 +1,118 @@
+edition = "2026";
+
+package beamlet.l2.v1;
+
+import "beamlet/l1/v1/kernel.proto";
+import "beamlet/l1/v1/primitives.proto";
+
+// 在线台账操作被拒绝的抽象原因.
+export enum LedgerErrorReason {
+  LEDGER_ERROR_REASON_UNSPECIFIED = 0;
+  // 指定 operation_id 已存在于台账中, 拒绝重复创建.
+  LEDGER_ERROR_REASON_OPERATION_EXISTS = 1;
+  // 指定 operation_id 在台账中不存在.
+  LEDGER_ERROR_REASON_OPERATION_NOT_FOUND = 2;
+  // 目标 Operation 正在等待 Report, 拒绝创建新 Attempt 或关闭.
+  LEDGER_ERROR_REASON_ATTEMPT_PENDING = 3;
+  // 目标 Operation 处于 Ready 状态, 当前没有待接受的 Attempt.
+  LEDGER_ERROR_REASON_NO_PENDING_ATTEMPT = 4;
+  // 目标 Operation 已处于 Closed 状态.
+  LEDGER_ERROR_REASON_OPERATION_CLOSED = 5;
+  // 指定的 attempt_id 已被台账签发过, 全局禁止重复使用.
+  LEDGER_ERROR_REASON_ATTEMPT_ID_REUSED = 6;
+  // 传入的 Report 与目标 Operation 或其当前等待的 Attempt 不匹配.
+  LEDGER_ERROR_REASON_REPORT_MISMATCH = 7;
+}
+
+// 创建新 Operation 的请求.
+export message CreateOperationRequest {
+  // 待创建的唯一 Operation 身份.
+  string operation_id = 1;
+  // 不可变原始请求载荷.
+  beamlet.l1.v1.OpaquePayload request = 2;
+}
+
+// 创建新 Operation 的响应.
+export message CreateOperationResponse {
+  // 操作成功时返回处于 Ready 状态的 Operation 视图; 失败时返回拒绝原因.
+  oneof result {
+    beamlet.l1.v1.Operation operation = 1;
+    LedgerErrorReason error = 2;
+  }
+}
+
+// 为已有 Ready Operation 签发新 Attempt 的请求.
+export message CreateAttemptRequest {
+  // 目标 Operation 身份.
+  string operation_id = 1;
+  // 本次待签发的全局未使用 Attempt 身份.
+  string attempt_id = 2;
+}
+
+// 为已有 Ready Operation 签发新 Attempt 的响应.
+export message CreateAttemptResponse {
+  // 签发成功时返回新生成的 Attempt 授权; 失败时返回拒绝原因.
+  oneof result {
+    beamlet.l1.v1.Attempt attempt = 1;
+    LedgerErrorReason error = 2;
+  }
+}
+
+// 提交 Report 以解除 Operation 等待状态的请求.
+export message AcceptReportRequest {
+  // 完整的 Report 证据.
+  beamlet.l1.v1.Report report = 1;
+}
+
+// 提交 Report 的响应.
+export message AcceptReportResponse {
+  // 接受成功时返回恢复为 Ready 状态的 Operation 视图; 失败时返回拒绝原因且保留原等待状态.
+  oneof result {
+    beamlet.l1.v1.Operation operation = 1;
+    LedgerErrorReason error = 2;
+  }
+}
+
+// 显式关闭 Operation 的请求.
+export message CloseOperationRequest {
+  // 待关闭的 Operation 身份.
+  string operation_id = 1;
+}
+
+// 显式关闭 Operation 的响应.
+export message CloseOperationResponse {
+  // 关闭成功(含对 Closed 状态的幂等关闭)时返回 Closed 视图; 失败时返回拒绝原因.
+  oneof result {
+    beamlet.l1.v1.Operation operation = 1;
+    LedgerErrorReason error = 2;
+  }
+}
+
+// 查询台账中单个 Operation 只读视图的请求.
+export message GetOperationRequest {
+  // 待查询的 Operation 身份.
+  string operation_id = 1;
+}
+
+// 查询台账中单个 Operation 只读视图的响应.
+export message GetOperationResponse {
+  // 存在时返回当前只读 Operation 视图; 不存在时返回 error.
+  oneof result {
+    beamlet.l1.v1.Operation operation = 1;
+    LedgerErrorReason error = 2;
+  }
+}
+
+// 抽象在线多 Operation 台账契约.
+service LedgerService {
+  // 在台账中创建一个新的 Ready Operation.
+  rpc CreateOperation(CreateOperationRequest) returns (CreateOperationResponse);
+  // 为处于 Ready 状态的 Operation 签发一次全局唯一的 Attempt 授权.
+  rpc CreateAttempt(CreateAttemptRequest) returns (CreateAttemptResponse);
+  // 校验并接受 Report, 使目标 Operation 返回 Ready 状态.
+  rpc AcceptReport(AcceptReportRequest) returns (AcceptReportResponse);
+  // 显式关闭 Ready 或幂等关闭 Closed 状态的 Operation.
+  rpc CloseOperation(CloseOperationRequest) returns (CloseOperationResponse);
+  // 获取指定 Operation 的当前只读视图.
+  rpc GetOperation(GetOperationRequest) returns (GetOperationResponse);
+}

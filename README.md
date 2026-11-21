@@ -57,6 +57,7 @@ just license
 # Update
 just update
 
-# Quint Check
+# Spec & Quint Check
+just check-spec
 just check-kernel-model
 ```

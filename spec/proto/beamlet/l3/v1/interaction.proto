@@ -1,0 +1,236 @@
+edition = "2026";
+
+package beamlet.l3.v1;
+
+import "beamlet/l1/v1/primitives.proto";
+
+// 角色身份与单次运行会话的组合, 共同锁定一次具体角色运行.
+export message RoleInstance {
+  // 持久配置的角色 UUID, 不允许全零 UUID.
+  string role_id = 1;
+  // 本次运行独立生成的会话 UUID, 不允许全零 UUID, 不以字典序判断新旧.
+  string session_id = 2;
+}
+
+// 面向调用方公开的 Authority 实例描述.
+export message AuthorityInfo {
+  // Authority 实例身份.
+  RoleInstance instance = 1;
+  // 可选的人类可读显示标签, 不参与路由或去重判断.
+  string label = 2;
+  // Authority 已加入并接受发现与请求的 pool 集合.
+  repeated string pools = 3;
+}
+
+// 本地观测到的传输连接状态与世代.
+export message Connection {
+  // 本地单调递增的连接世代; 世代变更后旧世代租约立即失效.
+  uint64 epoch = 1;
+  // 当前链路是否处于可尝试通信的已连接状态.
+  bool connected = 2;
+}
+
+// Worker 自报的接收准备状态.
+export enum PresenceState {
+  PRESENCE_STATE_UNSPECIFIED = 0;
+  // 可以尝试交付调用, 但不代表预留了执行槽位.
+  PRESENCE_STATE_READY = 1;
+  // 已停止接收新调用, 正在排空已入队调用.
+  PRESENCE_STATE_DRAINING = 2;
+  // 本会话已正常退出.
+  PRESENCE_STATE_OFFLINE = 3;
+}
+
+// Worker 发布的完整状态快照, 首份心跳即可用于登记.
+export message Presence {
+  // Worker 所属的唯一 pool (1..=64 字节 ASCII 字母, 数字, '-' 或 '_').
+  string pool = 1;
+  // Worker 实例身份.
+  RoleInstance instance = 2;
+  // 可选的人类可读显示标签.
+  string label = 3;
+  // 本次运行实际启用的能力标识集合 (每项 1..=256 字节).
+  repeated string capabilities = 4;
+  // 会话内严格递增的序号; 重复或倒序公告不更新状态或续租.
+  uint64 sequence = 5;
+  // 本次公告的自报状态.
+  PresenceState state = 6;
+}
+
+// Authority 观察到的 Worker 只读快照视图.
+export message WorkerView {
+  // 最近一次被接受的完整状态快照.
+  Presence presence = 1;
+  // 距最近一次有效公告的毫秒数, 仅使用 Authority 本地单调时钟计算.
+  uint64 last_seen_ms = 2;
+  // 当前是否已超时或尚未在重连后新世代重新确认.
+  bool stale = 3;
+}
+
+// 表示从指定 pool 和能力匹配的可用 Worker 候选中任选一个实例.
+export message SelectionAny {}
+
+// Worker 选择策略: 任选可用实例或精确锁定唯一实例.
+export message Selection {
+  // 一次选择最多执行一次; Exact 失效时不回退到其他会话.
+  oneof kind {
+    SelectionAny any = 1;
+    RoleInstance exact = 2;
+  }
+}
+
+// 业务请求, 构成 Operation 的不可变原始输入.
+export message Task {
+  // 精确匹配的带版本能力标识 (1..=256 字节).
+  string capability = 1;
+  // 调用方定义的业务输入载荷.
+  beamlet.l1.v1.OpaquePayload payload = 2;
+}
+
+// 调用方提交的任务请求上下文.
+export message Submission {
+  // 目标 pool 名称.
+  string pool = 1;
+  // 目标 Worker 选择约束.
+  Selection worker = 2;
+  // 待执行的业务 Task.
+  Task task = 3;
+}
+
+// 查询指定 pool 内已登记 Worker 的控制命令参数.
+export message WorkersQuery {
+  // 目标 pool 名称.
+  string pool = 1;
+  // 可选的能力过滤标识; 字段未设置时返回 pool 内所有已登记 Worker.
+  string capability = 2;
+}
+
+// 客户端向指定 Authority 发出的命令.
+export message Command {
+  // 请求与回复关联的唯一 UUID, 不作为幂等键或 Operation 身份.
+  string request_id = 1;
+  // 明确指定的目标 Authority 实例.
+  RoleInstance authority = 2;
+  // 具体查询或提交动作.
+  oneof action {
+    WorkersQuery workers = 3;
+    Submission submit = 4;
+  }
+}
+
+// 创建 Operation 前的拒绝结果或控制请求错误.
+export message OutcomeRejected {
+  // 拒绝的具体诊断原因.
+  string reason = 1;
+}
+
+// Worker 列表查询结果.
+export message OutcomeWorkers {
+  // Authority 本地登记表快照, 可能包含 Draining, Offline 或 Stale 记录.
+  repeated WorkerView workers = 1;
+}
+
+// 有效 Report 已接受且 Operation 已关闭的完成结果.
+export message OutcomeCompleted {
+  // 已分配的 Operation 身份.
+  string operation_id = 1;
+  // 已关联的 Attempt 身份.
+  string attempt_id = 2;
+  // Worker 生成的 Report 身份.
+  string report_id = 3;
+  // 实际执行该授权的 Worker 实例身份.
+  RoleInstance worker = 4;
+  // 执行产出的业务结果载荷.
+  beamlet.l1.v1.OpaquePayload result = 5;
+}
+
+// 已签发 Attempt 但未能取得有效 Report 的未解决结果.
+export message OutcomeUnresolved {
+  // 已分配的 Operation 身份.
+  string operation_id = 1;
+  // 已签发的 Attempt 身份, Operation 仍保持等待此授权报告的状态.
+  string attempt_id = 2;
+  // 签发时锁定的目标 Worker 实例; 未取得报告不表示其未执行.
+  RoleInstance worker = 3;
+  // 交付失败或等待超时的诊断原因.
+  string reason = 4;
+}
+
+// Authority 返回给客户端的最终语义结果.
+export message Outcome {
+  // 未解决结果绝不伪装成 Report.
+  oneof kind {
+    OutcomeRejected rejected = 1;
+    OutcomeWorkers workers = 2;
+    OutcomeCompleted completed = 3;
+    OutcomeUnresolved unresolved = 4;
+  }
+}
+
+// Authority 对客户端命令的关联回复.
+export message Reply {
+  // 原请求关联 UUID.
+  string request_id = 1;
+  // 实际处理并返回该回复的 Authority 实例.
+  RoleInstance authority = 2;
+  // 本次查询或提交的语义结果.
+  Outcome outcome = 3;
+}
+
+// 在指定 pools 范围内广播的 Authority 发现请求.
+export message DiscoveryRequest {
+  // 本次发现与多条回复关联使用的 UUID.
+  string request_id = 1;
+  // 关注的精确 pool 名称集合.
+  repeated string pools = 2;
+}
+
+// 单个 Authority 对发现请求的应答.
+export message DiscoveryReply {
+  // 对应的发现请求 UUID.
+  string request_id = 1;
+  // 应答 Authority 的公开实例信息.
+  AuthorityInfo authority = 2;
+}
+
+// Authority 向已选定 Worker 实例发出的定向调用封套.
+export message Call {
+  // 路由 pool 名称.
+  string pool = 1;
+  // 签发授权的 Authority 实例.
+  RoleInstance authority = 2;
+  // 唯一目标 Worker 实例.
+  RoleInstance worker = 3;
+  // 已签发的执行授权, Worker 不得自行再签发.
+  beamlet.l1.v1.Attempt attempt = 4;
+  // 待执行的能力与业务输入.
+  Task task = 5;
+}
+
+// Worker 对已接收 Call 的一次性响应.
+export message WorkerResponse {
+  // 区分正常产出完整 Report 与执行期异常失败.
+  oneof kind {
+    beamlet.l1.v1.Report report = 1;
+    string failed_reason = 2;
+  }
+}
+
+// 定向交付失败的可确认程度分类.
+export enum DeliveryErrorKind {
+  DELIVERY_ERROR_KIND_UNSPECIFIED = 0;
+  // 指定目标没有可路由的接收者.
+  DELIVERY_ERROR_KIND_NO_RECEIVER = 1;
+  // 有明确证据证明该次 Call 未被执行.
+  DELIVERY_ERROR_KIND_NOT_DELIVERED = 2;
+  // 无法确认远端是否已接收或产生副作用, 禁止据此自动重试.
+  DELIVERY_ERROR_KIND_UNKNOWN = 3;
+}
+
+// 定向交付错误描述.
+export message DeliveryError {
+  // 交付失败分类.
+  DeliveryErrorKind kind = 1;
+  // 失败诊断信息.
+  string reason = 2;
+}
