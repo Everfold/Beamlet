@@ -3,12 +3,19 @@ pkgs.mkShell rec {
   buildInputs = with pkgs; [
     pkg-config
     fontconfig
+
     libxcb
     libxkbcommon
+    libX11
+    libXcursor
+    libXi
+    libXrandr
+    libXxf86vm
 
     wayland
+    wayland-protocols
+    wayland-scanner
     vulkan-loader
-    libglvnd
   ];
 
   packages = with pkgs; [
