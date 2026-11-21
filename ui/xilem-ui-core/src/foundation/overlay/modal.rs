@@ -69,7 +69,7 @@ pub fn modal_shell_build<State, Action, V>(
 )
 where
     State: 'static,
-    Action: Default + 'static,
+    Action: 'static,
     V: WidgetView<State, Action>,
 {
     let scrim_view = ui_scrim(config.dismiss_on_scrim, on_dismiss).boxed();
@@ -124,7 +124,7 @@ pub fn modal_shell_rebuild<State, Action, V>(
     on_dismiss: Arc<dyn Fn(&mut State) -> Action + Send + Sync>,
 ) where
     State: 'static,
-    Action: Default + 'static,
+    Action: 'static,
     V: WidgetView<State, Action>,
 {
     let next_scrim = ui_scrim(config.dismiss_on_scrim, on_dismiss).boxed();

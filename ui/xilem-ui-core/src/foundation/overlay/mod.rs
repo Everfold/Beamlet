@@ -22,7 +22,7 @@ use xilem::masonry::layout::{LenReq, Length};
 use xilem::masonry::properties::Dimensions;
 use xilem::style::Style as _;
 use xilem::view::{button, label, sized_box};
-use xilem::{Pod, ViewCtx, WidgetView};
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::UiClassExt as _;
 use crate::style_engine::classes;
@@ -39,19 +39,21 @@ pub use tooltip_host::{HoverTooltipHost, HoverTooltipView, TooltipContentSpec};
 type ActionCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
 
 /// Full-viewport modal scrim backdrop blocking pointer pass-through and optionally dismissing.
-pub fn ui_scrim<State: 'static, Action: Default + 'static>(
+pub fn ui_scrim<State: 'static, Action: 'static>(
     dismiss_on_click: bool,
     on_dismiss: Arc<dyn Fn(&mut State) -> Action + Send + Sync>,
-) -> impl WidgetView<State, Action> + use<State, Action> {
-    button(label(""), move |state| {
-        if dismiss_on_click {
-            on_dismiss(state)
-        } else {
-            Action::default()
-        }
-    })
-    .ui_class(classes::SCRIM)
-    .dims(Dimensions::STRETCH)
+) -> Box<AnyWidgetView<State, Action>> {
+    if dismiss_on_click {
+        button(label(""), move |state| on_dismiss(state))
+            .ui_class(classes::SCRIM)
+            .dims(Dimensions::STRETCH)
+            .boxed()
+    } else {
+        sized_box(label(""))
+            .ui_class(classes::SCRIM)
+            .dims(Dimensions::STRETCH)
+            .boxed()
+    }
 }
 
 /// Action emitted by [`EscapeCatcher`] when the `Escape` key is pressed while focus is inside.

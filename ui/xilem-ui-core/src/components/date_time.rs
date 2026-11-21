@@ -1,0 +1,477 @@
+//! Gregorian `CalendarDate` picker and `TimeOfDay` selector (+ modal dialog wrappers).
+
+use std::sync::Arc;
+
+use xilem::Color;
+use xilem::masonry::layout::AsUnit;
+use xilem::masonry::properties::Dimensions;
+use xilem::style::Style as _;
+use xilem::view::{
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
+};
+use xilem::{AnyWidgetView, WidgetView};
+
+use crate::components::button::{primary_button, subtle_button};
+use crate::components::dialog::dialog;
+use crate::components::icon_button::icon_button;
+use crate::foundation::{UiClassExt, icons};
+use crate::style_engine::{classes, with_spec};
+use crate::tokens::{DesignSpec, TypeRole};
+
+/// Proleptic Gregorian calendar date (`year`, `month` `1..=12`, `day` `1..=31`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CalendarDate {
+    /// Four-digit year.
+    pub year: i32,
+    /// Month (`1..=12`).
+    pub month: u8,
+    /// Day of month (`1..=31`).
+    pub day: u8,
+}
+
+impl CalendarDate {
+    /// Creates a normalized [`CalendarDate`] clamped to valid month/day bounds.
+    #[must_use]
+    pub fn new(year: i32, month: u8, day: u8) -> Self {
+        let m = month.clamp(1, 12);
+        let max_d = days_in_month(year, m);
+        Self {
+            year,
+            month: m,
+            day: day.clamp(1, max_d),
+        }
+    }
+
+    /// Returns the same day clamped to the previous calendar month.
+    #[must_use]
+    pub fn prev_month(self) -> Self {
+        if self.month == 1 {
+            Self::new(self.year - 1, 12, self.day)
+        } else {
+            Self::new(self.year, self.month - 1, self.day)
+        }
+    }
+
+    /// Returns the same day clamped to the next calendar month.
+    #[must_use]
+    pub fn next_month(self) -> Self {
+        if self.month == 12 {
+            Self::new(self.year + 1, 1, self.day)
+        } else {
+            Self::new(self.year, self.month + 1, self.day)
+        }
+    }
+
+    /// Formats the date cleanly as `YYYY-MM-DD`.
+    #[must_use]
+    pub fn format_iso(self) -> String {
+        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
+/// 24-hour wall-clock time (`hour` `0..=23`, `minute` `0..=59`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TimeOfDay {
+    /// Hour (`0..=23`).
+    pub hour: u8,
+    /// Minute (`0..=59`).
+    pub minute: u8,
+}
+
+impl TimeOfDay {
+    /// Creates a [`TimeOfDay`] wrapping hours modulo 24 and minutes modulo 60.
+    #[must_use]
+    pub const fn new(hour: u8, minute: u8) -> Self {
+        Self {
+            hour: hour % 24,
+            minute: minute % 60,
+        }
+    }
+
+    /// Increments hour by `delta` modulo 24.
+    #[must_use]
+    pub const fn add_hours(self, delta: i8) -> Self {
+        let next = (self.hour as i16 + delta as i16).rem_euclid(24) as u8;
+        Self::new(next, self.minute)
+    }
+
+    /// Increments minute by `delta` modulo 60.
+    #[must_use]
+    pub const fn add_minutes(self, delta: i8) -> Self {
+        let next = (self.minute as i16 + delta as i16).rem_euclid(60) as u8;
+        Self::new(self.hour, next)
+    }
+
+    /// Formats time as `HH:MM`.
+    #[must_use]
+    pub fn format_24h(self) -> String {
+        format!("{:02}:{:02}", self.hour, self.minute)
+    }
+}
+
+/// Returns `true` for Gregorian leap years.
+#[must_use]
+pub const fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+}
+
+/// Returns the number of days in `(year, month)`.
+#[must_use]
+pub const fn days_in_month(year: i32, month: u8) -> u8 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if is_leap_year(year) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30,
+    }
+}
+
+/// Sakamoto's weekday algorithm returning `0 = Sunday .. 6 = Saturday`.
+#[must_use]
+pub const fn weekday_sunday_zero(year: i32, month: u8, day: u8) -> u8 {
+    const OFFSETS: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if month < 3 { year - 1 } else { year };
+    let m = (month.saturating_sub(1) as usize) % 12;
+    (y + y / 4 - y / 100 + y / 400 + OFFSETS[m] + day as i32).rem_euclid(7) as u8
+}
+
+fn month_name(month: u8) -> &'static str {
+    match month {
+        1 => "January",
+        2 => "February",
+        3 => "March",
+        4 => "April",
+        5 => "May",
+        6 => "June",
+        7 => "July",
+        8 => "August",
+        9 => "September",
+        10 => "October",
+        11 => "November",
+        12 => "December",
+        _ => "Month",
+    }
+}
+
+/// Interactive docked Gregorian month-grid date picker.
+pub fn date_picker<State: 'static, Action: 'static, F>(
+    selected: CalendarDate,
+    on_select: F,
+) -> Box<AnyWidgetView<State, Action>>
+where
+    F: Fn(&mut State, CalendarDate) -> Action + Send + Sync + 'static,
+{
+    let cb = Arc::new(on_select);
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let prev_date = selected.prev_month();
+        let next_date = selected.next_month();
+        let cb_prev = cb.clone();
+        let cb_next = cb.clone();
+
+        let header = flex_row((
+            spec.typography
+                .style_label(
+                    TypeRole::TitleMedium,
+                    label(format!("{} {}", month_name(selected.month), selected.year)),
+                )
+                .color(p.text_primary)
+                .flex(1.0),
+            icon_button(icons::CHEVRON_LEFT, move |s: &mut State| {
+                cb_prev(s, prev_date)
+            }),
+            icon_button(icons::CHEVRON_RIGHT, move |s: &mut State| {
+                cb_next(s, next_date)
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(4.px());
+
+        let weekday_row = flex_row(
+            ["S", "M", "T", "W", "T", "F", "S"]
+                .into_iter()
+                .map(|w| {
+                    sized_box(
+                        spec.typography
+                            .style_label(TypeRole::LabelSmall, label(w))
+                            .color(p.text_secondary),
+                    )
+                    .dims(Dimensions::fixed(34.px(), 24.px()))
+                })
+                .collect::<Vec<_>>(),
+        )
+        .main_axis_alignment(MainAxisAlignment::SpaceBetween);
+
+        let first_wd = weekday_sunday_zero(selected.year, selected.month, 1) as usize;
+        let days = days_in_month(selected.year, selected.month) as usize;
+        let mut cells: Vec<Option<u8>> = vec![None; first_wd];
+        for d in 1..=days {
+            cells.push(Some(d as u8));
+        }
+        while !cells.len().is_multiple_of(7) {
+            cells.push(None);
+        }
+
+        let rows: Vec<Box<AnyWidgetView<State, Action>>> = cells
+            .as_chunks::<7>()
+            .0
+            .iter()
+            .map(|week| {
+                let row_cells: Vec<Box<AnyWidgetView<State, Action>>> = week
+                    .iter()
+                    .map(|cell| match cell {
+                        None => sized_box(label(""))
+                            .dims(Dimensions::fixed(34.px(), 34.px()))
+                            .boxed(),
+                        Some(d) => {
+                            let d = *d;
+                            let is_sel = d == selected.day;
+                            let cb_d = cb.clone();
+                            let target = CalendarDate::new(selected.year, selected.month, d);
+                            let fg = if is_sel { p.on_accent } else { p.text_primary };
+                            let cls = if is_sel {
+                                classes::ICON_BTN_FILLED
+                            } else {
+                                classes::ICON_BTN_STD
+                            };
+                            sized_box(
+                                button(
+                                    spec.typography
+                                        .style_label(TypeRole::BodySmall, label(d.to_string()))
+                                        .color(fg),
+                                    move |s: &mut State| cb_d(s, target),
+                                )
+                                .ui_class(cls),
+                            )
+                            .dims(Dimensions::fixed(34.px(), 34.px()))
+                            .boxed()
+                        }
+                    })
+                    .collect();
+                flex_row(row_cells)
+                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                    .boxed()
+            })
+            .collect();
+
+        flex_col((header, weekday_row, flex_col(rows).gap(4.px())))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(8.px())
+            .boxed()
+    })
+    .boxed()
+}
+
+/// Modal dialog wrapping [`date_picker`] with Cancel / OK footer actions.
+pub fn date_picker_dialog<State: 'static, Action: 'static, FSel, FOke, FDis>(
+    selected: CalendarDate,
+    on_select: FSel,
+    on_confirm: FOke,
+    on_dismiss: FDis,
+) -> Box<AnyWidgetView<State, Action>>
+where
+    FSel: Fn(&mut State, CalendarDate) -> Action + Send + Sync + 'static,
+    FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
+    FDis: Fn(&mut State) -> Action + Send + Sync + 'static + Clone,
+{
+    let picker = date_picker(selected, on_select);
+    let dis_btn = on_dismiss.clone();
+    let actions = flex_row((
+        subtle_button("Cancel", dis_btn),
+        primary_button("OK", on_confirm),
+    ))
+    .main_axis_alignment(MainAxisAlignment::End)
+    .gap(8.px());
+
+    let content = flex_col((picker, actions))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(16.px());
+    dialog(content, on_dismiss).width(340.0).boxed()
+}
+
+/// Interactive numeric 24-hour / 12-hour stepper time selector.
+pub fn time_picker<State: 'static, Action: 'static, F>(
+    selected: TimeOfDay,
+    on_change: F,
+) -> Box<AnyWidgetView<State, Action>>
+where
+    F: Fn(&mut State, TimeOfDay) -> Action + Send + Sync + 'static,
+{
+    let cb = Arc::new(on_change);
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let is_pm = selected.hour >= 12;
+        let h_plus = cb.clone();
+        let h_minus = cb.clone();
+        let m_plus = cb.clone();
+        let m_minus = cb.clone();
+        let am_cb = cb.clone();
+        let pm_cb = cb.clone();
+
+        let hour_col = flex_col((
+            icon_button(icons::ARROW_DROP_UP, move |s| {
+                h_plus(s, selected.add_hours(1))
+            }),
+            sized_box(
+                spec.typography
+                    .style_label(
+                        TypeRole::DisplaySmall,
+                        label(format!("{:02}", selected.hour)),
+                    )
+                    .color(p.on_accent_container),
+            )
+            .dims(Dimensions::fixed(76.px(), 64.px()))
+            .background_color(p.accent_container)
+            .corner_radius(spec.metrics.card_radius.px()),
+            icon_button(icons::ARROW_DROP_DOWN, move |s| {
+                h_minus(s, selected.add_hours(-1))
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(4.px());
+
+        let colon = spec
+            .typography
+            .style_label(TypeRole::DisplaySmall, label(":"))
+            .color(p.text_primary);
+
+        let min_col = flex_col((
+            icon_button(icons::ARROW_DROP_UP, move |s| {
+                m_plus(s, selected.add_minutes(5))
+            }),
+            sized_box(
+                spec.typography
+                    .style_label(
+                        TypeRole::DisplaySmall,
+                        label(format!("{:02}", selected.minute)),
+                    )
+                    .color(p.text_primary),
+            )
+            .dims(Dimensions::fixed(76.px(), 64.px()))
+            .background_color(p.surface_highest)
+            .corner_radius(spec.metrics.card_radius.px()),
+            icon_button(icons::ARROW_DROP_DOWN, move |s| {
+                m_minus(s, selected.add_minutes(-5))
+            }),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(4.px());
+
+        let am_btn = button(
+            spec.typography
+                .style_label(TypeRole::LabelMedium, label("AM"))
+                .color(if !is_pm {
+                    p.on_tertiary_container
+                } else {
+                    p.text_secondary
+                }),
+            move |s: &mut State| am_cb(s, TimeOfDay::new(selected.hour % 12, selected.minute)),
+        )
+        .ui_class(if !is_pm {
+            classes::SEG_BTN_SELECTED
+        } else {
+            classes::SEG_BTN
+        });
+
+        let pm_btn = button(
+            spec.typography
+                .style_label(TypeRole::LabelMedium, label("PM"))
+                .color(if is_pm {
+                    p.on_tertiary_container
+                } else {
+                    p.text_secondary
+                }),
+            move |s: &mut State| {
+                pm_cb(
+                    s,
+                    TimeOfDay::new((selected.hour % 12) + 12, selected.minute),
+                )
+            },
+        )
+        .ui_class(if is_pm {
+            classes::SEG_BTN_SELECTED
+        } else {
+            classes::SEG_BTN
+        });
+
+        let am_pm_col = flex_col((am_btn, pm_btn)).gap(6.px());
+        let _ = Color::TRANSPARENT;
+
+        flex_row((hour_col, colon, min_col, am_pm_col))
+            .main_axis_alignment(MainAxisAlignment::Center)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px())
+            .boxed()
+    })
+    .boxed()
+}
+
+/// Modal dialog wrapping [`time_picker`] with Cancel / OK footer actions.
+pub fn time_picker_dialog<State: 'static, Action: 'static, FSel, FOke, FDis>(
+    selected: TimeOfDay,
+    on_change: FSel,
+    on_confirm: FOke,
+    on_dismiss: FDis,
+) -> Box<AnyWidgetView<State, Action>>
+where
+    FSel: Fn(&mut State, TimeOfDay) -> Action + Send + Sync + 'static,
+    FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
+    FDis: Fn(&mut State) -> Action + Send + Sync + 'static + Clone,
+{
+    let picker = time_picker(selected, on_change);
+    let dis_btn = on_dismiss.clone();
+    let actions = flex_row((
+        subtle_button("Cancel", dis_btn),
+        primary_button("OK", on_confirm),
+    ))
+    .main_axis_alignment(MainAxisAlignment::End)
+    .gap(8.px());
+
+    let content = flex_col((picker, actions))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(16.px());
+    dialog(content, on_dismiss).width(340.0).boxed()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn calendar_handles_leap_years_and_month_rollover() {
+        assert!(is_leap_year(2024));
+        assert!(!is_leap_year(2100));
+        assert!(is_leap_year(2000));
+        assert_eq!(days_in_month(2024, 2), 29);
+        assert_eq!(days_in_month(2025, 2), 28);
+
+        let mar31 = CalendarDate::new(2025, 3, 31);
+        let feb = mar31.prev_month();
+        assert_eq!(feb, CalendarDate::new(2025, 2, 28));
+
+        let jan = CalendarDate::new(2025, 1, 15).prev_month();
+        assert_eq!(jan, CalendarDate::new(2024, 12, 15));
+        assert_eq!(jan.next_month(), CalendarDate::new(2025, 1, 15));
+    }
+
+    #[test]
+    fn weekday_matches_known_dates() {
+        // 2024-01-01 was Monday (1), 2024-02-29 was Thursday (4)
+        assert_eq!(weekday_sunday_zero(2024, 1, 1), 1);
+        assert_eq!(weekday_sunday_zero(2024, 2, 29), 4);
+    }
+
+    #[test]
+    fn time_of_day_wraps_cleanly() {
+        let t = TimeOfDay::new(23, 55);
+        assert_eq!(t.add_hours(2), TimeOfDay::new(1, 55));
+        assert_eq!(t.add_hours(-25), TimeOfDay::new(22, 55));
+        assert_eq!(t.add_minutes(10), TimeOfDay::new(23, 5));
+    }
+}
