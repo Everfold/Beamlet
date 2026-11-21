@@ -5508,7 +5508,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "xilem-adwaita"
+version = "0.1.0"
+dependencies = [
+ "xilem",
+ "xilem-ui-core",
+]
+
+[[package]]
 name = "xilem-fluent"
+version = "0.1.0"
+dependencies = [
+ "xilem",
+ "xilem-ui-core",
+]
+
+[[package]]
+name = "xilem-hig"
 version = "0.1.0"
 dependencies = [
  "xilem",
