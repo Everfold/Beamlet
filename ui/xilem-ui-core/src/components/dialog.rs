@@ -12,7 +12,7 @@ use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, MainAxisAlignment, flex_col, flex_row, label};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
-use crate::components::button::{primary_button, subtle_button};
+use crate::components::button::{destructive_button, primary_button, subtle_button};
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
@@ -159,6 +159,7 @@ pub struct BasicDialog<State, Action> {
     dismiss_text: Option<ArcStr>,
     width: f64,
     dismiss_on_scrim: bool,
+    destructive: bool,
     on_confirm: DialogCallback<State, Action>,
     on_dismiss: DialogCallback<State, Action>,
 }
@@ -188,13 +189,20 @@ impl<State, Action> BasicDialog<State, Action> {
         self
     }
 
+    /// Styles the confirmation action as a destructive error action (and tints the icon red).
+    pub fn destructive(mut self, is_destructive: bool) -> Self {
+        self.destructive = is_destructive;
+        self
+    }
+
     fn build_content(&self, spec: &crate::tokens::DesignSpec) -> Box<AnyWidgetView<State, Action>>
     where
         State: 'static,
         Action: 'static,
     {
         let p = &spec.palette;
-        let ic = self.icon.map(|path| ui_icon(path, 24.0, p.accent));
+        let icon_color = if self.destructive { p.error } else { p.accent };
+        let ic = self.icon.map(|path| ui_icon(path, 24.0, icon_color));
         let title_v = spec
             .typography
             .style_label(TypeRole::HeadlineSmall, label(self.title.clone()))
@@ -210,10 +218,17 @@ impl<State, Action> BasicDialog<State, Action> {
             .dismiss_text
             .as_ref()
             .map(|txt| subtle_button(txt.clone(), move |s: &mut State| on_dismiss(s)).boxed());
-        let confirm_btn = primary_button(self.confirm_text.clone(), move |s: &mut State| {
-            on_confirm(s)
-        })
-        .boxed();
+        let confirm_btn = if self.destructive {
+            destructive_button(self.confirm_text.clone(), move |s: &mut State| {
+                on_confirm(s)
+            })
+            .boxed()
+        } else {
+            primary_button(self.confirm_text.clone(), move |s: &mut State| {
+                on_confirm(s)
+            })
+            .boxed()
+        };
         let ordered_btns: Vec<Box<AnyWidgetView<State, Action>>> = match spec.dialog_action_order {
             DialogActionOrder::PrimaryLeading => {
                 let mut v = vec![confirm_btn];
@@ -351,6 +366,7 @@ where
         dismiss_text: None,
         width: 380.0,
         dismiss_on_scrim: true,
+        destructive: false,
         on_confirm: Arc::new(on_confirm),
         on_dismiss: Arc::new(on_dismiss),
     }

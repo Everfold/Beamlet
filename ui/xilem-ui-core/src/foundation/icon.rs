@@ -82,6 +82,37 @@ pub mod icons {
     pub const CHECK_CIRCLE: &str = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z";
     /// Error circle (`error`).
     pub const ERROR_CIRCLE: &str = "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z";
+    /// Folder (`folder`).
+    pub const FOLDER: &str = "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z";
+    /// Document (`description`).
+    pub const DESCRIPTION: &str = "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z";
+    /// Forward arrow (`arrow_forward`).
+    pub const ARROW_FORWARD: &str = "M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z";
+    /// Refresh (`refresh`).
+    pub const REFRESH: &str = "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
+    /// Content copy (`content_copy`).
+    pub const COPY: &str = "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z";
+    /// Share (`share`).
+    pub const SHARE: &str = "M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z";
+    /// Download (`download`).
+    pub const DOWNLOAD: &str = "M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z";
+    /// Lock (`lock`).
+    pub const LOCK: &str = "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z";
+    /// Person (`person`).
+    pub const PERSON: &str = "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z";
+    /// Filled star (`star`).
+    pub const STAR: &str =
+        "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z";
+    /// Minus / decrement (`remove`).
+    pub const REMOVE: &str = "M19 13H5v-2h14v2z";
+    /// Sidebar / inspector toggle (`dock_to_left`).
+    pub const DOCK_LEFT: &str = "M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 19H5V5h4v14zm10 0h-8V5h8v14z";
+    /// Terminal (`terminal`).
+    pub const TERMINAL: &str = "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V8h16v10zm-11-1l1.41-1.41L6.83 12l3.58-3.59L9 7l-5 5 5 5zm3 0h6v-2h-6v2z";
+    /// Angle brackets (`code`).
+    pub const CODE: &str = "M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z";
+    /// Archive (`archive`).
+    pub const ARCHIVE: &str = "M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z";
 }
 
 type IconCacheMap = HashMap<(&'static str, [u8; 4]), Arc<usvg::Tree>>;
@@ -121,4 +152,69 @@ pub fn ui_icon<State: 'static, Action: 'static>(
 ) -> impl xilem::WidgetView<State, Action> + use<State, Action> {
     let tree = cached_icon_tree(svg_path, color);
     sized_box(svg(tree)).dims(Dimensions::fixed(size_px.px(), size_px.px()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_builtin_icons_parse_cleanly() {
+        let all = [
+            icons::ADD,
+            icons::EDIT,
+            icons::DELETE,
+            icons::CHECK,
+            icons::INDETERMINATE_MINUS,
+            icons::CLOSE,
+            icons::SEARCH,
+            icons::SETTINGS,
+            icons::HOME,
+            icons::EXPLORE,
+            icons::ARROW_BACK,
+            icons::MENU,
+            icons::MORE_HORIZ,
+            icons::ARROW_DROP_DOWN,
+            icons::ARROW_DROP_UP,
+            icons::CHEVRON_LEFT,
+            icons::CHEVRON_RIGHT,
+            icons::FAVORITE,
+            icons::BOOKMARK,
+            icons::NOTIFICATIONS,
+            icons::PALETTE,
+            icons::DARK_MODE,
+            icons::LIGHT_MODE,
+            icons::INFO,
+            icons::HELP,
+            icons::CALENDAR,
+            icons::SCHEDULE,
+            icons::TUNE,
+            icons::SEND,
+            icons::FILTER_LIST,
+            icons::VISIBILITY,
+            icons::VISIBILITY_OFF,
+            icons::WARNING,
+            icons::CHECK_CIRCLE,
+            icons::ERROR_CIRCLE,
+            icons::FOLDER,
+            icons::DESCRIPTION,
+            icons::ARROW_FORWARD,
+            icons::REFRESH,
+            icons::COPY,
+            icons::SHARE,
+            icons::DOWNLOAD,
+            icons::LOCK,
+            icons::PERSON,
+            icons::STAR,
+            icons::REMOVE,
+            icons::DOCK_LEFT,
+            icons::TERMINAL,
+            icons::CODE,
+            icons::ARCHIVE,
+        ];
+        for path in all {
+            let tree = cached_icon_tree(path, Color::WHITE);
+            assert!(tree.size().width() > 0.0);
+        }
+    }
 }

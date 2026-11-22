@@ -10,6 +10,8 @@ pub const BTN_ELEVATED: &str = "ui.btn.elevated";
 pub const BTN_OUTLINED: &str = "ui.btn.outlined";
 /// Borderless subtle/text action button.
 pub const BTN_SUBTLE: &str = "ui.btn.subtle";
+/// High-emphasis destructive / danger confirmation action button.
+pub const BTN_DESTRUCTIVE: &str = "ui.btn.destructive";
 
 /// Standard transparent icon button (unselected).
 pub const ICON_BTN_STD: &str = "ui.icon_btn.std";

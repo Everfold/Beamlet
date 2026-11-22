@@ -31,6 +31,8 @@ pub enum ButtonVariant {
     Outlined,
     /// Text/flat/borderless button.
     Subtle,
+    /// High-emphasis destructive / dangerous action button.
+    Destructive,
 }
 
 impl ButtonVariant {
@@ -41,6 +43,7 @@ impl ButtonVariant {
             Self::Elevated => classes::BTN_ELEVATED,
             Self::Outlined => classes::BTN_OUTLINED,
             Self::Subtle => classes::BTN_SUBTLE,
+            Self::Destructive => classes::BTN_DESTRUCTIVE,
         }
     }
 }
@@ -202,6 +205,7 @@ impl<State, Action> UiButton<State, Action> {
             ButtonVariant::Secondary => p.on_secondary_container,
             ButtonVariant::Elevated | ButtonVariant::Subtle => p.accent,
             ButtonVariant::Outlined => p.text_primary,
+            ButtonVariant::Destructive => p.on_error,
         };
         let fg = spec.content_color(active_fg, self.disabled);
         let lbl = spec
@@ -473,4 +477,15 @@ where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
     make_button(ButtonVariant::Subtle, text, on_click)
+}
+
+/// High-emphasis destructive / dangerous confirmation button styled with `palette.error`.
+pub fn destructive_button<State: 'static, Action: 'static, F>(
+    text: impl Into<ArcStr>,
+    on_click: F,
+) -> UiButton<State, Action>
+where
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    make_button(ButtonVariant::Destructive, text, on_click)
 }

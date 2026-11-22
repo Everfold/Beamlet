@@ -138,6 +138,17 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Padding::from_vh(6.px(), 10.px()),
         btn_dims,
     );
+    insert_button_variant(
+        &mut stack,
+        classes::BTN_DESTRUCTIVE,
+        spec,
+        p.error,
+        p.on_error,
+        None,
+        m.button_radius,
+        std_pad,
+        btn_dims,
+    );
 
     let icon_dims = Some(Dimensions::fixed(
         m.icon_btn_size.px(),

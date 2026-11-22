@@ -261,6 +261,20 @@ impl ColorScheme {
     /// Converts this MD3 scheme into the cross-theme [`SemanticPalette`].
     #[must_use]
     pub fn to_semantic_palette(&self) -> SemanticPalette {
+        let (success, on_success, warning, on_warning) = match self.brightness {
+            Brightness::Light => (
+                Color::from_rgb8(0x1B, 0x6E, 0x2D),
+                Color::WHITE,
+                Color::from_rgb8(0x8C, 0x50, 0x00),
+                Color::WHITE,
+            ),
+            Brightness::Dark => (
+                Color::from_rgb8(0x78, 0xDC, 0x77),
+                Color::from_rgb8(0x00, 0x39, 0x0F),
+                Color::from_rgb8(0xFF, 0xB9, 0x51),
+                Color::from_rgb8(0x47, 0x2A, 0x00),
+            ),
+        };
         SemanticPalette {
             accent: self.primary,
             on_accent: self.on_primary,
@@ -286,6 +300,10 @@ impl ColorScheme {
             border: self.outline_variant,
             border_strong: self.outline,
             divider: self.outline_variant,
+            success,
+            on_success,
+            warning,
+            on_warning,
             error: self.error,
             on_error: self.on_error,
             inverse_surface: self.inverse_surface,

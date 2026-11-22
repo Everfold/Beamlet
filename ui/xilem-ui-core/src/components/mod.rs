@@ -26,8 +26,8 @@ pub mod typography;
 
 pub use badge::{large_badge, small_badge, with_badge};
 pub use button::{
-    ButtonVariant, UiButton, UiCustomButton, button_view, elevated_button, outlined_button,
-    primary_button, secondary_button, subtle_button,
+    ButtonVariant, UiButton, UiCustomButton, button_view, destructive_button, elevated_button,
+    outlined_button, primary_button, secondary_button, subtle_button,
 };
 pub use card::{
     CardVariant, card, elevated_card, filled_card, grouped_card, outlined_card, surface_box,

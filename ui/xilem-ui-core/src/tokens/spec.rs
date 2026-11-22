@@ -115,6 +115,14 @@ pub struct SemanticPalette {
     pub border_strong: Color,
     /// Hairline horizontal/vertical divider color.
     pub divider: Color,
+    /// Positive / completion status color.
+    pub success: Color,
+    /// Ink over [`success`](Self::success).
+    pub on_success: Color,
+    /// Caution / warning status color.
+    pub warning: Color,
+    /// Ink over [`warning`](Self::warning).
+    pub on_warning: Color,
     /// Destructive / validation error color.
     pub error: Color,
     /// Ink over [`error`](Self::error).
@@ -346,6 +354,10 @@ impl DesignSpec {
                 border: Color::from_rgb8(0xD5, 0xDA, 0xE2),
                 border_strong: Color::from_rgb8(0x88, 0x90, 0x9B),
                 divider: Color::from_rgb8(0xE0, 0xE4, 0xEC),
+                success: Color::from_rgb8(0x1B, 0x6E, 0x2D),
+                on_success: Color::WHITE,
+                warning: Color::from_rgb8(0x9D, 0x5D, 0x00),
+                on_warning: Color::WHITE,
                 error: Color::from_rgb8(0xC6, 0x28, 0x28),
                 on_error: Color::WHITE,
                 inverse_surface: Color::from_rgb8(0x27, 0x2A, 0x30),
@@ -378,6 +390,10 @@ impl DesignSpec {
                 border: Color::from_rgb8(0x3A, 0x3F, 0x48),
                 border_strong: Color::from_rgb8(0x6E, 0x76, 0x84),
                 divider: Color::from_rgb8(0x35, 0x39, 0x42),
+                success: Color::from_rgb8(0x6C, 0xCB, 0x5F),
+                on_success: Color::from_rgb8(0x0A, 0x2E, 0x0A),
+                warning: Color::from_rgb8(0xFC, 0xE1, 0x00),
+                on_warning: Color::from_rgb8(0x2E, 0x22, 0x00),
                 error: Color::from_rgb8(0xF2, 0x8B, 0x82),
                 on_error: Color::from_rgb8(0x42, 0x0A, 0x0A),
                 inverse_surface: Color::from_rgb8(0xE9, 0xEC, 0xF2),
@@ -478,5 +494,18 @@ mod tests {
         let spec = DesignSpec::neutral_fallback(Brightness::Light);
         assert_eq!(spec.dialog_action_order, DialogActionOrder::PrimaryTrailing);
         assert_eq!(spec.shortcut_convention, ShortcutConvention::Control);
+    }
+
+    #[test]
+    fn semantic_status_colors_are_distinct() {
+        for brightness in [Brightness::Light, Brightness::Dark] {
+            let p = DesignSpec::neutral_fallback(brightness).palette;
+            assert_ne!(p.success, p.accent);
+            assert_ne!(p.warning, p.accent);
+            assert_ne!(p.error, p.accent);
+            assert_ne!(p.success, p.warning);
+            assert_ne!(p.success, p.error);
+            assert_ne!(p.warning, p.error);
+        }
     }
 }
