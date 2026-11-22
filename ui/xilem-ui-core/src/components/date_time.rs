@@ -8,7 +8,8 @@ use xilem::masonry::properties::Dimensions;
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label,
+    sized_box, zstack,
 };
 use xilem::{AnyWidgetView, WidgetView};
 
@@ -336,14 +337,14 @@ where
             icon_button(icons::ARROW_DROP_UP, move |s| {
                 h_plus(s, selected.add_hours(1))
             }),
-            sized_box(
-                spec.typography
-                    .style_label(
-                        TypeRole::DisplaySmall,
-                        label(format!("{:02}", selected.hour)),
-                    )
-                    .color(p.on_accent_container),
-            )
+            sized_box(zstack((spec
+                .typography
+                .style_label(
+                    TypeRole::DisplaySmall,
+                    label(format!("{:02}", selected.hour)),
+                )
+                .color(p.on_accent_container)
+                .alignment(xilem::masonry::layout::UnitPoint::CENTER),)))
             .dims(Dimensions::fixed(76.px(), 64.px()))
             .background_color(p.accent_container)
             .corner_radius(spec.metrics.card_radius.px()),
@@ -363,14 +364,14 @@ where
             icon_button(icons::ARROW_DROP_UP, move |s| {
                 m_plus(s, selected.add_minutes(5))
             }),
-            sized_box(
-                spec.typography
-                    .style_label(
-                        TypeRole::DisplaySmall,
-                        label(format!("{:02}", selected.minute)),
-                    )
-                    .color(p.text_primary),
-            )
+            sized_box(zstack((spec
+                .typography
+                .style_label(
+                    TypeRole::DisplaySmall,
+                    label(format!("{:02}", selected.minute)),
+                )
+                .color(p.text_primary)
+                .alignment(xilem::masonry::layout::UnitPoint::CENTER),)))
             .dims(Dimensions::fixed(76.px(), 64.px()))
             .background_color(p.surface_highest)
             .corner_radius(spec.metrics.card_radius.px()),

@@ -94,8 +94,11 @@ where
         .with(scrim_el.new_widget.erased(), UnitPoint::CENTER)
         .with(slide.erased(), config.alignment);
 
-    let pod =
-        ctx.with_action_widget(|ctx| ctx.create_pod(EscapeCatcher::new(NewWidget::new(zstack))));
+    let pod = ctx.with_action_widget(|ctx| {
+        let mut pod = ctx.create_pod(EscapeCatcher::new(NewWidget::new(zstack)));
+        pod.new_widget.properties.insert(Dimensions::STRETCH);
+        pod
+    });
 
     (
         pod,

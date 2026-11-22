@@ -4,7 +4,7 @@
 
 use xilem::dpi::LogicalSize;
 use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
+use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::style::Style as _;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
@@ -255,7 +255,8 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
             ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(12.px()),
+        .gap(12.px())
+        .dims(Dimensions::MAX),
     )
     .padding(Padding::all(20.px()))
     .alignment(UnitPoint::BOTTOM_RIGHT);

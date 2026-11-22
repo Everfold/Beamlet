@@ -22,6 +22,10 @@ pub fn overview_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
                 elevated_button("Elevated", |s: &mut GalleryState| s.click_count += 1),
                 outlined_button("Outlined", |s: &mut GalleryState| s.click_count += 1),
                 subtle_button("Subtle", |s: &mut GalleryState| s.click_count += 1),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px()),
+            flex_row((
                 destructive_button("Delete", |s: &mut GalleryState| {
                     s.show_destructive_dialog = true;
                 })

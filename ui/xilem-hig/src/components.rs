@@ -317,7 +317,8 @@ where
             move |s: &mut State| dec_cb(s, next_dec),
         )
         .disabled(!can_dec)
-        .ui_class(classes::ICON_BTN_STD);
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(24.px(), 24.px()));
 
         let inc_btn = button(
             ui_icon(
@@ -328,12 +329,17 @@ where
             move |s: &mut State| inc_cb(s, next_inc),
         )
         .disabled(!can_inc)
-        .ui_class(classes::ICON_BTN_STD);
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(24.px(), 24.px()));
 
         let pill = sized_box(
-            flex_row((dec_btn, vertical_divider(), inc_btn))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(0.px()),
+            flex_row((
+                dec_btn,
+                vertical_divider().dims(Dimensions::height(16.px())),
+                inc_btn,
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(0.px()),
         )
         .background_color(p.surface)
         .border(p.border_strong, 1.px())

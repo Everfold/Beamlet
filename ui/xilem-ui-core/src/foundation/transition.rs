@@ -30,7 +30,6 @@ pub struct SlideTransition {
     elapsed_ns: u64,
     exiting: bool,
     easing: MotionEasing,
-    pushed_group: bool,
 }
 
 impl SlideTransition {
@@ -49,7 +48,6 @@ impl SlideTransition {
             elapsed_ns: 0,
             exiting: false,
             easing,
-            pushed_group: false,
         }
     }
 
@@ -73,6 +71,7 @@ impl SlideTransition {
         this.ctx.request_anim_frame();
         this.ctx.request_compose();
         this.ctx.request_paint_only();
+        this.ctx.request_post_paint();
     }
 
     /// Starts a reverse slide-out & fade-out exit animation toward `offset`.
@@ -85,6 +84,7 @@ impl SlideTransition {
         this.ctx.request_anim_frame();
         this.ctx.request_compose();
         this.ctx.request_paint_only();
+        this.ctx.request_post_paint();
     }
 
     fn current_eased(&self) -> f64 {
@@ -133,6 +133,7 @@ impl Widget for SlideTransition {
             self.elapsed_ns = (self.elapsed_ns + interval).min(self.duration_ns);
             ctx.request_compose();
             ctx.request_paint_only();
+            ctx.request_post_paint();
             if self.elapsed_ns < self.duration_ns {
                 ctx.request_anim_frame();
             }
@@ -180,9 +181,6 @@ impl Widget for SlideTransition {
             painter.push_group(
                 GroupRef::new().with_composite(Composite::new(peniko::BlendMode::default(), alpha)),
             );
-            self.pushed_group = true;
-        } else {
-            self.pushed_group = false;
         }
     }
 
@@ -192,9 +190,8 @@ impl Widget for SlideTransition {
         _props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
-        if self.pushed_group {
+        if self.current_alpha() < 0.999 {
             painter.pop_group();
-            self.pushed_group = false;
         }
     }
 

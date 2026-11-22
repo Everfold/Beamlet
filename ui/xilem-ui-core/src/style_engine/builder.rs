@@ -271,7 +271,15 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         );
     }
 
-    let chip_pad = Padding::from_vh(4.px(), 12.px());
+    let chip_pad = Padding::from_vh(
+        if m.chip_height <= 24.0 {
+            2.px()
+        } else {
+            4.px()
+        },
+        12.px(),
+    );
+    let chip_dims = Some(Dimensions::height(m.chip_height.px()));
     insert_button_variant(
         &mut stack,
         classes::CHIP_ASSIST,
@@ -281,7 +289,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border, 1.0)),
         m.chip_radius,
         chip_pad,
-        None,
+        chip_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -292,7 +300,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border_strong, 1.0)),
         m.chip_radius,
         chip_pad,
-        None,
+        chip_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -303,7 +311,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         m.chip_radius,
         chip_pad,
-        None,
+        chip_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -314,7 +322,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border, 1.0)),
         m.chip_radius,
         chip_pad,
-        None,
+        chip_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -325,7 +333,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border, 1.0)),
         m.chip_radius,
         chip_pad,
-        None,
+        chip_dims,
     );
 
     insert_button_variant(
@@ -606,9 +614,10 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
     cb_stack.push_layer(
         Selector::classes(&[classes::CHECKED]),
         PropertySet::new()
-            .with(Background::Color(p.accent))
+            .with(Background::Color(Color::TRANSPARENT))
             .with(BorderColor::new(p.accent))
-            .with(BorderWidth { width: 2.px() }),
+            .with(BorderWidth { width: 2.px() })
+            .with(CheckmarkColor::new(p.accent)),
     );
     cb_stack.push_layer(
         Selector::new().with_disabled(true),

@@ -7,7 +7,7 @@ mod state;
 
 use xilem::dpi::LogicalSize;
 use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
+use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
@@ -277,6 +277,7 @@ fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
     ))
     .cross_axis_alignment(CrossAxisAlignment::Center)
     .gap(12.px())
+    .dims(Dimensions::MAX)
     .boxed();
     wrap_with_overlays(state, workspace, Some(fab_view))
 }

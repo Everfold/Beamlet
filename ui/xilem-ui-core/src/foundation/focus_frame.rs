@@ -54,7 +54,7 @@ impl FocusFrame {
     fn set_config(this: &mut WidgetMut<'_, Self>, config: FocusFrameConfig) {
         if this.widget.config != config {
             this.widget.config = config;
-            this.ctx.request_paint_only();
+            this.ctx.request_post_paint();
         }
     }
 
@@ -76,7 +76,7 @@ impl Widget for FocusFrame {
             && self.focused != *focused
         {
             self.focused = *focused;
-            ctx.request_paint_only();
+            ctx.request_post_paint();
         }
     }
 

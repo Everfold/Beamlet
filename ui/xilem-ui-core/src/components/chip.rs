@@ -6,6 +6,7 @@ use std::sync::Arc;
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
+use xilem::masonry::properties::Dimensions;
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, button, flex_row, label};
@@ -105,14 +106,16 @@ impl<State, Action> UiChip<State, Action> {
 
         if let Some(on_rem) = &self.on_remove {
             let on_rem = on_rem.clone();
-            let close_btn = button(ui_icon(icons::CLOSE, 14.0, fg), move |state: &mut State| {
+            let btn_sz = (spec.metrics.chip_height - 4.0).clamp(18.0, 26.0);
+            let close_btn = button(ui_icon(icons::CLOSE, 13.0, fg), move |state: &mut State| {
                 on_rem(state)
             })
             .disabled(self.disabled)
-            .ui_class(classes::ICON_BTN_STD);
+            .ui_class(classes::ICON_BTN_STD)
+            .dims(Dimensions::fixed(btn_sz.px(), btn_sz.px()));
             flex_row((main_chip, close_btn))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(2.px())
+                .gap(4.px())
                 .boxed()
         } else {
             main_chip.boxed()
