@@ -1,4 +1,4 @@
-//! macOS signature components: `macos_toolbar`, `source_list_sidebar`, `form_group`, `form_row`, `help_button`.
+//! macOS signature components: `macos_toolbar`, `macos_toolbar_with_center`, `source_list_sidebar`, `form_group`, `form_row`, `help_button`.
 
 use std::sync::Arc;
 
@@ -6,6 +6,7 @@ use xilem::Color;
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
 use xilem::masonry::properties::{Dimensions, Padding};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
@@ -16,26 +17,22 @@ use xilem_ui_core::foundation::{UiClassExt, ui_icon};
 use xilem_ui_core::style_engine::{classes, with_spec};
 use xilem_ui_core::tokens::{DesignSpec, TypeRole};
 
-/// Unified macOS compact `38px` window toolbar with leading, centered/bold title, and trailing items.
-pub fn macos_toolbar<State: 'static, Action: 'static>(
-    title: impl Into<ArcStr>,
+/// Unified macOS compact `38px` window toolbar hosting an arbitrary custom center view (e.g. search bar or segmented switcher).
+pub fn macos_toolbar_with_center<State: 'static, Action: 'static, C>(
     leading_actions: Vec<Box<AnyWidgetView<State, Action>>>,
+    center: C,
     trailing_actions: Vec<Box<AnyWidgetView<State, Action>>>,
-) -> Box<AnyWidgetView<State, Action>> {
-    let title: ArcStr = title.into();
-    let title_view = with_spec(move |spec: &DesignSpec, _| {
-        spec.typography
-            .style_label(TypeRole::TitleSmall, label(title.clone()))
-            .color(spec.palette.text_primary)
-    });
-
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+where
+    C: WidgetView<State, Action>,
+{
     flex_col((
         sized_box(
             flex_row((
                 flex_row(leading_actions)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(6.px()),
-                title_view.flex(1.0),
+                center.flex(1.0),
                 flex_row(trailing_actions)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(6.px()),
@@ -49,7 +46,21 @@ pub fn macos_toolbar<State: 'static, Action: 'static>(
         horizontal_divider(),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
-    .boxed()
+}
+
+/// Unified macOS compact `38px` window toolbar with leading actions, title, and trailing actions.
+pub fn macos_toolbar<State: 'static, Action: 'static>(
+    title: impl Into<ArcStr>,
+    leading_actions: Vec<Box<AnyWidgetView<State, Action>>>,
+    trailing_actions: Vec<Box<AnyWidgetView<State, Action>>>,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> {
+    let title: ArcStr = title.into();
+    let title_view = with_spec(move |spec: &DesignSpec, _| {
+        spec.typography
+            .style_label(TypeRole::TitleSmall, label(title.clone()))
+            .color(spec.palette.text_primary)
+    });
+    macos_toolbar_with_center(leading_actions, title_view, trailing_actions)
 }
 
 /// Frosted macOS Source List sidebar grouping labeled sections with rounded row selection.
@@ -57,7 +68,7 @@ pub fn source_list_sidebar<State: 'static, Action: 'static, F>(
     sections: &[(&str, Vec<(&str, &'static str)>)],
     selected: (usize, usize),
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, (usize, usize)) -> Action + Send + Sync + 'static,
 {
@@ -129,9 +140,7 @@ where
             vertical_divider(),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .boxed()
     })
-    .boxed()
 }
 
 /// macOS grouped Settings `Form` container separating child [`form_row`] items with inset dividers.
@@ -139,7 +148,7 @@ pub fn form_group<State: 'static, Action: 'static>(
     header: Option<&str>,
     rows: Vec<Box<AnyWidgetView<State, Action>>>,
     footer: Option<&str>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action> {
     let header_owned = header.map(ArcStr::from);
     let footer_owned = footer.map(ArcStr::from);
 
@@ -175,14 +184,13 @@ pub fn form_group<State: 'static, Action: 'static>(
     flex_col((head_view, card, foot_view))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(6.px())
-        .boxed()
 }
 
 /// macOS `Form` row aligning label on the leading edge and `control` on the trailing edge.
 pub fn form_row<State: 'static, Action: 'static, C>(
     label_text: impl Into<ArcStr>,
     control: C,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
 where
     C: WidgetView<State, Action>,
 {
@@ -198,13 +206,12 @@ where
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(16.px())
         .padding(Padding::from_vh(10.px(), 14.px()))
-        .boxed()
 }
 
-/// Classic circular macOS `?` help button (`22×22`).
+/// Classic circular macOS `?` help button (`24×24`), returning `Pod<widgets::Button>` directly.
 pub fn help_button<State: 'static, Action: 'static, F>(
     on_click: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
 where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
@@ -212,19 +219,16 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let cb = cb.clone();
-        sized_box(
-            button(
-                spec.typography
-                    .style_label(TypeRole::LabelMedium, label("?"))
-                    .color(p.text_primary),
-                move |s: &mut State| cb(s),
-            )
-            .ui_class(classes::BTN_OUTLINED)
-            .corner_radius(999.px())
-            .background_color(Color::TRANSPARENT),
+        button(
+            spec.typography
+                .style_label(TypeRole::LabelMedium, label("?"))
+                .color(p.text_primary),
+            move |s: &mut State| cb(s),
         )
+        .ui_class(classes::BTN_OUTLINED)
+        .corner_radius(999.px())
+        .background_color(Color::TRANSPARENT)
         .dims(Dimensions::fixed(24.px(), 24.px()))
-        .boxed()
+        .padding(Padding::ZERO)
     })
-    .boxed()
 }

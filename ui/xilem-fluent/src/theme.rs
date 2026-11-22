@@ -1,5 +1,8 @@
 //! `FluentTheme` constructing a Windows 11 / WinUI 3 [`DesignSpec`].
 
+use xilem::masonry::core::FromDynWidget;
+use xilem::{WidgetView, WindowId, WindowView};
+use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
     Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
@@ -107,4 +110,30 @@ impl Default for FluentTheme {
     fn default() -> Self {
         Self::light()
     }
+}
+
+/// Wraps `child` inside a live Windows Fluent [`UiScope`] matching `theme`.
+pub fn fluent_scope<State: 'static, Action: 'static, V>(
+    theme: &FluentTheme,
+    child: V,
+) -> UiScope<State, Action, V>
+where
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    ui_scope(theme.to_spec(), child)
+}
+
+/// Wraps a standalone desktop [`WindowView`] with Windows Fluent Mica backdrop, properties, and [`UiScope`].
+pub fn fluent_window<State: 'static, V>(
+    window_id: WindowId,
+    title: impl Into<String>,
+    theme: &FluentTheme,
+    child: V,
+) -> WindowView<State>
+where
+    V: WidgetView<State>,
+    V::Widget: FromDynWidget,
+{
+    ui_window(window_id, title, &theme.to_spec(), child)
 }

@@ -557,10 +557,13 @@ fn all_four_platform_signature_suites_build_and_render() {
                 xilem_ui::hig::macos_toolbar("HIG Toolbar", vec![], vec![]),
                 xilem_ui::hig::form_group(
                     Some("HIG FORM"),
-                    vec![xilem_ui::hig::form_row(
-                        "Help",
-                        xilem_ui::hig::help_button(|st: &mut MatrixState| st.clicks += 1),
-                    )],
+                    vec![
+                        xilem_ui::hig::form_row(
+                            "Help",
+                            xilem_ui::hig::help_button(|st: &mut MatrixState| st.clicks += 1),
+                        )
+                        .boxed(),
+                    ],
                     None,
                 ),
                 xilem_ui::adwaita::header_bar("Adwaita Header", None::<&str>, vec![], vec![]),
@@ -568,12 +571,15 @@ fn all_four_platform_signature_suites_build_and_render() {
                 xilem_ui::adwaita::preferences_group(
                     Some("GNOME Prefs"),
                     None,
-                    vec![xilem_ui::adwaita::switch_row(
-                        "Option",
-                        None::<&str>,
-                        s.switch_on,
-                        |st: &mut MatrixState, v| st.switch_on = v,
-                    )],
+                    vec![
+                        xilem_ui::adwaita::switch_row(
+                            "Option",
+                            None::<&str>,
+                            s.switch_on,
+                            |st: &mut MatrixState, v| st.switch_on = v,
+                        )
+                        .boxed(),
+                    ],
                 ),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)

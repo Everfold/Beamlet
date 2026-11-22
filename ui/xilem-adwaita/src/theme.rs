@@ -1,5 +1,8 @@
 //! `AdwaitaTheme` constructing a GNOME Libadwaita [`DesignSpec`].
 
+use xilem::masonry::core::FromDynWidget;
+use xilem::{WidgetView, WindowId, WindowView};
+use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
     Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
@@ -110,4 +113,30 @@ impl Default for AdwaitaTheme {
     fn default() -> Self {
         Self::light()
     }
+}
+
+/// Wraps `child` inside a live GNOME Libadwaita [`UiScope`] matching `theme`.
+pub fn adwaita_scope<State: 'static, Action: 'static, V>(
+    theme: &AdwaitaTheme,
+    child: V,
+) -> UiScope<State, Action, V>
+where
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    ui_scope(theme.to_spec(), child)
+}
+
+/// Wraps a standalone desktop [`WindowView`] with GNOME Libadwaita backdrop, properties, and [`UiScope`].
+pub fn adwaita_window<State: 'static, V>(
+    window_id: WindowId,
+    title: impl Into<String>,
+    theme: &AdwaitaTheme,
+    child: V,
+) -> WindowView<State>
+where
+    V: WidgetView<State>,
+    V::Widget: FromDynWidget,
+{
+    ui_window(window_id, title, &theme.to_spec(), child)
 }

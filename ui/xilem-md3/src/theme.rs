@@ -1,6 +1,8 @@
 //! `Md3Theme` constructing a complete Material Design 3 [`DesignSpec`].
 
-use xilem::Color;
+use xilem::masonry::core::FromDynWidget;
+use xilem::{Color, WidgetView, WindowId, WindowView};
+use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
     Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
@@ -116,4 +118,30 @@ impl Default for Md3Theme {
     fn default() -> Self {
         Self::light()
     }
+}
+
+/// Wraps `child` inside a live Material Design 3 [`UiScope`] matching `theme`.
+pub fn md3_scope<State: 'static, Action: 'static, V>(
+    theme: &Md3Theme,
+    child: V,
+) -> UiScope<State, Action, V>
+where
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    ui_scope(theme.to_spec(), child)
+}
+
+/// Wraps a standalone desktop [`WindowView`] with Material Design 3 backdrop, properties, and [`UiScope`].
+pub fn md3_window<State: 'static, V>(
+    window_id: WindowId,
+    title: impl Into<String>,
+    theme: &Md3Theme,
+    child: V,
+) -> WindowView<State>
+where
+    V: WidgetView<State>,
+    V::Widget: FromDynWidget,
+{
+    ui_window(window_id, title, &theme.to_spec(), child)
 }

@@ -60,10 +60,13 @@ pub fn platform_native_page(state: &mut GalleryState) -> impl WidgetView<Gallery
             state.expander_open,
             |s: &mut GalleryState| s.expander_open = !s.expander_open,
             None::<xilem_ui::components::button::UiButton<GalleryState, ()>>,
-            vec![command_bar(
-                vec![primary_button("Save", |s: &mut GalleryState| s.click_count += 1).boxed()],
-                vec![subtle_button("Reset", |s: &mut GalleryState| s.click_count = 0).boxed()],
-            )],
+            vec![
+                command_bar(
+                    vec![primary_button("Save", |s: &mut GalleryState| s.click_count += 1).boxed()],
+                    vec![subtle_button("Reset", |s: &mut GalleryState| s.click_count = 0).boxed()],
+                )
+                .boxed(),
+            ],
         ),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -74,7 +77,7 @@ pub fn platform_native_page(state: &mut GalleryState) -> impl WidgetView<Gallery
         macos_toolbar(
             "Inspector",
             vec![icon_button(icons::ARROW_BACK, |s: &mut GalleryState| s.click_count += 1).boxed()],
-            vec![help_button(|s: &mut GalleryState| s.click_count += 1)],
+            vec![help_button(|s: &mut GalleryState| s.click_count += 1).boxed()],
         ),
         form_group(
             Some("SYSTEM APPEARANCE"),
@@ -84,11 +87,13 @@ pub fn platform_native_page(state: &mut GalleryState) -> impl WidgetView<Gallery
                     switch(state.native_switch_b, |s: &mut GalleryState, v| {
                         s.native_switch_b = v;
                     }),
-                ),
+                )
+                .boxed(),
                 form_row(
                     "Default Action",
                     primary_button("Apply", |s: &mut GalleryState| s.click_count += 1),
-                ),
+                )
+                .boxed(),
             ],
             Some("Matches macOS compact 26px Aqua geometry & 3px focus halos."),
         ),
@@ -120,7 +125,8 @@ pub fn platform_native_page(state: &mut GalleryState) -> impl WidgetView<Gallery
                     Some("Uses 7% hover / 14% active alpha veils"),
                     state.native_switch_a,
                     |s: &mut GalleryState, v| s.native_switch_a = v,
-                ),
+                )
+                .boxed(),
                 action_row(
                     "Sync GNOME Account",
                     Some("Triggers row activation callback"),
@@ -129,7 +135,8 @@ pub fn platform_native_page(state: &mut GalleryState) -> impl WidgetView<Gallery
                     Some(std::sync::Arc::new(|s: &mut GalleryState| {
                         s.click_count += 1
                     })),
-                ),
+                )
+                .boxed(),
             ],
         ),
     ))

@@ -1,15 +1,18 @@
-//! Material Design 3 signature components (FAB, Extended FAB, Top/Bottom App Bars).
+//! Material Design 3 signature components (FAB, Extended FAB, Top/Bottom App Bars) with concrete `WidgetView`s.
 
 use std::sync::Arc;
 
 use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
+use xilem::masonry::layout::{AsUnit, UnitPoint};
 use xilem::masonry::properties::{Dimensions, Padding};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label,
+    sized_box, zstack,
 };
 use xilem::{AnyWidgetView, WidgetView};
+use xilem_ui_core::components::{headline_medium, headline_small, title_large};
 use xilem_ui_core::foundation::{UiClassExt, ui_icon};
 use xilem_ui_core::style_engine::{classes, with_spec};
 use xilem_ui_core::tokens::{DesignSpec, TypeRole};
@@ -49,12 +52,12 @@ impl FabColor {
     }
 }
 
-/// Material 3 `56×56` Floating Action Button.
+/// Material 3 `56×56` Floating Action Button returning `Pod<widgets::Button>` directly.
 pub fn fab<State: 'static, Action: 'static, F>(
     svg_path: &'static str,
     color: FabColor,
     on_click: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
 where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
@@ -62,23 +65,19 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let fg = color.foreground(spec);
         let cb = cb.clone();
-        sized_box(
-            button(ui_icon(svg_path, 24.0, fg), move |s: &mut State| cb(s))
-                .ui_class(color.class_name()),
-        )
-        .dims(Dimensions::fixed(56.px(), 56.px()))
-        .boxed()
+        button(ui_icon(svg_path, 24.0, fg), move |s: &mut State| cb(s))
+            .ui_class(color.class_name())
+            .dims(Dimensions::fixed(56.px(), 56.px()))
     })
-    .boxed()
 }
 
-/// Material 3 extended pill FAB combining icon + text label.
+/// Material 3 extended pill FAB combining icon + text label, returning `Pod<widgets::Button>` directly.
 pub fn extended_fab<State: 'static, Action: 'static, F>(
     svg_path: &'static str,
     text: impl Into<ArcStr>,
     color: FabColor,
     on_click: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
 where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
@@ -91,19 +90,14 @@ where
             .typography
             .style_label(TypeRole::LabelLarge, label(text.clone()))
             .color(fg);
-        sized_box(
-            button(
-                flex_row((ui_icon(svg_path, 20.0, fg), lbl))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(10.px()),
-                move |s: &mut State| cb(s),
-            )
-            .ui_class(color.class_name()),
+        button(
+            flex_row((ui_icon(svg_path, 20.0, fg), lbl))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(10.px()),
+            move |s: &mut State| cb(s),
         )
-        .dims(Dimensions::height(56.px()))
-        .boxed()
+        .ui_class(color.class_name())
     })
-    .boxed()
 }
 
 /// Material 3 Top App Bar height and layout variants.
@@ -120,86 +114,100 @@ pub enum TopAppBarVariant {
     Large,
 }
 
+/// Material 3 Top App Bar with open `leading` and `trailing` custom view slots.
+pub fn top_app_bar_slots<State: 'static, Action: 'static>(
+    variant: TopAppBarVariant,
+    title: impl Into<ArcStr>,
+    leading: Option<Box<AnyWidgetView<State, Action>>>,
+    trailing: Vec<Box<AnyWidgetView<State, Action>>>,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    let title: ArcStr = title.into();
+    let trail_row = (!trailing.is_empty()).then(|| {
+        flex_row(trailing)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(4.px())
+    });
+
+    let (height, body): (f64, Box<AnyWidgetView<State, Action>>) = match variant {
+        TopAppBarVariant::Small => (
+            64.0,
+            flex_row((leading, title_large(title).flex(1.0), trail_row))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px())
+                .padding(Padding::from_vh(8.px(), 16.px()))
+                .boxed(),
+        ),
+        TopAppBarVariant::CenterAligned => (
+            64.0,
+            zstack((
+                title_large(title).alignment(UnitPoint::CENTER),
+                flex_row((leading, trail_row))
+                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .padding(Padding::from_vh(8.px(), 16.px()))
+                    .alignment(UnitPoint::CENTER),
+            ))
+            .boxed(),
+        ),
+        TopAppBarVariant::Medium => {
+            let nav_row = flex_row((leading, sized_box(label("")).flex(1.0), trail_row))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px());
+            (
+                112.0,
+                flex_col((nav_row, headline_small(title)))
+                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .padding(Padding::from_vh(14.px(), 16.px()))
+                    .boxed(),
+            )
+        }
+        TopAppBarVariant::Large => {
+            let nav_row = flex_row((leading, sized_box(label("")).flex(1.0), trail_row))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px());
+            (
+                152.0,
+                flex_col((nav_row, headline_medium(title)))
+                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .padding(Padding::from_vh(18.px(), 16.px()))
+                    .boxed(),
+            )
+        }
+    };
+
+    sized_box(body)
+        .dims(Dimensions::height(height.px()))
+        .ui_class(classes::HEADER_BAR)
+}
+
 /// Material 3 Top App Bar supporting small, center-aligned, medium, and large variants.
 pub fn top_app_bar<State: 'static, Action: 'static>(
     variant: TopAppBarVariant,
     title: impl Into<ArcStr>,
-) -> Box<AnyWidgetView<State, Action>> {
-    let title: ArcStr = title.into();
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
-        match variant {
-            TopAppBarVariant::Small => sized_box(
-                flex_row((spec
-                    .typography
-                    .style_label(TypeRole::TitleLarge, label(title.clone()))
-                    .color(p.text_primary)
-                    .flex(1.0),))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .padding(Padding::from_vh(8.px(), 16.px())),
-            )
-            .dims(Dimensions::height(64.px()))
-            .ui_class(classes::HEADER_BAR)
-            .boxed(),
-            TopAppBarVariant::CenterAligned => sized_box(
-                flex_row((spec
-                    .typography
-                    .style_label(TypeRole::TitleLarge, label(title.clone()))
-                    .color(p.text_primary),))
-                .main_axis_alignment(MainAxisAlignment::Center)
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .padding(Padding::from_vh(8.px(), 16.px())),
-            )
-            .dims(Dimensions::height(64.px()))
-            .ui_class(classes::HEADER_BAR)
-            .boxed(),
-            TopAppBarVariant::Medium => sized_box(
-                flex_col((spec
-                    .typography
-                    .style_label(TypeRole::HeadlineSmall, label(title.clone()))
-                    .color(p.text_primary),))
-                .main_axis_alignment(MainAxisAlignment::End)
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .padding(Padding::from_vh(18.px(), 16.px())),
-            )
-            .dims(Dimensions::height(112.px()))
-            .ui_class(classes::HEADER_BAR)
-            .boxed(),
-            TopAppBarVariant::Large => sized_box(
-                flex_col((spec
-                    .typography
-                    .style_label(TypeRole::HeadlineMedium, label(title.clone()))
-                    .color(p.text_primary),))
-                .main_axis_alignment(MainAxisAlignment::End)
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .padding(Padding::from_vh(24.px(), 16.px())),
-            )
-            .dims(Dimensions::height(152.px()))
-            .ui_class(classes::HEADER_BAR)
-            .boxed(),
-        }
-    })
-    .boxed()
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    top_app_bar_slots(variant, title, None, Vec::new())
 }
 
 /// Center-aligned Material 3 top app bar.
 pub fn center_aligned_top_app_bar<State: 'static, Action: 'static>(
     title: impl Into<ArcStr>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     top_app_bar(TopAppBarVariant::CenterAligned, title)
 }
 
 /// Medium Material 3 top app bar.
 pub fn medium_top_app_bar<State: 'static, Action: 'static>(
     title: impl Into<ArcStr>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     top_app_bar(TopAppBarVariant::Medium, title)
 }
 
 /// Large Material 3 top app bar.
 pub fn large_top_app_bar<State: 'static, Action: 'static>(
     title: impl Into<ArcStr>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     top_app_bar(TopAppBarVariant::Large, title)
 }
 
@@ -207,7 +215,7 @@ pub fn large_top_app_bar<State: 'static, Action: 'static>(
 pub fn bottom_app_bar<State: 'static, Action: 'static>(
     actions: Vec<Box<AnyWidgetView<State, Action>>>,
     trailing_fab: Option<Box<AnyWidgetView<State, Action>>>,
-) -> impl WidgetView<State, Action> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     sized_box(
         flex_row((
             flex_row(actions)
