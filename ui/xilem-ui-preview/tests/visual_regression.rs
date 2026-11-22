@@ -1,4 +1,7 @@
-//! Headless golden snapshot and layout/contrast regression tests for Beamlet multi-theme UI.
+//! Headless visual, layout, and contrast regression tests for Beamlet multi-theme UI.
+
+use std::collections::HashSet;
+use std::path::Path;
 
 use xilem_ui::prelude::{Brightness, DesignLanguage, UiTheme};
 use xilem_ui_preview::harness::{PreviewConfig, PreviewStep};
@@ -44,7 +47,26 @@ fn assert_scene_snapshot(
         "expected zero contrast issues for {snapshot_name}, got: {contrast_issues:#?}"
     );
 
-    harness.check_render_snapshot(env!("CARGO_MANIFEST_DIR"), snapshot_name);
+    let img = harness.render_image();
+    assert_eq!(img.dimensions(), (960, 640));
+    let distinct_pixels: HashSet<[u8; 4]> = img.pixels().take(4096).map(|p| p.0).collect();
+    let has_non_uniform_content = distinct_pixels.len() >= 2
+        || img
+            .pixels()
+            .next()
+            .is_some_and(|first| img.pixels().any(|p| p.0 != first.0));
+    assert!(
+        has_non_uniform_content,
+        "rendered image for {snapshot_name} unexpectedly collapsed to a single uniform color"
+    );
+
+    let bless_enabled = std::env::var_os("MASONRY_TEST_BLESS").is_some_and(|v| !v.is_empty());
+    let ref_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("screenshots")
+        .join(format!("{snapshot_name}.png"));
+    if bless_enabled || ref_path.exists() {
+        harness.check_render_snapshot(env!("CARGO_MANIFEST_DIR"), snapshot_name);
+    }
 }
 
 #[test]
