@@ -14,7 +14,7 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let text_card = outlined_card(
         flex_col((
-            title_medium("Text Inputs (Theme-Adaptive Focus Ring)"),
+            title_medium("文本输入（主题自适应聚焦框）"),
             search_bar(state.search_query.clone(), |s: &mut GalleryState, val| {
                 s.search_query = val;
             })
@@ -22,15 +22,15 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             text_field(state.text_value.clone(), |s: &mut GalleryState, val| {
                 s.text_value = val;
             })
-            .label("Workspace Name")
+            .label("工作区名称")
             .prefix_text("https://")
             .max_chars(48)
-            .supporting_text("Compare MD3 Outline vs Fluent Bottom Accent vs HIG Halo"),
+            .supporting_text("对比 MD3 外框、Fluent 底部强调线与 HIG 外发光环"),
             filled_text_field(state.email_value.clone(), |s: &mut GalleryState, val| {
                 s.email_value = val;
             })
-            .label("Validation Demo")
-            .error_text("Enter a valid email address"),
+            .label("校验示例")
+            .error_text("请输入有效的电子邮箱地址"),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),
@@ -38,17 +38,17 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let selection_card = elevated_card(
         flex_col((
-            title_medium("Selection, Sliders & Dropdown"),
+            title_medium("选择控件、滑块与下拉列表"),
             flex_row((
                 checkbox(
-                    "Accept License",
+                    "同意许可协议",
                     state.agree_terms,
                     |s: &mut GalleryState, v| {
                         s.agree_terms = v;
                     },
                 ),
                 tri_state_checkbox(
-                    "Group Sync",
+                    "分组同步",
                     state.tri_state,
                     |s: &mut GalleryState, next| {
                         s.tri_state = next;
@@ -61,14 +61,14 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(16.px()),
             radio_group(vec![
-                radio("Standard Density", choice == 0, |s: &mut GalleryState| {
+                radio("标准密度", choice == 0, |s: &mut GalleryState| {
                     s.radio_choice = 0;
                 }),
-                radio("Compact Desktop", choice == 1, |s: &mut GalleryState| {
+                radio("紧凑桌面", choice == 1, |s: &mut GalleryState| {
                     s.radio_choice = 1;
                 }),
             ]),
-            body_small(format!("Single slider: {:.2}", state.slider_val)),
+            body_small(format!("单滑块数值：{:.2}", state.slider_val)),
             slider(
                 0.0,
                 1.0,
@@ -78,15 +78,12 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     s.slider_val = v;
                 },
             ),
-            body_small(format!(
-                "Dual-thumb range slider: {:.0} .. {:.0}",
-                range.0, range.1
-            )),
+            body_small(format!("双滑块区间：{:.0} .. {:.0}", range.0, range.1)),
             range_slider(0.0, 100.0, range, |s: &mut GalleryState, next| {
                 s.range_val = next;
             }),
             select(
-                &["Auto Detect", "Force Light", "Force Dark"],
+                &["自动检测", "强制浅色", "强制深色"],
                 state.select_index,
                 state.select_open,
                 |s: &mut GalleryState| s.select_open = !s.select_open,
@@ -102,7 +99,7 @@ pub fn inputs_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
     );
 
     flex_col((
-        headline_small("Text Fields & Selection Controls"),
+        headline_small("文本输入与选择控件"),
         text_card,
         selection_card,
     ))

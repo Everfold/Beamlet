@@ -9,7 +9,7 @@ use xilem_ui::prelude::*;
 use crate::state::GalleryState;
 
 pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let query = state.search_query.trim().to_ascii_lowercase();
+    let query = state.search_query.trim().to_lowercase();
     let accent_color = state.theme.to_spec().palette.accent;
     let total = state.workspace_items.len();
     let selected = state.selected_workspace_idx.min(total.saturating_sub(1));
@@ -20,8 +20,8 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         .enumerate()
         .filter(|(_, (title, desc, _))| {
             query.is_empty()
-                || title.to_ascii_lowercase().contains(&query)
-                || desc.to_ascii_lowercase().contains(&query)
+                || title.to_lowercase().contains(&query)
+                || desc.to_lowercase().contains(&query)
         })
         .map(|(idx, (title, desc, status))| {
             let active = idx == selected;
@@ -64,11 +64,11 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         })
         .on_clear(|s: &mut GalleryState| s.search_query.clear())
         .flex(1.0),
-        secondary_button("Inspect Drawer", |s: &mut GalleryState| {
+        secondary_button("检查器抽屉", |s: &mut GalleryState| {
             s.show_side_sheet = true;
         })
         .leading_icon(icons::DOCK_LEFT),
-        destructive_button("Remove Selected", |s: &mut GalleryState| {
+        destructive_button("移除选中项", |s: &mut GalleryState| {
             s.show_destructive_dialog = true;
         })
         .leading_icon(icons::DELETE)
@@ -80,10 +80,10 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
     let list_section = if rows.is_empty() {
         status_page(
             icons::SEARCH,
-            "No matching targets",
-            "Clear the search filter or add a new workspace item.",
+            "没有匹配的项目",
+            "请清空搜索条件，或添加新的工作区条目。",
             Some((
-                "Clear Search",
+                "清空搜索",
                 std::sync::Arc::new(|s: &mut GalleryState| s.search_query.clear()),
             )),
         )
@@ -101,13 +101,13 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
     let platform_settings = match state.theme.language {
         DesignLanguage::Md3 => filled_card(
             flex_col((
-                title_medium("Material 3 Workspace Actions"),
-                body_small("Combines M3 Floating Toolbar & Small/Large FAB ergonomics."),
+                title_medium("Material 3 工作区操作"),
+                body_small("结合 M3 悬浮工具栏与 Small / Large FAB 人机工学。"),
                 floating_toolbar(vec![
                     icon_button(icons::REFRESH, |s: &mut GalleryState| s.click_count += 1).boxed(),
                     icon_button(icons::COPY, |s: &mut GalleryState| s.click_count += 1).boxed(),
                     icon_button(icons::SHARE, |s: &mut GalleryState| s.click_count += 1).boxed(),
-                    primary_button("Deploy Build", |s: &mut GalleryState| s.click_count += 1)
+                    primary_button("部署构建", |s: &mut GalleryState| s.click_count += 1)
                         .leading_icon(icons::SEND)
                         .boxed(),
                 ]),
@@ -118,8 +118,8 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         .boxed(),
         DesignLanguage::Fluent => settings_card(
             Some(icons::TERMINAL),
-            "Concurrent Worker Threads",
-            Some("Configured via WinUI 3 NumberBox inside SettingsCard"),
+            "并发构建线程数",
+            Some("通过 SettingsCard 内嵌 WinUI 3 NumberBox 进行微调"),
             number_box(
                 state.fluent_number_val,
                 1.0,
@@ -130,12 +130,12 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         )
         .boxed(),
         DesignLanguage::Hig => form_group(
-            Some("MACOS BUILD SETTINGS"),
+            Some("MACOS 构建设置"),
             vec![
                 form_row(
-                    "Build Workers",
+                    "构建工作线程",
                     stepper(
-                        "Threads",
+                        "线程",
                         state.hig_stepper_val,
                         1,
                         32,
@@ -145,30 +145,30 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
                 )
                 .boxed(),
                 form_row(
-                    "Toggle Inspector",
+                    "显示检查器面板",
                     switch(state.show_hig_inspector, |s: &mut GalleryState, v| {
                         s.show_hig_inspector = v;
                     }),
                 )
                 .boxed(),
             ],
-            Some("macOS Form rows inside Aqua grouped card."),
+            Some("Aqua 分组卡片内的 macOS Form 表单行。"),
         )
         .boxed(),
         DesignLanguage::Adwaita => preferences_group(
-            Some("Libadwaita Project Settings"),
-            Some("Uses AdwComboRow, AdwEntryRow, and AdwExpanderRow"),
+            Some("Libadwaita 项目设置"),
+            Some("使用 AdwComboRow、AdwEntryRow 与 AdwExpanderRow"),
             vec![
                 entry_row(
-                    "Workspace Slug",
+                    "工作区标识 (Slug)",
                     state.adw_entry_val.clone(),
                     |s: &mut GalleryState, txt| s.adw_entry_val = txt,
                 )
                 .boxed(),
                 combo_row(
-                    "Release Profile",
-                    Some("Select build optimization target"),
-                    &["Debug", "Release", "RelWithDebInfo"],
+                    "发布配置档案",
+                    Some("选择编译优化目标"),
+                    &["调试模式 (Debug)", "发布模式 (Release)", "带调试信息发布"],
                     state.adw_combo_idx,
                     state.adw_combo_open,
                     |s: &mut GalleryState| s.adw_combo_open = !s.adw_combo_open,
@@ -185,8 +185,10 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
     };
 
     flex_col((
-        headline_small("Project & Release Workbench"),
-        body_small("Demonstrates shared searchable state driving native drawers, destructive confirmation, and platform-specific settings."),
+        headline_small("项目与发布工作台"),
+        body_small(
+            "演示跨主题共享可搜索状态，并与各平台原生抽屉、危险确认弹窗及设置容器协同工作。",
+        ),
         filter_bar,
         list_section,
         platform_settings,

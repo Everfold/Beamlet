@@ -72,7 +72,7 @@ impl PrefsApp {
 fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
     let hdr = header_bar_with_title(
         view_switcher(
-            &[("Preferences", icons::TUNE), ("Status", icons::EXPLORE)],
+            &[("首选项", icons::TUNE), ("运行状态", icons::EXPLORE)],
             state.active_view,
             |s: &mut PrefsApp, idx| s.active_view = idx,
         ),
@@ -97,8 +97,8 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
 
     let top_banner = state.banner_open.then(|| {
         banner(
-            "AdwClamp limits boxed-list readability width to 640px automatically.",
-            Some("Switch to Status"),
+            "AdwClamp 会自动将 boxed-list 表单可读宽度约束在 640px 以内。",
+            Some("切换到状态页"),
             Some(Arc::new(|s: &mut PrefsApp| s.active_view = 1)),
             Some(Arc::new(|s: &mut PrefsApp| s.banner_open = false)),
         )
@@ -109,19 +109,19 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
             640.0,
             flex_col((
                 preferences_group(
-                    Some("Identity & Rendering"),
-                    Some("AdwEntryRow, AdwComboRow, and AdwSwitchRow inside boxed-list."),
+                    Some("应用标识与渲染"),
+                    Some("在 boxed-list 卡片内组合 AdwEntryRow、AdwComboRow 与 AdwSwitchRow。"),
                     vec![
                         entry_row(
-                            "Workspace Display Name",
+                            "工作区显示名称",
                             state.app_title.clone(),
                             |s: &mut PrefsApp, txt| s.app_title = txt,
                         )
                         .boxed(),
                         combo_row(
-                            "GNOME Accent Preset",
-                            Some("Select one of GNOME 47 system accents"),
-                            &["Blue", "Teal", "Green", "Purple"],
+                            "GNOME 强调色预设",
+                            Some("选择一组 GNOME 47 系统级强调色"),
+                            &["经典蓝", "青绿", "翠绿", "优雅紫"],
                             state.combo_idx,
                             state.combo_open,
                             |s: &mut PrefsApp| s.combo_open = !s.combo_open,
@@ -139,8 +139,8 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
                         )
                         .boxed(),
                         switch_row(
-                            "Alpha Overlay Feedback",
-                            Some("Flat 7% hover / 14% active Adwaita state veils"),
+                            "Alpha 透明叠加反馈",
+                            Some("使用 Adwaita 7% 悬停 / 14% 按下的扁平透明态遮罩"),
                             state.flat_overlays,
                             |s: &mut PrefsApp, v| s.flat_overlays = v,
                         )
@@ -148,26 +148,26 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
                     ],
                 ),
                 preferences_group(
-                    Some("Advanced"),
+                    Some("高级选项"),
                     None,
                     vec![
                         expander_row(
-                            "Diagnostic Data & Logs",
-                            Some("AdwExpanderRow with nested AdwSwitchRow & AdwActionRow"),
+                            "诊断数据与日志",
+                            Some("支持嵌套 AdwSwitchRow 与 AdwActionRow 的 AdwExpanderRow"),
                             Some(icons::INFO),
                             state.expander_open,
                             |s: &mut PrefsApp| s.expander_open = !s.expander_open,
                             vec![
                                 switch_row(
-                                    "Share Anonymous Metrics",
+                                    "分享匿名遥测指标",
                                     None::<&str>,
                                     state.telemetry_opt_in,
                                     |s: &mut PrefsApp, v| s.telemetry_opt_in = v,
                                 )
                                 .boxed(),
                                 clickable_action_row(
-                                    "Export Support Bundle",
-                                    Some("Clickable Pod<widgets::Button> action row"),
+                                    "导出支持诊断包",
+                                    Some("直接返回 Pod<widgets::Button> 的可点击操作行"),
                                     Some(icons::DOWNLOAD),
                                     None::<xilem_adwaita::UiButton<PrefsApp, ()>>,
                                     |s: &mut PrefsApp| s.banner_open = true,
@@ -177,10 +177,10 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
                         )
                         .boxed(),
                         action_row(
-                            "Danger Zone",
-                            Some("Demonstrates destructive_button inside AdwActionRow"),
+                            "危险操作区",
+                            Some("演示在 AdwActionRow 内嵌入 destructive_button"),
                             Some(icons::WARNING),
-                            Some(destructive_button("Reset App", |s: &mut PrefsApp| {
+                            Some(destructive_button("重置应用", |s: &mut PrefsApp| {
                                 s.show_wipe_dialog = true;
                             })),
                             None,
@@ -198,12 +198,9 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
             640.0,
             status_page(
                 icons::CHECK_CIRCLE,
-                "All Systems Operational",
-                "Standalone GNOME Libadwaita shell powered by xilem-adwaita.",
-                Some((
-                    "Return to Preferences",
-                    Arc::new(|s: &mut PrefsApp| s.active_view = 0),
-                )),
+                "所有系统运行正常",
+                "由 xilem-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
+                Some(("返回首选项", Arc::new(|s: &mut PrefsApp| s.active_view = 0))),
             ),
         )
         .boxed()
@@ -216,9 +213,9 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
 
     let wipe_modal = state.show_wipe_dialog.then(|| {
         basic_dialog(
-            "Reset Adwaita Preferences?",
-            "Restores workspace display name and default GNOME Blue accent.",
-            "Reset All",
+            "重置 Adwaita 首选项？",
+            "将恢复工作区显示名称及默认的 GNOME 经典蓝强调色。",
+            "全部重置",
             |s: &mut PrefsApp| {
                 s.app_title = "Beamlet Adwaita Studio".into();
                 s.accent = AdwaitaAccent::Blue;
@@ -229,7 +226,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
         )
         .icon(icons::DELETE)
         .destructive(true)
-        .dismiss_text("Cancel")
+        .dismiss_text("取消")
     });
 
     zstack((
@@ -245,11 +242,12 @@ fn main() {
         let theme = state.current_theme();
         let wid = state.window_id;
         std::iter::once(
-            adwaita_window(wid, "GNOME Libadwaita Preferences", &theme, app_view(state))
-                .with_options(|opts| {
+            adwaita_window(wid, "GNOME Libadwaita 首选项", &theme, app_view(state)).with_options(
+                |opts| {
                     opts.on_close(|s: &mut PrefsApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(980.0, 740.0))
-                }),
+                },
+            ),
         )
     })
     .with_default_properties(props);

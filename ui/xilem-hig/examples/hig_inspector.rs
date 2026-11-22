@@ -49,7 +49,7 @@ impl Default for InspectorApp {
             accent: HigAccent::Blue,
             sidebar_sel: (0, 0),
             search: String::new(),
-            title_input: "Aqua Workspace Document".into(),
+            title_input: "Aqua 工作区文档".into(),
             grid_snap: true,
             live_preview: true,
             columns: 4,
@@ -74,14 +74,14 @@ impl InspectorApp {
 fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
     let sections = [
         (
-            "FAVORITES",
+            "个人收藏",
             vec![
-                ("Canvas", icons::HOME),
-                ("Layers", icons::DESCRIPTION),
-                ("Assets", icons::FOLDER),
+                ("画布", icons::HOME),
+                ("图层", icons::DESCRIPTION),
+                ("资源库", icons::FOLDER),
             ],
         ),
-        ("SETTINGS", vec![("Appearance", icons::PALETTE)]),
+        ("偏好设置", vec![("外观", icons::PALETTE)]),
     ];
 
     let sidebar = source_list_sidebar(&sections, state.sidebar_sel, |s: &mut InspectorApp, pos| {
@@ -111,7 +111,7 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
         ],
     );
 
-    let accent_names = ["Blue", "Purple", "Pink", "Green"];
+    let accent_names = ["蓝色", "紫色", "粉色", "绿色"];
     let accent_idx = match state.accent {
         HigAccent::Blue => 0,
         HigAccent::Purple => 1,
@@ -123,37 +123,43 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
     let main_body = portal(
         sized_box(
             flex_col((
-                headline_small("macOS Document & Inspector"),
-                body_medium("Notice 26px Aqua compact control heights, ⌘ shortcut chords, and 3px reactive focus halos."),
+                headline_small("macOS 文档与检查器"),
+                body_medium(
+                    "体现 26px 紧凑 Aqua 控件高度、⌘ 快捷键组合以及 3px 响应式外发光聚焦环。",
+                ),
                 form_group(
-                    Some("DOCUMENT METADATA"),
+                    Some("文档元数据"),
                     vec![
                         text_field(state.title_input.clone(), |s: &mut InspectorApp, v| {
                             s.title_input = v;
                         })
-                        .label("Document Title")
-                        .supporting_text("Focus the input box to inspect macOS OuterHalo3px")
+                        .label("文档标题")
+                        .supporting_text("点击聚焦输入框可观察 macOS OuterHalo3px 外发光环")
                         .boxed(),
                         form_row(
-                            "System Accent",
-                            segmented_button(&accent_names, accent_idx, |s: &mut InspectorApp, i| {
-                                s.accent = match i {
-                                    0 => HigAccent::Blue,
-                                    1 => HigAccent::Purple,
-                                    2 => HigAccent::Pink,
-                                    _ => HigAccent::Green,
-                                };
-                            }),
+                            "系统强调色",
+                            segmented_button(
+                                &accent_names,
+                                accent_idx,
+                                |s: &mut InspectorApp, i| {
+                                    s.accent = match i {
+                                        0 => HigAccent::Blue,
+                                        1 => HigAccent::Purple,
+                                        2 => HigAccent::Pink,
+                                        _ => HigAccent::Green,
+                                    };
+                                },
+                            ),
                         )
                         .boxed(),
                     ],
-                    Some("Footer caption inside HIG grouped form."),
+                    Some("HIG 分组表单页脚说明文字。"),
                 ),
                 disclosure_group(
-                    "Keyboard & Export Notes",
+                    "快捷键与导出说明",
                     state.metadata_expanded,
                     |s: &mut InspectorApp| s.metadata_expanded = !s.metadata_expanded,
-                    body_small("Press ⌘S to export or click '?' in the toolbar for macOS Help."),
+                    body_small("按 ⌘S 快速导出，或点击工具栏右上角“?”查看 macOS 帮助弹窗。"),
                 ),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -165,22 +171,22 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
 
     let path_segments = [
         ("Macintosh HD", icons::FOLDER),
-        ("Users", icons::PERSON),
-        ("Projects", icons::FOLDER),
+        ("用户", icons::PERSON),
+        ("项目", icons::FOLDER),
         ("Beamlet.xcodeproj", icons::CODE),
     ];
 
     let inspector = state.inspector_visible.then(|| {
         inspector_panel(
-            "Inspector",
+            "检查器",
             vec![
                 form_group(
-                    Some("LAYOUT"),
+                    Some("布局参数"),
                     vec![
                         form_row(
-                            "Grid Columns",
+                            "网格栏数",
                             stepper(
-                                "Count",
+                                "栏数",
                                 state.columns,
                                 1,
                                 12,
@@ -190,14 +196,14 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
                         )
                         .boxed(),
                         form_row(
-                            "Snap to Grid",
+                            "吸附网格",
                             switch(state.grid_snap, |s: &mut InspectorApp, v| {
                                 s.grid_snap = v;
                             }),
                         )
                         .boxed(),
                         form_row(
-                            "Live Render",
+                            "实时渲染",
                             switch(state.live_preview, |s: &mut InspectorApp, v| {
                                 s.live_preview = v;
                             }),
@@ -208,16 +214,13 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
                 )
                 .boxed(),
                 form_group(
-                    Some("INFO"),
+                    Some("摘要信息"),
                     vec![
+                        form_row("当前选中", label_medium(format!("{:?}", state.sidebar_sel)))
+                            .boxed(),
                         form_row(
-                            "Active Item",
-                            label_medium(format!("{:?}", state.sidebar_sel)),
-                        )
-                        .boxed(),
-                        form_row(
-                            "Export",
-                            primary_button("Save (⌘S)", |s: &mut InspectorApp| {
+                            "导出项目",
+                            primary_button("保存 (⌘S)", |s: &mut InspectorApp| {
                                 s.show_help_dialog = true
                             }),
                         )
@@ -247,14 +250,14 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
 
     let help_modal = state.show_help_dialog.then(|| {
         basic_dialog(
-            "macOS Inspector Shortcut Guide",
-            "Cancel stays on the trailing-left while Confirm stays on the trailing-right per Apple HIG.",
-            "Done",
+            "macOS 检查器快捷键指南",
+            "遵循 Apple HIG 规范：“关闭/取消”靠右偏左，“完成/确认”按钮置于最右侧 (PrimaryTrailing)。",
+            "完成",
             |s: &mut InspectorApp| s.show_help_dialog = false,
             |s: &mut InspectorApp| s.show_help_dialog = false,
         )
         .icon(icons::HELP)
-        .dismiss_text("Close")
+        .dismiss_text("关闭")
     });
 
     zstack((
@@ -270,7 +273,7 @@ fn main() {
         let theme = state.current_theme();
         let wid = state.window_id;
         std::iter::once(
-            hig_window(wid, "macOS Apple HIG Inspector", &theme, app_view(state)).with_options(
+            hig_window(wid, "macOS Apple HIG 检查器", &theme, app_view(state)).with_options(
                 |opts| {
                     opts.on_close(|s: &mut InspectorApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(1120.0, 740.0))

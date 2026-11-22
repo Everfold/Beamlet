@@ -35,7 +35,14 @@ fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         .unwrap_or(0);
     let lang_titles = ["Material 3", "Windows Fluent", "macOS HIG", "GNOME Adwaita"];
     let accent_labels = [
-        "Default", "Blue", "Teal", "Green", "Purple", "Pink", "Orange", "Red",
+        "系统默认",
+        "蓝色",
+        "青绿",
+        "翠绿",
+        "紫色",
+        "粉色",
+        "橙色",
+        "红色",
     ];
     let is_dark = state.theme.brightness == Brightness::Dark;
     let is_hc = state.theme.high_contrast;
@@ -56,10 +63,10 @@ fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
                 },
                 |s: &mut GalleryState| s.accent_menu_open = false,
             ),
-            filter_chip("Dark Mode", is_dark, |s: &mut GalleryState| {
+            filter_chip("深色模式", is_dark, |s: &mut GalleryState| {
                 s.theme.toggle_brightness();
             }),
-            filter_chip("High Contrast", is_hc, |s: &mut GalleryState| {
+            filter_chip("高对比度", is_hc, |s: &mut GalleryState| {
                 s.theme.high_contrast = !s.theme.high_contrast;
             }),
         ))
@@ -88,9 +95,9 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
 ) -> impl WidgetView<GalleryState, Widget = widgets::ZStack> + use<V> {
     let dialog_overlay = state.show_basic_dialog.then(|| {
         basic_dialog(
-            "Reset theme preferences?",
-            "This restores the host OS default design language and accent preset.",
-            "Reset",
+            "重置主题偏好设置？",
+            "将恢复宿主系统默认的设计语言与强调色预设。",
+            "恢复默认",
             |s: &mut GalleryState| {
                 s.theme = UiTheme::native_light();
                 s.show_basic_dialog = false;
@@ -98,14 +105,14 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             |s: &mut GalleryState| s.show_basic_dialog = false,
         )
         .icon(icons::PALETTE)
-        .dismiss_text("Cancel")
+        .dismiss_text("取消")
     });
 
     let destructive_overlay = state.show_destructive_dialog.then(|| {
         basic_dialog(
-            "Remove workspace target?",
-            "Removes the currently selected target from the showcase list.",
-            "Remove",
+            "移除选中的工作区目标？",
+            "将从展示列表中移除当前选中的工作区目标条目。",
+            "确认移除",
             |s: &mut GalleryState| {
                 if !s.workspace_items.is_empty() {
                     let idx = s
@@ -120,7 +127,7 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         )
         .icon(icons::DELETE)
         .destructive(true)
-        .dismiss_text("Cancel")
+        .dismiss_text("取消")
     });
 
     let date_overlay = state.show_date_dialog.then(|| {
@@ -144,9 +151,9 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     let sheet_overlay = state.show_bottom_sheet.then(|| {
         bottom_sheet(
             flex_col((
-                headline_small("Bottom Sheet"),
-                body_medium("Shared modal sheet animated with SlideTransition + EscapeCatcher."),
-                primary_button("Close Sheet", |s: &mut GalleryState| {
+                headline_small("底部抽屉面板"),
+                body_medium("通过 SlideTransition + EscapeCatcher 实现的共享模态底部抽屉。"),
+                primary_button("关闭抽屉", |s: &mut GalleryState| {
                     s.show_bottom_sheet = false;
                 }),
             ))
@@ -160,13 +167,13 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         let selected_title = state
             .workspace_items
             .get(state.selected_workspace_idx)
-            .map_or("No item selected", |(t, _, _)| *t);
+            .map_or("未选中任何项目", |(t, _, _)| *t);
         side_sheet(
             flex_col((
-                headline_small("Target Side Sheet"),
+                headline_small("目标详情侧边抽屉"),
                 title_medium(selected_title),
-                body_medium("Trailing inspector drawer backed by modal_shell + EscapeCatcher."),
-                primary_button("Close Drawer", |s: &mut GalleryState| {
+                body_medium("由 modal_shell + EscapeCatcher 驱动的右侧检查器抽屉。"),
+                primary_button("关闭侧边抽屉", |s: &mut GalleryState| {
                     s.show_side_sheet = false;
                 }),
             ))
@@ -174,7 +181,7 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             .gap(12.px()),
             |s: &mut GalleryState| s.show_side_sheet = false,
         )
-        .extent(340.0)
+        .extent(360.0)
     });
 
     let fab_layer = floating_action.map(|f| {
@@ -182,9 +189,14 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             .padding(Padding::all(20.px()))
             .alignment(UnitPoint::BOTTOM_RIGHT)
     });
-    let toast_layer = sized_box(toast_host(&state.toasts, |s: &mut GalleryState| {
-        let _ = s.toasts.dismiss_current();
-    }))
+    let toast_layer = sized_box(
+        toast_host(&state.toasts, |s: &mut GalleryState| {
+            let _ = s.toasts.dismiss_current();
+        })
+        .on_action(|s: &mut GalleryState| {
+            let _ = s.toasts.dismiss_current();
+        }),
+    )
     .padding(Padding::all(16.px()))
     .alignment(UnitPoint::BOTTOM);
 
@@ -203,12 +215,12 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
 
 fn destinations() -> [NavDestination; 6] {
     [
-        NavDestination::new("Overview", icons::HOME),
-        NavDestination::new("Inputs", icons::EDIT),
-        NavDestination::new("Overlays", icons::MORE_HORIZ),
-        NavDestination::new("Tokens", icons::TUNE),
-        NavDestination::new("Native Suites", icons::PALETTE),
-        NavDestination::new("Workbench", icons::FOLDER),
+        NavDestination::new("概览", icons::HOME),
+        NavDestination::new("输入控件", icons::EDIT),
+        NavDestination::new("浮层组件", icons::MORE_HORIZ),
+        NavDestination::new("设计令牌", icons::TUNE),
+        NavDestination::new("原生套件", icons::PALETTE),
+        NavDestination::new("工作台", icons::FOLDER),
     ]
 }
 
@@ -230,7 +242,7 @@ fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
     );
     let bar = top_app_bar_slots(
         TopAppBarVariant::Small,
-        "Beamlet Material 3",
+        "Beamlet Material 3 展示台",
         None,
         vec![
             icon_button(icons::PALETTE, |s: &mut GalleryState| {
@@ -262,13 +274,13 @@ fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
         ]),
         extended_fab(
             icons::ADD,
-            "New Action",
+            "新建操作",
             FabColor::Primary,
             |s: &mut GalleryState| {
                 s.click_count += 1;
                 s.toasts.show(
-                    "Material 3 Extended FAB triggered",
-                    None::<&str>,
+                    "已触发 Material 3 扩展悬浮按钮 (Extended FAB)",
+                    Some("关闭"),
                     ToastDuration::Short,
                     true,
                 );
@@ -285,21 +297,21 @@ fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
 fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let dests = destinations();
     let nav = navigation_view(
-        Some("WinUI 3 Shell"),
+        Some("WinUI 3 外壳"),
         &dests[..4],
         &dests[4..],
         state.active_tab.index(),
         |s: &mut GalleryState, i| s.active_tab = GalleryTab::from_index(i),
     );
     let tab_title = match state.active_tab {
-        GalleryTab::Overview => "Overview",
-        GalleryTab::Inputs => "Inputs",
-        GalleryTab::Overlays => "Overlays",
-        GalleryTab::Tokens => "Tokens",
-        GalleryTab::PlatformNative => "Native Suites",
-        GalleryTab::Workspace => "Workbench",
+        GalleryTab::Overview => "概览",
+        GalleryTab::Inputs => "输入控件",
+        GalleryTab::Overlays => "浮层组件",
+        GalleryTab::Tokens => "设计令牌",
+        GalleryTab::PlatformNative => "原生套件",
+        GalleryTab::Workspace => "工作台",
     };
-    let crumbs = ["Beamlet", "Theme Gallery", tab_title];
+    let crumbs = ["Beamlet", "多主题展示台", tab_title];
     let bc = breadcrumb_bar(&crumbs, |s: &mut GalleryState, idx| {
         if idx == 0 {
             s.active_tab = GalleryTab::Overview;
@@ -307,11 +319,11 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
     });
     let cmd = command_bar(
         vec![
-            primary_button("New", |s: &mut GalleryState| s.click_count += 1).boxed(),
-            subtle_button("Reset Counter", |s: &mut GalleryState| s.click_count = 0).boxed(),
+            primary_button("新建", |s: &mut GalleryState| s.click_count += 1).boxed(),
+            subtle_button("计数清零", |s: &mut GalleryState| s.click_count = 0).boxed(),
         ],
         vec![
-            outlined_button("Dialog", |s: &mut GalleryState| {
+            outlined_button("打开弹窗", |s: &mut GalleryState| {
                 s.show_basic_dialog = true;
             })
             .boxed(),
@@ -320,8 +332,8 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
     let notice = state.info_bar_visible.then(|| {
         info_bar(
             InfoBarSeverity::Informational,
-            "Windows Fluent NavigationView + BreadcrumbBar + CommandBar",
-            "Notice Settings pinned at the bottom of NavigationView & PrimaryLeading dialog buttons.",
+            "Windows Fluent 导航视图 + 面包屑导航 + 命令栏",
+            "注意底部的页脚固定导航项，以及 Windows 惯例下“主确认按钮居左 (PrimaryLeading)”的弹窗排布。",
             Some(std::sync::Arc::new(|s: &mut GalleryState| {
                 s.info_bar_visible = false;
             })),
@@ -344,20 +356,17 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
 fn hig_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let sections = [
         (
-            "COMPONENTS",
+            "基础组件",
             vec![
-                ("Overview", icons::HOME),
-                ("Inputs", icons::EDIT),
-                ("Overlays", icons::MORE_HORIZ),
-                ("Tokens", icons::TUNE),
+                ("概览", icons::HOME),
+                ("输入控件", icons::EDIT),
+                ("浮层组件", icons::MORE_HORIZ),
+                ("设计令牌", icons::TUNE),
             ],
         ),
         (
-            "PLATFORM",
-            vec![
-                ("Native Suites", icons::PALETTE),
-                ("Workbench", icons::FOLDER),
-            ],
+            "平台能力",
+            vec![("原生套件", icons::PALETTE), ("工作台", icons::FOLDER)],
         ),
     ];
     let selected = match state.active_tab {
@@ -392,18 +401,19 @@ fn hig_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
     let hig_path_items = [
         ("Macintosh HD", icons::FOLDER),
         ("Beamlet", icons::CODE),
-        ("Gallery", icons::DESCRIPTION),
+        ("组件展示台", icons::DESCRIPTION),
     ];
     let inspector = state.show_hig_inspector.then(|| {
         inspector_panel(
-            "Attributes",
+            "属性检查器",
             vec![
                 form_group(
-                    Some("SELECTION"),
+                    Some("当前状态"),
                     vec![
-                        form_row("Clicks", label_medium(format!("{}", state.click_count))).boxed(),
+                        form_row("点击次数", label_medium(format!("{}", state.click_count)))
+                            .boxed(),
                         form_row(
-                            "Dark Aqua",
+                            "深色 Aqua",
                             switch(
                                 state.theme.brightness == Brightness::Dark,
                                 |s: &mut GalleryState, _| {
@@ -417,10 +427,10 @@ fn hig_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
                 )
                 .boxed(),
                 disclosure_group(
-                    "Shortcuts",
+                    "快捷键说明",
                     state.hig_disclosure_open,
                     |s: &mut GalleryState| s.hig_disclosure_open = !s.hig_disclosure_open,
-                    body_small("Save: ⌘S · Redo: ⇧⌘Z"),
+                    body_small("保存：⌘S · 重做：⇧⌘Z"),
                 )
                 .boxed(),
             ],
@@ -455,10 +465,10 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     let hdr = header_bar_with_title(
         view_switcher(
             &[
-                ("Overview", icons::HOME),
-                ("Tokens", icons::TUNE),
-                ("Native", icons::PALETTE),
-                ("Work", icons::FOLDER),
+                ("概览", icons::HOME),
+                ("令牌", icons::TUNE),
+                ("原生", icons::PALETTE),
+                ("工作台", icons::FOLDER),
             ],
             match state.active_tab {
                 GalleryTab::Overview => 0,
@@ -478,7 +488,7 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         ),
         vec![icon_button(icons::MENU, |s: &mut GalleryState| s.click_count += 1).boxed()],
         vec![
-            primary_button("Dialog", |s: &mut GalleryState| {
+            primary_button("弹窗", |s: &mut GalleryState| {
                 s.show_basic_dialog = true;
             })
             .boxed(),
@@ -486,8 +496,8 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     );
     let top_banner = state.banner_visible.then(|| {
         banner(
-            "GNOME Adwaita SplitView + AdwViewSwitcher + AdwClamp(880px)",
-            Some("Hide"),
+            "GNOME Adwaita SplitView 分栏 + AdwViewSwitcher 切换器 + AdwClamp(880px) 限宽布局",
+            Some("隐藏"),
             Some(std::sync::Arc::new(|s: &mut GalleryState| {
                 s.banner_visible = false;
             })),
@@ -524,10 +534,7 @@ fn main() {
     let app = Xilem::new(initial, |state: &mut GalleryState| {
         let wid = state.window_id;
         let theme = state.theme.clone();
-        let title = format!(
-            "Beamlet Multi-Theme UI Gallery ({})",
-            theme.language.label()
-        );
+        let title = format!("Beamlet 多主题 UI 展示台 ({})", theme.language.label());
         let view = app_view(state);
         std::iter::once(ui_window(wid, title, &theme, view).with_options(|opts| {
             opts.on_close(|s: &mut GalleryState| s.running = false)

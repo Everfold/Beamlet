@@ -71,14 +71,14 @@ impl SettingsApp {
 
 fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
     let primary_nav = [
-        NavDestination::new("System", icons::SETTINGS),
-        NavDestination::new("Personalization", icons::PALETTE),
-        NavDestination::new("Developer", icons::CODE),
+        NavDestination::new("系统", icons::SETTINGS),
+        NavDestination::new("个性化", icons::PALETTE),
+        NavDestination::new("开发者", icons::CODE),
     ];
-    let footer_nav = [NavDestination::new("Updates", icons::REFRESH).with_badge("1")];
+    let footer_nav = [NavDestination::new("Windows 更新", icons::REFRESH).with_badge("1")];
 
     let nav = navigation_view(
-        Some("Windows Settings"),
+        Some("Windows 设置"),
         &primary_nav,
         &footer_nav,
         state.nav_idx,
@@ -86,13 +86,13 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
     );
 
     let page_title = match state.nav_idx {
-        0 => "System",
-        1 => "Personalization",
-        2 => "Developer",
-        _ => "Updates",
+        0 => "系统",
+        1 => "个性化",
+        2 => "开发者",
+        _ => "Windows 更新",
     };
 
-    let crumbs = ["Settings", page_title, "Display & Performance"];
+    let crumbs = ["设置", page_title, "显示与性能"];
     let bc = breadcrumb_bar(&crumbs, |s: &mut SettingsApp, idx| {
         if idx == 0 {
             s.nav_idx = 0;
@@ -101,11 +101,11 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
 
     let cmd = command_bar(
         vec![
-            primary_button("Toggle Dark Mica", |s: &mut SettingsApp| {
+            primary_button("切换深色 Mica", |s: &mut SettingsApp| {
                 s.brightness = s.brightness.toggled();
             })
             .boxed(),
-            subtle_button("Cycle Accent", |s: &mut SettingsApp| {
+            subtle_button("切换强调色", |s: &mut SettingsApp| {
                 s.accent = match s.accent {
                     FluentAccent::WindowsBlue => FluentAccent::Teal,
                     FluentAccent::Teal => FluentAccent::Purple,
@@ -116,7 +116,7 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
             .boxed(),
         ],
         vec![
-            outlined_button("Reset Defaults", |s: &mut SettingsApp| {
+            outlined_button("恢复默认", |s: &mut SettingsApp| {
                 s.show_reset_dialog = true;
             })
             .boxed(),
@@ -126,8 +126,8 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
     let banner_opt = state.show_banner.then(|| {
         info_bar(
             InfoBarSeverity::Informational,
-            "Fluent 2 Shell Ready",
-            "Demonstrating NavigationView footer pin, BreadcrumbBar, InfoBadge, and PrimaryLeading dialog buttons.",
+            "Fluent 2 系统外壳已就绪",
+            "完整展示 NavigationView 底部固定项、BreadcrumbBar 面包屑、InfoBadge 徽章以及 PrimaryLeading 弹窗按钮序。",
             Some(Arc::new(|s: &mut SettingsApp| s.show_banner = false)),
         )
     });
@@ -140,8 +140,8 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
                 banner_opt,
                 settings_card(
                     Some(icons::PALETTE),
-                    "Mica Backdrop Effect",
-                    Some("Layered `#F3F3F3` Light / `#202020` Dark desktop materials"),
+                    "Mica 云母背景材质效果",
+                    Some("根据浅色 #F3F3F3 与深色 #202020 自动适配桌面分层底色"),
                     flex_row((
                         info_badge(InfoBarSeverity::Success, Some("Mica")),
                         switch(state.mica_enabled, |s: &mut SettingsApp, v| {
@@ -153,8 +153,8 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
                 ),
                 settings_card(
                     Some(icons::TUNE),
-                    "Background Build Workers",
-                    Some("Clamped WinUI 3 NumberBox spin control"),
+                    "后台编译工作线程",
+                    Some("受范围约束的 WinUI 3 NumberBox 微调控件"),
                     number_box(
                         state.worker_threads,
                         1.0,
@@ -165,28 +165,26 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
                 ),
                 settings_expander(
                     Some(icons::SETTINGS),
-                    "Windows Update & Diagnostics",
-                    Some("Auto-download security updates"),
+                    "Windows 更新与诊断",
+                    Some("自动下载重要安全更新"),
                     state.expander_open,
                     |s: &mut SettingsApp| s.expander_open = !s.expander_open,
                     Some(switch(state.auto_updates, |s: &mut SettingsApp, v| {
                         s.auto_updates = v;
                     })),
                     vec![
-                        body_small(
-                            "WinUI 3 SettingsExpander reveals nested child rows dynamically.",
-                        )
-                        .boxed(),
+                        body_small("WinUI 3 SettingsExpander 可动态展开或收起嵌套子设置行。")
+                            .boxed(),
                     ],
                 ),
                 expander(
-                    "Experimental Build Options",
-                    Some("Standalone WinUI 3 Expander wrapping custom view body"),
+                    "实验性构建选项",
+                    Some("独立 WinUI 3 Expander 容器，支持包裹任意自定义视图"),
                     state.custom_expander_open,
                     |s: &mut SettingsApp| s.custom_expander_open = !s.custom_expander_open,
                     flex_row((
-                        info_badge(InfoBarSeverity::Warning, Some("Preview")),
-                        body_small("Custom nested diagnostics payload."),
+                        info_badge(InfoBarSeverity::Warning, Some("预览版")),
+                        body_small("自定义嵌套诊断信息负载内容。"),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(8.px()),
@@ -210,9 +208,9 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
 
     let reset_modal = state.show_reset_dialog.then(|| {
         basic_dialog(
-            "Reset Fluent Settings?",
-            "Windows Fluent places primary Confirm left of Cancel (`DialogActionOrder::PrimaryLeading`).",
-            "Reset Now",
+            "重置 Fluent 设置？",
+            "Windows Fluent 规范将主确认按钮放在取消按钮左侧 (`DialogActionOrder::PrimaryLeading`)。",
+            "立即重置",
             |s: &mut SettingsApp| {
                 s.brightness = Brightness::Light;
                 s.accent = FluentAccent::WindowsBlue;
@@ -222,7 +220,7 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
             |s: &mut SettingsApp| s.show_reset_dialog = false,
         )
         .destructive(true)
-        .dismiss_text("Cancel")
+        .dismiss_text("取消")
     });
 
     zstack((
@@ -238,7 +236,7 @@ fn main() {
         let theme = state.current_theme();
         let wid = state.window_id;
         std::iter::once(
-            fluent_window(wid, "WinUI 3 Fluent Settings", &theme, app_view(state)).with_options(
+            fluent_window(wid, "WinUI 3 Fluent 设置", &theme, app_view(state)).with_options(
                 |opts| {
                     opts.on_close(|s: &mut SettingsApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(1080.0, 740.0))

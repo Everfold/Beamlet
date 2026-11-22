@@ -11,50 +11,52 @@ use crate::state::GalleryState;
 pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let trigger_row = elevated_card(
         flex_col((
-            title_medium("Modals, Tooltips & Toast Queue"),
+            title_medium("模态框、提示与轻提示队列 (Toast)"),
             flex_row((
-                primary_button("Open Basic Dialog", |s: &mut GalleryState| {
+                primary_button("打开基础弹窗", |s: &mut GalleryState| {
                     s.show_basic_dialog = true;
                 }),
-                destructive_button("Destructive Dialog", |s: &mut GalleryState| {
+                destructive_button("危险确认弹窗", |s: &mut GalleryState| {
                     s.show_destructive_dialog = true;
                 })
                 .leading_icon(icons::DELETE),
-                secondary_button("Bottom Sheet", |s: &mut GalleryState| {
+                secondary_button("底部抽屉", |s: &mut GalleryState| {
                     s.show_bottom_sheet = true;
                 }),
-                secondary_button("Side Sheet", |s: &mut GalleryState| {
+                secondary_button("侧边抽屉", |s: &mut GalleryState| {
                     s.show_side_sheet = true;
                 }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(10.px()),
             flex_row((
-                outlined_button("Date Dialog", |s: &mut GalleryState| {
+                outlined_button("日期选择弹窗", |s: &mut GalleryState| {
                     s.show_date_dialog = true;
                 })
                 .leading_icon(icons::CALENDAR),
-                outlined_button("Time Dialog", |s: &mut GalleryState| {
+                outlined_button("时间选择弹窗", |s: &mut GalleryState| {
                     s.show_time_dialog = true;
                 })
                 .leading_icon(icons::SCHEDULE),
-                outlined_button("Queue Toast", |s: &mut GalleryState| {
+                outlined_button("弹出轻提示 (Toast)", |s: &mut GalleryState| {
                     let theme_name = s.theme.language.label();
                     s.toasts.show(
-                        format!("Theme active: {theme_name}"),
-                        Some("OK"),
+                        format!("当前激活主题：{theme_name}"),
+                        Some("知道了"),
                         ToastDuration::Short,
                         true,
                     );
                 }),
                 plain_tooltip(
-                    "Passive hover tooltip backed by LayerStack",
-                    subtle_button("Hover Plain Tip", |s: &mut GalleryState| s.click_count += 1),
+                    "由 LayerStack 承载的悬停轻量提示",
+                    subtle_button("悬停普通提示", |s: &mut GalleryState| {
+                        s.click_count += 1
+                    }),
                 ),
                 rich_tooltip(
-                    Some("Rich Tooltip"),
-                    "Hover surfaces automatically tear down on mouse leave.",
-                    subtle_button("Hover Rich Tip", |s: &mut GalleryState| s.click_count += 1),
+                    Some("富文本提示"),
+                    "鼠标移出控件范围后浮层会自动卸载销毁。",
+                    subtle_button("悬停富提示", |s: &mut GalleryState| s.click_count += 1),
                 ),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -67,10 +69,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     let pickers_row = flex_row((
         outlined_card(
             flex_col((
-                title_medium(format!(
-                    "Date Picker ({})",
-                    state.selected_date.format_iso()
-                )),
+                title_medium(format!("日期选择器 ({})", state.selected_date.format_iso())),
                 date_picker(state.selected_date, |s: &mut GalleryState, d| {
                     s.selected_date = d;
                 }),
@@ -79,10 +78,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         ),
         outlined_card(
             flex_col((
-                title_medium(format!(
-                    "Time Picker ({})",
-                    state.selected_time.format_24h()
-                )),
+                title_medium(format!("时间选择器 ({})", state.selected_time.format_24h())),
                 time_picker(state.selected_time, |s: &mut GalleryState, t| {
                     s.selected_time = t;
                 }),
@@ -94,7 +90,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     .gap(16.px());
 
     flex_col((
-        headline_small("Layered Overlays & Pickers"),
+        headline_small("分层浮层与日期时间选择器"),
         trigger_row,
         pickers_row,
     ))

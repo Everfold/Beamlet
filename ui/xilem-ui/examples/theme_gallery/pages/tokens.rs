@@ -89,19 +89,19 @@ pub fn tokens_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
         let m = &spec.metrics;
         let lines = [
             format!(
-                "Design Language: {} ({theme_name}) · Brightness: {:?}",
+                "设计语言：{} ({theme_name}) · 明暗模式：{:?}",
                 spec.name, spec.brightness
             ),
             format!(
-                "Control Geometry: button={}px (r={}px), chip={}px, top_bar={}px, sidebar={}px",
+                "控件几何尺寸：按钮高度={}px（圆角={}px），标签高度={}px，顶栏={}px，侧栏={}px",
                 m.button_height, m.button_radius, m.chip_height, m.top_bar_height, m.sidebar_width
             ),
             format!(
-                "Interaction Grammar: input_focus={:?}, tab={:?}, nav={:?}",
+                "交互规范：输入框聚焦={:?}，选项卡指示器={:?}，导航指示器={:?}",
                 spec.input_focus, spec.tab_indicator, spec.nav_indicator
             ),
             format!(
-                "Platform Conventions: dialog_order={:?}, shortcut_save={}",
+                "平台惯例：弹窗按钮序={:?}，保存快捷键={}",
                 spec.dialog_action_order,
                 spec.shortcut_convention.format_primary("S")
             ),
@@ -118,34 +118,34 @@ pub fn tokens_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let typography_ramp = outlined_card(
         flex_col((
-            title_medium("15-Role Typographic Ramp"),
-            display_small("Display Small — Hero Metric"),
-            headline_large("Headline Large — Window Title"),
-            headline_medium("Headline Medium — Section Header"),
-            headline_small("Headline Small — Dialog Heading"),
-            title_large("Title Large — App Bar"),
-            title_medium("Title Medium — Card Heading"),
-            title_small("Title Small — Sidebar Group"),
-            body_large("Body Large — Primary reading copy and form labels."),
-            body_medium("Body Medium — Dense desktop controls and settings rows."),
-            body_small("Body Small — Captions, hints, and secondary descriptions."),
-            label_large("Label Large — Button & Tab Label"),
-            label_medium("Label Medium — Badge & Form Header"),
-            label_small("Label Small — Micro Shortcut Caption"),
+            title_medium("15 级语义排版字阶 (Typographic Ramp)"),
+            display_small("Display Small — 核心大字指标"),
+            headline_large("Headline Large — 窗口级标题"),
+            headline_medium("Headline Medium — 分区标题"),
+            headline_small("Headline Small — 弹窗与页面标题"),
+            title_large("Title Large — 顶栏标题"),
+            title_medium("Title Medium — 卡片标题"),
+            title_small("Title Small — 侧栏分组与列表项"),
+            body_large("Body Large — 主要正文与表单主标签。"),
+            body_medium("Body Medium — 紧凑桌面控件与设置行正文。"),
+            body_small("Body Small — 辅助说明、校验与次要描述。"),
+            label_large("Label Large — 按钮与选项卡文案"),
+            label_medium("Label Medium — 徽章与分组眉题"),
+            label_small("Label Small — 微型快捷键提示"),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
         .gap(6.px()),
     );
 
     flex_col((
-        headline_small("DesignSpec Tokens, Metrics & Conventions"),
+        headline_small("DesignSpec 令牌、度量与平台惯例"),
         elevated_card(
-            flex_col((title_medium("Active Geometry & Behavior"), metrics_summary))
+            flex_col((title_medium("当前几何度量与交互规则"), metrics_summary))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(10.px()),
         ),
         filled_card(
-            flex_col((title_medium("Semantic Palette & Status Swatches"), swatches))
+            flex_col((title_medium("语义调色板与状态色板"), swatches))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(10.px()),
         ),

@@ -58,19 +58,19 @@ impl Default for NotesApp {
             query: String::new(),
             notes: vec![
                 NoteItem {
-                    title: "OKLCH Tonal Palette Audit".into(),
+                    title: "OKLCH 色阶调色板核查".into(),
                     pinned: true,
-                    tag: "Design",
+                    tag: "设计",
                 },
                 NoteItem {
-                    title: "Refactor FocusFrame State Machine".into(),
+                    title: "重构 FocusFrame 状态机".into(),
                     pinned: true,
-                    tag: "Architecture",
+                    tag: "架构",
                 },
                 NoteItem {
-                    title: "Expressive Floating Toolbar Polish".into(),
+                    title: "悬浮工具栏表现力打磨".into(),
                     pinned: false,
-                    tag: "UI",
+                    tag: "界面",
                 },
             ],
             pending_delete: None,
@@ -92,9 +92,9 @@ impl NotesApp {
 
 fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
     let dests = [
-        NavDestination::new("Notes", icons::DESCRIPTION),
-        NavDestination::new("Pinned", icons::STAR),
-        NavDestination::new("Archive", icons::ARCHIVE),
+        NavDestination::new("全部笔记", icons::DESCRIPTION),
+        NavDestination::new("已置顶", icons::STAR),
+        NavDestination::new("归档箱", icons::ARCHIVE),
     ];
 
     let rail = navigation_rail_with_fab(
@@ -104,9 +104,9 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
             |s: &mut NotesApp| {
                 let n = s.notes.len() + 1;
                 s.notes.push(NoteItem {
-                    title: format!("Quick Idea #{n}"),
+                    title: format!("快速灵感 #{n}"),
                     pinned: s.section == 1,
-                    tag: "Inbox",
+                    tag: "收集箱",
                 });
             },
         )),
@@ -120,11 +120,11 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
 
     let bar = top_app_bar_slots(
         TopAppBarVariant::Small,
-        "Material 3 Notes",
+        "Material 3 笔记",
         None,
         vec![
             filter_chip(
-                "Pinned Only",
+                "仅看置顶",
                 state.filter_pinned_only,
                 |s: &mut NotesApp| {
                     s.filter_pinned_only = !s.filter_pinned_only;
@@ -146,14 +146,14 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
         ],
     );
 
-    let q = state.query.trim().to_ascii_lowercase();
+    let q = state.query.trim().to_lowercase();
     let note_cards: Vec<_> = state
         .notes
         .iter()
         .enumerate()
         .filter(|(_, n)| {
             (!state.filter_pinned_only || n.pinned)
-                && (q.is_empty() || n.title.to_ascii_lowercase().contains(&q))
+                && (q.is_empty() || n.title.to_lowercase().contains(&q))
         })
         .map(|(idx, note)| {
             let pinned = note.pinned;
@@ -167,12 +167,12 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
                     .selected(pinned),
                     flex_col((
                         title_medium(note.title.clone()),
-                        body_small(format!("Tag: {}", note.tag)),
+                        body_small(format!("标签：{}", note.tag)),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Start)
                     .gap(2.px())
                     .flex(1.0),
-                    destructive_button("Delete", move |s: &mut NotesApp| {
+                    destructive_button("删除", move |s: &mut NotesApp| {
                         s.pending_delete = Some(idx);
                     }),
                 ))
@@ -186,14 +186,14 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
     let hero = elevated_card(
         flex_row((
             flex_col((
-                headline_small("Expressive M3 Components"),
-                body_medium("Built standalone with xilem-md3::md3_window, navigation_rail_with_fab, and floating_toolbar."),
+                headline_small("Expressive M3 专属组件体系"),
+                body_medium("完全脱离 xilem-ui 门面，直接使用 xilem-md3::md3_window、navigation_rail_with_fab 与 floating_toolbar 构建。"),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(4.px())
             .flex(1.0),
             large_fab(icons::EDIT, FabColor::Primary, |s: &mut NotesApp| {
-                s.toasts.show("Compose opened", None::<&str>, ToastDuration::Short, true);
+                s.toasts.show("已打开新建笔记编辑器", Some("知道了"), ToastDuration::Short, true);
             }),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -226,30 +226,30 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
     let dock = sized_box(
         flex_row((
             floating_toolbar(vec![
-                subtle_button("High Contrast", |s: &mut NotesApp| {
+                subtle_button("高对比度", |s: &mut NotesApp| {
                     s.high_contrast = !s.high_contrast;
                 })
                 .boxed(),
-                primary_button("Add Note", |s: &mut NotesApp| {
+                primary_button("添加待办", |s: &mut NotesApp| {
                     let n = s.notes.len() + 1;
                     s.notes.push(NoteItem {
-                        title: format!("Material Task #{n}"),
+                        title: format!("Material 待办任务 #{n}"),
                         pinned: false,
-                        tag: "Tasks",
+                        tag: "任务",
                     });
                 })
                 .boxed(),
             ]),
             extended_fab(
                 icons::ADD,
-                "New Note",
+                "新建笔记",
                 FabColor::Secondary,
                 |s: &mut NotesApp| {
                     let n = s.notes.len() + 1;
                     s.notes.push(NoteItem {
-                        title: format!("Extended FAB Note #{n}"),
+                        title: format!("Extended FAB 笔记 #{n}"),
                         pinned: false,
-                        tag: "FAB",
+                        tag: "随记",
                     });
                 },
             ),
@@ -263,9 +263,9 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
 
     let delete_modal = state.pending_delete.map(|idx| {
         basic_dialog(
-            "Delete note permanently?",
-            "Destructive confirmation removes this note from your list.",
-            "Delete",
+            "永久删除此笔记？",
+            "该操作属于高风险确认，将从列表中永久移除这条笔记。",
+            "确认删除",
             move |s: &mut NotesApp| {
                 if idx < s.notes.len() {
                     s.notes.remove(idx);
@@ -276,12 +276,17 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
         )
         .icon(icons::DELETE)
         .destructive(true)
-        .dismiss_text("Cancel")
+        .dismiss_text("取消")
     });
 
-    let toast_layer = sized_box(toast_host(&state.toasts, |s: &mut NotesApp| {
-        let _ = s.toasts.dismiss_current();
-    }))
+    let toast_layer = sized_box(
+        toast_host(&state.toasts, |s: &mut NotesApp| {
+            let _ = s.toasts.dismiss_current();
+        })
+        .on_action(|s: &mut NotesApp| {
+            let _ = s.toasts.dismiss_current();
+        }),
+    )
     .padding(Padding::all(16.px()))
     .alignment(UnitPoint::BOTTOM);
 
@@ -300,7 +305,7 @@ fn main() {
         let theme = state.current_theme();
         let wid = state.window_id;
         std::iter::once(
-            md3_window(wid, "Material Design 3 Notes", &theme, app_view(state)).with_options(
+            md3_window(wid, "Material Design 3 笔记", &theme, app_view(state)).with_options(
                 |opts| {
                     opts.on_close(|s: &mut NotesApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(1040.0, 740.0))
