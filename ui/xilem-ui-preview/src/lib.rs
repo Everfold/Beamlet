@@ -5,3 +5,4 @@
 
 pub mod harness;
 pub mod inspect;
+pub mod scenes;
