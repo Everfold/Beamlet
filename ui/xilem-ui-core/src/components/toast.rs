@@ -13,11 +13,11 @@ use xilem::masonry::core::{
     PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetPod,
 };
 use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, Dim, LenReq, Length};
+use xilem::masonry::layout::{AsUnit, LenReq, Length};
 use xilem::masonry::properties::{CornerRadius, Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, label, sized_box};
+use xilem::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::overlay::empty_slot;
@@ -148,7 +148,7 @@ pub fn toast<State: 'static, Action: 'static>(
                 let action_lbl = spec
                     .typography
                     .style_label(TypeRole::LabelLarge, label(lbl.clone()))
-                    .color(p.accent);
+                    .color(p.accent_container);
                 button(action_lbl, move |s: &mut State| cb(s)).ui_class(classes::BTN_SUBTLE)
             });
         let close_btn = if data.with_close
@@ -167,12 +167,12 @@ pub fn toast<State: 'static, Action: 'static>(
         };
 
         sized_box(
-            flex_row((msg.flex(1.0), act_btn, close_btn))
+            flex_row((msg, act_btn, close_btn))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(8.px())
                 .padding(Padding::from_vh(10.px(), 16.px())),
         )
-        .dims(Dimensions::width(Dim::FitContent))
+        .dims(Dimensions::MAX)
         .background_color(p.inverse_surface)
         .corner_radius(spec.metrics.button_radius.max(8.0).px())
         .box_shadow(spec.box_shadow(ElevationLevel::Level3))

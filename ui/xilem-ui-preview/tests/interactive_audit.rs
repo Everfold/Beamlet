@@ -832,3 +832,74 @@ fn audit_desktop_all_scenes_themes_brightness() {
         }
     }
 }
+
+#[test]
+fn audit_toast_host_without_outer_max_dims_stays_compact() {
+    use xilem::WidgetView;
+    use xilem::masonry::layout::{AsUnit, UnitPoint};
+    use xilem::masonry::properties::Padding;
+    use xilem::style::Style as _;
+    use xilem::view::{ZStackExt, sized_box, zstack};
+    use xilem_ui::prelude::{ToastDuration, ToastHostState, primary_button, toast_host};
+
+    #[derive(Clone)]
+    struct ToastMountState {
+        theme: UiTheme,
+        toasts: ToastHostState,
+    }
+
+    let initial = ToastMountState {
+        theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        toasts: ToastHostState::new(),
+    };
+
+    let mut h = PreviewHarness::new(
+        initial,
+        |s| s.theme.clone(),
+        |s| {
+            // Reproduces exact theme_gallery / md3_notes mount: NO `.dims(Dimensions::MAX)` on outer `sized_box`.
+            let toast_layer = sized_box(
+                toast_host(&s.toasts, |st: &mut ToastMountState| {
+                    let _ = st.toasts.dismiss_current();
+                })
+                .on_action(|st: &mut ToastMountState| {
+                    let _ = st.toasts.dismiss_current();
+                }),
+            )
+            .padding(Padding::all(16.px()))
+            .alignment(UnitPoint::BOTTOM);
+
+            let trigger = primary_button("Queue Toast", |st: &mut ToastMountState| {
+                st.toasts.show(
+                    "Preview queued notice",
+                    Some("Undo"),
+                    ToastDuration::Short,
+                    true,
+                );
+            });
+
+            zstack((trigger.alignment(UnitPoint::CENTER), toast_layer)).boxed()
+        },
+        PreviewConfig::default(),
+    );
+
+    h.run_step(&PreviewStep::ClickLabel("Queue Toast".to_owned()))
+        .unwrap();
+    h.settle_animations();
+
+    let tree = dump_layout_tree(&mut h);
+    fn find_toast_child_rect(node: &LayoutNode) -> Option<(f64, f64)> {
+        if node.type_name == "ToastTimerHost" {
+            let child = node.children.first()?;
+            return Some((child.rect.width, child.rect.height));
+        }
+        node.children.iter().find_map(find_toast_child_rect)
+    }
+
+    let (w, ht) = find_toast_child_rect(&tree).expect("ToastTimerHost child present");
+    assert!(
+        w < 600.0 && ht < 120.0,
+        "toast must remain a compact pill without outer Dimensions::MAX, got {w}x{ht}"
+    );
+    let _ = h.render_image();
+}
