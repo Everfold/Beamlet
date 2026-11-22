@@ -5,6 +5,7 @@ use std::sync::Arc;
 use xilem::Color;
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
+use xilem::masonry::parley::style::FontWeight;
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
@@ -38,27 +39,27 @@ impl InfoBarSeverity {
         match self {
             Self::Informational => (icons::INFO, p.accent, p.surface),
             Self::Success => {
-                let badge = if is_dark {
-                    Color::from_rgb8(0x6C, 0xCB, 0x5F)
-                } else {
-                    Color::from_rgb8(0x0F, 0x7B, 0x0F)
-                };
-                let bg = blend_over(p.surface, badge, if is_dark { 0.14 } else { 0.10 });
-                (icons::CHECK_CIRCLE, badge, bg)
+                let bg = blend_over(p.surface, p.success, if is_dark { 0.14 } else { 0.10 });
+                (icons::CHECK_CIRCLE, p.success, bg)
             }
             Self::Warning => {
-                let badge = if is_dark {
-                    Color::from_rgb8(0xFC, 0xE1, 0x00)
-                } else {
-                    Color::from_rgb8(0x9D, 0x5D, 0x00)
-                };
-                let bg = blend_over(p.surface, badge, if is_dark { 0.14 } else { 0.10 });
-                (icons::WARNING, badge, bg)
+                let bg = blend_over(p.surface, p.warning, if is_dark { 0.14 } else { 0.10 });
+                (icons::WARNING, p.warning, bg)
             }
             Self::Error => {
                 let bg = blend_over(p.surface, p.error, if is_dark { 0.16 } else { 0.10 });
                 (icons::ERROR_CIRCLE, p.error, bg)
             }
+        }
+    }
+
+    const fn badge_colors(self, spec: &DesignSpec) -> (Color, Color) {
+        let p = &spec.palette;
+        match self {
+            Self::Informational => (p.accent, p.on_accent),
+            Self::Success => (p.success, p.on_success),
+            Self::Warning => (p.warning, p.on_warning),
+            Self::Error => (p.error, p.on_error),
         }
     }
 }
@@ -385,5 +386,219 @@ where
             vertical_divider(),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    })
+}
+
+/// WinUI 3 `InfoBadge` semantic notification pill (`Some("3")`) or `10×10` dot (`None`).
+pub fn info_badge<State: 'static, Action: 'static>(
+    severity: InfoBarSeverity,
+    text: Option<impl Into<ArcStr>>,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    let text: Option<ArcStr> = text.map(Into::into);
+    with_spec(move |spec: &DesignSpec, _| {
+        let (fill, ink) = severity.badge_colors(spec);
+        let (inner, dims, pad): (Box<AnyWidgetView<State, Action>>, Dimensions, Padding) =
+            match &text {
+                Some(txt) => (
+                    spec.typography
+                        .style_label(TypeRole::LabelSmall, label(txt.clone()))
+                        .weight(FontWeight::BOLD)
+                        .color(ink)
+                        .boxed(),
+                    Dimensions::default(),
+                    Padding::from_vh(2.px(), 7.px()),
+                ),
+                None => (
+                    label("").boxed(),
+                    Dimensions::fixed(10.px(), 10.px()),
+                    Padding::ZERO,
+                ),
+            };
+        sized_box(inner)
+            .dims(dims)
+            .padding(pad)
+            .background_color(fill)
+            .corner_radius(999.px())
+    })
+}
+
+/// WinUI 3 `BreadcrumbBar` rendering clickable ancestor segments separated by chevrons and a bold current leaf.
+pub fn breadcrumb_bar<State: 'static, Action: 'static, F>(
+    segments: &[&str],
+    on_select: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+where
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    let items: Vec<ArcStr> = segments.iter().map(|s| ArcStr::from(*s)).collect();
+    let cb = Arc::new(on_select);
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let last_idx = items.len().saturating_sub(1);
+        let mut children: Vec<Box<AnyWidgetView<State, Action>>> = Vec::new();
+        for (idx, seg) in items.iter().enumerate() {
+            if idx > 0 {
+                children.push(ui_icon(icons::CHEVRON_RIGHT, 14.0, p.text_secondary).boxed());
+            }
+            if idx == last_idx {
+                children.push(
+                    spec.typography
+                        .style_label(TypeRole::BodyMedium, label(seg.clone()))
+                        .weight(FontWeight::SEMI_BOLD)
+                        .color(p.text_primary)
+                        .padding(Padding::from_vh(4.px(), 6.px()))
+                        .boxed(),
+                );
+            } else {
+                let cb = cb.clone();
+                let lbl = spec
+                    .typography
+                    .style_label(TypeRole::BodyMedium, label(seg.clone()))
+                    .color(p.text_secondary);
+                children.push(
+                    button(lbl, move |s: &mut State| cb(s, idx))
+                        .ui_class(classes::BTN_SUBTLE)
+                        .boxed(),
+                );
+            }
+        }
+        flex_row(children)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(4.px())
+    })
+}
+
+/// General-purpose WinUI 3 `Expander` revealing arbitrary custom `content` when `expanded` is `true`.
+pub fn expander<State: 'static, Action: 'static, C, F>(
+    title: impl Into<ArcStr>,
+    subtitle: Option<impl Into<ArcStr>>,
+    expanded: bool,
+    on_toggle: F,
+    content: C,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox>
+where
+    C: WidgetView<State, Action>,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    let title: ArcStr = title.into();
+    let subtitle: Option<ArcStr> = subtitle.map(Into::into);
+    let cb = Arc::new(on_toggle);
+
+    let header_left = with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let t = spec
+            .typography
+            .style_label(TypeRole::BodyLarge, label(title.clone()))
+            .color(p.text_primary);
+        let sub = subtitle.as_ref().map(|s| {
+            spec.typography
+                .style_label(TypeRole::BodySmall, label(s.clone()))
+                .color(p.text_secondary)
+        });
+        flex_col((t, sub))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(2.px())
+    });
+
+    let toggle_btn = with_spec(move |spec: &DesignSpec, _| {
+        let cb = cb.clone();
+        let chevron = if expanded {
+            icons::ARROW_DROP_UP
+        } else {
+            icons::ARROW_DROP_DOWN
+        };
+        button(
+            ui_icon(chevron, 18.0, spec.palette.text_secondary),
+            move |s| cb(s),
+        )
+        .ui_class(classes::ICON_BTN_STD)
+    });
+
+    let header_row = flex_row((header_left.flex(1.0), toggle_btn))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(12.px())
+        .padding(Padding::from_vh(12.px(), 16.px()));
+
+    let expanded_body = expanded.then(|| {
+        flex_col((
+            horizontal_divider(),
+            sized_box(content).padding(Padding::from_vh(12.px(), 16.px())),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    });
+
+    sized_box(
+        flex_col((header_row, expanded_body)).cross_axis_alignment(CrossAxisAlignment::Stretch),
+    )
+    .ui_class(classes::GROUPED_CARD)
+}
+
+/// WinUI 3 `NumberBox` compact numeric spin control with inline `−` / `+` buttons clamped to `[min, max]`.
+pub fn number_box<State: 'static, Action: 'static, F>(
+    value: f64,
+    min: f64,
+    max: f64,
+    step: f64,
+    on_change: F,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox>
+where
+    F: Fn(&mut State, f64) -> Action + Send + Sync + 'static,
+{
+    let step = step.abs().max(f64::EPSILON);
+    let clamped = value.clamp(min, max);
+    let can_dec = clamped > min + f64::EPSILON;
+    let can_inc = clamped + f64::EPSILON < max;
+    let cb = Arc::new(on_change);
+
+    let formatted = if step.fract() == 0.0 && clamped.fract() == 0.0 {
+        format!("{clamped:.0}")
+    } else {
+        format!("{clamped:.2}")
+    };
+
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let dec_cb = cb.clone();
+        let inc_cb = cb.clone();
+        let next_dec = (clamped - step).clamp(min, max);
+        let next_inc = (clamped + step).clamp(min, max);
+
+        let dec_btn = button(
+            ui_icon(
+                icons::REMOVE,
+                16.0,
+                spec.content_color(p.text_primary, !can_dec),
+            ),
+            move |s: &mut State| dec_cb(s, next_dec),
+        )
+        .disabled(!can_dec)
+        .ui_class(classes::ICON_BTN_STD);
+
+        let inc_btn = button(
+            ui_icon(
+                icons::ADD,
+                16.0,
+                spec.content_color(p.text_primary, !can_inc),
+            ),
+            move |s: &mut State| inc_cb(s, next_inc),
+        )
+        .disabled(!can_inc)
+        .ui_class(classes::ICON_BTN_STD);
+
+        let readout = spec
+            .typography
+            .style_label(TypeRole::BodyMedium, label(formatted.clone()))
+            .color(p.text_primary)
+            .padding(Padding::from_vh(0.px(), 12.px()));
+
+        sized_box(
+            flex_row((dec_btn, readout, inc_btn))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(2.px())
+                .padding(Padding::from_vh(2.px(), 4.px())),
+        )
+        .background_color(p.surface)
+        .border(p.border_strong, 1.px())
+        .corner_radius(spec.metrics.input_radius.px())
     })
 }

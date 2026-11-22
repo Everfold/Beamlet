@@ -13,7 +13,7 @@ use xilem::view::{
 };
 use xilem::{AnyWidgetView, WidgetView};
 use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
-use xilem_ui_core::foundation::{UiClassExt, ui_icon};
+use xilem_ui_core::foundation::{UiClassExt, icons, ui_icon};
 use xilem_ui_core::style_engine::{classes, with_spec};
 use xilem_ui_core::tokens::{DesignSpec, TypeRole};
 
@@ -230,5 +230,209 @@ where
         .background_color(Color::TRANSPARENT)
         .dims(Dimensions::fixed(24.px(), 24.px()))
         .padding(Padding::ZERO)
+    })
+}
+
+/// macOS SwiftUI `DisclosureGroup` revealing indented custom `content` under a chevron header.
+pub fn disclosure_group<State: 'static, Action: 'static, C, F>(
+    title: impl Into<ArcStr>,
+    expanded: bool,
+    on_toggle: F,
+    content: C,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+where
+    C: WidgetView<State, Action>,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    let title: ArcStr = title.into();
+    let cb = Arc::new(on_toggle);
+    let header_btn = with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let cb = cb.clone();
+        let chevron = if expanded {
+            icons::ARROW_DROP_DOWN
+        } else {
+            icons::CHEVRON_RIGHT
+        };
+        let lbl = spec
+            .typography
+            .style_label(TypeRole::TitleSmall, label(title.clone()))
+            .color(p.text_primary);
+        button(
+            flex_row((ui_icon(chevron, 16.0, p.text_secondary), lbl.flex(1.0)))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(6.px()),
+            move |s: &mut State| cb(s),
+        )
+        .ui_class(classes::BTN_SUBTLE)
+    });
+
+    let body = expanded.then(|| sized_box(content).padding(Padding::left(20.px())));
+    flex_col((header_btn, body))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(6.px())
+}
+
+/// macOS `NSStepper` / SwiftUI `Stepper` pairing a leading label, numeric readout, and compact `−` / `+` buttons.
+pub fn stepper<State: 'static, Action: 'static, F>(
+    label_text: impl Into<ArcStr>,
+    value: i32,
+    min: i32,
+    max: i32,
+    step: i32,
+    on_change: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+where
+    F: Fn(&mut State, i32) -> Action + Send + Sync + 'static,
+{
+    let label_text: ArcStr = label_text.into();
+    let step = step.abs().max(1);
+    let clamped = value.clamp(min, max);
+    let can_dec = clamped > min;
+    let can_inc = clamped < max;
+    let cb = Arc::new(on_change);
+
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let dec_cb = cb.clone();
+        let inc_cb = cb.clone();
+        let next_dec = clamped.saturating_sub(step).clamp(min, max);
+        let next_inc = clamped.saturating_add(step).clamp(min, max);
+
+        let lbl = spec
+            .typography
+            .style_label(TypeRole::BodyMedium, label(label_text.clone()))
+            .color(p.text_primary);
+        let readout = spec
+            .typography
+            .style_label(TypeRole::BodyMedium, label(format!("{clamped}")))
+            .color(p.text_secondary);
+
+        let dec_btn = button(
+            ui_icon(
+                icons::REMOVE,
+                14.0,
+                spec.content_color(p.text_primary, !can_dec),
+            ),
+            move |s: &mut State| dec_cb(s, next_dec),
+        )
+        .disabled(!can_dec)
+        .ui_class(classes::ICON_BTN_STD);
+
+        let inc_btn = button(
+            ui_icon(
+                icons::ADD,
+                14.0,
+                spec.content_color(p.text_primary, !can_inc),
+            ),
+            move |s: &mut State| inc_cb(s, next_inc),
+        )
+        .disabled(!can_inc)
+        .ui_class(classes::ICON_BTN_STD);
+
+        let pill = sized_box(
+            flex_row((dec_btn, vertical_divider(), inc_btn))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(0.px()),
+        )
+        .background_color(p.surface)
+        .border(p.border_strong, 1.px())
+        .corner_radius(spec.metrics.button_radius.px());
+
+        flex_row((lbl.flex(1.0), readout, pill))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px())
+    })
+}
+
+/// Trailing macOS Inspector pane (`260px`) with leading hairline divider and compact grouped section stack.
+pub fn inspector_panel<State: 'static, Action: 'static>(
+    title: impl Into<ArcStr>,
+    sections: Vec<Box<AnyWidgetView<State, Action>>>,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> {
+    let title: ArcStr = title.into();
+    let hdr = with_spec(move |spec: &DesignSpec, _| {
+        spec.typography
+            .style_label(TypeRole::TitleSmall, label(title.clone()))
+            .color(spec.palette.text_primary)
+    });
+
+    flex_row((
+        vertical_divider(),
+        sized_box(
+            flex_col((
+                hdr,
+                horizontal_divider(),
+                flex_col(sections)
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(12.px()),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(10.px()),
+        )
+        .ui_class(classes::CARD_FILLED)
+        .corner_radius(0.px())
+        .padding(Padding::all(12.px()))
+        .dims(Dimensions::STRETCH.with_width(260.px())),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+}
+
+/// macOS Finder-style bottom `NSPathControl` bar with `14px` segment icons and chevron separators.
+pub fn path_control<State: 'static, Action: 'static, F>(
+    segments: &[(&str, &'static str)],
+    on_select: F,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, F>
+where
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    let items: Vec<(ArcStr, &'static str)> = segments
+        .iter()
+        .map(|(name, ic)| (ArcStr::from(*name), *ic))
+        .collect();
+    let cb = Arc::new(on_select);
+
+    with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let last_idx = items.len().saturating_sub(1);
+        let mut children: Vec<Box<AnyWidgetView<State, Action>>> = Vec::new();
+        for (idx, (name, icon_path)) in items.iter().enumerate() {
+            if idx > 0 {
+                children.push(ui_icon(icons::CHEVRON_RIGHT, 12.0, p.text_secondary).boxed());
+            }
+            let cb = cb.clone();
+            let fg = if idx == last_idx {
+                p.text_primary
+            } else {
+                p.text_secondary
+            };
+            let lbl = spec
+                .typography
+                .style_label(TypeRole::BodySmall, label(name.clone()))
+                .color(fg);
+            children.push(
+                button(
+                    flex_row((ui_icon(icon_path, 14.0, fg), lbl))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px()),
+                    move |s: &mut State| cb(s, idx),
+                )
+                .ui_class(classes::BTN_SUBTLE)
+                .dims(Dimensions::height(22.px()))
+                .boxed(),
+            );
+        }
+
+        sized_box(
+            flex_col((
+                horizontal_divider(),
+                flex_row(children)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(4.px())
+                    .padding(Padding::from_vh(3.px(), 10.px())),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch),
+        )
+        .background_color(p.header_bar_bg)
     })
 }

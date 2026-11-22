@@ -8,7 +8,8 @@ pub mod palette;
 pub mod theme;
 
 pub use components::{
-    InfoBarSeverity, command_bar, info_bar, navigation_view, settings_card, settings_expander,
+    InfoBarSeverity, breadcrumb_bar, command_bar, expander, info_badge, info_bar, navigation_view,
+    number_box, settings_card, settings_expander,
 };
 pub use palette::{FluentAccent, fluent_palette};
 pub use theme::{FluentTheme, fluent_scope, fluent_window};

@@ -9,8 +9,9 @@ pub mod theme;
 
 pub use color::{ColorScheme, ContrastLevel, contrast_ratio, relative_luminance};
 pub use components::{
-    FabColor, TopAppBarVariant, bottom_app_bar, center_aligned_top_app_bar, extended_fab, fab,
-    large_top_app_bar, medium_top_app_bar, top_app_bar, top_app_bar_slots,
+    FabColor, FabSize, TopAppBarVariant, bottom_app_bar, center_aligned_top_app_bar, extended_fab,
+    fab, floating_toolbar, large_fab, large_top_app_bar, medium_top_app_bar,
+    navigation_rail_with_fab, sized_fab, small_fab, top_app_bar, top_app_bar_slots,
 };
 pub use theme::{Md3Theme, md3_scope, md3_window};
 pub use xilem_ui_core::components::*;

@@ -12,10 +12,12 @@ use xilem::view::{
     sized_box, zstack,
 };
 use xilem::{AnyWidgetView, WidgetView};
-use xilem_ui_core::components::{headline_medium, headline_small, title_large};
+use xilem_ui_core::components::{
+    NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
+};
 use xilem_ui_core::foundation::{UiClassExt, ui_icon};
 use xilem_ui_core::style_engine::{classes, with_spec};
-use xilem_ui_core::tokens::{DesignSpec, TypeRole};
+use xilem_ui_core::tokens::{DesignSpec, ElevationLevel, TypeRole};
 
 /// Material 3 FAB tonal color mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -52,9 +54,48 @@ impl FabColor {
     }
 }
 
-/// Material 3 `56×56` Floating Action Button returning `Pod<widgets::Button>` directly.
-pub fn fab<State: 'static, Action: 'static, F>(
+/// Material 3 FAB size tokens (`Small 40px`, `Medium 56px`, `Large 96px`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum FabSize {
+    /// Compact `40×40` FAB (`12px` radius, `20px` icon).
+    Small,
+    /// Standard `56×56` FAB (`16px` radius, `24px` icon).
+    #[default]
+    Medium,
+    /// Prominent `96×96` FAB (`28px` radius, `36px` icon).
+    Large,
+}
+
+impl FabSize {
+    const fn box_px(self) -> f64 {
+        match self {
+            Self::Small => 40.0,
+            Self::Medium => 56.0,
+            Self::Large => 96.0,
+        }
+    }
+
+    const fn icon_px(self) -> f64 {
+        match self {
+            Self::Small => 20.0,
+            Self::Medium => 24.0,
+            Self::Large => 36.0,
+        }
+    }
+
+    const fn radius_px(self) -> f64 {
+        match self {
+            Self::Small => 12.0,
+            Self::Medium => 16.0,
+            Self::Large => 28.0,
+        }
+    }
+}
+
+/// Material 3 Floating Action Button parameterized by [`FabSize`] and [`FabColor`], returning `Pod<widgets::Button>`.
+pub fn sized_fab<State: 'static, Action: 'static, F>(
     svg_path: &'static str,
+    size: FabSize,
     color: FabColor,
     on_click: F,
 ) -> impl WidgetView<State, Action, Widget = widgets::Button>
@@ -65,10 +106,50 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let fg = color.foreground(spec);
         let cb = cb.clone();
-        button(ui_icon(svg_path, 24.0, fg), move |s: &mut State| cb(s))
-            .ui_class(color.class_name())
-            .dims(Dimensions::fixed(56.px(), 56.px()))
+        button(
+            ui_icon(svg_path, size.icon_px(), fg),
+            move |s: &mut State| cb(s),
+        )
+        .ui_class(color.class_name())
+        .corner_radius(size.radius_px().px())
+        .dims(Dimensions::fixed(size.box_px().px(), size.box_px().px()))
     })
+}
+
+/// Material 3 `40×40` Small Floating Action Button returning `Pod<widgets::Button>` directly.
+pub fn small_fab<State: 'static, Action: 'static, F>(
+    svg_path: &'static str,
+    color: FabColor,
+    on_click: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
+where
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    sized_fab(svg_path, FabSize::Small, color, on_click)
+}
+
+/// Material 3 `56×56` Floating Action Button returning `Pod<widgets::Button>` directly.
+pub fn fab<State: 'static, Action: 'static, F>(
+    svg_path: &'static str,
+    color: FabColor,
+    on_click: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
+where
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    sized_fab(svg_path, FabSize::Medium, color, on_click)
+}
+
+/// Material 3 `96×96` Large Floating Action Button returning `Pod<widgets::Button>` directly.
+pub fn large_fab<State: 'static, Action: 'static, F>(
+    svg_path: &'static str,
+    color: FabColor,
+    on_click: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
+where
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    sized_fab(svg_path, FabSize::Large, color, on_click)
 }
 
 /// Material 3 extended pill FAB combining icon + text label, returning `Pod<widgets::Button>` directly.
@@ -229,4 +310,94 @@ pub fn bottom_app_bar<State: 'static, Action: 'static>(
     )
     .dims(Dimensions::height(80.px()))
     .ui_class(classes::BOTTOM_BAR)
+}
+
+/// Material 3 Navigation Rail hosting an optional top header/FAB slot above pill navigation destinations.
+pub fn navigation_rail_with_fab<State: 'static, Action: 'static, H, F>(
+    header: Option<H>,
+    destinations: &[NavDestination],
+    selected: usize,
+    on_select: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, H, F>
+where
+    H: WidgetView<State, Action>,
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    let dests = destinations.to_vec();
+    let cb = Arc::new(on_select);
+    let nav_items = with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let items: Vec<Box<AnyWidgetView<State, Action>>> = dests
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                let active = i == selected;
+                let cb = cb.clone();
+                let fg = if active {
+                    p.on_secondary_container
+                } else {
+                    p.text_secondary
+                };
+                let pill_bg = if active {
+                    p.secondary_container
+                } else {
+                    xilem::Color::TRANSPARENT
+                };
+                let pill = sized_box(ui_icon(d.icon, 18.0, fg))
+                    .padding(Padding::from_vh(5.px(), 14.px()))
+                    .background_color(pill_bg)
+                    .corner_radius(spec.metrics.nav_pill_radius.px());
+                let txt = spec
+                    .typography
+                    .style_label(TypeRole::LabelSmall, label(d.label.clone()))
+                    .color(if active {
+                        p.text_primary
+                    } else {
+                        p.text_secondary
+                    });
+                button(
+                    flex_col((pill, txt))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px()),
+                    move |s: &mut State| cb(s, i),
+                )
+                .ui_class(classes::TAB_ITEM)
+                .boxed()
+            })
+            .collect();
+        flex_col(items)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(8.px())
+    });
+
+    flex_row((
+        surface_box(
+            ElevationLevel::Level1,
+            flex_col((header, nav_items))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(14.px())
+                .padding(Padding::from_vh(14.px(), 6.px())),
+        )
+        .radius(0.0)
+        .padding(0.0)
+        .dims(Dimensions::STRETCH.with_width(80.px())),
+        vertical_divider(),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+}
+
+/// Material 3 Expressive pill-shaped floating toolbar hosting an action row with `Level3` elevation.
+pub fn floating_toolbar<State: 'static, Action: 'static>(
+    actions: Vec<Box<AnyWidgetView<State, Action>>>,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    surface_box(
+        ElevationLevel::Level3,
+        flex_row(actions)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(6.px())
+            .padding(Padding::from_vh(0.px(), 8.px())),
+    )
+    .radius(999.0)
+    .padding(8.0)
+    .dims(Dimensions::height(56.px()))
 }

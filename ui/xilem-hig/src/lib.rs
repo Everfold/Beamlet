@@ -8,8 +8,8 @@ pub mod palette;
 pub mod theme;
 
 pub use components::{
-    form_group, form_row, help_button, macos_toolbar, macos_toolbar_with_center,
-    source_list_sidebar,
+    disclosure_group, form_group, form_row, help_button, inspector_panel, macos_toolbar,
+    macos_toolbar_with_center, path_control, source_list_sidebar, stepper,
 };
 pub use palette::{HigAccent, hig_palette};
 pub use theme::{HigTheme, hig_scope, hig_window};
