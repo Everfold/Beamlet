@@ -27,6 +27,7 @@ members = [
   "ui/xilem-hig",
   "ui/xilem-adwaita",
   "ui/xilem-ui",
+  "ui/xilem-ui-preview",
 ]
 
 [workspace.package]
@@ -98,6 +99,7 @@ xilem-fluent = { path = "ui/xilem-fluent" }
 xilem-hig = { path = "ui/xilem-hig" }
 xilem-adwaita = { path = "ui/xilem-adwaita" }
 xilem-ui = { path = "ui/xilem-ui" }
+xilem-ui-preview = { path = "ui/xilem-ui-preview" }
 
 foundations = "5.11"
 opentelemetry = "0.33"
