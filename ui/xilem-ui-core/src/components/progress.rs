@@ -165,7 +165,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let mut pod = ctx.create_pod(LinearProgressWidget::new(self.progress));
         pod.new_widget.properties.insert(TrackColor {
             active: spec.palette.accent,
@@ -323,7 +323,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let mut pod = ctx.create_pod(DeterminateCircularWidget {
             progress: self.progress.clamp(0.0, 1.0),
         });

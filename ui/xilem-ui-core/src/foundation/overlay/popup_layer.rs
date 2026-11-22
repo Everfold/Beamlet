@@ -26,7 +26,7 @@ use xilem::masonry::widgets::{self, ButtonPress, Divider, Flex, Label, SizedBox,
 use xilem::{Color, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::icon::cached_icon_tree;
-use crate::style_engine::scope::current_spec;
+use crate::style_engine::scope::current_spec_arc;
 use crate::tokens::{DesignSpec, ElevationLevel};
 
 const POPUP_TRIGGER_ID: ViewId = ViewId::new(0x5549_3420);
@@ -598,7 +598,7 @@ where
     type ViewState = TriggerV::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec_theme = current_spec(ctx);
+        let spec_theme = current_spec_arc(ctx);
         let popup_spec = (self.spec_builder)(&spec_theme);
         let (trigger_pod, trigger_state) =
             ctx.with_id(POPUP_TRIGGER_ID, |ctx| self.trigger.build(ctx, app_state));
@@ -633,7 +633,7 @@ where
                 );
             });
         }
-        let spec_theme = current_spec(ctx);
+        let spec_theme = current_spec_arc(ctx);
         let popup_spec = (self.spec_builder)(&spec_theme);
         AnchoredPopupHost::sync(&mut element, self.open, self.offset, popup_spec);
     }

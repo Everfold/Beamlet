@@ -12,7 +12,7 @@ use xilem::view::{CrossAxisAlignment, flex_row};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::ui_icon;
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
 const BUTTON_CONTENT_VIEW_ID: ViewId = ViewId::new(0x5549_3701);
@@ -236,7 +236,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiButton<
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let inner = self.build_inner(&spec);
         let (pod, child_state) = class_button_build(
             ctx,
@@ -256,7 +256,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiButton<
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_inner = self.build_inner(&spec);
         class_button_rebuild(
             ctx,

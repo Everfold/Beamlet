@@ -72,7 +72,7 @@ where
     type ViewState = (f64, V::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let h = spec.metrics.top_bar_height;
         let (child_pod, child_state) = self.inner.build(ctx, app_state);
         let mut pod = ctx.create_pod(xilem::masonry::widgets::SizedBox::new(
@@ -93,7 +93,7 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let next_h = spec.metrics.top_bar_height;
         if (*prev_h - next_h).abs() > 1e-6 {
             ctx.mark_prop_changed::<Dimensions>(element.id());

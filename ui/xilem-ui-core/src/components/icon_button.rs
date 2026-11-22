@@ -12,7 +12,7 @@ use crate::components::button::{
     class_button_teardown,
 };
 use crate::foundation::ui_icon;
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::DesignSpec;
 
 /// Visual emphasis style for [`UiIconButton`] and [`UiCustomIconButton`].
@@ -108,7 +108,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiIconBut
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let (cls, inner) = self.build_inner(&spec);
         let (pod, child_state) = class_button_build(ctx, app_state, cls, self.disabled, &inner);
         (pod, (cls, inner, child_state))
@@ -122,7 +122,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiIconBut
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let (next_cls, next_inner) = self.build_inner(&spec);
         class_button_rebuild(
             ctx,

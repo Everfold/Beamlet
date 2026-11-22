@@ -108,18 +108,19 @@ where
     V: WidgetView<State, Action>,
 {
     type Element = xilem::Pod<xilem::masonry::widgets::SizedBox>;
-    type ViewState = V::ViewState;
+    type ViewState = ((xilem::Color, f64, f64, BoxShadow), V::ViewState);
 
     fn build(
         &self,
         ctx: &mut xilem::ViewCtx,
         app_state: &mut State,
     ) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let p = &spec.palette;
         let bg = self.elevation.tinted_surface(p.surface, p.accent);
         let rad = self.radius.unwrap_or(spec.metrics.card_radius);
         let pad = self.padding.unwrap_or(12.0);
+        let shadow = spec.box_shadow(self.elevation);
         let (child_pod, child_state) = self.child.build(ctx, app_state);
         let mut pod = ctx.create_pod(xilem::masonry::widgets::SizedBox::new(
             child_pod.new_widget.erased(),
@@ -129,34 +130,45 @@ where
             .properties
             .insert(CornerRadius { radius: rad.px() });
         pod.new_widget.properties.insert(Padding::all(pad.px()));
-        pod.new_widget
-            .properties
-            .insert(spec.box_shadow(self.elevation));
-        (pod, child_state)
+        pod.new_widget.properties.insert(shadow);
+        (pod, ((bg, rad, pad, shadow), child_state))
     }
 
     fn rebuild(
         &self,
         prev: &Self,
-        view_state: &mut Self::ViewState,
+        ((prev_bg, prev_rad, prev_pad, prev_shadow), view_state): &mut Self::ViewState,
         ctx: &mut xilem::ViewCtx,
         mut element: xilem::core::Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let p = &spec.palette;
         let bg = self.elevation.tinted_surface(p.surface, p.accent);
         let rad = self.radius.unwrap_or(spec.metrics.card_radius);
         let pad = self.padding.unwrap_or(12.0);
+        let shadow = spec.box_shadow(self.elevation);
         let id = element.id();
-        ctx.mark_prop_changed::<Background>(id);
-        ctx.mark_prop_changed::<CornerRadius>(id);
-        ctx.mark_prop_changed::<Padding>(id);
-        ctx.mark_prop_changed::<BoxShadow>(id);
-        element.insert_prop(Background::Color(bg));
-        element.insert_prop(CornerRadius { radius: rad.px() });
-        element.insert_prop(Padding::all(pad.px()));
-        element.insert_prop(spec.box_shadow(self.elevation));
+        if *prev_bg != bg {
+            ctx.mark_prop_changed::<Background>(id);
+            element.insert_prop(Background::Color(bg));
+            *prev_bg = bg;
+        }
+        if (*prev_rad - rad).abs() > f64::EPSILON {
+            ctx.mark_prop_changed::<CornerRadius>(id);
+            element.insert_prop(CornerRadius { radius: rad.px() });
+            *prev_rad = rad;
+        }
+        if (*prev_pad - pad).abs() > f64::EPSILON {
+            ctx.mark_prop_changed::<Padding>(id);
+            element.insert_prop(Padding::all(pad.px()));
+            *prev_pad = pad;
+        }
+        if *prev_shadow != shadow {
+            ctx.mark_prop_changed::<BoxShadow>(id);
+            element.insert_prop(shadow);
+            *prev_shadow = shadow;
+        }
 
         let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("SurfaceBox SizedBox always holds a child");
@@ -171,7 +183,7 @@ where
 
     fn teardown(
         &self,
-        view_state: &mut Self::ViewState,
+        (_props_cache, view_state): &mut Self::ViewState,
         ctx: &mut xilem::ViewCtx,
         mut element: xilem::core::Mut<'_, Self::Element>,
     ) {
@@ -182,7 +194,7 @@ where
 
     fn message(
         &self,
-        view_state: &mut Self::ViewState,
+        (_props_cache, view_state): &mut Self::ViewState,
         message: &mut xilem::core::MessageCtx,
         mut element: xilem::core::Mut<'_, Self::Element>,
         app_state: &mut State,

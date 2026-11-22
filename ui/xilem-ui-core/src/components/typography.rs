@@ -9,7 +9,7 @@ use xilem::masonry::widgets;
 use xilem::view::{Label, Prose, label, prose};
 use xilem::{Color, Pod, ViewCtx};
 
-use crate::style_engine::current_spec;
+use crate::style_engine::current_spec_arc;
 use crate::tokens::TypeRole;
 
 /// Label view styled via a semantic [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
@@ -30,7 +30,7 @@ impl<State, Action> UiLabel<State, Action> {
     }
 
     fn inner_view(&self, ctx: &ViewCtx) -> Label {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         spec.typography
             .style_label(self.role, label(self.text.clone()))
     }
@@ -129,7 +129,7 @@ impl<State, Action> UiProse<State, Action> {
     }
 
     fn inner_view(&self, ctx: &ViewCtx) -> Prose<State, Action> {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let style = spec.typography.get(self.role);
         let view: Prose<State, Action> = prose(self.text.clone())
             .text_size(style.font_size)

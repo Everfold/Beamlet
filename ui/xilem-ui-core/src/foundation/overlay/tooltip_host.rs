@@ -22,7 +22,7 @@ use xilem::masonry::properties::{
 use xilem::masonry::widgets::{Flex, Label, SizedBox};
 use xilem::{Color, Pod, ViewCtx, WidgetView};
 
-use crate::style_engine::scope::current_spec;
+use crate::style_engine::scope::current_spec_arc;
 use crate::tokens::{DesignSpec, ElevationLevel};
 
 const TOOLTIP_HOVER_DELAY_NS: u64 = 450_000_000;
@@ -408,7 +408,7 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec_theme = current_spec(ctx);
+        let spec_theme = current_spec_arc(ctx);
         let tip_spec = (self.spec_builder)(&spec_theme);
         let (child_pod, child_state) =
             ctx.with_id(TOOLTIP_CHILD_ID, |ctx| self.child.build(ctx, app_state));
@@ -424,7 +424,7 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec_theme = current_spec(ctx);
+        let spec_theme = current_spec_arc(ctx);
         HoverTooltipHost::set_spec(&mut element, (self.spec_builder)(&spec_theme));
         let mut child = HoverTooltipHost::child_mut(&mut element);
         ctx.with_id(TOOLTIP_CHILD_ID, |ctx| {

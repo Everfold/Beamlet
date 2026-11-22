@@ -1,12 +1,18 @@
 //! Unified [`DesignLanguage`], [`UiTheme`], and runtime theme-scoping helpers.
 
+use std::sync::{Arc, LazyLock, Mutex};
+
 use xilem::masonry::core::DefaultProperties;
 use xilem::masonry::core::FromDynWidget;
 use xilem::{Color, WidgetView, WindowId, WindowView};
 use xilem_ui_core::style_engine::scope::{
-    UiScope, ui_scope as core_ui_scope, ui_window as core_ui_window,
+    UiScope, ui_scope_arc as core_ui_scope_arc, ui_window_arc as core_ui_window_arc,
 };
 use xilem_ui_core::tokens::{Brightness, DesignSpec};
+
+type ThemeSpecCache = Vec<(UiTheme, Arc<DesignSpec>)>;
+
+static THEME_SPEC_CACHE: LazyLock<Mutex<ThemeSpecCache>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
 /// Supported cross-platform design systems.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -282,10 +288,28 @@ impl UiTheme {
         }
     }
 
+    /// Returns a cached [`Arc<DesignSpec>`] for this theme, avoiding repeated palette
+    /// synthesis and cloning across high-frequency rebuilds (e.g. slider drags).
+    #[must_use]
+    pub fn cached_spec(&self) -> Arc<DesignSpec> {
+        let mut cache = THEME_SPEC_CACHE
+            .lock()
+            .expect("theme spec cache mutex poisoned");
+        if let Some((_, spec)) = cache.iter().find(|(cached, _)| cached == self) {
+            return spec.clone();
+        }
+        let spec = Arc::new(self.to_spec());
+        if cache.len() >= 32 {
+            cache.remove(0);
+        }
+        cache.push((self.clone(), spec.clone()));
+        spec
+    }
+
     /// Builds Masonry [`DefaultProperties`] corresponding to [`to_spec`](Self::to_spec).
     #[must_use]
     pub fn default_properties(&self) -> DefaultProperties {
-        xilem_ui_core::style_engine::build_default_properties(&self.to_spec())
+        xilem_ui_core::style_engine::build_default_properties(&self.cached_spec())
     }
 }
 
@@ -304,7 +328,7 @@ where
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
-    core_ui_scope(theme.to_spec(), child)
+    core_ui_scope_arc(theme.cached_spec(), child)
 }
 
 /// Wraps an entire Xilem desktop window with backdrop color, Masonry `DefaultProperties`, and `UiScope` synced to `theme`.
@@ -318,7 +342,7 @@ where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    core_ui_window(window_id, title, &theme.to_spec(), child)
+    core_ui_window_arc(window_id, title, &theme.cached_spec(), child)
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::foundation::overlay::{
 };
 use crate::foundation::ui_icon;
 use crate::style_engine::classes;
-use crate::style_engine::current_spec;
+use crate::style_engine::current_spec_arc;
 use crate::tokens::{DialogActionOrder, MotionDuration, TypeRole};
 
 /// Callback invoked when a dialog closes via scrim, Escape, or action buttons.
@@ -272,7 +272,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
@@ -295,7 +295,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,

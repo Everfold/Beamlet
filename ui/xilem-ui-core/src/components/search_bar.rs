@@ -13,7 +13,7 @@ use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 use crate::foundation::{
     FocusFrame, FocusFrameView, UiClassExt, WithClass, focus_frame, icons, ui_icon,
 };
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
 /// Callback invoked when the search query text changes.
@@ -86,9 +86,14 @@ impl<State, Action> UiSearchBar<State, Action> {
             None
         };
 
+        let reserve = f64::from(style.font_size) * 1.7;
+        let pad_v = ((m.search_height - 2.0 - reserve) / 2.0).max(0.0);
+
         let inner = flex_row((
             ui_icon(icons::SEARCH, 18.0, p.text_secondary),
-            ti.ui_class(classes::TEXT_FIELD_FLUSH).flex(1.0),
+            ti.ui_class(classes::TEXT_FIELD_FLUSH)
+                .padding(Padding::from_vh(pad_v.px(), 0.px()))
+                .flex(1.0),
             clear_btn,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -112,7 +117,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSearchB
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let frame = self.build_frame(&spec);
         let (pod, st) = frame.build(ctx, app_state);
         (pod, (frame, st))
@@ -126,7 +131,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSearchB
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_frame = self.build_frame(&spec);
         next_frame.rebuild(prev_frame, st, ctx, element, app_state);
         *prev_frame = next_frame;

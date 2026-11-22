@@ -16,7 +16,7 @@ use xilem::masonry::layout::{LenReq, Length};
 use xilem::{Pod, ViewCtx, WidgetView};
 
 use crate::foundation::state_layer::with_opacity;
-use crate::style_engine::current_spec;
+use crate::style_engine::current_spec_arc;
 use crate::tokens::InputFocusStyle;
 
 const FOCUS_FRAME_CHILD_ID: ViewId = ViewId::new(0x5549_3601);
@@ -229,7 +229,7 @@ impl<V, State, Action> FocusFrameView<V, State, Action> {
     }
 
     fn resolve_config(&self, ctx: &ViewCtx) -> FocusFrameConfig {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         FocusFrameConfig {
             style: self.style.unwrap_or(spec.input_focus),
             radius: self.radius.unwrap_or(spec.metrics.input_radius),

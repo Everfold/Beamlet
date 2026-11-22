@@ -14,7 +14,7 @@ use xilem::view::{
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::{FocusFrameView, UiClassExt, focus_frame, icons, ui_icon};
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
 /// Text field surface variant.
@@ -135,13 +135,9 @@ impl<State, Action> UiTextField<State, Action> {
     {
         let p = &spec.palette;
         let is_error = self.error_text.is_some();
-        let class = if is_error {
-            classes::TEXT_FIELD_ERROR
-        } else {
-            match self.variant {
-                TextFieldVariant::Outlined => classes::TEXT_FIELD_OUTLINED,
-                TextFieldVariant::Filled => classes::TEXT_FIELD_FILLED,
-            }
+        let base_class = match self.variant {
+            TextFieldVariant::Outlined => classes::TEXT_FIELD_OUTLINED,
+            TextFieldVariant::Filled => classes::TEXT_FIELD_FILLED,
         };
 
         let top_label = self.label_text.as_ref().map(|t| {
@@ -205,10 +201,13 @@ impl<State, Action> UiTextField<State, Action> {
             flex_row((prefix, flush.flex(1.0), suffix, trail, trail_err))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(6.px())
-                .ui_class(class)
+                .ui_class(base_class)
+                .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
                 .boxed()
         } else {
-            ti.ui_class(class).boxed()
+            ti.ui_class(base_class)
+                .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                .boxed()
         };
 
         let frame = focus_frame(input_widget).error(is_error);
@@ -261,7 +260,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextFie
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let flex = self.build_flex(&spec);
         let (pod, st) = flex.build(ctx, app_state);
         (pod, (flex, st))
@@ -275,7 +274,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextFie
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_flex = self.build_flex(&spec);
         next_flex.rebuild(prev_flex, st, ctx, element, app_state);
         *prev_flex = next_flex;

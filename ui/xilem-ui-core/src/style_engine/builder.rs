@@ -2,7 +2,7 @@
 
 use xilem::Color;
 use xilem::masonry::core::{DefaultProperties, PropertySet, PropertyStack, Selector};
-use xilem::masonry::layout::{AsUnit, Length};
+use xilem::masonry::layout::{AsUnit, Dim, Length};
 use xilem::masonry::properties::{
     Background, BorderColor, BorderWidth, BoxShadow, CaretColor, CheckmarkColor,
     CheckmarkStrokeWidth, ContentColor, CornerRadius, Dimensions, Gap, Padding, PlaceholderColor,
@@ -723,7 +723,8 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(BorderColor::new(Color::TRANSPARENT))
             .with(BorderWidth { width: 0.px() })
             .with(CornerRadius { radius: 0.px() })
-            .with(base_pad)
+            .with(Padding::ZERO)
+            .with(Dimensions::height(Dim::MaxContent))
             .with(PlaceholderColor::new(p.text_secondary)),
     );
     for cls in [classes::TEXT_FIELD_OUTLINED, classes::TEXT_FIELD_FILLED] {
@@ -757,6 +758,66 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(BorderColor::new(Color::TRANSPARENT)),
     );
     props.insert_stack::<TextInput>(tf_stack);
+
+    // Composite UiTextField rows (prefix/suffix/trailing action) host a flush TextInput inside Flex.
+    let mut flex_stack = PropertyStack::new();
+    let row_pad = Padding::from_vh(m.input_pad_v.px(), m.input_pad_h.px());
+    flex_stack.push_layer(
+        Selector::classes(&[classes::TEXT_FIELD_OUTLINED]),
+        PropertySet::new()
+            .with(Background::Color(match spec.brightness {
+                Brightness::Light => p.surface,
+                Brightness::Dark => p.surface_low,
+            }))
+            .with(BorderColor::new(p.border_strong))
+            .with(BorderWidth { width: 1.px() })
+            .with(CornerRadius {
+                radius: m.input_radius.px(),
+            })
+            .with(row_pad),
+    );
+    flex_stack.push_layer(
+        Selector::classes(&[classes::TEXT_FIELD_FILLED]),
+        PropertySet::new()
+            .with(Background::Color(p.surface_highest))
+            .with(BorderColor::new(p.border))
+            .with(BorderWidth { width: 1.px() })
+            .with(CornerRadius {
+                radius: m.input_radius.px(),
+            })
+            .with(row_pad),
+    );
+    for cls in [classes::TEXT_FIELD_OUTLINED, classes::TEXT_FIELD_FILLED] {
+        flex_stack.push_layer(
+            Selector::classes(&[cls]).with_hovered(true),
+            PropertySet::new().with(BorderColor::new(p.text_primary)),
+        );
+        flex_stack.push_layer(
+            Selector::classes(&[cls]).with_focused(true),
+            PropertySet::new()
+                .with(BorderColor::new(p.accent))
+                .with(BorderWidth { width: 1.px() }),
+        );
+    }
+    flex_stack.push_layer(
+        Selector::classes(&[classes::TEXT_FIELD_ERROR]),
+        PropertySet::new()
+            .with(BorderColor::new(p.error))
+            .with(BorderWidth { width: 1.px() }),
+    );
+    flex_stack.push_layer(
+        Selector::classes(&[classes::TEXT_FIELD_OUTLINED]).with_disabled(true),
+        PropertySet::new()
+            .with(Background::Color(spec.disabled_container()))
+            .with(BorderColor::new(with_opacity(p.text_primary, 0.16))),
+    );
+    flex_stack.push_layer(
+        Selector::classes(&[classes::TEXT_FIELD_FILLED]).with_disabled(true),
+        PropertySet::new()
+            .with(Background::Color(spec.disabled_container()))
+            .with(BorderColor::new(Color::TRANSPARENT)),
+    );
+    props.insert_stack::<Flex>(flex_stack);
 }
 
 /// Builds a complete Masonry [`DefaultProperties`] bundle for `spec`.

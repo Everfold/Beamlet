@@ -58,16 +58,26 @@ pub fn cached_default_properties(spec: &DesignSpec) -> Arc<DefaultProperties> {
     props
 }
 
+static FALLBACK_LIGHT_SPEC: LazyLock<Arc<DesignSpec>> =
+    LazyLock::new(|| Arc::new(DesignSpec::neutral_fallback(Brightness::Light)));
+
+/// Reads a shared `Arc` handle to the ambient [`DesignSpec`] from the active [`ui_scope`]
+/// stack without deep-cloning `DesignSpec`, falling back to a cached neutral fallback.
+#[must_use]
+pub fn current_spec_arc(_ctx: &ViewCtx) -> Arc<DesignSpec> {
+    SPEC_STACK.with(|stack| {
+        stack
+            .borrow()
+            .last()
+            .map_or_else(|| FALLBACK_LIGHT_SPEC.clone(), Arc::clone)
+    })
+}
+
 /// Reads the ambient [`DesignSpec`] from the active [`ui_scope`] stack, falling back to
 /// [`DesignSpec::neutral_fallback`] if no enclosing [`ui_scope`] exists.
 #[must_use]
-pub fn current_spec(_ctx: &ViewCtx) -> DesignSpec {
-    SPEC_STACK.with(|stack| {
-        stack.borrow().last().map_or_else(
-            || DesignSpec::neutral_fallback(Brightness::Light),
-            |s| (**s).clone(),
-        )
-    })
+pub fn current_spec(ctx: &ViewCtx) -> DesignSpec {
+    (*current_spec_arc(ctx)).clone()
 }
 
 /// View created by [`ui_scope`] pushing an [`Arc<DesignSpec>`] around child build and rebuild.
@@ -129,6 +139,22 @@ where
     }
 }
 
+/// Wraps `child` inside a Xilem [`DesignSpec`] environment scope using a pre-allocated [`Arc<DesignSpec>`].
+pub fn ui_scope_arc<State: 'static, Action: 'static, V>(
+    spec: Arc<DesignSpec>,
+    child: V,
+) -> UiScope<State, Action, V>
+where
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    UiScope {
+        spec,
+        child,
+        phantom: PhantomData,
+    }
+}
+
 /// Wraps `child` inside a Xilem [`DesignSpec`] environment scope supporting live updates.
 pub fn ui_scope<State: 'static, Action: 'static, V>(
     spec: DesignSpec,
@@ -138,11 +164,28 @@ where
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
-    UiScope {
-        spec: Arc::new(spec),
-        child,
-        phantom: PhantomData,
-    }
+    ui_scope_arc(Arc::new(spec), child)
+}
+
+/// Convenience helper constructing an opinionated desktop [`WindowView`] from a shared [`Arc<DesignSpec>`].
+pub fn ui_window_arc<State: 'static, V>(
+    window_id: WindowId,
+    title: impl Into<String>,
+    spec: &Arc<DesignSpec>,
+    child: V,
+) -> WindowView<State>
+where
+    V: WidgetView<State>,
+    V::Widget: FromDynWidget,
+{
+    let bg = spec.palette.window_bg;
+    let default_props = cached_default_properties(spec);
+    let root = sized_box(child)
+        .dims(Dimensions::STRETCH)
+        .background_color(bg);
+    window(window_id, title.into(), ui_scope_arc(spec.clone(), root))
+        .with_base_color(bg)
+        .with_default_properties(default_props)
 }
 
 /// Convenience helper constructing an opinionated desktop [`WindowView`] whose backdrop,
@@ -157,14 +200,7 @@ where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    let bg = spec.palette.window_bg;
-    let default_props = cached_default_properties(spec);
-    let root = sized_box(child)
-        .dims(Dimensions::STRETCH)
-        .background_color(bg);
-    window(window_id, title.into(), ui_scope(spec.clone(), root))
-        .with_base_color(bg)
-        .with_default_properties(default_props)
+    ui_window_arc(window_id, title, &Arc::new(spec.clone()), child)
 }
 
 /// Creates a lazily evaluated view that reads the active [`DesignSpec`] on every build/rebuild.
@@ -205,10 +241,10 @@ where
     V::Widget: xilem::masonry::core::FromDynWidget,
 {
     type Element = Pod<V::Widget>;
-    type ViewState = (DesignSpec, V, V::ViewState);
+    type ViewState = (Arc<DesignSpec>, V, V::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let view = (self.builder)(&spec, app_state);
         let (el, state) = view.build(ctx, app_state);
         (el, (spec, view, state))
@@ -222,7 +258,7 @@ where
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let next_spec = current_spec(ctx);
+        let next_spec = current_spec_arc(ctx);
         let next_view = (self.builder)(&next_spec, app_state);
         next_view.rebuild(prev_view, view_state, ctx, element, app_state);
         *prev_spec = next_spec;

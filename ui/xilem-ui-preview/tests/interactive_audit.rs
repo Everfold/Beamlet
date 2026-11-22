@@ -903,3 +903,62 @@ fn audit_toast_host_without_outer_max_dims_stays_compact() {
     );
     let _ = h.render_image();
 }
+
+#[test]
+fn audit_search_bar_text_vertically_centered_across_all_themes() {
+    fn find_first_focus_frame_and_text_area(
+        node: &LayoutNode,
+    ) -> Option<(
+        xilem_ui_preview::inspect::LayoutRect,
+        xilem_ui_preview::inspect::LayoutRect,
+    )> {
+        if node.type_name == "FocusFrame" {
+            fn find_text_area(n: &LayoutNode) -> Option<xilem_ui_preview::inspect::LayoutRect> {
+                if n.type_name == "TextArea" {
+                    return Some(n.rect);
+                }
+                n.children.iter().find_map(find_text_area)
+            }
+            if let Some(area_rect) = find_text_area(node) {
+                return Some((node.rect, area_rect));
+            }
+        }
+        node.children
+            .iter()
+            .find_map(find_first_focus_frame_and_text_area)
+    }
+
+    for &lang in &DesignLanguage::ALL {
+        let mut h = default_harness("inputs", lang);
+
+        for stage in ["placeholder", "typed"] {
+            if stage == "typed" {
+                h.run_steps(&[
+                    PreviewStep::FocusType {
+                        type_name: "TextArea".to_owned(),
+                        index: 0,
+                    },
+                    PreviewStep::TypeText("Search123".to_owned()),
+                ])
+                .unwrap();
+            }
+
+            let tree = dump_layout_tree(&mut h);
+            let (frame_rect, area_rect) = find_first_focus_frame_and_text_area(&tree)
+                .expect("search bar FocusFrame and TextArea present");
+            assert!(
+                area_rect.height < frame_rect.height,
+                "[{lang:?} {stage}] TextArea height ({}) must be strictly smaller than FocusFrame height ({})",
+                area_rect.height,
+                frame_rect.height
+            );
+            let frame_cy = frame_rect.y + frame_rect.height * 0.5;
+            let area_cy = area_rect.y + area_rect.height * 0.5;
+            assert!(
+                (area_cy - frame_cy).abs() <= 2.0,
+                "[{lang:?} {stage}] search TextArea center y ({area_cy:.2}) must match FocusFrame center y ({frame_cy:.2}) within 2px (frame={frame_rect:?}, area={area_rect:?})"
+            );
+            assert_healthy(&mut h, &format!("search_bar_center/{lang:?}/{stage}"));
+        }
+    }
+}

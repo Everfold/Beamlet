@@ -17,7 +17,7 @@ use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::components::divider::horizontal_divider;
 use crate::foundation::UiClassExt;
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
 /// Slot view factory stored in [`UiListItem`].
@@ -179,7 +179,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiListIte
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let flex = self.build_flex(&spec);
         let (pod, st) = flex.build(ctx, app_state);
         (pod, (flex, st))
@@ -193,7 +193,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiListIte
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_flex = self.build_flex(&spec);
         next_flex.rebuild(prev_flex, st, ctx, element, app_state);
         *prev_flex = next_flex;

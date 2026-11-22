@@ -13,7 +13,7 @@ use xilem::view::{CrossAxisAlignment, button, flex_row, label};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
-use crate::style_engine::{classes, current_spec};
+use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
 const CHIP_CHILD_VIEW_ID: ViewId = ViewId::new(0x5549_3710);
@@ -133,7 +133,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiChip<St
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let inner = self.build_inner(&spec);
         let (child_pod, child_state) =
             ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| inner.build(ctx, app_state));
@@ -150,7 +150,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiChip<St
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec(ctx);
+        let spec = current_spec_arc(ctx);
         let next_inner = self.build_inner(&spec);
         let mut child_dyn =
             widgets::SizedBox::child_mut(&mut element).expect("UiChip SizedBox always has child");

@@ -344,7 +344,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for RangeSlid
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec(ctx);
+        let spec = crate::style_engine::current_spec_arc(ctx);
         let p = &spec.palette;
         let pod = ctx.with_action_widget(|ctx| {
             let mut pod = ctx.create_pod(RangeSliderWidget::new(
