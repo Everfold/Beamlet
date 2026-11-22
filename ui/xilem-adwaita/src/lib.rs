@@ -3,15 +3,18 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 #![cfg_attr(target_pointer_width = "64", warn(clippy::trivially_copy_pass_by_ref))]
 
+pub mod breakpoint;
 pub mod clamp;
 pub mod components;
 pub mod palette;
 pub mod theme;
 
+pub use breakpoint::{AdwBreakpointBin, BreakpointBin, breakpoint_bin};
 pub use clamp::{AdwClamp, ClampView, clamp};
 pub use components::{
-    action_row, banner, clickable_action_row, combo_row, entry_row, expander_row, header_bar,
-    header_bar_with_title, preferences_group, status_page, switch_row, view_switcher,
+    AdwAlertDialog, action_row, alert_dialog, banner, clickable_action_row, combo_row, entry_row,
+    expander_row, header_bar, header_bar_with_title, preferences_group, status_page, switch_row,
+    view_switcher, view_switcher_bar,
 };
 pub use palette::{AdwaitaAccent, adwaita_palette};
 pub use theme::{AdwaitaTheme, adwaita_scope, adwaita_window};

@@ -1,9 +1,12 @@
 //! GNOME Libadwaita signature components: `header_bar`, `header_bar_with_title`, `preferences_group`, `action_row`, `clickable_action_row`, `switch_row`, `status_page`, `banner`.
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem::kurbo::Vec2;
 use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
+use xilem::masonry::layout::{AsUnit, Dim, UnitPoint};
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
@@ -11,14 +14,19 @@ use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
     text_input,
 };
-use xilem::{AnyWidgetView, WidgetView};
-use xilem_ui_core::components::button::{primary_button, subtle_button};
-use xilem_ui_core::components::divider::horizontal_divider;
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use xilem_ui_core::components::button::{
+    destructive_button, primary_button, secondary_button, subtle_button,
+};
+use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
 use xilem_ui_core::components::menu::select;
 use xilem_ui_core::components::selection::switch;
-use xilem_ui_core::foundation::{FocusFrame, UiClassExt, focus_frame, icons, ui_icon};
-use xilem_ui_core::style_engine::{classes, with_spec};
-use xilem_ui_core::tokens::{DesignSpec, TypeRole};
+use xilem_ui_core::foundation::{
+    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, focus_frame, icons,
+    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+};
+use xilem_ui_core::style_engine::{classes, current_spec_arc, with_spec};
+use xilem_ui_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 
 /// GNOME `AdwHeaderBar` (`46px` bar) hosting a custom center `title_view` alongside start and end action clusters.
 pub fn header_bar_with_title<State: 'static, Action: 'static, T>(
@@ -117,6 +125,7 @@ pub fn preferences_group<State: 'static, Action: 'static>(
 
     let boxed_list =
         sized_box(flex_col(children).cross_axis_alignment(CrossAxisAlignment::Stretch))
+            .padding(Padding::ZERO)
             .ui_class(classes::GROUPED_CARD);
 
     flex_col((header, boxed_list))
@@ -180,6 +189,7 @@ where
     let inner = if let Some(cb) = on_activate {
         button(row_content, move |s: &mut State| cb(s))
             .ui_class(classes::LIST_ITEM)
+            .corner_radius(0.px())
             .boxed()
     } else {
         row_content
@@ -202,7 +212,9 @@ where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
     let row_content = action_row_inner(title.into(), subtitle.map(Into::into), prefix_icon, suffix);
-    button(row_content, on_activate).ui_class(classes::LIST_ITEM)
+    button(row_content, on_activate)
+        .ui_class(classes::LIST_ITEM)
+        .corner_radius(0.px())
 }
 
 /// GNOME `AdwSwitchRow` pairing a title/subtitle directly with an interactive [`switch`].
@@ -471,4 +483,261 @@ where
     });
 
     focus_frame(inner)
+}
+
+/// GNOME `AdwViewSwitcherBar` compact bottom navigation bar displayed by responsive narrow shells.
+pub fn view_switcher_bar<State: 'static, Action: 'static, F>(
+    items: &[(&str, &'static str)],
+    selected: usize,
+    on_select: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+where
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    let owned: Vec<(ArcStr, &'static str)> = items
+        .iter()
+        .map(|(name, ic)| (ArcStr::from(*name), *ic))
+        .collect();
+    let cb = Arc::new(on_select);
+
+    let bar_items = with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let views: Vec<_> = owned
+            .iter()
+            .enumerate()
+            .map(|(idx, (name, icon_path))| {
+                let active = idx == selected;
+                let cb = cb.clone();
+                let fg = if active {
+                    p.text_primary
+                } else {
+                    p.text_secondary
+                };
+                let cls = if active {
+                    classes::SEG_BTN_SELECTED
+                } else {
+                    classes::SEG_BTN
+                };
+                let lbl = spec
+                    .typography
+                    .style_label(TypeRole::LabelSmall, label(name.clone()))
+                    .color(fg);
+                button(
+                    flex_col((ui_icon(icon_path, 16.0, fg), lbl))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(2.px()),
+                    move |s: &mut State| cb(s, idx),
+                )
+                .ui_class(cls)
+                .boxed()
+                .flex(1.0)
+            })
+            .collect();
+
+        sized_box(
+            flex_row(views)
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(4.px())
+                .padding(Padding::from_vh(4.px(), 8.px())),
+        )
+        .dims(Dimensions::height(56.px()))
+        .ui_class(classes::HEADER_BAR)
+    });
+
+    flex_col((horizontal_divider(), bar_items)).cross_axis_alignment(CrossAxisAlignment::Stretch)
+}
+
+/// Callback invoked by [`AdwAlertDialog`].
+pub type AlertDialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
+
+/// GNOME `AdwAlertDialog` modal featuring centered copy and full-width split footer responses.
+#[must_use = "View values do nothing unless provided to Xilem."]
+#[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
+pub struct AdwAlertDialog<State, Action> {
+    heading: ArcStr,
+    body: ArcStr,
+    confirm_text: ArcStr,
+    cancel_text: ArcStr,
+    destructive: bool,
+    width: f64,
+    on_confirm: AlertDialogCallback<State, Action>,
+    on_dismiss: AlertDialogCallback<State, Action>,
+    phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<State, Action> AdwAlertDialog<State, Action> {
+    /// Colors the primary response with Adwaita `.destructive-action` styling when `true`.
+    pub fn destructive(mut self, destructive: bool) -> Self {
+        self.destructive = destructive;
+        self
+    }
+
+    /// Overrides the modal dialog card width (defaults to `360px`).
+    pub fn width(mut self, width: f64) -> Self {
+        self.width = width;
+        self
+    }
+
+    fn build_content(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    where
+        State: 'static,
+        Action: 'static,
+    {
+        let p = &spec.palette;
+        let header = flex_col((
+            spec.typography
+                .style_label(TypeRole::HeadlineSmall, label(self.heading.clone()))
+                .color(p.text_primary),
+            spec.typography
+                .style_label(TypeRole::BodyMedium, label(self.body.clone()))
+                .color(p.text_secondary),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(8.px())
+        .padding(Padding::all(22.px()));
+
+        let on_dismiss = self.on_dismiss.clone();
+        let cancel_btn =
+            secondary_button(self.cancel_text.clone(), move |s: &mut State| on_dismiss(s))
+                .corner_radius(0.px())
+                .flex(1.0);
+
+        let on_confirm = self.on_confirm.clone();
+        let confirm_btn: Box<AnyWidgetView<State, Action>> = if self.destructive {
+            destructive_button(self.confirm_text.clone(), move |s: &mut State| {
+                on_confirm(s)
+            })
+            .corner_radius(0.px())
+            .boxed()
+        } else {
+            primary_button(self.confirm_text.clone(), move |s: &mut State| {
+                on_confirm(s)
+            })
+            .corner_radius(0.px())
+            .boxed()
+        };
+
+        let responses = flex_row((cancel_btn, vertical_divider(), confirm_btn.flex(1.0)))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+        flex_col((header, horizontal_divider(), responses))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .boxed()
+    }
+}
+
+impl<State: 'static, Action: 'static> ViewMarker for AdwAlertDialog<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
+    for AdwAlertDialog<State, Action>
+{
+    type Element = Pod<EscapeCatcher>;
+    type ViewState = (
+        Box<AnyWidgetView<State, Action>>,
+        ModalShellState<
+            State,
+            Action,
+            <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
+        >,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec_arc(ctx);
+        let content = self.build_content(&spec);
+        let cfg = ModalShellConfig {
+            class: classes::DIALOG_SURFACE,
+            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            padding: Padding::ZERO,
+            alignment: UnitPoint::CENTER,
+            enter_offset: Vec2::new(0.0, 16.0),
+            duration: MotionDuration::Medium2,
+            dismiss_on_scrim: true,
+        };
+        let (el, shell) = modal_shell_build(ctx, app_state, cfg, &content, self.on_dismiss.clone());
+        (el, (content, shell))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_content, shell): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec_arc(ctx);
+        let next_content = self.build_content(&spec);
+        let cfg = ModalShellConfig {
+            class: classes::DIALOG_SURFACE,
+            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            padding: Padding::ZERO,
+            alignment: UnitPoint::CENTER,
+            enter_offset: Vec2::new(0.0, 16.0),
+            duration: MotionDuration::Medium2,
+            dismiss_on_scrim: true,
+        };
+        modal_shell_rebuild(
+            shell,
+            ctx,
+            element,
+            app_state,
+            cfg,
+            prev_content,
+            &next_content,
+            self.on_dismiss.clone(),
+        );
+        *prev_content = next_content;
+    }
+
+    fn teardown(
+        &self,
+        (content, shell): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        modal_shell_teardown(shell, ctx, element, content);
+    }
+
+    fn message(
+        &self,
+        (content, shell): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        modal_shell_message(
+            shell,
+            message,
+            element,
+            app_state,
+            content,
+            &self.on_dismiss,
+        )
+    }
+}
+
+/// Creates a GNOME `AdwAlertDialog` with centered heading/body and split equal-width response buttons.
+pub fn alert_dialog<State: 'static, Action: 'static, F1, F2>(
+    heading: impl Into<ArcStr>,
+    body: impl Into<ArcStr>,
+    cancel_text: impl Into<ArcStr>,
+    confirm_text: impl Into<ArcStr>,
+    on_confirm: F1,
+    on_dismiss: F2,
+) -> AdwAlertDialog<State, Action>
+where
+    F1: Fn(&mut State) -> Action + Send + Sync + 'static,
+    F2: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    AdwAlertDialog {
+        heading: heading.into(),
+        body: body.into(),
+        confirm_text: confirm_text.into(),
+        cancel_text: cancel_text.into(),
+        destructive: false,
+        width: 360.0,
+        on_confirm: Arc::new(on_confirm),
+        on_dismiss: Arc::new(on_dismiss),
+        phantom: PhantomData,
+    }
 }

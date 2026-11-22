@@ -34,7 +34,9 @@ pub use xilem_hig::{
 
 #[cfg(feature = "adwaita")]
 pub use xilem_adwaita::{
-    AdwClamp, AdwaitaAccent, AdwaitaTheme, ClampView, action_row, adwaita_scope, adwaita_window,
-    banner, clamp, clickable_action_row, combo_row, entry_row, expander_row, header_bar,
+    AdwAlertDialog, AdwBreakpointBin, AdwClamp, AdwaitaAccent, AdwaitaTheme, BreakpointBin,
+    ClampView, action_row, adwaita_scope, adwaita_window, alert_dialog, banner, breakpoint_bin,
+    clamp, clickable_action_row, combo_row, entry_row, expander_row, header_bar,
     header_bar_with_title, preferences_group, status_page, switch_row, view_switcher,
+    view_switcher_bar,
 };

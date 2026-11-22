@@ -1093,3 +1093,185 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
         );
     }
 }
+
+#[test]
+fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
+    use xilem::WidgetView;
+    use xilem::masonry::layout::{AsUnit, UnitPoint};
+    use xilem::style::Style as _;
+    use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, zstack};
+    use xilem_ui::prelude::{
+        alert_dialog, breakpoint_bin, clickable_action_row, header_bar_with_title, icons,
+        preferences_group, primary_button, switch_row, view_switcher, view_switcher_bar,
+    };
+
+    #[derive(Clone)]
+    struct AdwResponsiveState {
+        theme: UiTheme,
+        tab: usize,
+        toggle: bool,
+        show_alert: bool,
+        confirmed: u32,
+        row_clicks: u32,
+    }
+
+    let make_harness = |width: u32| {
+        let cfg = PreviewConfig {
+            width,
+            height: 800,
+            ..PreviewConfig::default()
+        };
+        PreviewHarness::new(
+            AdwResponsiveState {
+                theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+                tab: 0,
+                toggle: false,
+                show_alert: false,
+                confirmed: 0,
+                row_clicks: 0,
+            },
+            |s| s.theme.clone(),
+            |s| {
+                let toggle = s.toggle;
+                let make_body = || {
+                    let list = preferences_group(
+                        Some("Prefs"),
+                        None,
+                        vec![
+                            switch_row(
+                                "Opt A",
+                                None::<&str>,
+                                toggle,
+                                |st: &mut AdwResponsiveState, v| {
+                                    st.toggle = v;
+                                },
+                            )
+                            .boxed(),
+                            clickable_action_row(
+                                "Run Row",
+                                None::<&str>,
+                                Some(icons::CHECK_CIRCLE),
+                                None::<xilem_ui::prelude::UiButton<AdwResponsiveState, ()>>,
+                                |st: &mut AdwResponsiveState| st.row_clicks += 1,
+                            )
+                            .boxed(),
+                        ],
+                    );
+                    flex_col((
+                        list,
+                        primary_button("Open Alert", |st: &mut AdwResponsiveState| {
+                            st.show_alert = true;
+                        }),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(12.px())
+                };
+
+                let wide = flex_col((
+                    header_bar_with_title(
+                        view_switcher(
+                            &[("WidePrefs", icons::TUNE), ("WideStatus", icons::EXPLORE)],
+                            s.tab,
+                            |st: &mut AdwResponsiveState, idx| st.tab = idx,
+                        ),
+                        vec![],
+                        vec![],
+                    ),
+                    make_body().flex(1.0),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+                let narrow = flex_col((
+                    make_body().flex(1.0),
+                    view_switcher_bar(
+                        &[
+                            ("NarrowPrefs", icons::TUNE),
+                            ("NarrowStatus", icons::EXPLORE),
+                        ],
+                        s.tab,
+                        |st: &mut AdwResponsiveState, idx| st.tab = idx,
+                    ),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+                let bin = breakpoint_bin(600.0, wide, narrow);
+                let dlg = s.show_alert.then(|| {
+                    alert_dialog(
+                        "Confirm Reset?",
+                        "This resets Adwaita preferences.",
+                        "Cancel",
+                        "Reset",
+                        |st: &mut AdwResponsiveState| {
+                            st.confirmed += 1;
+                            st.show_alert = false;
+                        },
+                        |st: &mut AdwResponsiveState| st.show_alert = false,
+                    )
+                    .destructive(true)
+                });
+                zstack((
+                    bin.alignment(UnitPoint::TOP_LEFT),
+                    dlg.map(|d| d.alignment(UnitPoint::CENTER)),
+                ))
+                .boxed()
+            },
+            cfg,
+        )
+    };
+
+    // 1. Wide layout (>= 600px): header ViewSwitcher visible, bottom ViewSwitcherBar stashed.
+    let mut wide_h = make_harness(1180);
+    wide_h
+        .run_step(&PreviewStep::ClickLabel("WideStatus".to_owned()))
+        .unwrap();
+    assert_eq!(wide_h.state().tab, 1);
+    assert!(
+        wide_h
+            .run_step(&PreviewStep::ClickLabel("NarrowPrefs".to_owned()))
+            .is_err(),
+        "narrow ViewSwitcherBar must be stashed when width >= 600px"
+    );
+
+    // 2. Narrow layout (< 600px): ViewSwitcherBar visible & interactive, alert_dialog opens and confirms.
+    let mut narrow_h = make_harness(480);
+    narrow_h
+        .run_step(&PreviewStep::ClickLabel("NarrowStatus".to_owned()))
+        .unwrap();
+    assert_eq!(narrow_h.state().tab, 1);
+    narrow_h
+        .run_step(&PreviewStep::ClickLabel("Run Row".to_owned()))
+        .unwrap();
+    assert_eq!(narrow_h.state().row_clicks, 1);
+
+    narrow_h
+        .run_step(&PreviewStep::ClickLabel("Open Alert".to_owned()))
+        .unwrap();
+    assert!(narrow_h.state().show_alert);
+    narrow_h.settle_animations();
+    let tree = dump_layout_tree(&mut narrow_h);
+    let issues = lint_layout(&tree, narrow_h.viewport());
+    let errors: Vec<_> = issues
+        .iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "narrow Adwaita alert errors: {errors:#?}"
+    );
+    narrow_h
+        .run_step(&PreviewStep::ClickLabel("Reset".to_owned()))
+        .unwrap();
+    assert!(!narrow_h.state().show_alert);
+    assert_eq!(narrow_h.state().confirmed, 1);
+
+    // Also render wide Adwaita tree to verify 0 errors.
+    let wide_tree = dump_layout_tree(&mut wide_h);
+    let wide_errors: Vec<_> = lint_layout(&wide_tree, wide_h.viewport())
+        .into_iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(
+        wide_errors.is_empty(),
+        "wide Adwaita errors: {wide_errors:#?}"
+    );
+}

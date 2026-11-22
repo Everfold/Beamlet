@@ -11,10 +11,10 @@ use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, portal, sized_box, zstack};
 use xilem::{AppState, EventLoop, WidgetView, Xilem};
 use xilem_adwaita::{
-    AdwaitaAccent, AdwaitaTheme, Brightness, action_row, adwaita_window, banner, basic_dialog,
-    clamp, clickable_action_row, combo_row, destructive_button, entry_row, expander_row,
-    header_bar_with_title, icon_button, icons, preferences_group, status_page, switch_row,
-    view_switcher,
+    AdwaitaAccent, AdwaitaTheme, Brightness, action_row, adwaita_window, alert_dialog, banner,
+    breakpoint_bin, clamp, clickable_action_row, combo_row, destructive_button, entry_row,
+    expander_row, header_bar, header_bar_with_title, icon_button, icons, preferences_group,
+    status_page, switch_row, view_switcher, view_switcher_bar,
 };
 
 struct PrefsApp {
@@ -70,7 +70,7 @@ impl PrefsApp {
 }
 
 fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
-    let hdr = header_bar_with_title(
+    let wide_hdr = header_bar_with_title(
         view_switcher(
             &[("首选项", icons::TUNE), ("运行状态", icons::EXPLORE)],
             state.active_view,
@@ -95,14 +95,40 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
         ],
     );
 
-    let top_banner = state.banner_open.then(|| {
-        banner(
-            "AdwClamp 会自动将 boxed-list 表单可读宽度约束在 640px 以内。",
-            Some("切换到状态页"),
-            Some(Arc::new(|s: &mut PrefsApp| s.active_view = 1)),
-            Some(Arc::new(|s: &mut PrefsApp| s.banner_open = false)),
-        )
-    });
+    let narrow_hdr = header_bar(
+        "Libadwaita 首选项",
+        None::<&str>,
+        vec![
+            icon_button(icons::PALETTE, |s: &mut PrefsApp| {
+                s.accent = match s.accent {
+                    AdwaitaAccent::Blue => AdwaitaAccent::Teal,
+                    AdwaitaAccent::Teal => AdwaitaAccent::Green,
+                    AdwaitaAccent::Green => AdwaitaAccent::Purple,
+                    _ => AdwaitaAccent::Blue,
+                };
+            })
+            .boxed(),
+        ],
+        vec![
+            icon_button(icons::DARK_MODE, |s: &mut PrefsApp| {
+                s.brightness = s.brightness.toggled();
+            })
+            .boxed(),
+        ],
+    );
+
+    let make_banner = || {
+        state.banner_open.then(|| {
+            banner(
+                "AdwClamp 会自动将 boxed-list 表单可读宽度约束在 640px 以内。",
+                Some("切换到状态页"),
+                Some(Arc::new(|s: &mut PrefsApp| s.active_view = 1)),
+                Some(Arc::new(|s: &mut PrefsApp| s.banner_open = false)),
+            )
+        })
+    };
+    let top_banner_wide = make_banner();
+    let top_banner_narrow = make_banner();
 
     let page = if state.active_view == 0 {
         clamp(
@@ -206,15 +232,93 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
         .boxed()
     };
 
-    let body = portal(sized_box(page).padding(Padding::all(24.px()))).constrain_horizontal(true);
+    let page_narrow = if state.active_view == 0 {
+        clamp(
+            640.0,
+            flex_col((
+                preferences_group(
+                    Some("应用标识与渲染"),
+                    Some("在 boxed-list 卡片内组合 AdwEntryRow、AdwComboRow 与 AdwSwitchRow。"),
+                    vec![
+                        entry_row(
+                            "工作区显示名称",
+                            state.app_title.clone(),
+                            |s: &mut PrefsApp, txt| s.app_title = txt,
+                        )
+                        .boxed(),
+                        switch_row(
+                            "Alpha 透明叠加反馈",
+                            Some("使用 Adwaita 7% 悬停 / 14% 按下的扁平透明态遮罩"),
+                            state.flat_overlays,
+                            |s: &mut PrefsApp, v| s.flat_overlays = v,
+                        )
+                        .boxed(),
+                    ],
+                ),
+                preferences_group(
+                    Some("危险操作区"),
+                    None,
+                    vec![
+                        action_row(
+                            "恢复默认配置",
+                            Some("演示 AdwAlertDialog 居中弹框与等宽分栏按钮"),
+                            Some(icons::WARNING),
+                            Some(destructive_button("重置应用", |s: &mut PrefsApp| {
+                                s.show_wipe_dialog = true;
+                            })),
+                            None,
+                        )
+                        .boxed(),
+                    ],
+                ),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(16.px()),
+        )
+        .boxed()
+    } else {
+        clamp(
+            640.0,
+            status_page(
+                icons::CHECK_CIRCLE,
+                "所有系统运行正常",
+                "由 xilem-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
+                Some(("返回首选项", Arc::new(|s: &mut PrefsApp| s.active_view = 0))),
+            ),
+        )
+        .boxed()
+    };
 
-    let main_col = flex_col((hdr, top_banner, body.flex(1.0)))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch);
+    let wide_shell = flex_col((
+        wide_hdr,
+        top_banner_wide,
+        portal(sized_box(page).padding(Padding::all(24.px())))
+            .constrain_horizontal(true)
+            .flex(1.0),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+    let narrow_shell = flex_col((
+        narrow_hdr,
+        top_banner_narrow,
+        portal(sized_box(page_narrow).padding(Padding::all(16.px())))
+            .constrain_horizontal(true)
+            .flex(1.0),
+        view_switcher_bar(
+            &[("首选项", icons::TUNE), ("运行状态", icons::EXPLORE)],
+            state.active_view,
+            |s: &mut PrefsApp, idx| s.active_view = idx,
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
+    let main_col = breakpoint_bin(600.0, wide_shell, narrow_shell);
 
     let wipe_modal = state.show_wipe_dialog.then(|| {
-        basic_dialog(
+        alert_dialog(
             "重置 Adwaita 首选项？",
             "将恢复工作区显示名称及默认的 GNOME 经典蓝强调色。",
+            "取消",
             "全部重置",
             |s: &mut PrefsApp| {
                 s.app_title = "Beamlet Adwaita Studio".into();
@@ -224,9 +328,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
             },
             |s: &mut PrefsApp| s.show_wipe_dialog = false,
         )
-        .icon(icons::DELETE)
         .destructive(true)
-        .dismiss_text("取消")
     });
 
     zstack((
