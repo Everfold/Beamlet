@@ -17,7 +17,7 @@ use xilem::masonry::properties::Dimensions;
 use xilem::masonry::widgets::Passthrough;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, flex_col, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, ViewCtx, WidgetView};
+use xilem::{AnyWidgetView, Color, ViewCtx, WidgetView};
 use xilem_ui::core::foundation::overlay::HoverTooltipHost;
 use xilem_ui::prelude::*;
 
@@ -528,8 +528,17 @@ fn all_four_platform_signature_suites_build_and_render() {
         MatrixState::default(),
         |s| s.theme.clone(),
         |s| {
+            let nav_dests = [
+                NavDestination::new("Home", icons::HOME),
+                NavDestination::new("Settings", icons::SETTINGS),
+            ];
             flex_col((
-                xilem_ui::md3::center_aligned_top_app_bar("MD3 Signature"),
+                xilem_ui::md3::top_app_bar_slots(
+                    TopAppBarVariant::CenterAligned,
+                    "MD3 Signature",
+                    None,
+                    vec![],
+                ),
                 flex_row((
                     xilem_ui::md3::fab(icons::ADD, FabColor::Primary, |st: &mut MatrixState| {
                         st.clicks += 1;
@@ -542,6 +551,13 @@ fn all_four_platform_signature_suites_build_and_render() {
                     ),
                 ))
                 .gap(8.px()),
+                xilem_ui::fluent::navigation_view(
+                    Some("WinUI"),
+                    &nav_dests[..1],
+                    &nav_dests[1..],
+                    0,
+                    |st: &mut MatrixState, _| st.clicks += 1,
+                ),
                 xilem_ui::fluent::info_bar(
                     InfoBarSeverity::Informational,
                     "Fluent InfoBar",
@@ -554,7 +570,11 @@ fn all_four_platform_signature_suites_build_and_render() {
                     Some("Subtext"),
                     switch(s.switch_on, |st: &mut MatrixState, v| st.switch_on = v),
                 ),
-                xilem_ui::hig::macos_toolbar("HIG Toolbar", vec![], vec![]),
+                xilem_ui::hig::macos_toolbar_with_center(
+                    vec![],
+                    search_bar(s.text.clone(), |st: &mut MatrixState, v| st.text = v),
+                    vec![],
+                ),
                 xilem_ui::hig::form_group(
                     Some("HIG FORM"),
                     vec![
@@ -566,7 +586,7 @@ fn all_four_platform_signature_suites_build_and_render() {
                     ],
                     None,
                 ),
-                xilem_ui::adwaita::header_bar("Adwaita Header", None::<&str>, vec![], vec![]),
+                xilem_ui::adwaita::header_bar_with_title(label("Adwaita Header"), vec![], vec![]),
                 xilem_ui::adwaita::banner("Adwaita Banner", Some("OK"), None, None),
                 xilem_ui::adwaita::preferences_group(
                     Some("GNOME Prefs"),
@@ -579,6 +599,14 @@ fn all_four_platform_signature_suites_build_and_render() {
                             |st: &mut MatrixState, v| st.switch_on = v,
                         )
                         .boxed(),
+                        xilem_ui::adwaita::clickable_action_row(
+                            "Sync",
+                            None::<&str>,
+                            Some(icons::SETTINGS),
+                            None::<xilem_ui::components::button::UiButton<MatrixState, ()>>,
+                            |st: &mut MatrixState| st.clicks += 1,
+                        )
+                        .boxed(),
                     ],
                 ),
             ))
@@ -586,11 +614,191 @@ fn all_four_platform_signature_suites_build_and_render() {
             .gap(8.px())
             .boxed()
         },
-        (720, 760),
+        (720, 920),
     );
 
     let pixels = app.render_bytes();
     let (chunks, _) = pixels.as_chunks::<4>();
     let first = chunks[0];
     assert!(chunks.iter().any(|&px| px != first));
+}
+
+#[test]
+fn focus_frame_reacts_to_real_focus_changes() {
+    for lang in [
+        DesignLanguage::Fluent,
+        DesignLanguage::Hig,
+        DesignLanguage::Md3,
+    ] {
+        let st = MatrixState {
+            theme: UiTheme::new(lang, Brightness::Light),
+            ..Default::default()
+        };
+        let mut app = XilemHarness::new(
+            st,
+            |s| s.theme.clone(),
+            |s| {
+                text_field(s.text.clone(), |st: &mut MatrixState, v| st.text = v)
+                    .label("Input")
+                    .boxed()
+            },
+            (360, 140),
+        );
+        let before = app.render_bytes();
+
+        let root = app.harness.render_root().get_layer_root(0);
+        assert!(
+            find_first_widget_id_by_type_name(&root, "FocusFrame").is_some(),
+            "TextField must expose FocusFrame in {lang:?}"
+        );
+        let area_id =
+            find_first_widget_id_by_type_name(&root, "TextArea").expect("TextArea child exists");
+        app.harness.focus_on(Some(area_id));
+
+        let after = app.render_bytes();
+        assert_ne!(
+            before, after,
+            "FocusFrame must visibly update rendered pixels when focused for {lang:?}"
+        );
+    }
+}
+
+#[test]
+fn dialog_action_order_follows_platform_convention() {
+    fn button_x_positions(lang: DesignLanguage) -> (f64, f64) {
+        let initial = MatrixState {
+            theme: UiTheme::new(lang, Brightness::Light),
+            ..Default::default()
+        };
+        let mut app = XilemHarness::new(
+            initial,
+            |s| s.theme.clone(),
+            |_| {
+                basic_dialog(
+                    "Apply Changes",
+                    "Confirm action order.",
+                    "Confirm",
+                    |_: &mut MatrixState| {},
+                    |_: &mut MatrixState| {},
+                )
+                .dismiss_text("Cancel")
+                .boxed()
+            },
+            (500, 320),
+        );
+        let _ = app.render_bytes();
+
+        let root = app.harness.render_root().get_layer_root(0);
+        let confirm_id = find_button_with_label(&root, "Confirm").expect("Confirm button");
+        let cancel_id = find_button_with_label(&root, "Cancel").expect("Cancel button");
+
+        let confirm_x = (app
+            .harness
+            .get_widget_with_id(confirm_id)
+            .ctx()
+            .window_transform()
+            * Point::ORIGIN)
+            .x;
+        let cancel_x = (app
+            .harness
+            .get_widget_with_id(cancel_id)
+            .ctx()
+            .window_transform()
+            * Point::ORIGIN)
+            .x;
+        (confirm_x, cancel_x)
+    }
+
+    let (fluent_confirm_x, fluent_cancel_x) = button_x_positions(DesignLanguage::Fluent);
+    assert!(
+        fluent_confirm_x < fluent_cancel_x,
+        "Fluent must place primary Confirm ({fluent_confirm_x}) left of Cancel ({fluent_cancel_x})"
+    );
+
+    let (hig_confirm_x, hig_cancel_x) = button_x_positions(DesignLanguage::Hig);
+    assert!(
+        hig_cancel_x < hig_confirm_x,
+        "macOS HIG must place Cancel ({hig_cancel_x}) left of Confirm ({hig_confirm_x})"
+    );
+}
+
+#[test]
+fn style_overrides_apply_directly_to_concrete_components() {
+    let mut app = XilemHarness::new(
+        MatrixState::default(),
+        |s| s.theme.clone(),
+        |_| {
+            flex_col((
+                primary_button("WideBtn", |st: &mut MatrixState| st.clicks += 1)
+                    .width(240.px())
+                    .corner_radius(2.px())
+                    .background_color(Color::from_rgb8(0xE0, 0x20, 0x20)),
+                button_view(
+                    ButtonVariant::Secondary,
+                    label("CustomSlot"),
+                    |st: &mut MatrixState| st.clicks += 1,
+                )
+                .width(190.px()),
+                elevated_card(label("CardSlot")).width(300.px()),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(8.px())
+            .boxed()
+        },
+        (420, 260),
+    );
+    let _ = app.render_bytes();
+
+    // Verify Flex children are concrete Button, Button, SizedBox with zero Passthrough walls.
+    fn collect_flex_child_types(
+        node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    ) -> Option<Vec<&'static str>> {
+        if node.inner().short_type_name() == "Flex" {
+            let names: Vec<&'static str> = node
+                .children()
+                .iter()
+                .map(|c| c.inner().short_type_name())
+                .collect();
+            if names.len() == 3 {
+                return Some(names);
+            }
+        }
+        for c in node.children() {
+            if let Some(found) = collect_flex_child_types(&c) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    let (wide_id, custom_id, child_types) = {
+        let root = app.harness.render_root().get_layer_root(0);
+        let wide_id = find_button_with_label(&root, "WideBtn").expect("WideBtn found");
+        let custom_id = find_button_with_label(&root, "CustomSlot").expect("CustomSlot found");
+        let child_types =
+            collect_flex_child_types(&root).expect("inner Flex with 3 concrete children");
+        (wide_id, custom_id, child_types)
+    };
+
+    let wide_w = app
+        .harness
+        .get_widget_with_id(wide_id)
+        .ctx()
+        .border_box()
+        .width();
+    let custom_w = app
+        .harness
+        .get_widget_with_id(custom_id)
+        .ctx()
+        .border_box()
+        .width();
+    assert!(
+        (wide_w - 240.0).abs() < 0.5,
+        "expected direct .width(240.px()) override on Button, got {wide_w}"
+    );
+    assert!(
+        (custom_w - 190.0).abs() < 0.5,
+        "expected direct .width(190.px()) override on button_view Button, got {custom_w}"
+    );
+    assert_eq!(child_types, vec!["Button", "Button", "SizedBox"]);
 }

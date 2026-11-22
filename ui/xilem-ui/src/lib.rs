@@ -9,14 +9,17 @@ pub mod theme;
 pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window};
 pub use xilem_ui_core as core;
 pub use xilem_ui_core::components;
-pub use xilem_ui_core::foundation::{UiClassExt, icons, ui_icon, ui_transition};
+pub use xilem_ui_core::foundation::{
+    EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost, UiClassExt, focus_frame, icons,
+    ui_icon, ui_transition,
+};
 pub use xilem_ui_core::style_engine::{
     build_default_properties, cached_default_properties, classes, current_spec, with_spec,
 };
 pub use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, ElevationLevel, InputFocusStyle, MotionDuration,
-    MotionEasing, NavIndicatorStyle, SemanticPalette, StateFeedbackMode, TabIndicatorStyle,
-    TypeRole, TypeScale, WindowSizeClass,
+    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel, InputFocusStyle,
+    MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette, ShortcutConvention,
+    StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowSizeClass,
 };
 
 #[cfg(feature = "md3")]
