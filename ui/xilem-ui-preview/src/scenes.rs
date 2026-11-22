@@ -224,6 +224,10 @@ fn render_overview_page(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>
                 elevated_button("Elevated", |s: &mut SceneState| s.click_count += 1),
                 outlined_button("Outlined", |s: &mut SceneState| s.click_count += 1),
                 subtle_button("Subtle", |s: &mut SceneState| s.click_count += 1),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(8.px()),
+            flex_row((
                 destructive_button("Delete", |s: &mut SceneState| {
                     s.show_destructive_dialog = true;
                 })
@@ -318,10 +322,12 @@ fn render_overview_page(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>
                     s.chip_flags[0] = !s.chip_flags[0];
                 }),
                 suggestion_chip("Suggestion", |s: &mut SceneState| s.click_count += 1),
-                flex_row(tag_chips).gap(6.px()),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px()),
+            flex_row(tag_chips)
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(10.px()),
@@ -894,7 +900,12 @@ fn workspace_body(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(16.px()),
         )
-        .padding(Padding::all(18.px())),
+        .padding(Padding {
+            left: 18.px(),
+            top: 18.px(),
+            right: 24.px(),
+            bottom: 18.px(),
+        }),
     )
     .constrain_horizontal(true)
     .boxed()
@@ -951,6 +962,7 @@ fn render_workspace_scene(state: &mut SceneState) -> Box<AnyWidgetView<SceneStat
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(10.px())
+            .dims(Dimensions::MAX)
             .boxed();
             wrap_overlays(
                 state,
@@ -1153,7 +1165,8 @@ pub fn build_scene_harness(
     ))
 }
 
-/// Renders `scene_id` under `theme`, replays `steps`, rasterizes pixels, dumps geometry, and runs layout + contrast lints.
+/// Renders `scene_id` under `theme`, replays `steps`, settles mount transitions (unless an explicit
+/// `AnimateMs` step was passed), rasterizes pixels, dumps geometry, and runs layout + contrast lints.
 pub fn run_scene_preview(
     scene_id: &str,
     theme: UiTheme,
@@ -1162,6 +1175,9 @@ pub fn run_scene_preview(
 ) -> anyhow::Result<SceneOutput> {
     let mut harness = build_scene_harness(scene_id, theme, config)?;
     harness.run_steps(steps)?;
+    if !steps.iter().any(|s| matches!(s, PreviewStep::AnimateMs(_))) {
+        harness.settle_animations();
+    }
     let image = harness.render_image();
     let tree = dump_layout_tree(&mut harness);
     let layout_issues = lint_layout(&tree, harness.viewport());

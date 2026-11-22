@@ -382,6 +382,13 @@ impl<State: 'static> PreviewHarness<State> {
         Ok(())
     }
 
+    /// Advances Masonry animation timers by 500ms so mount transitions settle to full opacity.
+    pub fn settle_animations(&mut self) {
+        let _ = self.harness.redraw();
+        self.harness.animate_ms(500);
+        self.pump_actions();
+    }
+
     /// Rasterizes the current widget tree on CPU using `vello_cpu`.
     pub fn render_image(&mut self) -> RgbaImage {
         self.harness.render()

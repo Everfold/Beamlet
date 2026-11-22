@@ -5,7 +5,6 @@ use std::fmt::Write as _;
 
 use serde::Serialize;
 use xilem::Color;
-use xilem::kurbo::Point;
 use xilem::masonry::core::{Widget, WidgetId, WidgetRef};
 use xilem_ui::prelude::DesignSpec;
 
@@ -94,7 +93,7 @@ fn snapshot_node(
 
     let ctx = node.ctx();
     let box_rect = ctx.border_box();
-    let origin = ctx.window_transform() * Point::ORIGIN;
+    let origin = ctx.window_transform() * box_rect.origin();
     let text = node.inner().get_debug_text().filter(|s| !s.is_empty());
 
     let children = node
@@ -204,7 +203,13 @@ fn is_visible_leaf_type(type_name: &str) -> bool {
 fn allows_child_overflow(type_name: &str) -> bool {
     matches!(
         type_name,
-        "Portal" | "ZStack" | "EscapeCatcher" | "Passthrough" | "FocusFrame" | "ScrollBar"
+        "Portal"
+            | "ZStack"
+            | "EscapeCatcher"
+            | "Passthrough"
+            | "FocusFrame"
+            | "ScrollBar"
+            | "Badged"
     )
 }
 

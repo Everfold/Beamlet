@@ -62,6 +62,10 @@ struct Cli {
     #[arg(long)]
     fail_on_lint: bool,
 
+    /// Skip settling entrance animations (e.g. SlideTransition) before capturing the frame.
+    #[arg(long)]
+    no_settle: bool,
+
     /// Output directory for preview artifacts.
     #[arg(long, default_value = "target/previews")]
     out: PathBuf,
@@ -188,7 +192,24 @@ fn main() -> anyhow::Result<()> {
                 let base_name = format!("{scene_id}_{lang_slug}_{bright_slug}{hc_suffix}");
 
                 let t0 = Instant::now();
-                let output = run_scene_preview(scene_id, theme, config, &steps)?;
+                let output = if cli.no_settle {
+                    let mut h =
+                        xilem_ui_preview::scenes::build_scene_harness(scene_id, theme, config)?;
+                    h.run_steps(&steps)?;
+                    let image = h.render_image();
+                    let tree = xilem_ui_preview::inspect::dump_layout_tree(&mut h);
+                    let layout_issues = xilem_ui_preview::inspect::lint_layout(&tree, h.viewport());
+                    let contrast_issues =
+                        xilem_ui_preview::inspect::lint_spec_contrast(h.current_spec());
+                    xilem_ui_preview::scenes::SceneOutput {
+                        image,
+                        tree,
+                        layout_issues,
+                        contrast_issues,
+                    }
+                } else {
+                    run_scene_preview(scene_id, theme, config, &steps)?
+                };
                 let elapsed_ms = t0.elapsed().as_millis();
 
                 let png_path = cli.out.join(format!("{base_name}.png"));

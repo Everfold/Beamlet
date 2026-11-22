@@ -5757,9 +5757,11 @@ name = "xilem-ui-preview"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "image",
  "masonry_testing",
  "serde",
+ "serde_json",
  "tokio",
  "xilem",
  "xilem-ui",
