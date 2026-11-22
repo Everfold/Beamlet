@@ -74,7 +74,9 @@ fn active_page_body(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
         GalleryTab::Overview => pages::overview_page(state).boxed(),
         GalleryTab::Inputs => pages::inputs_page(state).boxed(),
         GalleryTab::Overlays => pages::overlays_page(state).boxed(),
+        GalleryTab::Tokens => pages::tokens_page(state).boxed(),
         GalleryTab::PlatformNative => pages::platform_native_page(state).boxed(),
+        GalleryTab::Workspace => pages::workspace_demo_page(state).boxed(),
     };
     portal(sized_box(page).padding(Padding::all(20.px()))).constrain_horizontal(true)
 }
@@ -99,6 +101,46 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         .dismiss_text("Cancel")
     });
 
+    let destructive_overlay = state.show_destructive_dialog.then(|| {
+        basic_dialog(
+            "Remove workspace target?",
+            "Removes the currently selected target from the showcase list.",
+            "Remove",
+            |s: &mut GalleryState| {
+                if !s.workspace_items.is_empty() {
+                    let idx = s
+                        .selected_workspace_idx
+                        .min(s.workspace_items.len().saturating_sub(1));
+                    s.workspace_items.remove(idx);
+                    s.selected_workspace_idx = 0;
+                }
+                s.show_destructive_dialog = false;
+            },
+            |s: &mut GalleryState| s.show_destructive_dialog = false,
+        )
+        .icon(icons::DELETE)
+        .destructive(true)
+        .dismiss_text("Cancel")
+    });
+
+    let date_overlay = state.show_date_dialog.then(|| {
+        date_picker_dialog(
+            state.selected_date,
+            |s: &mut GalleryState, d| s.selected_date = d,
+            |s: &mut GalleryState| s.show_date_dialog = false,
+            |s: &mut GalleryState| s.show_date_dialog = false,
+        )
+    });
+
+    let time_overlay = state.show_time_dialog.then(|| {
+        time_picker_dialog(
+            state.selected_time,
+            |s: &mut GalleryState, t| s.selected_time = t,
+            |s: &mut GalleryState| s.show_time_dialog = false,
+            |s: &mut GalleryState| s.show_time_dialog = false,
+        )
+    });
+
     let sheet_overlay = state.show_bottom_sheet.then(|| {
         bottom_sheet(
             flex_col((
@@ -112,6 +154,27 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             .gap(12.px()),
             |s: &mut GalleryState| s.show_bottom_sheet = false,
         )
+    });
+
+    let side_sheet_overlay = state.show_side_sheet.then(|| {
+        let selected_title = state
+            .workspace_items
+            .get(state.selected_workspace_idx)
+            .map_or("No item selected", |(t, _, _)| *t);
+        side_sheet(
+            flex_col((
+                headline_small("Target Side Sheet"),
+                title_medium(selected_title),
+                body_medium("Trailing inspector drawer backed by modal_shell + EscapeCatcher."),
+                primary_button("Close Drawer", |s: &mut GalleryState| {
+                    s.show_side_sheet = false;
+                }),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(12.px()),
+            |s: &mut GalleryState| s.show_side_sheet = false,
+        )
+        .extent(340.0)
     });
 
     let fab_layer = floating_action.map(|f| {
@@ -130,22 +193,35 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         fab_layer,
         toast_layer,
         sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
+        side_sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
+        date_overlay.map(|d| d.alignment(UnitPoint::CENTER)),
+        time_overlay.map(|t| t.alignment(UnitPoint::CENTER)),
         dialog_overlay.map(|d| d.alignment(UnitPoint::CENTER)),
+        destructive_overlay.map(|d| d.alignment(UnitPoint::CENTER)),
     ))
 }
 
-fn destinations() -> [NavDestination; 4] {
+fn destinations() -> [NavDestination; 6] {
     [
         NavDestination::new("Overview", icons::HOME),
         NavDestination::new("Inputs", icons::EDIT),
         NavDestination::new("Overlays", icons::MORE_HORIZ),
-        NavDestination::new("Platform Native", icons::PALETTE),
+        NavDestination::new("Tokens", icons::TUNE),
+        NavDestination::new("Native Suites", icons::PALETTE),
+        NavDestination::new("Workbench", icons::FOLDER),
     ]
 }
 
 fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let dests = destinations();
-    let rail = navigation_rail(
+    let rail = navigation_rail_with_fab(
+        Some(small_fab(
+            icons::ADD,
+            FabColor::Tertiary,
+            |s: &mut GalleryState| {
+                s.click_count += 1;
+            },
+        )),
         &dests,
         state.active_tab.index(),
         |s: &mut GalleryState, i| {
@@ -173,20 +249,34 @@ fn md3_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
 
     let workspace =
         flex_row((rail, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch);
-    let fab_view = extended_fab(
-        icons::ADD,
-        "New Action",
-        FabColor::Primary,
-        |s: &mut GalleryState| {
-            s.click_count += 1;
-            s.toasts.show(
-                "Material 3 Extended FAB triggered",
-                None::<&str>,
-                ToastDuration::Short,
-                true,
-            );
-        },
-    )
+    let fab_view = flex_row((
+        floating_toolbar(vec![
+            icon_button(icons::EDIT, |s: &mut GalleryState| {
+                s.active_tab = GalleryTab::Inputs;
+            })
+            .boxed(),
+            icon_button(icons::TUNE, |s: &mut GalleryState| {
+                s.active_tab = GalleryTab::Tokens;
+            })
+            .boxed(),
+        ]),
+        extended_fab(
+            icons::ADD,
+            "New Action",
+            FabColor::Primary,
+            |s: &mut GalleryState| {
+                s.click_count += 1;
+                s.toasts.show(
+                    "Material 3 Extended FAB triggered",
+                    None::<&str>,
+                    ToastDuration::Short,
+                    true,
+                );
+            },
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(12.px())
     .boxed();
     wrap_with_overlays(state, workspace, Some(fab_view))
 }
@@ -195,11 +285,25 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
     let dests = destinations();
     let nav = navigation_view(
         Some("WinUI 3 Shell"),
-        &dests[..3],
-        &dests[3..],
+        &dests[..4],
+        &dests[4..],
         state.active_tab.index(),
         |s: &mut GalleryState, i| s.active_tab = GalleryTab::from_index(i),
     );
+    let tab_title = match state.active_tab {
+        GalleryTab::Overview => "Overview",
+        GalleryTab::Inputs => "Inputs",
+        GalleryTab::Overlays => "Overlays",
+        GalleryTab::Tokens => "Tokens",
+        GalleryTab::PlatformNative => "Native Suites",
+        GalleryTab::Workspace => "Workbench",
+    };
+    let crumbs = ["Beamlet", "Theme Gallery", tab_title];
+    let bc = breadcrumb_bar(&crumbs, |s: &mut GalleryState, idx| {
+        if idx == 0 {
+            s.active_tab = GalleryTab::Overview;
+        }
+    });
     let cmd = command_bar(
         vec![
             primary_button("New", |s: &mut GalleryState| s.click_count += 1).boxed(),
@@ -215,7 +319,7 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
     let notice = state.info_bar_visible.then(|| {
         info_bar(
             InfoBarSeverity::Informational,
-            "Windows Fluent NavigationView + CommandBar",
+            "Windows Fluent NavigationView + BreadcrumbBar + CommandBar",
             "Notice Settings pinned at the bottom of NavigationView & PrimaryLeading dialog buttons.",
             Some(std::sync::Arc::new(|s: &mut GalleryState| {
                 s.info_bar_visible = false;
@@ -225,7 +329,8 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
     let main = flex_col((
         switcher_bar(state),
         horizontal_divider(),
-        sized_box(flex_col((cmd, notice)).gap(8.px())).padding(Padding::from_vh(8.px(), 16.px())),
+        sized_box(flex_col((bc, cmd, notice)).gap(8.px()))
+            .padding(Padding::from_vh(8.px(), 16.px())),
         active_page_body(state).flex(1.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch);
@@ -238,21 +343,29 @@ fn fluent_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> +
 fn hig_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let sections = [
         (
-            "SHOWCASE",
+            "COMPONENTS",
             vec![
                 ("Overview", icons::HOME),
                 ("Inputs", icons::EDIT),
                 ("Overlays", icons::MORE_HORIZ),
+                ("Tokens", icons::TUNE),
             ],
         ),
-        ("PREFERENCES", vec![("Native Suites", icons::PALETTE)]),
+        (
+            "PLATFORM",
+            vec![
+                ("Native Suites", icons::PALETTE),
+                ("Workbench", icons::FOLDER),
+            ],
+        ),
     ];
     let selected = match state.active_tab {
         GalleryTab::PlatformNative => (1, 0),
+        GalleryTab::Workspace => (1, 1),
         other => (0, other.index()),
     };
     let sidebar = source_list_sidebar(&sections, selected, |s: &mut GalleryState, (sec, row)| {
-        let idx = if sec == 1 { 3 } else { row };
+        let idx = if sec == 1 { 4 + row } else { row };
         s.active_tab = GalleryTab::from_index(idx);
     });
     let toolbar = macos_toolbar_with_center(
@@ -267,18 +380,66 @@ fn hig_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
         })
         .on_clear(|s: &mut GalleryState| s.search_query.clear())
         .width(260.px()),
-        vec![help_button(|s: &mut GalleryState| s.show_basic_dialog = true).boxed()],
+        vec![
+            icon_button(icons::DOCK_LEFT, |s: &mut GalleryState| {
+                s.show_hig_inspector = !s.show_hig_inspector;
+            })
+            .boxed(),
+            help_button(|s: &mut GalleryState| s.show_basic_dialog = true).boxed(),
+        ],
     );
+    let hig_path_items = [
+        ("Macintosh HD", icons::FOLDER),
+        ("Beamlet", icons::CODE),
+        ("Gallery", icons::DESCRIPTION),
+    ];
+    let inspector = state.show_hig_inspector.then(|| {
+        inspector_panel(
+            "Attributes",
+            vec![
+                form_group(
+                    Some("SELECTION"),
+                    vec![
+                        form_row("Clicks", label_medium(format!("{}", state.click_count))).boxed(),
+                        form_row(
+                            "Dark Aqua",
+                            switch(
+                                state.theme.brightness == Brightness::Dark,
+                                |s: &mut GalleryState, _| {
+                                    s.theme.toggle_brightness();
+                                },
+                            ),
+                        )
+                        .boxed(),
+                    ],
+                    None,
+                )
+                .boxed(),
+                disclosure_group(
+                    "Shortcuts",
+                    state.hig_disclosure_open,
+                    |s: &mut GalleryState| s.hig_disclosure_open = !s.hig_disclosure_open,
+                    body_small("Save: ⌘S · Redo: ⇧⌘Z"),
+                )
+                .boxed(),
+            ],
+        )
+    });
     let main = flex_col((
         toolbar,
         switcher_bar(state),
         horizontal_divider(),
         active_page_body(state).flex(1.0),
+        path_control(&hig_path_items, |s: &mut GalleryState, idx| {
+            if idx == 0 {
+                s.active_tab = GalleryTab::Overview;
+            }
+        }),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch);
 
-    let workspace =
-        flex_row((sidebar, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch);
+    let workspace = flex_row((sidebar, main.flex(1.0), inspector))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch);
     wrap_with_overlays(state, workspace, None)
 }
 
@@ -290,9 +451,30 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         state.active_tab.index(),
         |s: &mut GalleryState, i| s.active_tab = GalleryTab::from_index(i),
     );
-    let hdr = header_bar(
-        "Beamlet Gallery",
-        Some("GNOME Libadwaita Workspace"),
+    let hdr = header_bar_with_title(
+        view_switcher(
+            &[
+                ("Overview", icons::HOME),
+                ("Tokens", icons::TUNE),
+                ("Native", icons::PALETTE),
+                ("Work", icons::FOLDER),
+            ],
+            match state.active_tab {
+                GalleryTab::Overview => 0,
+                GalleryTab::Tokens => 1,
+                GalleryTab::PlatformNative => 2,
+                GalleryTab::Workspace => 3,
+                _ => 0,
+            },
+            |s: &mut GalleryState, idx| {
+                s.active_tab = match idx {
+                    0 => GalleryTab::Overview,
+                    1 => GalleryTab::Tokens,
+                    2 => GalleryTab::PlatformNative,
+                    _ => GalleryTab::Workspace,
+                };
+            },
+        ),
         vec![icon_button(icons::MENU, |s: &mut GalleryState| s.click_count += 1).boxed()],
         vec![
             primary_button("Dialog", |s: &mut GalleryState| {
@@ -303,7 +485,7 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     );
     let top_banner = state.banner_visible.then(|| {
         banner(
-            "GNOME Adwaita SplitView + Centered HeaderBar",
+            "GNOME Adwaita SplitView + AdwViewSwitcher + AdwClamp(880px)",
             Some("Hide"),
             Some(std::sync::Arc::new(|s: &mut GalleryState| {
                 s.banner_visible = false;
@@ -316,7 +498,7 @@ fn adwaita_workspace(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         top_banner,
         switcher_bar(state),
         horizontal_divider(),
-        active_page_body(state).flex(1.0),
+        clamp(880.0, active_page_body(state)).flex(1.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch);
 

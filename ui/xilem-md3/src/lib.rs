@@ -23,7 +23,7 @@ pub use xilem_ui_core::foundation::{
     resolve_interactive_colors, ui_icon, ui_transition, with_opacity,
 };
 pub use xilem_ui_core::style_engine::{
-    cached_default_properties, classes, current_spec, with_spec,
+    build_default_properties, cached_default_properties, classes, current_spec, with_spec,
 };
 pub use xilem_ui_core::tokens::{
     Brightness, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel, InputFocusStyle,

@@ -802,3 +802,368 @@ fn style_overrides_apply_directly_to_concrete_components() {
     );
     assert_eq!(child_types, vec!["Button", "Button", "SizedBox"]);
 }
+
+fn collect_all_widget_ids_by_type_name(
+    root: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    needle: &str,
+    out: &mut Vec<WidgetId>,
+) {
+    if root.inner().short_type_name() == needle {
+        out.push(root.id());
+    }
+    for child in root.children() {
+        collect_all_widget_ids_by_type_name(&child, needle, out);
+    }
+}
+
+#[test]
+fn aligned_platform_signature_components_build_interact_and_render() {
+    // 1) Material Design 3: Small/Large FAB, NavigationRailWithFab, FloatingToolbar
+    {
+        let mut app = XilemHarness::new(
+            MatrixState {
+                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+                ..Default::default()
+            },
+            |s| s.theme.clone(),
+            |s| {
+                let dests = [
+                    NavDestination::new("Notes", icons::DESCRIPTION),
+                    NavDestination::new("Starred", icons::STAR),
+                ];
+                flex_row((
+                    navigation_rail_with_fab(
+                        Some(small_fab(
+                            icons::ADD,
+                            FabColor::Primary,
+                            |st: &mut MatrixState| {
+                                st.clicks += 1;
+                            },
+                        )),
+                        &dests,
+                        s.selected_menu,
+                        |st: &mut MatrixState, i| st.selected_menu = i,
+                    ),
+                    flex_col((
+                        large_fab(icons::EDIT, FabColor::Tertiary, |st: &mut MatrixState| {
+                            st.clicks += 10;
+                        }),
+                        floating_toolbar(vec![
+                            icon_button(icons::COPY, |st: &mut MatrixState| st.clicks += 1).boxed(),
+                            primary_button("Publish", |st: &mut MatrixState| st.clicks += 1)
+                                .boxed(),
+                        ]),
+                    ))
+                    .gap(12.px()),
+                ))
+                .boxed()
+            },
+            (720, 420),
+        );
+        let bytes = app.render_bytes();
+        assert!(bytes.as_chunks::<4>().0.iter().any(|px| px[3] > 0));
+    }
+
+    // 2) Windows Fluent: BreadcrumbBar, InfoBadge, NumberBox, Expander
+    {
+        struct FluentState {
+            theme: UiTheme,
+            crumb_clicks: usize,
+            num: f64,
+            expanded: bool,
+        }
+        let mut app = XilemHarness::new(
+            FluentState {
+                theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+                crumb_clicks: 0,
+                num: 9.0,
+                expanded: false,
+            },
+            |s| s.theme.clone(),
+            |s| {
+                flex_col((
+                    breadcrumb_bar(&["Root", "Section", "Leaf"], |st: &mut FluentState, idx| {
+                        st.crumb_clicks = idx + 1;
+                    }),
+                    info_badge(InfoBarSeverity::Success, Some("OK")),
+                    number_box(s.num, 0.0, 10.0, 1.0, |st: &mut FluentState, next| {
+                        st.num = next;
+                    }),
+                    expander(
+                        "Expander Header",
+                        Some("Details"),
+                        s.expanded,
+                        |st: &mut FluentState| st.expanded = !st.expanded,
+                        label("Expanded Body"),
+                    ),
+                ))
+                .gap(8.px())
+                .boxed()
+            },
+            (600, 360),
+        );
+        let _ = app.render_bytes();
+
+        let (inc_btn_id, exp_toggle_id) = {
+            let root = app.harness.render_root().get_layer_root(0);
+            let mut btns = Vec::new();
+            collect_all_widget_ids_by_type_name(&root, "Button", &mut btns);
+            // Buttons: Breadcrumb[0], Breadcrumb[1], NumberBox(-), NumberBox(+), Expander toggle
+            assert_eq!(btns.len(), 5);
+            (btns[3], btns[4])
+        };
+
+        // Increment twice: 9.0 -> 10.0 (max), second click must stay clamped / disabled at 10.0
+        app.harness
+            .mouse_click_on(inc_btn_id, Some(PointerButton::Primary));
+        app.pump_actions();
+        assert!((app.state.num - 10.0).abs() < f64::EPSILON);
+
+        app.harness
+            .mouse_click_on(inc_btn_id, Some(PointerButton::Primary));
+        app.pump_actions();
+        assert!((app.state.num - 10.0).abs() < f64::EPSILON);
+
+        // Toggle Expander
+        app.harness
+            .mouse_click_on(exp_toggle_id, Some(PointerButton::Primary));
+        app.pump_actions();
+        assert!(app.state.expanded);
+    }
+
+    // 3) macOS HIG: DisclosureGroup, Stepper, InspectorPanel, PathControl
+    {
+        struct HigState {
+            theme: UiTheme,
+            expanded: bool,
+            step_val: i32,
+            path_clicks: usize,
+        }
+        let mut app = XilemHarness::new(
+            HigState {
+                theme: UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+                expanded: false,
+                step_val: 3,
+                path_clicks: 0,
+            },
+            |s| s.theme.clone(),
+            |s| {
+                flex_row((
+                    flex_col((
+                        disclosure_group(
+                            "Advanced Group",
+                            s.expanded,
+                            |st: &mut HigState| st.expanded = !st.expanded,
+                            label("Hidden Detail"),
+                        ),
+                        stepper("Workers", s.step_val, 1, 8, 1, |st: &mut HigState, v| {
+                            st.step_val = v;
+                        }),
+                        path_control(
+                            &[("Disk", icons::FOLDER), ("File", icons::DESCRIPTION)],
+                            |st: &mut HigState, idx| st.path_clicks = idx + 1,
+                        ),
+                    ))
+                    .gap(8.px()),
+                    inspector_panel("Inspector", vec![label("Props").boxed()]),
+                ))
+                .boxed()
+            },
+            (720, 360),
+        );
+        let _ = app.render_bytes();
+
+        let (disc_btn, step_inc_btn) = {
+            let root = app.harness.render_root().get_layer_root(0);
+            let mut btns = Vec::new();
+            collect_all_widget_ids_by_type_name(&root, "Button", &mut btns);
+            // Buttons: DisclosureGroup header, Stepper(-), Stepper(+), PathControl[0], PathControl[1]
+            assert_eq!(btns.len(), 5);
+            (btns[0], btns[2])
+        };
+
+        app.harness
+            .mouse_click_on(disc_btn, Some(PointerButton::Primary));
+        app.pump_actions();
+        assert!(app.state.expanded);
+
+        app.harness
+            .mouse_click_on(step_inc_btn, Some(PointerButton::Primary));
+        app.pump_actions();
+        assert_eq!(app.state.step_val, 4);
+    }
+
+    // 4) GNOME Adwaita: AdwClamp centering & capping, ViewSwitcher, ExpanderRow, ComboRow, EntryRow
+    {
+        struct AdwState {
+            theme: UiTheme,
+            tab: usize,
+            expanded: bool,
+            combo_open: bool,
+            combo_idx: usize,
+            entry: String,
+        }
+        let mut app = XilemHarness::new(
+            AdwState {
+                theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+                tab: 0,
+                expanded: true,
+                combo_open: false,
+                combo_idx: 0,
+                entry: "adwaita-app".into(),
+            },
+            |s| s.theme.clone(),
+            |s| {
+                flex_col((
+                    header_bar_with_title(
+                        view_switcher(
+                            &[("Prefs", icons::TUNE), ("Status", icons::EXPLORE)],
+                            s.tab,
+                            |st: &mut AdwState, i| st.tab = i,
+                        ),
+                        vec![],
+                        vec![],
+                    ),
+                    clamp(
+                        420.0,
+                        preferences_group(
+                            Some("Group"),
+                            None,
+                            vec![
+                                entry_row("Title", s.entry.clone(), |st: &mut AdwState, v| {
+                                    st.entry = v;
+                                })
+                                .boxed(),
+                                combo_row(
+                                    "Mode",
+                                    None::<&str>,
+                                    &["Auto", "Manual"],
+                                    s.combo_idx,
+                                    s.combo_open,
+                                    |st: &mut AdwState| st.combo_open = !st.combo_open,
+                                    |st: &mut AdwState, i| {
+                                        st.combo_idx = i;
+                                        st.combo_open = false;
+                                    },
+                                    |st: &mut AdwState| st.combo_open = false,
+                                )
+                                .boxed(),
+                                expander_row(
+                                    "More",
+                                    None::<&str>,
+                                    None,
+                                    s.expanded,
+                                    |st: &mut AdwState| st.expanded = !st.expanded,
+                                    vec![label("Nested").boxed()],
+                                )
+                                .boxed(),
+                            ],
+                        ),
+                    ),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(8.px())
+                .boxed()
+            },
+            (860, 480),
+        );
+        let bytes = app.render_bytes();
+        assert!(bytes.as_chunks::<4>().0.iter().any(|px| px[3] > 0));
+
+        let clamp_child_id = {
+            let root = app.harness.render_root().get_layer_root(0);
+            fn find_clamp_child(
+                node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+            ) -> Option<WidgetId> {
+                if node.inner().short_type_name() == "AdwClamp" {
+                    return node.children().into_iter().next().map(|c| c.id());
+                }
+                for child in node.children() {
+                    if let Some(found) = find_clamp_child(&child) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            find_clamp_child(&root).expect("AdwClamp child widget present")
+        };
+
+        let child_ref = app.harness.get_widget_with_id(clamp_child_id);
+        let child_w = child_ref.ctx().border_box().width();
+        let child_x = (child_ref.ctx().window_transform() * Point::ORIGIN).x;
+        assert!(
+            child_w <= 420.5,
+            "AdwClamp must cap child width at <= 420px, got {child_w}"
+        );
+        assert!(
+            child_x > 100.0,
+            "AdwClamp must horizontally center child in 860px container, got x={child_x}"
+        );
+    }
+}
+
+#[test]
+fn destructive_button_and_dialog_apply_error_semantics_and_fire_actions() {
+    struct DestructState {
+        theme: UiTheme,
+        dialog_open: bool,
+        confirmed: bool,
+    }
+    let mut app = XilemHarness::new(
+        DestructState {
+            theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+            dialog_open: false,
+            confirmed: false,
+        },
+        |s| s.theme.clone(),
+        |s| {
+            let dlg = s.dialog_open.then(|| {
+                basic_dialog(
+                    "Erase workspace?",
+                    "Destructive dialog test.",
+                    "Confirm Erase",
+                    |st: &mut DestructState| {
+                        st.confirmed = true;
+                        st.dialog_open = false;
+                    },
+                    |st: &mut DestructState| st.dialog_open = false,
+                )
+                .icon(icons::DELETE)
+                .destructive(true)
+                .dismiss_text("Cancel")
+            });
+            scaffold(destructive_button("Erase", |st: &mut DestructState| {
+                st.dialog_open = true;
+            }))
+            .dialog(dlg)
+            .build()
+            .boxed()
+        },
+        (520, 360),
+    );
+    let _ = app.render_bytes();
+
+    let erase_btn = {
+        let root = app.harness.render_root().get_layer_root(0);
+        find_button_with_label(&root, "Erase").expect("destructive Erase button")
+    };
+    app.harness
+        .mouse_click_on(erase_btn, Some(PointerButton::Primary));
+    app.pump_actions();
+    assert!(
+        app.state.dialog_open,
+        "destructive_button must open confirmation dialog"
+    );
+
+    let confirm_btn = {
+        let root = app.harness.render_root().get_layer_root(0);
+        find_button_with_label(&root, "Confirm Erase").expect("destructive dialog confirm button")
+    };
+    app.harness
+        .mouse_click_on(confirm_btn, Some(PointerButton::Primary));
+    app.pump_actions();
+    assert!(
+        app.state.confirmed && !app.state.dialog_open,
+        "destructive dialog confirm action must fire and close dialog"
+    );
+}

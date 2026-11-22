@@ -22,6 +22,12 @@ pub fn overview_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
                 elevated_button("Elevated", |s: &mut GalleryState| s.click_count += 1),
                 outlined_button("Outlined", |s: &mut GalleryState| s.click_count += 1),
                 subtle_button("Subtle", |s: &mut GalleryState| s.click_count += 1),
+                destructive_button("Delete", |s: &mut GalleryState| {
+                    s.show_destructive_dialog = true;
+                })
+                .leading_icon(icons::DELETE),
+                primary_button("Disabled", |s: &mut GalleryState| s.click_count += 1)
+                    .disabled(true),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(10.px()),
@@ -69,13 +75,45 @@ pub fn overview_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         .gap(12.px()),
     );
 
+    let tag_chips: Vec<_> = state
+        .input_tags
+        .iter()
+        .enumerate()
+        .map(|(i, tag)| {
+            input_chip(tag.clone(), |s: &mut GalleryState| s.click_count += 1)
+                .on_remove(move |s: &mut GalleryState| {
+                    if i < s.input_tags.len() {
+                        s.input_tags.remove(i);
+                    }
+                })
+                .boxed()
+        })
+        .collect();
+
     let chips_card = filled_card(
         flex_col((
-            title_medium("Chips & Tabs"),
+            title_medium("Chips, Tabs & Segmented Groups"),
             tabs(
                 &["General", "Appearance", "Shortcuts"],
                 state.selected_tab,
                 |s: &mut GalleryState, idx| s.selected_tab = idx,
+            ),
+            secondary_tabs(
+                &["Overview", "Spec", "Changelog"],
+                state.secondary_tab,
+                |s: &mut GalleryState, idx| s.secondary_tab = idx,
+            ),
+            multi_choice_segmented_button(
+                &[
+                    ("Bold", state.multi_seg_mask[0]),
+                    ("Italic", state.multi_seg_mask[1]),
+                    ("Code", state.multi_seg_mask[2]),
+                ],
+                |s: &mut GalleryState, idx| {
+                    if let Some(flag) = s.multi_seg_mask.get_mut(idx) {
+                        *flag = !*flag;
+                    }
+                },
             ),
             flex_row((
                 assist_chip("Assist", |s: &mut GalleryState| s.click_count += 1)
@@ -92,6 +130,9 @@ pub fn overview_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px()),
+            flex_row(tag_chips)
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),

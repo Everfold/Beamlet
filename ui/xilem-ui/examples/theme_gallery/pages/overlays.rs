@@ -16,9 +16,28 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
                 primary_button("Open Basic Dialog", |s: &mut GalleryState| {
                     s.show_basic_dialog = true;
                 }),
-                secondary_button("Open Bottom Sheet", |s: &mut GalleryState| {
+                destructive_button("Destructive Dialog", |s: &mut GalleryState| {
+                    s.show_destructive_dialog = true;
+                })
+                .leading_icon(icons::DELETE),
+                secondary_button("Bottom Sheet", |s: &mut GalleryState| {
                     s.show_bottom_sheet = true;
                 }),
+                secondary_button("Side Sheet", |s: &mut GalleryState| {
+                    s.show_side_sheet = true;
+                }),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px()),
+            flex_row((
+                outlined_button("Date Dialog", |s: &mut GalleryState| {
+                    s.show_date_dialog = true;
+                })
+                .leading_icon(icons::CALENDAR),
+                outlined_button("Time Dialog", |s: &mut GalleryState| {
+                    s.show_time_dialog = true;
+                })
+                .leading_icon(icons::SCHEDULE),
                 outlined_button("Queue Toast", |s: &mut GalleryState| {
                     let theme_name = s.theme.language.label();
                     s.toasts.show(
