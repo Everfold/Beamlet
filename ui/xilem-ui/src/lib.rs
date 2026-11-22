@@ -10,8 +10,8 @@ pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window};
 pub use xilem_ui_core as core;
 pub use xilem_ui_core::components;
 pub use xilem_ui_core::foundation::{
-    EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost, UiClassExt, focus_frame, icons,
-    ui_icon, ui_transition,
+    EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost, RippleLayer, RippleLayerView,
+    UiClassExt, focus_frame, icons, ripple_layer, ui_icon, ui_transition,
 };
 pub use xilem_ui_core::style_engine::{
     build_default_properties, cached_default_properties, classes, current_spec, with_spec,

@@ -15,7 +15,7 @@ use xilem_md3::{
     TopAppBarVariant, basic_dialog, body_medium, body_small, destructive_button, elevated_card,
     extended_fab, filter_chip, floating_toolbar, headline_small, horizontal_divider, icon_button,
     icons, large_fab, list_item_view, md3_window, navigation_rail_with_fab, outlined_card,
-    primary_button, search_bar, small_fab, subtle_button, title_medium, toast_host,
+    primary_button, ripple_layer, search_bar, small_fab, subtle_button, title_medium, toast_host,
     top_app_bar_slots,
 };
 
@@ -192,9 +192,14 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(4.px())
             .flex(1.0),
-            large_fab(icons::EDIT, FabColor::Primary, |s: &mut NotesApp| {
-                s.toasts.show("已打开新建笔记编辑器", Some("知道了"), ToastDuration::Short, true);
-            }),
+            ripple_layer(large_fab(
+                icons::EDIT,
+                FabColor::Primary,
+                |s: &mut NotesApp| {
+                    s.toasts
+                        .show("已打开新建笔记编辑器", Some("知道了"), ToastDuration::Short, true);
+                },
+            )),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(16.px()),
@@ -240,7 +245,7 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
                 })
                 .boxed(),
             ]),
-            extended_fab(
+            ripple_layer(extended_fab(
                 icons::ADD,
                 "新建笔记",
                 FabColor::Secondary,
@@ -252,7 +257,7 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
                         tag: "随记",
                     });
                 },
-            ),
+            )),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(12.px())

@@ -5,9 +5,10 @@ pub use crate::theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window};
 pub use crate::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     FocusFrame, FocusFrameView, InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle,
-    SemanticPalette, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale,
-    UiClassExt, WindowSizeClass, build_default_properties, cached_default_properties, classes,
-    current_spec, focus_frame, icons, ui_icon, ui_transition, with_spec,
+    RippleLayer, RippleLayerView, SemanticPalette, ShortcutConvention, StateFeedbackMode,
+    TabIndicatorStyle, TypeRole, TypeScale, UiClassExt, WindowSizeClass, build_default_properties,
+    cached_default_properties, classes, current_spec, focus_frame, icons, ripple_layer, ui_icon,
+    ui_transition, with_spec,
 };
 
 #[cfg(feature = "md3")]

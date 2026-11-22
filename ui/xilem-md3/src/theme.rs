@@ -87,7 +87,7 @@ impl Md3Theme {
             input_radius: 8.0,
             input_pad_v: 12.0,
             input_pad_h: 16.0,
-            search_height: 52.0,
+            search_height: 56.0,
             search_radius: 999.0,
             card_radius: 12.0,
             card_pad: 16.0,

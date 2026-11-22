@@ -1275,3 +1275,105 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
         "wide Adwaita errors: {wide_errors:#?}"
     );
 }
+
+#[test]
+fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
+    use xilem::WidgetView as _;
+    use xilem::masonry::layout::AsUnit;
+    use xilem::masonry::properties::Padding;
+    use xilem::style::Style as _;
+    use xilem::view::{CrossAxisAlignment, flex_col};
+    use xilem_ui::prelude::{filled_text_field, primary_button, ripple_layer, text_field};
+
+    struct Phase4State {
+        theme: UiTheme,
+        clicks: usize,
+        outlined: String,
+        filled: String,
+    }
+
+    let build = |reduced_motion: bool| {
+        PreviewHarness::new(
+            Phase4State {
+                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                    .with_reduced_motion(reduced_motion),
+                clicks: 0,
+                outlined: String::new(),
+                filled: String::new(),
+            },
+            |s| s.theme.clone(),
+            |s| {
+                flex_col((
+                    ripple_layer(primary_button("Ripple CTA", |st: &mut Phase4State| {
+                        st.clicks += 1;
+                    })),
+                    text_field(s.outlined.clone(), |st: &mut Phase4State, v| {
+                        st.outlined = v;
+                    })
+                    .label("Outlined Floating")
+                    .placeholder("Type here"),
+                    filled_text_field(s.filled.clone(), |st: &mut Phase4State, v| {
+                        st.filled = v;
+                    })
+                    .label("Filled Floating")
+                    .placeholder("Type here"),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(12.px())
+                .padding(Padding::all(16.px()))
+                .boxed()
+            },
+            PreviewConfig {
+                width: 480,
+                height: 360,
+                ..PreviewConfig::default()
+            },
+        )
+    };
+
+    // 1. Standard motion: RippleLayer animates on click, terminates cleanly, doesn't block Button click,
+    //    and both MD3 floating-label text fields accept typing cleanly with 0 layout errors.
+    let mut h = build(false);
+    let tree = dump_layout_tree(&mut h);
+    let errors: Vec<_> = lint_layout(&tree, h.viewport())
+        .into_iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "MD3 Phase 4 errors: {errors:#?}");
+
+    h.run_step(&PreviewStep::ClickLabel("Ripple CTA".to_owned()))
+        .unwrap();
+    assert_eq!(h.state().clicks, 1);
+    h.run_step(&PreviewStep::AnimateMs(400)).unwrap();
+    assert!(
+        !h.inner_harness_mut().render_root().needs_anim(),
+        "RippleLayer must stop requesting anim frames after wave completes"
+    );
+
+    h.run_step(&PreviewStep::ClickType {
+        type_name: "TextInput".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    h.run_step(&PreviewStep::TypeText("m3-out".to_owned()))
+        .unwrap();
+    h.run_step(&PreviewStep::ClickType {
+        type_name: "TextInput".to_owned(),
+        index: 1,
+    })
+    .unwrap();
+    h.run_step(&PreviewStep::TypeText("m3-fill".to_owned()))
+        .unwrap();
+    assert_eq!(h.state().outlined, "m3-out");
+    assert_eq!(h.state().filled, "m3-fill");
+
+    // 2. Reduced motion: RippleLayer does not schedule animations at all on press.
+    let mut h_rm = build(true);
+    h_rm.run_step(&PreviewStep::ClickLabel("Ripple CTA".to_owned()))
+        .unwrap();
+    assert_eq!(h_rm.state().clicks, 1);
+    assert!(
+        !h_rm.inner_harness_mut().render_root().needs_anim(),
+        "RippleLayer must suppress animations when reduced_motion is true"
+    );
+}

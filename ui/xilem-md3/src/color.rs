@@ -38,6 +38,22 @@ pub struct ColorScheme {
     pub secondary_container: Color,
     /// Ink painted on [`secondary_container`](Self::secondary_container).
     pub on_secondary_container: Color,
+    /// Tone-invariant high-emphasis primary fill (identical across Light & Dark).
+    pub primary_fixed: Color,
+    /// Tone-invariant slightly dimmer primary fixed fill (identical across Light & Dark).
+    pub primary_fixed_dim: Color,
+    /// Ink painted on [`primary_fixed`](Self::primary_fixed) / [`primary_fixed_dim`](Self::primary_fixed_dim).
+    pub on_primary_fixed: Color,
+    /// Lower-emphasis ink painted on primary fixed containers.
+    pub on_primary_fixed_variant: Color,
+    /// Tone-invariant secondary fixed fill (identical across Light & Dark).
+    pub secondary_fixed: Color,
+    /// Tone-invariant slightly dimmer secondary fixed fill.
+    pub secondary_fixed_dim: Color,
+    /// Ink painted on [`secondary_fixed`](Self::secondary_fixed) / [`secondary_fixed_dim`](Self::secondary_fixed_dim).
+    pub on_secondary_fixed: Color,
+    /// Lower-emphasis ink painted on secondary fixed containers.
+    pub on_secondary_fixed_variant: Color,
     /// Complementary tertiary highlight role.
     pub tertiary: Color,
     /// Ink painted on [`tertiary`](Self::tertiary).
@@ -46,6 +62,14 @@ pub struct ColorScheme {
     pub tertiary_container: Color,
     /// Ink painted on [`tertiary_container`](Self::tertiary_container).
     pub on_tertiary_container: Color,
+    /// Tone-invariant tertiary fixed fill (identical across Light & Dark).
+    pub tertiary_fixed: Color,
+    /// Tone-invariant slightly dimmer tertiary fixed fill.
+    pub tertiary_fixed_dim: Color,
+    /// Ink painted on [`tertiary_fixed`](Self::tertiary_fixed) / [`tertiary_fixed_dim`](Self::tertiary_fixed_dim).
+    pub on_tertiary_fixed: Color,
+    /// Lower-emphasis ink painted on tertiary fixed containers.
+    pub on_tertiary_fixed_variant: Color,
     /// Validation / destructive error color.
     pub error: Color,
     /// Ink painted on [`error`](Self::error).
@@ -202,6 +226,23 @@ impl ColorScheme {
             ),
         };
 
+        // MD3 Fixed roles are tone-invariant across Light and Dark modes (tones 90 / 80 / 10 / 30).
+        let primary_fixed = oklch(0.90, c_primary * 0.45, hue);
+        let primary_fixed_dim = oklch(0.80, c_primary * 0.65, hue);
+        let on_primary_fixed = oklch((0.20 - boost).max(0.08), c_primary * 0.85, hue);
+        let on_primary_fixed_variant = oklch((0.36 - boost).max(0.18), c_primary * 0.85, hue);
+
+        let secondary_fixed = oklch(0.91, c_secondary * 0.75, hue);
+        let secondary_fixed_dim = oklch(0.81, c_secondary * 0.85, hue);
+        let on_secondary_fixed = oklch((0.20 - boost).max(0.08), c_secondary * 0.90, hue);
+        let on_secondary_fixed_variant = oklch((0.36 - boost).max(0.18), c_secondary * 0.90, hue);
+
+        let tertiary_fixed = oklch(0.91, c_tertiary * 0.48, hue_tertiary);
+        let tertiary_fixed_dim = oklch(0.81, c_tertiary * 0.65, hue_tertiary);
+        let on_tertiary_fixed = oklch((0.20 - boost).max(0.08), c_tertiary * 0.85, hue_tertiary);
+        let on_tertiary_fixed_variant =
+            oklch((0.36 - boost).max(0.18), c_tertiary * 0.85, hue_tertiary);
+
         Self {
             brightness,
             contrast,
@@ -213,10 +254,22 @@ impl ColorScheme {
             on_secondary,
             secondary_container,
             on_secondary_container,
+            primary_fixed,
+            primary_fixed_dim,
+            on_primary_fixed,
+            on_primary_fixed_variant,
+            secondary_fixed,
+            secondary_fixed_dim,
+            on_secondary_fixed,
+            on_secondary_fixed_variant,
             tertiary,
             on_tertiary,
             tertiary_container,
             on_tertiary_container,
+            tertiary_fixed,
+            tertiary_fixed_dim,
+            on_tertiary_fixed,
+            on_tertiary_fixed_variant,
             error,
             on_error,
             error_container,
@@ -420,8 +473,13 @@ mod tests {
     fn high_contrast_increases_foreground_background_separation() {
         let seed = Color::from_rgb8(0x00, 0x6A, 0x60);
         let std = ColorScheme::from_seed(seed, Brightness::Light, ContrastLevel::Standard);
+        let med = ColorScheme::from_seed(seed, Brightness::Light, ContrastLevel::Medium);
         let high = ColorScheme::from_seed(seed, Brightness::Light, ContrastLevel::High);
 
+        assert!(
+            contrast_ratio(med.on_primary, med.primary)
+                >= contrast_ratio(std.on_primary, std.primary)
+        );
         assert!(
             contrast_ratio(high.on_primary, high.primary)
                 > contrast_ratio(std.on_primary, std.primary)
@@ -430,5 +488,45 @@ mod tests {
             contrast_ratio(high.on_surface, high.surface)
                 > contrast_ratio(std.on_surface, std.surface)
         );
+    }
+
+    #[test]
+    fn fixed_roles_are_identical_across_polarity_and_meet_wcag_aa() {
+        let seed = Color::from_rgb8(0x33, 0x66, 0xCC);
+        for contrast in [
+            ContrastLevel::Standard,
+            ContrastLevel::Medium,
+            ContrastLevel::High,
+        ] {
+            let light = ColorScheme::from_seed(seed, Brightness::Light, contrast);
+            let dark = ColorScheme::from_seed(seed, Brightness::Dark, contrast);
+
+            assert_eq!(light.primary_fixed, dark.primary_fixed);
+            assert_eq!(light.primary_fixed_dim, dark.primary_fixed_dim);
+            assert_eq!(light.on_primary_fixed, dark.on_primary_fixed);
+            assert_eq!(
+                light.on_primary_fixed_variant,
+                dark.on_primary_fixed_variant
+            );
+            assert_eq!(light.secondary_fixed, dark.secondary_fixed);
+            assert_eq!(light.secondary_fixed_dim, dark.secondary_fixed_dim);
+            assert_eq!(light.on_secondary_fixed, dark.on_secondary_fixed);
+            assert_eq!(
+                light.on_secondary_fixed_variant,
+                dark.on_secondary_fixed_variant
+            );
+            assert_eq!(light.tertiary_fixed, dark.tertiary_fixed);
+            assert_eq!(light.tertiary_fixed_dim, dark.tertiary_fixed_dim);
+            assert_eq!(light.on_tertiary_fixed, dark.on_tertiary_fixed);
+            assert_eq!(
+                light.on_tertiary_fixed_variant,
+                dark.on_tertiary_fixed_variant
+            );
+
+            assert!(contrast_ratio(light.on_primary_fixed, light.primary_fixed) >= 4.5);
+            assert!(contrast_ratio(light.on_primary_fixed, light.primary_fixed_dim) >= 4.5);
+            assert!(contrast_ratio(light.on_secondary_fixed, light.secondary_fixed) >= 4.5);
+            assert!(contrast_ratio(light.on_tertiary_fixed, light.tertiary_fixed) >= 4.5);
+        }
     }
 }

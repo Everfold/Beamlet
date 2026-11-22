@@ -4,18 +4,19 @@ use std::sync::Arc;
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{ContentColor, Gap};
+use xilem::masonry::layout::{AsUnit, UnitPoint};
+use xilem::masonry::properties::{ContentColor, Gap, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
-    CrossAxisAlignment, Flex, FlexExt, Label, Prop, button, flex_col, flex_row, label, text_input,
+    CrossAxisAlignment, Flex, FlexExt, Label, Prop, ZStackExt, button, flex_col, flex_row, label,
+    sized_box, text_input, zstack,
 };
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
-use crate::foundation::{FocusFrameView, UiClassExt, focus_frame, icons, ui_icon};
+use crate::foundation::{UiClassExt, focus_frame, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::tokens::{ControlVisualGrammar, DesignSpec, TypeRole};
 
 /// Text field surface variant.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -42,7 +43,7 @@ type TextFieldFlex<State, Action> = Prop<
     Flex<
         (
             Option<Prop<ContentColor, Label, State, Action>>,
-            FocusFrameView<Box<AnyWidgetView<State, Action>>, State, Action>,
+            Box<AnyWidgetView<State, Action>>,
             Option<Box<AnyWidgetView<State, Action>>>,
         ),
         State,
@@ -134,22 +135,29 @@ impl<State, Action> UiTextField<State, Action> {
         Action: 'static,
     {
         let p = &spec.palette;
+        let m = &spec.metrics;
         let is_error = self.error_text.is_some();
+        let is_md3_floating =
+            spec.control_grammar() == ControlVisualGrammar::Material3 && self.label_text.is_some();
         let base_class = match self.variant {
             TextFieldVariant::Outlined => classes::TEXT_FIELD_OUTLINED,
             TextFieldVariant::Filled => classes::TEXT_FIELD_FILLED,
         };
 
-        let top_label = self.label_text.as_ref().map(|t| {
-            let color = if is_error {
-                p.error
-            } else {
-                spec.content_color(p.text_secondary, self.disabled)
-            };
-            spec.typography
-                .style_label(TypeRole::LabelMedium, label(t.clone()))
-                .color(color)
-        });
+        let label_color = if is_error {
+            p.error
+        } else {
+            spec.content_color(p.text_secondary, self.disabled)
+        };
+        let top_label = (!is_md3_floating)
+            .then(|| {
+                self.label_text.as_ref().map(|t| {
+                    spec.typography
+                        .style_label(TypeRole::LabelMedium, label(t.clone()))
+                        .color(label_color)
+                })
+            })
+            .flatten();
 
         let style = spec.typography.get(TypeRole::BodyMedium);
         let on_change = self.on_change.clone();
@@ -168,11 +176,11 @@ impl<State, Action> UiTextField<State, Action> {
             ti = ti.font(font.clone());
         }
 
-        let input_widget: Box<AnyWidgetView<State, Action>> = if self.prefix_text.is_some()
+        let has_addons = self.prefix_text.is_some()
             || self.suffix_text.is_some()
-            || self.trailing_action.is_some()
-        {
-            let flush = ti.ui_class(classes::TEXT_FIELD_FLUSH);
+            || self.trailing_action.is_some();
+
+        let make_row_inner = |ti_view: Box<AnyWidgetView<State, Action>>| {
             let sub_ink = spec.content_color(p.text_secondary, self.disabled);
             let prefix = self.prefix_text.as_ref().map(|t| {
                 spec.typography
@@ -198,19 +206,78 @@ impl<State, Action> UiTextField<State, Action> {
             } else {
                 None
             };
-            flex_row((prefix, flush.flex(1.0), suffix, trail, trail_err))
+            flex_row((prefix, ti_view.flex(1.0), suffix, trail, trail_err))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(6.px())
-                .ui_class(base_class)
-                .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
-                .boxed()
-        } else {
-            ti.ui_class(base_class)
-                .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
-                .boxed()
         };
 
-        let frame = focus_frame(input_widget).error(is_error);
+        let frame_slot: Box<AnyWidgetView<State, Action>> = if is_md3_floating {
+            let float_text = self.label_text.clone().unwrap_or_default();
+            let float_lbl = spec
+                .typography
+                .style_label(TypeRole::LabelSmall, label(float_text))
+                .color(if is_error {
+                    p.error
+                } else if !self.value.is_empty() {
+                    spec.content_color(p.accent, self.disabled)
+                } else {
+                    label_color
+                });
+
+            match self.variant {
+                TextFieldVariant::Filled => {
+                    let flush = ti.ui_class(classes::TEXT_FIELD_FLUSH).boxed();
+                    let row = if has_addons {
+                        make_row_inner(flush).boxed()
+                    } else {
+                        flush
+                    };
+                    let container = flex_col((float_lbl, row))
+                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                        .gap(2.px())
+                        .ui_class(classes::TEXT_FIELD_FILLED)
+                        .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                        .padding(Padding::from_vh(7.px(), m.input_pad_h.px()))
+                        .boxed();
+                    focus_frame(container).error(is_error).boxed()
+                }
+                TextFieldVariant::Outlined => {
+                    let input_widget: Box<AnyWidgetView<State, Action>> = if has_addons {
+                        make_row_inner(ti.ui_class(classes::TEXT_FIELD_FLUSH).boxed())
+                            .ui_class(base_class)
+                            .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                            .boxed()
+                    } else {
+                        ti.ui_class(base_class)
+                            .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                            .boxed()
+                    };
+                    let framed = sized_box(focus_frame(input_widget).error(is_error))
+                        .padding(Padding::top(7.px()))
+                        .alignment(UnitPoint::TOP_LEFT);
+                    let notch = sized_box(
+                        sized_box(float_lbl)
+                            .padding(Padding::from_vh(0.px(), 4.px()))
+                            .background_color(p.surface),
+                    )
+                    .padding(Padding::left(12.px()))
+                    .alignment(UnitPoint::TOP_LEFT);
+                    zstack((framed, notch)).boxed()
+                }
+            }
+        } else {
+            let input_widget: Box<AnyWidgetView<State, Action>> = if has_addons {
+                make_row_inner(ti.ui_class(classes::TEXT_FIELD_FLUSH).boxed())
+                    .ui_class(base_class)
+                    .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                    .boxed()
+            } else {
+                ti.ui_class(base_class)
+                    .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
+                    .boxed()
+            };
+            focus_frame(input_widget).error(is_error).boxed()
+        };
 
         let msg_text = self.error_text.as_ref().or(self.supporting_text.as_ref());
         let counter_text = self
@@ -244,7 +311,7 @@ impl<State, Action> UiTextField<State, Action> {
             None
         };
 
-        flex_col((top_label, frame, bottom_row))
+        flex_col((top_label, frame_slot, bottom_row))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px())
     }
