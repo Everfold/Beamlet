@@ -5699,6 +5699,7 @@ dependencies = [
 name = "xilem-adwaita"
 version = "0.1.0"
 dependencies = [
+ "tracing",
  "xilem",
  "xilem-ui-core",
 ]
