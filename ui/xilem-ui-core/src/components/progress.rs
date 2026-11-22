@@ -23,6 +23,7 @@ use xilem::{Pod, ViewCtx, WidgetView};
 pub struct LinearProgressWidget {
     progress: Option<f64>,
     phase: f64,
+    reduced_motion: bool,
 }
 
 impl UsesProperty<TrackColor> for LinearProgressWidget {}
@@ -34,6 +35,7 @@ impl LinearProgressWidget {
         Self {
             progress: progress.map(|p| p.clamp(0.0, 1.0)),
             phase: 0.0,
+            reduced_motion: false,
         }
     }
 
@@ -43,7 +45,18 @@ impl LinearProgressWidget {
         if this.widget.progress != next {
             let became_indet = this.widget.progress.is_some() && next.is_none();
             this.widget.progress = next;
-            if became_indet {
+            if became_indet && !this.widget.reduced_motion {
+                this.ctx.request_anim_frame();
+            }
+            this.ctx.request_paint_only();
+        }
+    }
+
+    /// Updates whether indeterminate sweep animation is disabled.
+    pub fn set_reduced_motion(this: &mut WidgetMut<'_, Self>, reduced_motion: bool) {
+        if this.widget.reduced_motion != reduced_motion {
+            this.widget.reduced_motion = reduced_motion;
+            if !reduced_motion && this.widget.progress.is_none() {
                 this.ctx.request_anim_frame();
             }
             this.ctx.request_paint_only();
@@ -57,7 +70,7 @@ impl Widget for LinearProgressWidget {
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
-        if matches!(event, Update::WidgetAdded) && self.progress.is_none() {
+        if matches!(event, Update::WidgetAdded) && self.progress.is_none() && !self.reduced_motion {
             ctx.request_anim_frame();
         }
     }
@@ -68,7 +81,7 @@ impl Widget for LinearProgressWidget {
         _props: &mut PropertiesMut<'_>,
         interval: u64,
     ) {
-        if self.progress.is_none() {
+        if self.progress.is_none() && !self.reduced_motion {
             let dt = interval as f64 / 1_000_000_000.0;
             self.phase = (self.phase + dt * 0.75) % 1.0;
             ctx.request_paint_only();
@@ -119,6 +132,13 @@ impl Widget for LinearProgressWidget {
                 let active = Rect::new(0.0, 0.0, w, size.height).to_rounded_rect(r);
                 painter.fill(active, track.active).draw();
             }
+        } else if self.reduced_motion {
+            let left = size.width * 0.33;
+            let right = size.width * 0.67;
+            if right > left {
+                let centered = Rect::new(left, 0.0, right, size.height).to_rounded_rect(r);
+                painter.fill(centered, track.active).draw();
+            }
         } else {
             let bar_w = size.width * 0.34;
             let start = -bar_w + (size.width + bar_w * 2.0) * self.phase;
@@ -139,8 +159,13 @@ impl Widget for LinearProgressWidget {
         &mut self,
         _ctx: &mut AccessCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _node: &mut Node,
+        node: &mut Node,
     ) {
+        if let Some(p) = self.progress {
+            node.set_min_numeric_value(0.0);
+            node.set_max_numeric_value(1.0);
+            node.set_numeric_value(p);
+        }
     }
 
     fn children_ids(&self) -> ChildrenIds {
@@ -166,7 +191,9 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec = crate::style_engine::current_spec_arc(ctx);
-        let mut pod = ctx.create_pod(LinearProgressWidget::new(self.progress));
+        let mut widget = LinearProgressWidget::new(self.progress);
+        widget.reduced_motion = spec.reduced_motion;
+        let mut pod = ctx.create_pod(widget);
         pod.new_widget.properties.insert(TrackColor {
             active: spec.palette.accent,
             inactive: spec.palette.secondary_container,
@@ -178,10 +205,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         &self,
         _prev: &Self,
         _view_state: &mut Self::ViewState,
-        _ctx: &mut ViewCtx,
+        ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
+        let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+        LinearProgressWidget::set_reduced_motion(&mut element, reduced);
         LinearProgressWidget::set_progress(&mut element, self.progress);
     }
 
@@ -297,8 +326,11 @@ impl Widget for DeterminateCircularWidget {
         &mut self,
         _ctx: &mut AccessCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _node: &mut Node,
+        node: &mut Node,
     ) {
+        node.set_min_numeric_value(0.0);
+        node.set_max_numeric_value(1.0);
+        node.set_numeric_value(self.progress);
     }
 
     fn children_ids(&self) -> ChildrenIds {

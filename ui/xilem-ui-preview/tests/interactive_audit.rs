@@ -1687,3 +1687,322 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
     assert!(!hh.state().show_alert);
     assert_eq!(hh.state().dismissed, 1);
 }
+
+#[test]
+fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
+    use xilem::WidgetView as _;
+    use xilem::masonry::accesskit::Role;
+    use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
+    use xilem::masonry::core::{KeyboardEvent, TextEvent};
+    use xilem::masonry::layout::{AsUnit, UnitPoint};
+    use xilem::masonry::properties::Padding;
+    use xilem::style::Style as _;
+    use xilem::view::{CrossAxisAlignment, ZStackExt, flex_col, zstack};
+    use xilem_ui::prelude::{
+        basic_dialog, determinate_circular_progress, dropdown_menu, linear_progress, menu_item,
+        primary_button, range_slider, ripple_layer, slider, switch, ui_transition,
+    };
+
+    // 1. Modal Focus Trap, Instant Escape (without manual FocusType), & Double-Escape safety
+    struct ModalTrapState {
+        theme: UiTheme,
+        dialog_open: bool,
+        menu_open: bool,
+        menu_choice: Option<usize>,
+        toggled: bool,
+        toggle_count: usize,
+        slider_val: f64,
+        range_val: (f64, f64),
+        clicks: usize,
+    }
+
+    let build_harness = |reduced_motion: bool| {
+        PreviewHarness::new(
+            ModalTrapState {
+                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                    .with_reduced_motion(reduced_motion),
+                dialog_open: false,
+                menu_open: false,
+                menu_choice: None,
+                toggled: false,
+                toggle_count: 0,
+                slider_val: 0.4,
+                range_val: (0.2, 0.8),
+                clicks: 0,
+            },
+            |s| s.theme.clone(),
+            |s| {
+                let bg_btn = primary_button("BgBtn", |st: &mut ModalTrapState| st.clicks += 1);
+                let menu = dropdown_menu(
+                    primary_button("OpenMenu", |st: &mut ModalTrapState| {
+                        st.menu_open = !st.menu_open;
+                    }),
+                    s.menu_open,
+                    vec![
+                        menu_item("MenuZero"),
+                        menu_item("MenuOne"),
+                        menu_item("MenuTwo"),
+                    ],
+                    |st: &mut ModalTrapState, idx| {
+                        st.menu_choice = Some(idx);
+                        st.menu_open = false;
+                    },
+                    |st: &mut ModalTrapState| st.menu_open = false,
+                );
+                let main = ui_transition(
+                    1,
+                    flex_col((
+                        bg_btn,
+                        primary_button("OpenDlg", |st: &mut ModalTrapState| {
+                            st.dialog_open = true;
+                        }),
+                        menu,
+                        ripple_layer(switch(s.toggled, |st: &mut ModalTrapState, v| {
+                            st.toggled = v;
+                            st.toggle_count += 1;
+                        })),
+                        slider(
+                            0.0,
+                            1.0,
+                            s.slider_val,
+                            None,
+                            |st: &mut ModalTrapState, v| {
+                                st.slider_val = v;
+                            },
+                        ),
+                        range_slider(0.0, 1.0, s.range_val, |st: &mut ModalTrapState, pair| {
+                            st.range_val = pair;
+                        }),
+                        linear_progress(Some(0.65)),
+                        linear_progress(None),
+                        determinate_circular_progress(0.45),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .gap(10.px())
+                    .padding(Padding::all(16.px())),
+                );
+
+                let dlg = s.dialog_open.then(|| {
+                    basic_dialog(
+                        "Modal Trap Test",
+                        "Tab must stay inside this modal.",
+                        "Confirm",
+                        |st: &mut ModalTrapState| {
+                            st.clicks += 10;
+                            st.dialog_open = false;
+                        },
+                        |st: &mut ModalTrapState| st.dialog_open = false,
+                    )
+                    .dismiss_text("Cancel")
+                });
+
+                zstack((
+                    main.alignment(UnitPoint::TOP_LEFT),
+                    dlg.map(|d| d.alignment(UnitPoint::CENTER)),
+                ))
+                .boxed()
+            },
+            PreviewConfig {
+                width: 640,
+                height: 600,
+                ..PreviewConfig::default()
+            },
+        )
+    };
+
+    let mut h = build_harness(false);
+
+    // Check AccessKit on progress indicators and closed AnchoredPopupHost
+    let _ = h.render_image();
+    let lin_ids = h.find_widget_ids("LinearProgressWidget");
+    assert_eq!(lin_ids.len(), 2);
+    let circ_ids = h.find_widget_ids("DeterminateCircularWidget");
+    assert_eq!(circ_ids.len(), 1);
+    let host_ids = h.find_widget_ids("AnchoredPopupHost");
+    assert_eq!(host_ids.len(), 1);
+    {
+        let inner = h.inner_harness_mut();
+        let lin_node = inner
+            .access_node(lin_ids[0])
+            .expect("determinate LinearProgressWidget access node");
+        assert_eq!(lin_node.role(), Role::ProgressIndicator);
+        assert_eq!(lin_node.numeric_value(), Some(0.65));
+        let circ_node = inner
+            .access_node(circ_ids[0])
+            .expect("DeterminateCircularWidget access node");
+        assert_eq!(circ_node.role(), Role::ProgressIndicator);
+        assert_eq!(circ_node.numeric_value(), Some(0.45));
+        let host_node = inner
+            .access_node(host_ids[0])
+            .expect("AnchoredPopupHost access node");
+        assert_eq!(host_node.data().is_expanded(), Some(false));
+    }
+
+    // Identify BgBtn WidgetId before opening modal
+    let tree_before = dump_layout_tree(&mut h);
+    fn has_text_descendant(node: &LayoutNode, needle: &str) -> bool {
+        if node.text.as_deref().is_some_and(|t| t.contains(needle)) {
+            return true;
+        }
+        node.children.iter().any(|c| has_text_descendant(c, needle))
+    }
+    fn find_btn_id_by_text(node: &LayoutNode, needle: &str) -> Option<u64> {
+        if node.type_name == "Button" && has_text_descendant(node, needle) {
+            return Some(node.id);
+        }
+        node.children
+            .iter()
+            .find_map(|c| find_btn_id_by_text(c, needle))
+    }
+    let bg_btn_raw_id = find_btn_id_by_text(&tree_before, "BgBtn").unwrap_or_else(|| {
+        panic!(
+            "BgBtn present in tree:\n{}",
+            xilem_ui_preview::inspect::format_tree_text(&tree_before)
+        )
+    });
+
+    // Open dialog by clicking OpenDlg; move pointer onto EscapeCatcher so desktop hover/click
+    // gives modal focus, then verify Role::Dialog + modal=true and Tab trap ring.
+    h.run_step(&PreviewStep::ClickLabel("OpenDlg".to_owned()))
+        .unwrap();
+    assert!(h.state().dialog_open);
+    h.run_step(&PreviewStep::HoverType {
+        type_name: "EscapeCatcher".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    let _ = h.render_image();
+    let trap_ids = h.find_widget_ids("EscapeCatcher");
+    assert_eq!(trap_ids.len(), 1);
+    {
+        let inner = h.inner_harness_mut();
+        let dlg_node = inner
+            .access_node(trap_ids[0])
+            .expect("EscapeCatcher modal access node");
+        assert_eq!(dlg_node.role(), Role::Dialog);
+        assert!(dlg_node.is_modal());
+    }
+
+    // Tab 10 times: focus must cycle ONLY among modal buttons and NEVER reach BgBtn.
+    let mut visited_in_modal = HashSet::new();
+    for _ in 0..10 {
+        h.run_step(&PreviewStep::PressTab { shift: false }).unwrap();
+        let focused_raw = h
+            .inner_harness_mut()
+            .focused_widget_id()
+            .map(|id| id.to_raw());
+        assert_ne!(
+            focused_raw,
+            Some(bg_btn_raw_id),
+            "Tab must be trapped inside modal EscapeCatcher and never reach BgBtn"
+        );
+        if let Some(id) = focused_raw {
+            visited_in_modal.insert(id);
+        }
+    }
+    assert!(
+        visited_in_modal.len() >= 2,
+        "Tab trap must cycle across at least 2 buttons inside the modal, saw {visited_in_modal:?}"
+    );
+
+    // Press Escape TWICE: first closes modal, second is harmless no-op
+    h.run_step(&PreviewStep::PressEscape).unwrap();
+    assert!(!h.state().dialog_open);
+    h.run_step(&PreviewStep::PressEscape).unwrap();
+    assert!(!h.state().dialog_open);
+
+    // 2. PopupLayer keyboard navigation: ArrowDown -> ArrowDown -> Enter selects MenuOne (index 1)
+    h.run_step(&PreviewStep::ClickLabel("OpenMenu".to_owned()))
+        .unwrap();
+    assert!(h.state().menu_open);
+    let _ = h.render_image();
+    {
+        let inner = h.inner_harness_mut();
+        let host_node = inner
+            .access_node(host_ids[0])
+            .expect("expanded AnchoredPopupHost node");
+        assert_eq!(host_node.data().is_expanded(), Some(true));
+    }
+    for _ in 0..2 {
+        h.inner_harness_mut()
+            .process_text_event(TextEvent::Keyboard(KeyboardEvent {
+                state: KeyState::Down,
+                key: Key::Named(NamedKey::ArrowDown),
+                code: Code::ArrowDown,
+                ..KeyboardEvent::default()
+            }));
+        h.pump_actions();
+    }
+    h.inner_harness_mut()
+        .process_text_event(TextEvent::Keyboard(KeyboardEvent {
+            state: KeyState::Down,
+            key: Key::Named(NamedKey::Enter),
+            code: Code::Enter,
+            ..KeyboardEvent::default()
+        }));
+    h.inner_harness_mut()
+        .process_text_event(TextEvent::Keyboard(KeyboardEvent {
+            state: KeyState::Up,
+            key: Key::Named(NamedKey::Enter),
+            code: Code::Enter,
+            ..KeyboardEvent::default()
+        }));
+    h.pump_actions();
+    assert!(!h.state().menu_open);
+    assert_eq!(h.state().menu_choice, Some(1));
+
+    // Reopen and dismiss PopupLayer via Escape
+    h.run_step(&PreviewStep::ClickLabel("OpenMenu".to_owned()))
+        .unwrap();
+    assert!(h.state().menu_open);
+    h.run_step(&PreviewStep::PressEscape).unwrap();
+    assert!(!h.state().menu_open);
+
+    // 3. Rapid stress test (20x rapid switch clicks + out-of-bounds slider/range drags)
+    for _ in 0..20 {
+        h.run_step(&PreviewStep::ClickType {
+            type_name: "UiSwitch".to_owned(),
+            index: 0,
+        })
+        .unwrap();
+    }
+    assert_eq!(h.state().toggle_count, 20);
+    assert!(!h.state().toggled);
+
+    h.settle_animations();
+    h.drag_type("UiSlider", 0, (0.4, 0.5), (1.5, 0.5)).unwrap();
+    assert!((h.state().slider_val - 1.0).abs() < 1e-6);
+    h.drag_type("UiSlider", 0, (0.9, 0.5), (-0.5, 0.5)).unwrap();
+    assert!((h.state().slider_val - 0.0).abs() < 1e-6);
+    h.drag_type("RangeSliderWidget", 0, (0.2, 0.5), (1.4, 0.5))
+        .unwrap();
+    assert!(h.state().range_val.0 <= h.state().range_val.1 && h.state().range_val.1 <= 1.0);
+
+    // 4. reduced_motion = true: UiSwitch, RippleLayer, UiTransition, LinearProgressWidget(None), and Modal
+    //    must schedule ZERO animation loops.
+    let mut h_rm = build_harness(true);
+    assert!(
+        !h_rm.inner_harness_mut().render_root().needs_anim(),
+        "UiTransition & indeterminate LinearProgressWidget must not animate under reduced_motion"
+    );
+    h_rm.run_step(&PreviewStep::ClickType {
+        type_name: "UiSwitch".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    assert!(h_rm.state().toggled);
+    assert!(
+        !h_rm.inner_harness_mut().render_root().needs_anim(),
+        "UiSwitch & RippleLayer must not animate under reduced_motion"
+    );
+    h_rm.run_step(&PreviewStep::ClickLabel("OpenDlg".to_owned()))
+        .unwrap();
+    assert!(h_rm.state().dialog_open);
+    // Advance one 16ms tick to clear Masonry's initial WidgetState::new(request_anim = true);
+    // with reduced_motion = true (0ms SlideTransition), no further anim frames may be requested.
+    h_rm.run_step(&PreviewStep::AnimateMs(16)).unwrap();
+    assert!(
+        !h_rm.inner_harness_mut().render_root().needs_anim(),
+        "Modal SlideTransition must not animate under reduced_motion"
+    );
+}

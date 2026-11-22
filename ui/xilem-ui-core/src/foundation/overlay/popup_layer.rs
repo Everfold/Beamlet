@@ -99,14 +99,18 @@ pub enum PopupAction {
 pub struct PopupLayer {
     creator: WidgetId,
     child: WidgetPod<SizedBox>,
-    button_map: Vec<(WidgetId, usize)>,
+    button_map: Vec<(WidgetId, usize, bool)>,
+    highlighted: Option<usize>,
     min_width: f64,
     max_width: f64,
     dismissed: bool,
 }
 
 impl PopupLayer {
-    fn from_spec(creator: WidgetId, spec: &PopupLayerSpec) -> NewWidget<Self> {
+    fn from_spec(
+        creator: WidgetId,
+        spec: &PopupLayerSpec,
+    ) -> (NewWidget<Self>, Vec<(WidgetId, usize, bool)>) {
         let mut col = Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch);
         let mut button_map = Vec::new();
 
@@ -174,7 +178,7 @@ impl PopupLayer {
                     btn.classes.insert((*class).to_string());
                     btn.options.disabled = *disabled;
                     let btn_id = btn.id();
-                    button_map.push((btn_id, *action_idx));
+                    button_map.push((btn_id, *action_idx, *disabled));
                     col = col.with_fixed(btn);
                 }
             }
@@ -197,14 +201,52 @@ impl PopupLayer {
                 ),
             ));
 
-        NewWidget::new(Self {
+        let widget = NewWidget::new(Self {
             creator,
             child: card.to_pod(),
-            button_map,
+            button_map: button_map.clone(),
+            highlighted: None,
             min_width: spec.min_width,
             max_width: spec.max_width.max(spec.min_width),
             dismissed: false,
-        })
+        });
+        (widget, button_map)
+    }
+
+    fn enabled_slot_indices(&self) -> Vec<usize> {
+        self.button_map
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, &(_, _, disabled))| (!disabled).then_some(slot))
+            .collect()
+    }
+
+    fn select_slot(&mut self, next_slot: Option<usize>, ctx: &mut EventCtx<'_>) {
+        if let Some(slot) = next_slot
+            && let Some(&(btn_id, _, false)) = self.button_map.get(slot)
+        {
+            self.highlighted = Some(slot);
+            ctx.set_focus(btn_id);
+        }
+    }
+
+    fn activate_index(&mut self, ctx: &mut EventCtx<'_>, idx: usize) {
+        if self.dismissed {
+            return;
+        }
+        self.dismissed = true;
+        let self_id = ctx.widget_id();
+        ctx.remove_layer(self_id);
+        let creator = self.creator;
+        ctx.mutate_later(creator, move |mut host| {
+            let mut host = host.downcast::<AnchoredPopupHost>();
+            if host.widget.layer_id == Some(self_id) {
+                host.widget.layer_id = None;
+                host.widget.layer_buttons.clear();
+            }
+            host.ctx
+                .submit_action::<PopupAction>(PopupAction::Selected(idx));
+        });
     }
 
     fn dismiss_layer(&mut self, ctx: &mut EventCtx<'_>) {
@@ -219,6 +261,7 @@ impl PopupLayer {
             let mut host = host.downcast::<AnchoredPopupHost>();
             if host.widget.layer_id == Some(self_id) {
                 host.widget.layer_id = None;
+                host.widget.layer_buttons.clear();
             }
             if host.widget.open {
                 host.ctx
@@ -241,13 +284,78 @@ impl Widget for PopupLayer {
         _props: &mut PropertiesMut<'_>,
         event: &TextEvent,
     ) {
+        let current_slot = ctx
+            .focus_target_id()
+            .and_then(|fid| self.button_map.iter().position(|(id, _, _)| *id == fid))
+            .or(self.highlighted);
+
         match event {
-            TextEvent::Keyboard(key_event)
-                if !key_event.state.is_up() && key_event.key == Key::Named(NamedKey::Escape) =>
-            {
-                ctx.set_handled();
-                self.dismiss_layer(ctx);
-            }
+            TextEvent::Keyboard(key_event) if !key_event.state.is_up() => match &key_event.key {
+                Key::Named(NamedKey::Escape) => {
+                    ctx.set_handled();
+                    self.dismiss_layer(ctx);
+                }
+                Key::Named(NamedKey::ArrowDown) => {
+                    let enabled = self.enabled_slot_indices();
+                    let next = if enabled.is_empty() {
+                        None
+                    } else if let Some(cur) = current_slot
+                        && let Some(pos) = enabled.iter().position(|&s| s == cur)
+                    {
+                        Some(enabled[(pos + 1) % enabled.len()])
+                    } else {
+                        enabled.first().copied()
+                    };
+                    self.select_slot(next, ctx);
+                    ctx.set_handled();
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    let enabled = self.enabled_slot_indices();
+                    let prev = if enabled.is_empty() {
+                        None
+                    } else if let Some(cur) = current_slot
+                        && let Some(pos) = enabled.iter().position(|&s| s == cur)
+                    {
+                        let p = if pos == 0 { enabled.len() - 1 } else { pos - 1 };
+                        Some(enabled[p])
+                    } else {
+                        enabled.last().copied()
+                    };
+                    self.select_slot(prev, ctx);
+                    ctx.set_handled();
+                }
+                Key::Named(NamedKey::Home) => {
+                    let first = self.enabled_slot_indices().first().copied();
+                    self.select_slot(first, ctx);
+                    ctx.set_handled();
+                }
+                Key::Named(NamedKey::End) => {
+                    let last = self.enabled_slot_indices().last().copied();
+                    self.select_slot(last, ctx);
+                    ctx.set_handled();
+                }
+                Key::Named(NamedKey::Enter) => {
+                    if ctx.is_focus_target()
+                        && let Some(slot) =
+                            current_slot.or_else(|| self.enabled_slot_indices().first().copied())
+                        && let Some(&(_, action_idx, false)) = self.button_map.get(slot)
+                    {
+                        ctx.set_handled();
+                        self.activate_index(ctx, action_idx);
+                    }
+                }
+                Key::Character(c) if c == " " => {
+                    if ctx.is_focus_target()
+                        && let Some(slot) =
+                            current_slot.or_else(|| self.enabled_slot_indices().first().copied())
+                        && let Some(&(_, action_idx, false)) = self.button_map.get(slot)
+                    {
+                        ctx.set_handled();
+                        self.activate_index(ctx, action_idx);
+                    }
+                }
+                _ => {}
+            },
             TextEvent::WindowFocusChange(false) => {
                 self.dismiss_layer(ctx);
             }
@@ -264,7 +372,7 @@ impl Widget for PopupLayer {
     ) {
         if action.downcast_ref::<ButtonPress>().is_some()
             && !self.dismissed
-            && let Some(&(_, idx)) = self.button_map.iter().find(|(id, _)| *id == source)
+            && let Some(&(_, idx, _)) = self.button_map.iter().find(|(id, _, _)| *id == source)
         {
             self.dismissed = true;
             ctx.set_handled();
@@ -274,6 +382,7 @@ impl Widget for PopupLayer {
                 let mut host = host.downcast::<AnchoredPopupHost>();
                 if host.widget.layer_id == Some(self_id) {
                     host.widget.layer_id = None;
+                    host.widget.layer_buttons.clear();
                 }
                 host.ctx
                     .submit_action::<PopupAction>(PopupAction::Selected(idx));
@@ -387,6 +496,7 @@ pub struct AnchoredPopupHost {
     offset: Vec2,
     spec: PopupLayerSpec,
     layer_id: Option<WidgetId>,
+    layer_buttons: Vec<(WidgetId, usize, bool)>,
 }
 
 impl AnchoredPopupHost {
@@ -403,6 +513,7 @@ impl AnchoredPopupHost {
             offset,
             spec,
             layer_id: None,
+            layer_buttons: Vec::new(),
         }
     }
 
@@ -428,12 +539,16 @@ impl AnchoredPopupHost {
         if !state_changed {
             return;
         }
+        if this.widget.open != open {
+            this.ctx.request_accessibility_update();
+        }
         this.widget.open = open;
         this.widget.offset = offset;
         this.widget.spec = spec;
 
         if !open {
             this.widget.pending_spawn = false;
+            this.widget.layer_buttons.clear();
             Self::remove_active_layer_with(this.widget.layer_id.take(), |id| {
                 this.ctx.mutate_later(id, |mut layer| {
                     layer.downcast::<PopupLayer>().widget.dismissed = true;
@@ -443,6 +558,7 @@ impl AnchoredPopupHost {
             return;
         }
 
+        this.widget.layer_buttons.clear();
         Self::remove_active_layer_with(this.widget.layer_id.take(), |id| {
             this.ctx.mutate_later(id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
@@ -451,8 +567,9 @@ impl AnchoredPopupHost {
         });
         let border_box = this.ctx.border_box();
         if border_box.size() != Size::ZERO {
-            let layer = PopupLayer::from_spec(this.ctx.widget_id(), &this.widget.spec);
+            let (layer, buttons) = PopupLayer::from_spec(this.ctx.widget_id(), &this.widget.spec);
             this.widget.layer_id = Some(layer.id());
+            this.widget.layer_buttons = buttons;
             let pos = this.ctx.to_window(border_box.origin())
                 + Vec2::new(0.0, border_box.height())
                 + offset;
@@ -466,6 +583,7 @@ impl AnchoredPopupHost {
 
     fn close_layer(this: &mut WidgetMut<'_, Self>) {
         this.widget.pending_spawn = false;
+        this.widget.layer_buttons.clear();
         if let Some(id) = this.widget.layer_id.take() {
             this.ctx.mutate_later(id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
@@ -484,6 +602,54 @@ impl Widget for AnchoredPopupHost {
         }
     }
 
+    fn on_text_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &TextEvent,
+    ) {
+        if !self.open {
+            return;
+        }
+        let Some(layer_id) = self.layer_id else {
+            return;
+        };
+        if let TextEvent::Keyboard(key_event) = event
+            && !key_event.state.is_up()
+        {
+            match &key_event.key {
+                Key::Named(NamedKey::Escape) => {
+                    ctx.mutate_later(layer_id, |mut layer| {
+                        layer.downcast::<PopupLayer>().widget.dismissed = true;
+                    });
+                    ctx.remove_layer(layer_id);
+                    self.layer_id = None;
+                    self.layer_buttons.clear();
+                    self.pending_spawn = false;
+                    ctx.submit_action::<PopupAction>(PopupAction::Dismissed);
+                    ctx.set_handled();
+                }
+                Key::Named(NamedKey::ArrowDown | NamedKey::Home) => {
+                    if let Some(&(btn_id, _, false)) =
+                        self.layer_buttons.iter().find(|(_, _, d)| !*d)
+                    {
+                        ctx.set_focus(btn_id);
+                        ctx.set_handled();
+                    }
+                }
+                Key::Named(NamedKey::ArrowUp | NamedKey::End) => {
+                    if let Some(&(btn_id, _, false)) =
+                        self.layer_buttons.iter().rev().find(|(_, _, d)| !*d)
+                    {
+                        ctx.set_focus(btn_id);
+                        ctx.set_handled();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn on_anim_frame(
         &mut self,
         ctx: &mut UpdateCtx<'_>,
@@ -492,14 +658,16 @@ impl Widget for AnchoredPopupHost {
     ) {
         if self.pending_spawn && self.open {
             self.pending_spawn = false;
+            self.layer_buttons.clear();
             if let Some(old_id) = self.layer_id.take() {
                 ctx.mutate_later(old_id, |mut layer| {
                     layer.downcast::<PopupLayer>().widget.dismissed = true;
                 });
                 ctx.remove_layer(old_id);
             }
-            let layer = PopupLayer::from_spec(ctx.widget_id(), &self.spec);
+            let (layer, buttons) = PopupLayer::from_spec(ctx.widget_id(), &self.spec);
             self.layer_id = Some(layer.id());
+            self.layer_buttons = buttons;
             let border_box = ctx.border_box();
             let pos = ctx.to_window(border_box.origin())
                 + Vec2::new(0.0, border_box.height())
@@ -545,8 +713,9 @@ impl Widget for AnchoredPopupHost {
         &mut self,
         _ctx: &mut AccessCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _node: &mut Node,
+        node: &mut Node,
     ) {
+        node.set_expanded(self.open);
     }
 
     fn children_ids(&self) -> ChildrenIds {

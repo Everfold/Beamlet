@@ -69,12 +69,35 @@ const ESCAPE_CHILD_ID: ViewId = ViewId::new(0x5549_3401);
 )]
 pub struct EscapeCatcher {
     child: WidgetPod<dyn Widget>,
+    trap_focus: bool,
+    focus_ring: Vec<WidgetId>,
 }
 
 impl EscapeCatcher {
     fn new(child: NewWidget<impl Widget + ?Sized>) -> Self {
         Self {
             child: child.erased().to_pod(),
+            trap_focus: false,
+            focus_ring: Vec::new(),
+        }
+    }
+
+    /// Creates a modal [`EscapeCatcher`] exposing `Role::Dialog` (`modal = true`) and trapping `Tab` focus.
+    pub(crate) fn new_modal_with_focus_ring(
+        child: NewWidget<impl Widget + ?Sized>,
+        focus_ring: Vec<WidgetId>,
+    ) -> Self {
+        Self {
+            child: child.erased().to_pod(),
+            trap_focus: true,
+            focus_ring,
+        }
+    }
+
+    fn set_trap_focus(this: &mut WidgetMut<'_, Self>, trap: bool) {
+        if this.widget.trap_focus != trap {
+            this.widget.trap_focus = trap;
+            this.ctx.request_accessibility_update();
         }
     }
 
@@ -110,10 +133,29 @@ impl Widget for EscapeCatcher {
     ) {
         if let TextEvent::Keyboard(key_event) = event
             && !key_event.state.is_up()
-            && key_event.key == Key::Named(NamedKey::Escape)
         {
-            ctx.set_handled();
-            ctx.submit_action::<Self::Action>(EscapePressed);
+            if key_event.key == Key::Named(NamedKey::Escape) {
+                ctx.set_handled();
+                ctx.submit_action::<Self::Action>(EscapePressed);
+            } else if self.trap_focus && key_event.key == Key::Named(NamedKey::Tab) {
+                let backward = key_event.modifiers.shift();
+                if self.focus_ring.is_empty() {
+                    ctx.request_focus();
+                } else {
+                    let cur_pos = ctx
+                        .focus_target_id()
+                        .and_then(|id| self.focus_ring.iter().position(|ring_id| *ring_id == id));
+                    let next_idx = match (cur_pos, backward) {
+                        (Some(idx), false) => (idx + 1) % self.focus_ring.len(),
+                        (Some(0), true) => self.focus_ring.len() - 1,
+                        (Some(idx), true) => idx - 1,
+                        (None, false) => 0,
+                        (None, true) => self.focus_ring.len() - 1,
+                    };
+                    ctx.set_focus(self.focus_ring[next_idx]);
+                }
+                ctx.set_handled();
+            }
         }
     }
 
@@ -147,15 +189,22 @@ impl Widget for EscapeCatcher {
     }
 
     fn accessibility_role(&self) -> Role {
-        Role::GenericContainer
+        if self.trap_focus {
+            Role::Dialog
+        } else {
+            Role::GenericContainer
+        }
     }
 
     fn accessibility(
         &mut self,
         _ctx: &mut AccessCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _node: &mut Node,
+        node: &mut Node,
     ) {
+        if self.trap_focus {
+            node.set_modal();
+        }
     }
 
     fn children_ids(&self) -> ChildrenIds {
@@ -174,6 +223,7 @@ pub fn escape_catcher<State: 'static, Action: 'static, V: WidgetView<State, Acti
 ) -> EscapeCatcherView<V, State, Action> {
     EscapeCatcherView {
         child,
+        trap_focus: false,
         on_escape: Arc::new(on_escape),
         phantom: PhantomData,
     }
@@ -187,8 +237,17 @@ pub fn escape_catcher<State: 'static, Action: 'static, V: WidgetView<State, Acti
 )]
 pub struct EscapeCatcherView<V, State, Action> {
     child: V,
+    trap_focus: bool,
     on_escape: ActionCallback<State, Action>,
     phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<V, State, Action> EscapeCatcherView<V, State, Action> {
+    /// Enables modal `Role::Dialog` (`modal = true`) semantics and keyboard focus trapping.
+    pub fn modal(mut self, trap_focus: bool) -> Self {
+        self.trap_focus = trap_focus;
+        self
+    }
 }
 
 impl<V, State, Action> ViewMarker for EscapeCatcherView<V, State, Action> {}
@@ -205,8 +264,14 @@ where
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let (child_pod, child_state) =
             ctx.with_id(ESCAPE_CHILD_ID, |ctx| self.child.build(ctx, app_state));
-        let pod =
-            ctx.with_action_widget(|ctx| ctx.create_pod(EscapeCatcher::new(child_pod.new_widget)));
+        let pod = ctx.with_action_widget(|ctx| {
+            let widget = if self.trap_focus {
+                EscapeCatcher::new_modal_with_focus_ring(child_pod.new_widget, Vec::new())
+            } else {
+                EscapeCatcher::new(child_pod.new_widget)
+            };
+            ctx.create_pod(widget)
+        });
         (pod, child_state)
     }
 
@@ -218,6 +283,7 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
+        EscapeCatcher::set_trap_focus(&mut element, self.trap_focus);
         let mut child = EscapeCatcher::child_mut(&mut element);
         ctx.with_id(ESCAPE_CHILD_ID, |ctx| {
             self.child

@@ -64,6 +64,9 @@ pub(crate) fn class_button_build<State: 'static, Action: 'static, V: WidgetView<
         let mut pod = ctx.create_pod(widgets::Button::new(child_pod.new_widget));
         pod.new_widget.classes.insert(class.to_string());
         pod.new_widget.options.disabled = disabled;
+        if !disabled {
+            crate::foundation::overlay::modal::record_modal_focusable(pod.new_widget.id());
+        }
         pod
     });
     (pod, child_state)
