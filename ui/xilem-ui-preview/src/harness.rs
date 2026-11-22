@@ -388,6 +388,14 @@ impl<State: 'static> PreviewHarness<State> {
         self.pump_actions();
     }
 
+    /// Simulates an OS window focus gain/loss event (`TextEvent::WindowFocusChange`) and repaints.
+    pub fn set_window_focused(&mut self, focused: bool) {
+        self.harness
+            .process_text_event(TextEvent::WindowFocusChange(focused));
+        self.pump_actions();
+        let _ = self.harness.redraw();
+    }
+
     /// Rasterizes the current widget tree on CPU using `vello_cpu`.
     pub fn render_image(&mut self) -> RgbaImage {
         self.harness.render()

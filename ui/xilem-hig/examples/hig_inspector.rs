@@ -11,10 +11,10 @@ use xilem::view::{
 };
 use xilem::{AppState, EventLoop, WidgetView, Xilem};
 use xilem_hig::{
-    Brightness, HigAccent, HigTheme, basic_dialog, body_medium, body_small, disclosure_group,
-    form_group, form_row, headline_small, help_button, hig_window, icon_button, icons,
-    inspector_panel, label_medium, macos_toolbar_with_center, path_control, primary_button,
-    search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
+    Brightness, HigAccent, HigTheme, body_medium, body_small, disclosure_group, form_group,
+    form_row, headline_small, help_button, hig_window, icon_button, icons, inspector_panel,
+    label_medium, macos_alert_dialog, macos_toolbar_with_center, path_control, popup_button,
+    primary_button, search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
 };
 
 struct InspectorApp {
@@ -31,6 +31,8 @@ struct InspectorApp {
     inspector_visible: bool,
     metadata_expanded: bool,
     path_idx: usize,
+    export_format: usize,
+    export_popup_open: bool,
     show_help_dialog: bool,
 }
 
@@ -56,6 +58,8 @@ impl Default for InspectorApp {
             inspector_visible: true,
             metadata_expanded: true,
             path_idx: 2,
+            export_format: 0,
+            export_popup_open: false,
             show_help_dialog: false,
         }
     }
@@ -216,6 +220,23 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
                 form_group(
                     Some("摘要信息"),
                     vec![
+                        form_row(
+                            "导出格式",
+                            popup_button(
+                                &["PDF 矢量", "PNG Retina", "SVG 源码"],
+                                state.export_format,
+                                state.export_popup_open,
+                                |s: &mut InspectorApp| {
+                                    s.export_popup_open = !s.export_popup_open;
+                                },
+                                |s: &mut InspectorApp, idx| {
+                                    s.export_format = idx;
+                                    s.export_popup_open = false;
+                                },
+                                |s: &mut InspectorApp| s.export_popup_open = false,
+                            ),
+                        )
+                        .boxed(),
                         form_row("当前选中", label_medium(format!("{:?}", state.sidebar_sel)))
                             .boxed(),
                         form_row(
@@ -249,15 +270,15 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
         .cross_axis_alignment(CrossAxisAlignment::Stretch);
 
     let help_modal = state.show_help_dialog.then(|| {
-        basic_dialog(
-            "macOS 检查器快捷键指南",
-            "遵循 Apple HIG 规范：“关闭/取消”靠右偏左，“完成/确认”按钮置于最右侧 (PrimaryTrailing)。",
-            "完成",
+        macos_alert_dialog(
+            "确认保存并导出？",
+            "macOS Big Sur 居中图标与堆叠按钮规范：主动作置于上方，取消置于下方。",
+            "导出文档",
+            "取消",
             |s: &mut InspectorApp| s.show_help_dialog = false,
             |s: &mut InspectorApp| s.show_help_dialog = false,
         )
-        .icon(icons::HELP)
-        .dismiss_text("关闭")
+        .icon(Some(icons::HELP))
     });
 
     zstack((

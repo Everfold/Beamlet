@@ -9,8 +9,9 @@ pub mod style_engine;
 pub mod tokens;
 
 pub use foundation::{
-    EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost, RippleLayer, RippleLayerView,
-    UiClassExt, focus_frame, icons, ripple_layer, ui_icon, ui_transition,
+    BeveledBorder, BeveledBorderView, EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost,
+    RippleLayer, RippleLayerView, UiClassExt, beveled_surface, focus_frame, icons, ripple_layer,
+    ui_icon, ui_transition,
 };
 pub use style_engine::{build_default_properties, current_spec, ui_scope, ui_window, with_spec};
 pub use tokens::{

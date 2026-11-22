@@ -1377,3 +1377,313 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
         "RippleLayer must suppress animations when reduced_motion is true"
     );
 }
+
+#[test]
+fn audit_phase5_fluent_and_hig_desktop_controls() {
+    use xilem::WidgetView as _;
+    use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
+    use xilem::masonry::core::{KeyboardEvent, TextEvent};
+    use xilem::masonry::layout::{AsUnit, UnitPoint};
+    use xilem::masonry::properties::Padding;
+    use xilem::style::Style as _;
+    use xilem::view::{CrossAxisAlignment, FlexExt as _, ZStackExt, flex_col, flex_row, zstack};
+    use xilem_ui::prelude::{
+        NavDestination, command_bar_with_overflow, icons, macos_alert_dialog, menu_item,
+        navigation_view_collapsible, number_box, popup_button, primary_button, switch, text_field,
+    };
+
+    fn find_button_center(node: &LayoutNode, needle: &str) -> Option<(f64, f64)> {
+        if node.type_name == "Button" && has_matching_text(node, needle) {
+            return Some((
+                node.rect.x + node.rect.width * 0.5,
+                node.rect.y + node.rect.height * 0.5,
+            ));
+        }
+        for c in &node.children {
+            if let Some(pt) = find_button_center(c, needle) {
+                return Some(pt);
+            }
+        }
+        None
+    }
+
+    fn has_matching_text(node: &LayoutNode, needle: &str) -> bool {
+        if node.text.as_deref().is_some_and(|t| t.contains(needle)) {
+            return true;
+        }
+        node.children.iter().any(|c| has_matching_text(c, needle))
+    }
+
+    // 1. Windows Fluent 2: collapsible NavigationView (280px <-> 52px), CommandBar overflow popup,
+    //    and NumberBox ArrowUp/ArrowDown clamped stepping.
+    struct FluentPhase5 {
+        theme: UiTheme,
+        collapsed: bool,
+        nav: usize,
+        overflow_open: bool,
+        overflow_picked: Option<usize>,
+        num: f64,
+    }
+
+    let mut fh = PreviewHarness::new(
+        FluentPhase5 {
+            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+            collapsed: false,
+            nav: 0,
+            overflow_open: false,
+            overflow_picked: None,
+            num: 9.0,
+        },
+        |s| s.theme.clone(),
+        |s| {
+            let nav_items = [
+                NavDestination::new("Home", icons::HOME),
+                NavDestination::new("Settings", icons::SETTINGS),
+            ];
+            let footer = [NavDestination::new("Update", icons::REFRESH).with_badge("1")];
+            let nav = navigation_view_collapsible(
+                Some("WinUI"),
+                &nav_items,
+                &footer,
+                s.nav,
+                s.collapsed,
+                |st: &mut FluentPhase5| st.collapsed = !st.collapsed,
+                |st: &mut FluentPhase5, i| st.nav = i,
+            );
+            let cmd = command_bar_with_overflow(
+                vec![primary_button("Save", |st: &mut FluentPhase5| st.num += 0.0).boxed()],
+                vec![menu_item("OverflowOne"), menu_item("OverflowTwo")],
+                s.overflow_open,
+                |st: &mut FluentPhase5| st.overflow_open = !st.overflow_open,
+                |st: &mut FluentPhase5, idx| {
+                    st.overflow_picked = Some(idx);
+                    st.overflow_open = false;
+                },
+                |st: &mut FluentPhase5| st.overflow_open = false,
+            );
+            let nb = number_box(s.num, 0.0, 10.0, 1.0, |st: &mut FluentPhase5, v| {
+                st.num = v;
+            });
+            let right = flex_col((cmd, nb))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(12.px())
+                .padding(Padding::all(16.px()));
+            flex_row((nav, right.flex(1.0)))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .boxed()
+        },
+        PreviewConfig {
+            width: 820,
+            height: 480,
+            ..PreviewConfig::default()
+        },
+    );
+
+    let wide_tree = dump_layout_tree(&mut fh);
+    let wide_nav_w = wide_tree.children[0].children[0].children[0].children[0]
+        .rect
+        .width;
+    assert!(
+        (wide_nav_w - 280.0).abs() < 2.0,
+        "expanded NavigationView width expected 280px, got {wide_nav_w}"
+    );
+    // Toggle hamburger collapse
+    fh.run_step(&PreviewStep::ClickType {
+        type_name: "Button".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    assert!(fh.state().collapsed);
+    let compact_tree = dump_layout_tree(&mut fh);
+    let compact_nav_w = compact_tree.children[0].children[0].children[0].children[0]
+        .rect
+        .width;
+    assert!(
+        (compact_nav_w - 52.0).abs() < 2.0,
+        "collapsed NavigationView width expected 52px, got {compact_nav_w}"
+    );
+    let compact_errors: Vec<_> = lint_layout(&compact_tree, fh.viewport())
+        .into_iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(
+        compact_errors.is_empty(),
+        "compact NavigationView errors: {compact_errors:#?}"
+    );
+
+    // CommandBar overflow menu open + item click
+    fh.run_step(&PreviewStep::ClickType {
+        type_name: "AnchoredPopupHost".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    assert!(fh.state().overflow_open);
+    let popup_tree = dump_layout_tree(&mut fh);
+    let (ox, oy) = find_button_center(&popup_tree, "OverflowTwo")
+        .expect("OverflowTwo popup menu item should be visible");
+    fh.click_point(ox, oy);
+    assert!(!fh.state().overflow_open);
+    assert_eq!(fh.state().overflow_picked, Some(1));
+
+    // NumberBox ArrowUp -> clamped at 10.0, then ArrowDown -> 9.0
+    fh.run_step(&PreviewStep::FocusType {
+        type_name: "NumberStepCatcher".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    for _ in 0..3 {
+        fh.inner_harness_mut()
+            .process_text_event(TextEvent::Keyboard(KeyboardEvent {
+                state: KeyState::Down,
+                key: Key::Named(NamedKey::ArrowUp),
+                code: Code::ArrowUp,
+                ..KeyboardEvent::default()
+            }));
+        fh.pump_actions();
+    }
+    assert!((fh.state().num - 10.0).abs() < 1e-6);
+    fh.inner_harness_mut()
+        .process_text_event(TextEvent::Keyboard(KeyboardEvent {
+            state: KeyState::Down,
+            key: Key::Named(NamedKey::ArrowDown),
+            code: Code::ArrowDown,
+            ..KeyboardEvent::default()
+        }));
+    fh.pump_actions();
+    assert!((fh.state().num - 9.0).abs() < 1e-6);
+
+    // 2. macOS HIG: FocusFrame + UiSwitch inactive-window pixel diff, popup_button, and macos_alert_dialog
+    struct HigPhase5 {
+        theme: UiTheme,
+        text: String,
+        toggle: bool,
+        pop_sel: usize,
+        pop_open: bool,
+        show_alert: bool,
+        confirmed: usize,
+        dismissed: usize,
+    }
+
+    let mut hh = PreviewHarness::new(
+        HigPhase5 {
+            theme: UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+            text: "Aqua".to_owned(),
+            toggle: true,
+            pop_sel: 0,
+            pop_open: false,
+            show_alert: false,
+            confirmed: 0,
+            dismissed: 0,
+        },
+        |s| s.theme.clone(),
+        |s| {
+            let main = flex_col((
+                text_field(s.text.clone(), |st: &mut HigPhase5, v| st.text = v).label("Field"),
+                switch(s.toggle, |st: &mut HigPhase5, v| st.toggle = v),
+                popup_button(
+                    &["PDF", "PNG", "SVG"],
+                    s.pop_sel,
+                    s.pop_open,
+                    |st: &mut HigPhase5| st.pop_open = !st.pop_open,
+                    |st: &mut HigPhase5, i| {
+                        st.pop_sel = i;
+                        st.pop_open = false;
+                    },
+                    |st: &mut HigPhase5| st.pop_open = false,
+                ),
+                primary_button("Open Mac Alert", |st: &mut HigPhase5| {
+                    st.show_alert = true;
+                }),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(12.px())
+            .padding(Padding::all(16.px()));
+
+            let alert = s.show_alert.then(|| {
+                macos_alert_dialog(
+                    "Export Document?",
+                    "Select primary or cancel.",
+                    "Export",
+                    "Cancel",
+                    |st: &mut HigPhase5| {
+                        st.confirmed += 1;
+                        st.show_alert = false;
+                    },
+                    |st: &mut HigPhase5| {
+                        st.dismissed += 1;
+                        st.show_alert = false;
+                    },
+                )
+            });
+
+            zstack((
+                main.alignment(UnitPoint::TOP_LEFT),
+                alert.map(|a| a.alignment(UnitPoint::CENTER)),
+            ))
+            .boxed()
+        },
+        PreviewConfig {
+            width: 560,
+            height: 440,
+            ..PreviewConfig::default()
+        },
+    );
+
+    hh.run_step(&PreviewStep::ClickType {
+        type_name: "TextInput".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    let active_img = hh.render_image();
+    hh.set_window_focused(false);
+    let inactive_img = hh.render_image();
+    assert_ne!(
+        active_img.as_raw(),
+        inactive_img.as_raw(),
+        "macOS inactive window must visually remove OuterHalo3px focus ring & desaturate controls"
+    );
+    hh.set_window_focused(true);
+
+    // PopUpButton select "SVG"
+    hh.run_step(&PreviewStep::ClickType {
+        type_name: "AnchoredPopupHost".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    assert!(hh.state().pop_open);
+    let pop_tree = dump_layout_tree(&mut hh);
+    let (px, py) = find_button_center(&pop_tree, "SVG").expect("SVG menu item should appear");
+    hh.click_point(px, py);
+    assert_eq!(hh.state().pop_sel, 2);
+    assert!(!hh.state().pop_open);
+
+    // macOS AlertDialog confirm + Escape
+    hh.run_step(&PreviewStep::ClickLabel("Open Mac Alert".to_owned()))
+        .unwrap();
+    assert!(hh.state().show_alert);
+    hh.settle_animations();
+    let alert_tree = dump_layout_tree(&mut hh);
+    let alert_errors: Vec<_> = lint_layout(&alert_tree, hh.viewport())
+        .into_iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(
+        alert_errors.is_empty(),
+        "macOS alert layout errors: {alert_errors:#?}"
+    );
+    hh.run_step(&PreviewStep::ClickLabel("Export".to_owned()))
+        .unwrap();
+    assert!(!hh.state().show_alert);
+    assert_eq!(hh.state().confirmed, 1);
+
+    hh.run_step(&PreviewStep::ClickLabel("Open Mac Alert".to_owned()))
+        .unwrap();
+    hh.run_step(&PreviewStep::FocusType {
+        type_name: "EscapeCatcher".to_owned(),
+        index: 0,
+    })
+    .unwrap();
+    hh.run_step(&PreviewStep::PressEscape).unwrap();
+    assert!(!hh.state().show_alert);
+    assert_eq!(hh.state().dismissed, 1);
+}

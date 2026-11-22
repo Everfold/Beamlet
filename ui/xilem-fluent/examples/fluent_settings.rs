@@ -14,9 +14,9 @@ use xilem::view::{
 use xilem::{AppState, EventLoop, WidgetView, Xilem};
 use xilem_fluent::{
     Brightness, FluentAccent, FluentTheme, InfoBarSeverity, NavDestination, basic_dialog,
-    body_small, breadcrumb_bar, command_bar, expander, fluent_window, headline_small,
-    horizontal_divider, icons, info_badge, info_bar, navigation_view, number_box, outlined_button,
-    primary_button, settings_card, settings_expander, subtle_button, switch,
+    body_small, breadcrumb_bar, command_bar_with_overflow, expander, fluent_window, headline_small,
+    horizontal_divider, icons, info_badge, info_bar, menu_item, navigation_view_collapsible,
+    number_box, primary_button, settings_card, settings_expander, subtle_button, switch,
 };
 
 struct SettingsApp {
@@ -25,6 +25,8 @@ struct SettingsApp {
     brightness: Brightness,
     accent: FluentAccent,
     nav_idx: usize,
+    nav_collapsed: bool,
+    overflow_open: bool,
     mica_enabled: bool,
     auto_updates: bool,
     expander_open: bool,
@@ -48,6 +50,8 @@ impl Default for SettingsApp {
             brightness: Brightness::Light,
             accent: FluentAccent::WindowsBlue,
             nav_idx: 0,
+            nav_collapsed: false,
+            overflow_open: false,
             mica_enabled: true,
             auto_updates: true,
             expander_open: true,
@@ -77,11 +81,13 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
     ];
     let footer_nav = [NavDestination::new("Windows 更新", icons::REFRESH).with_badge("1")];
 
-    let nav = navigation_view(
+    let nav = navigation_view_collapsible(
         Some("Windows 设置"),
         &primary_nav,
         &footer_nav,
         state.nav_idx,
+        state.nav_collapsed,
+        |s: &mut SettingsApp| s.nav_collapsed = !s.nav_collapsed,
         |s: &mut SettingsApp, i| s.nav_idx = i,
     );
 
@@ -99,7 +105,7 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
         }
     });
 
-    let cmd = command_bar(
+    let cmd = command_bar_with_overflow(
         vec![
             primary_button("切换深色 Mica", |s: &mut SettingsApp| {
                 s.brightness = s.brightness.toggled();
@@ -116,11 +122,20 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
             .boxed(),
         ],
         vec![
-            outlined_button("恢复默认", |s: &mut SettingsApp| {
-                s.show_reset_dialog = true;
-            })
-            .boxed(),
+            menu_item("折叠/展开导航栏").leading_icon(icons::MENU),
+            menu_item("恢复默认设置").leading_icon(icons::REFRESH),
         ],
+        state.overflow_open,
+        |s: &mut SettingsApp| s.overflow_open = !s.overflow_open,
+        |s: &mut SettingsApp, idx| {
+            s.overflow_open = false;
+            match idx {
+                0 => s.nav_collapsed = !s.nav_collapsed,
+                1 => s.show_reset_dialog = true,
+                _ => {}
+            }
+        },
+        |s: &mut SettingsApp| s.overflow_open = false,
     );
 
     let banner_opt = state.show_banner.then(|| {

@@ -1,21 +1,29 @@
-//! macOS signature components: `macos_toolbar`, `macos_toolbar_with_center`, `source_list_sidebar`, `form_group`, `form_row`, `help_button`.
+//! macOS signature components: `macos_toolbar`, `macos_toolbar_with_center`, `source_list_sidebar`, `form_group`, `form_row`, `help_button`, `popup_button`, `MacosAlertDialog`.
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::Color;
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem::kurbo::Vec2;
 use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
+use xilem::masonry::layout::{AsUnit, Dim, UnitPoint};
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
 };
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::{AnyWidgetView, Color, Pod, ViewCtx, WidgetView};
 use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
-use xilem_ui_core::foundation::{UiClassExt, icons, ui_icon};
-use xilem_ui_core::style_engine::{classes, with_spec};
-use xilem_ui_core::tokens::{DesignSpec, TypeRole};
+use xilem_ui_core::components::{
+    MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,
+};
+use xilem_ui_core::foundation::{
+    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, icons,
+    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+};
+use xilem_ui_core::style_engine::{classes, current_spec_arc, with_spec};
+use xilem_ui_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 
 /// Unified macOS compact `38px` window toolbar hosting an arbitrary custom center view (e.g. search bar or segmented switcher).
 pub fn macos_toolbar_with_center<State: 'static, Action: 'static, C>(
@@ -441,4 +449,282 @@ where
         )
         .background_color(p.header_bar_bg)
     })
+}
+
+/// macOS `NSPopUpButton` compact pill with trailing accent-tinted double-chevron badge
+/// backed by an anchored [`PopupLayer`](xilem_ui_core::foundation::PopupLayer).
+pub fn popup_button<State: 'static, Action: 'static, OnToggle, OnSelect, OnDismiss>(
+    options: &[&str],
+    selected: usize,
+    open: bool,
+    on_toggle: OnToggle,
+    on_select: OnSelect,
+    on_dismiss: OnDismiss,
+) -> AnchoredPopupView<Box<AnyWidgetView<State, Action>>, State, Action>
+where
+    OnToggle: Fn(&mut State) -> Action + Send + Sync + 'static,
+    OnSelect: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+    OnDismiss: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    let current = options
+        .get(selected)
+        .copied()
+        .or_else(|| options.first().copied())
+        .unwrap_or("选择…");
+    let current_text = ArcStr::from(current);
+    let toggle_cb = Arc::new(on_toggle);
+
+    let trigger = with_spec(move |spec: &DesignSpec, _| {
+        let p = &spec.palette;
+        let toggle_cb = toggle_cb.clone();
+        let lbl = spec
+            .typography
+            .style_label(TypeRole::BodyMedium, label(current_text.clone()))
+            .color(p.text_primary);
+        let chevrons = sized_box(
+            flex_col((
+                ui_icon(icons::ARROW_DROP_UP, 8.0, p.on_accent),
+                ui_icon(icons::ARROW_DROP_DOWN, 8.0, p.on_accent),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(0.px()),
+        )
+        .dims(Dimensions::fixed(18.px(), 18.px()))
+        .background_color(p.accent)
+        .corner_radius(4.px());
+
+        button(
+            flex_row((lbl.flex(1.0), chevrons))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px()),
+            move |s: &mut State| toggle_cb(s),
+        )
+        .ui_class(classes::BTN_OUTLINED)
+        .padding(Padding::from_vh(2.px(), 8.px()))
+    })
+    .boxed();
+
+    let entries: Vec<MenuEntry> = options
+        .iter()
+        .enumerate()
+        .map(|(i, opt)| {
+            let entry = menu_item(*opt).selected(i == selected);
+            if i == selected {
+                entry.leading_icon(icons::CHECK)
+            } else {
+                entry
+            }
+        })
+        .collect();
+
+    dropdown_menu(trigger, open, entries, on_select, on_dismiss)
+}
+
+/// Callback invoked by [`MacosAlertDialog`].
+pub type MacosAlertCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
+
+/// macOS 11+ (Big Sur / Sonoma) centered alert dialog with icon, centered copy,
+/// and stacked full-width primary/secondary action buttons.
+#[must_use = "View values do nothing unless provided to Xilem."]
+#[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
+pub struct MacosAlertDialog<State, Action> {
+    title: ArcStr,
+    message: ArcStr,
+    primary_text: ArcStr,
+    secondary_text: ArcStr,
+    icon_svg: Option<&'static str>,
+    destructive: bool,
+    dismiss_on_scrim: bool,
+    on_primary: MacosAlertCallback<State, Action>,
+    on_secondary: MacosAlertCallback<State, Action>,
+    phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<State, Action> MacosAlertDialog<State, Action> {
+    /// Sets or clears the centered header glyph.
+    pub fn icon(mut self, svg_path: Option<&'static str>) -> Self {
+        self.icon_svg = svg_path;
+        self
+    }
+
+    /// Uses destructive emphasis for the primary stacked button when `true`.
+    pub fn destructive(mut self, destructive: bool) -> Self {
+        self.destructive = destructive;
+        self
+    }
+
+    /// Enables or disables closing when clicking outside the alert card (defaults to `true`).
+    pub fn dismiss_on_scrim(mut self, dismiss: bool) -> Self {
+        self.dismiss_on_scrim = dismiss;
+        self
+    }
+
+    fn build_content(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    where
+        State: 'static,
+        Action: 'static,
+    {
+        let p = &spec.palette;
+        let glyph = self.icon_svg.map(|path| {
+            let tint = if self.destructive { p.error } else { p.accent };
+            sized_box(ui_icon(path, 36.0, tint))
+                .padding(Padding::all(8.px()))
+                .background_color(p.surface_low)
+                .corner_radius(10.px())
+        });
+
+        let title_lbl = spec
+            .typography
+            .style_label(TypeRole::TitleMedium, label(self.title.clone()))
+            .color(p.text_primary);
+        let msg_lbl = spec
+            .typography
+            .style_label(TypeRole::BodySmall, label(self.message.clone()))
+            .color(p.text_secondary);
+
+        let on_primary = self.on_primary.clone();
+        let primary_btn: Box<AnyWidgetView<State, Action>> = if self.destructive {
+            destructive_button(self.primary_text.clone(), move |s: &mut State| {
+                on_primary(s)
+            })
+            .boxed()
+        } else {
+            primary_button(self.primary_text.clone(), move |s: &mut State| {
+                on_primary(s)
+            })
+            .boxed()
+        };
+
+        let on_secondary = self.on_secondary.clone();
+        let secondary_btn = secondary_button(self.secondary_text.clone(), move |s: &mut State| {
+            on_secondary(s)
+        });
+
+        let actions = flex_col((primary_btn, secondary_btn))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(8.px());
+
+        flex_col((glyph, title_lbl, msg_lbl, actions))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px())
+            .boxed()
+    }
+}
+
+impl<State: 'static, Action: 'static> ViewMarker for MacosAlertDialog<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
+    for MacosAlertDialog<State, Action>
+{
+    type Element = Pod<EscapeCatcher>;
+    type ViewState = (
+        Box<AnyWidgetView<State, Action>>,
+        ModalShellState<
+            State,
+            Action,
+            <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
+        >,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec_arc(ctx);
+        let content = self.build_content(&spec);
+        let cfg = ModalShellConfig {
+            class: classes::DIALOG_SURFACE,
+            dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
+            padding: Padding::all(20.px()),
+            alignment: UnitPoint::CENTER,
+            enter_offset: Vec2::new(0.0, 12.0),
+            duration: MotionDuration::Medium1,
+            dismiss_on_scrim: self.dismiss_on_scrim,
+        };
+        let (el, shell) =
+            modal_shell_build(ctx, app_state, cfg, &content, self.on_secondary.clone());
+        (el, (content, shell))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_content, shell): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec_arc(ctx);
+        let next_content = self.build_content(&spec);
+        let cfg = ModalShellConfig {
+            class: classes::DIALOG_SURFACE,
+            dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
+            padding: Padding::all(20.px()),
+            alignment: UnitPoint::CENTER,
+            enter_offset: Vec2::new(0.0, 12.0),
+            duration: MotionDuration::Medium1,
+            dismiss_on_scrim: self.dismiss_on_scrim,
+        };
+        modal_shell_rebuild(
+            shell,
+            ctx,
+            element,
+            app_state,
+            cfg,
+            prev_content,
+            &next_content,
+            self.on_secondary.clone(),
+        );
+        *prev_content = next_content;
+    }
+
+    fn teardown(
+        &self,
+        (content, shell): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        modal_shell_teardown(shell, ctx, element, content);
+    }
+
+    fn message(
+        &self,
+        (content, shell): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        modal_shell_message(
+            shell,
+            message,
+            element,
+            app_state,
+            content,
+            &self.on_secondary,
+        )
+    }
+}
+
+/// Constructs a macOS 11+ [`MacosAlertDialog`] with centered icon, title, copy, and stacked full-width buttons.
+pub fn macos_alert_dialog<State: 'static, Action: 'static, F1, F2>(
+    title: impl Into<ArcStr>,
+    message: impl Into<ArcStr>,
+    primary_text: impl Into<ArcStr>,
+    secondary_text: impl Into<ArcStr>,
+    on_primary: F1,
+    on_secondary: F2,
+) -> MacosAlertDialog<State, Action>
+where
+    F1: Fn(&mut State) -> Action + Send + Sync + 'static,
+    F2: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    MacosAlertDialog {
+        title: title.into(),
+        message: message.into(),
+        primary_text: primary_text.into(),
+        secondary_text: secondary_text.into(),
+        icon_svg: Some(icons::INFO),
+        destructive: false,
+        dismiss_on_scrim: true,
+        on_primary: Arc::new(on_primary),
+        on_secondary: Arc::new(on_secondary),
+        phantom: PhantomData,
+    }
 }

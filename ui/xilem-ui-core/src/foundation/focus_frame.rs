@@ -8,8 +8,9 @@ use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, View
 use xilem::kurbo::{Axis, Point, Rect, Size, Stroke};
 use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::{
-    AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PropertiesMut,
-    PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
+    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
+    PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Update, UpdateCtx, Widget, WidgetId,
+    WidgetMut, WidgetPod,
 };
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::layout::{LenReq, Length};
@@ -69,6 +70,17 @@ impl Widget for FocusFrame {
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);
+    }
+
+    fn on_text_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &TextEvent,
+    ) {
+        if matches!(event, TextEvent::WindowFocusChange(_)) {
+            ctx.request_post_paint();
+        }
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
@@ -141,7 +153,8 @@ impl Widget for FocusFrame {
                 }
             }
             InputFocusStyle::OuterHalo3px => {
-                if show_active {
+                let window_focused = ctx.is_window_focused();
+                if self.focused && window_focused {
                     let outer = rect.inflate(1.5, 1.5).to_rounded_rect(radius + 1.5);
                     painter
                         .stroke(outer, &Stroke::new(3.0), with_opacity(active_color, 0.32))
@@ -150,6 +163,14 @@ impl Widget for FocusFrame {
                     painter
                         .stroke(inner, &Stroke::new(1.0), active_color)
                         .draw();
+                } else if self.config.error_color.is_some() {
+                    let inner = rect.inset(0.5).to_rounded_rect((radius - 0.5).max(0.0));
+                    let edge_col = if window_focused {
+                        active_color
+                    } else {
+                        with_opacity(active_color, 0.6)
+                    };
+                    painter.stroke(inner, &Stroke::new(1.0), edge_col).draw();
                 }
             }
         }

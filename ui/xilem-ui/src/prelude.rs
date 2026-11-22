@@ -3,12 +3,12 @@
 pub use crate::components::*;
 pub use crate::theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window};
 pub use crate::{
-    Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
-    FocusFrame, FocusFrameView, InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle,
-    RippleLayer, RippleLayerView, SemanticPalette, ShortcutConvention, StateFeedbackMode,
-    TabIndicatorStyle, TypeRole, TypeScale, UiClassExt, WindowSizeClass, build_default_properties,
-    cached_default_properties, classes, current_spec, focus_frame, icons, ripple_layer, ui_icon,
-    ui_transition, with_spec,
+    BeveledBorder, BeveledBorderView, Brightness, ControlBorderStyle, ControlMetrics, DesignSpec,
+    DialogActionOrder, ElevationLevel, FocusFrame, FocusFrameView, InputFocusStyle, MotionDuration,
+    MotionEasing, NavIndicatorStyle, RippleLayer, RippleLayerView, SemanticPalette,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, UiClassExt,
+    WindowSizeClass, beveled_surface, build_default_properties, cached_default_properties, classes,
+    current_spec, focus_frame, icons, ripple_layer, ui_icon, ui_transition, with_spec,
 };
 
 #[cfg(feature = "md3")]
@@ -21,16 +21,16 @@ pub use xilem_md3::{
 
 #[cfg(feature = "fluent")]
 pub use xilem_fluent::{
-    FluentAccent, FluentTheme, InfoBarSeverity, breadcrumb_bar, command_bar, expander,
-    fluent_scope, fluent_window, info_badge, info_bar, navigation_view, number_box, settings_card,
-    settings_expander,
+    FluentAccent, FluentTheme, InfoBarSeverity, breadcrumb_bar, command_bar,
+    command_bar_with_overflow, expander, fluent_scope, fluent_window, info_badge, info_bar,
+    navigation_view, navigation_view_collapsible, number_box, settings_card, settings_expander,
 };
 
 #[cfg(feature = "hig")]
 pub use xilem_hig::{
-    HigAccent, HigTheme, disclosure_group, form_group, form_row, help_button, hig_scope,
-    hig_window, inspector_panel, macos_toolbar, macos_toolbar_with_center, path_control,
-    source_list_sidebar, stepper,
+    HigAccent, HigTheme, MacosAlertDialog, disclosure_group, form_group, form_row, help_button,
+    hig_scope, hig_window, inspector_panel, macos_alert_dialog, macos_toolbar,
+    macos_toolbar_with_center, path_control, popup_button, source_list_sidebar, stepper,
 };
 
 #[cfg(feature = "adwaita")]
