@@ -103,6 +103,7 @@ fn snapshot_node(
     let mut children: Vec<LayoutNode> = node
         .children()
         .iter()
+        .filter(|c| !c.ctx().is_stashed())
         .map(|c| snapshot_node(c, render_root, focused_id, ids))
         .collect();
     if let Some(host) = node.downcast::<AnchoredPopupHost>()
@@ -200,9 +201,13 @@ fn is_visible_leaf_type(type_name: &str) -> bool {
         "Button"
             | "TextInput"
             | "Checkbox"
+            | "UiCheckbox"
             | "Switch"
+            | "UiSwitch"
             | "Slider"
+            | "UiSlider"
             | "RadioButton"
+            | "UiRadioButton"
             | "Svg"
             | "RangeSliderWidget"
             | "LinearProgressWidget"

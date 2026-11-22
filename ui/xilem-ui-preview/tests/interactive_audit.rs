@@ -962,3 +962,134 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
         }
     }
 }
+
+#[test]
+fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
+    use xilem::WidgetView;
+    use xilem::masonry::layout::AsUnit;
+    use xilem::style::Style as _;
+    use xilem::view::{CrossAxisAlignment, flex_col};
+    use xilem_ui::prelude::{checkbox, radio, radio_group, range_slider, slider, switch};
+
+    #[derive(Clone)]
+    struct ControlStressState {
+        theme: UiTheme,
+        sw_disabled: bool,
+        cb_disabled: bool,
+        radio_idx: usize,
+        slider_val: f64,
+        range_val: (f64, f64),
+        disabled_clicks: u32,
+    }
+
+    for &lang in &DesignLanguage::ALL {
+        let initial = ControlStressState {
+            theme: UiTheme::new(lang, Brightness::Light),
+            sw_disabled: true,
+            cb_disabled: true,
+            radio_idx: 0,
+            slider_val: 0.5,
+            range_val: (25.0, 75.0),
+            disabled_clicks: 0,
+        };
+
+        let mut h = PreviewHarness::new(
+            initial,
+            |s| s.theme.clone(),
+            |s| {
+                flex_col((
+                    switch(s.sw_disabled, |st: &mut ControlStressState, v| {
+                        st.sw_disabled = v;
+                        st.disabled_clicks += 1;
+                    })
+                    .disabled(true),
+                    checkbox(
+                        "Disabled Box",
+                        s.cb_disabled,
+                        |st: &mut ControlStressState, v| {
+                            st.cb_disabled = v;
+                            st.disabled_clicks += 1;
+                        },
+                    )
+                    .disabled(true),
+                    radio_group(vec![
+                        radio(
+                            "Active Option",
+                            s.radio_idx == 0,
+                            |st: &mut ControlStressState| {
+                                st.radio_idx = 0;
+                            },
+                        ),
+                        radio(
+                            "Disabled Option",
+                            s.radio_idx == 1,
+                            |st: &mut ControlStressState| {
+                                st.radio_idx = 1;
+                                st.disabled_clicks += 1;
+                            },
+                        )
+                        .disabled(true),
+                    ]),
+                    slider(
+                        0.0,
+                        1.0,
+                        s.slider_val,
+                        None,
+                        |st: &mut ControlStressState, v| {
+                            st.slider_val = v;
+                        },
+                    ),
+                    range_slider(
+                        0.0,
+                        100.0,
+                        s.range_val,
+                        |st: &mut ControlStressState, next| st.range_val = next,
+                    ),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(12.px())
+                .boxed()
+            },
+            PreviewConfig::default(),
+        );
+
+        // Disabled switch, checkbox, and radio must reject clicks cleanly.
+        let sw = h.find_widget_ids("UiSwitch")[0];
+        h.click_widget_id(sw);
+        let cb = h.find_widget_ids("UiCheckbox")[0];
+        h.click_widget_id(cb);
+        h.run_step(&PreviewStep::ClickLabel("Disabled Option".to_owned()))
+            .unwrap();
+        assert_eq!(
+            h.state().disabled_clicks,
+            0,
+            "[{lang:?}] disabled custom controls must never fire callbacks"
+        );
+        assert_eq!(h.state().radio_idx, 0);
+
+        // Extreme out-of-bounds slider drags must clamp cleanly to [min, max] without panicking.
+        h.drag_type("UiSlider", 0, (0.5, 0.5), (-0.5, 0.5)).unwrap();
+        assert!(
+            (h.state().slider_val - 0.0).abs() < 1e-6,
+            "[{lang:?}] out-of-bounds left drag should clamp to 0.0 (got {})",
+            h.state().slider_val
+        );
+        h.drag_type("UiSlider", 0, (0.05, 0.5), (1.5, 0.5)).unwrap();
+        assert!(
+            (h.state().slider_val - 1.0).abs() < 1e-6,
+            "[{lang:?}] out-of-bounds right drag should clamp to 1.0 (got {})",
+            h.state().slider_val
+        );
+
+        // RangeSlider extreme crossing drag must clamp and prevent crossover.
+        h.drag_type("RangeSliderWidget", 0, (0.25, 0.5), (1.4, 0.5))
+            .unwrap();
+        assert!(
+            h.state().range_val.0 <= h.state().range_val.1
+                && h.state().range_val.0 >= 0.0
+                && h.state().range_val.1 <= 100.0,
+            "[{lang:?}] range slider bounds invariant violated: {:?}",
+            h.state().range_val
+        );
+    }
+}

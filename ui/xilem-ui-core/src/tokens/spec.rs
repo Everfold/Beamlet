@@ -281,6 +281,19 @@ pub enum ControlBorderStyle {
     BorderlessFlat,
 }
 
+/// Per-system visual grammar guiding theme-authentic control rendering.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ControlVisualGrammar {
+    /// Material Design 3 geometry and state feedback.
+    Material3,
+    /// Windows 11 / WinUI 3 Fluent 2 geometry.
+    Fluent2,
+    /// Apple macOS HIG Aqua geometry and inactive-window behavior.
+    MacosHig,
+    /// GNOME Libadwaita flat geometry.
+    Adwaita,
+}
+
 /// Platform keyboard shortcut modifier display convention.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ShortcutConvention {
@@ -491,6 +504,17 @@ impl DesignSpec {
     #[must_use]
     pub fn box_shadow(&self, level: ElevationLevel) -> BoxShadow {
         level.box_shadow(self.palette.shadow)
+    }
+
+    /// Maps this specification's border/feedback grammar onto the active platform control archetype.
+    #[must_use]
+    pub const fn control_grammar(&self) -> ControlVisualGrammar {
+        match self.control_border {
+            ControlBorderStyle::UniformHairline => ControlVisualGrammar::Material3,
+            ControlBorderStyle::BeveledElevation => ControlVisualGrammar::Fluent2,
+            ControlBorderStyle::CrispElevation => ControlVisualGrammar::MacosHig,
+            ControlBorderStyle::BorderlessFlat => ControlVisualGrammar::Adwaita,
+        }
     }
 }
 

@@ -563,6 +563,9 @@ fn find_button_exact_then_contains(
         needle: &str,
         exact: bool,
     ) -> Option<WidgetId> {
+        if node.ctx().is_stashed() {
+            return None;
+        }
         if node.inner().short_type_name().contains("Button") && subtree_text(node, needle, exact) {
             return Some(node.id());
         }
@@ -590,6 +593,9 @@ fn collect_matching_type(
     exact: &mut Vec<WidgetId>,
     partial: &mut Vec<WidgetId>,
 ) {
+    if node.ctx().is_stashed() {
+        return;
+    }
     let name = node.inner().short_type_name();
     if name == needle {
         exact.push(node.id());
