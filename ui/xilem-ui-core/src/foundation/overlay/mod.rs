@@ -14,8 +14,8 @@ use xilem::kurbo::{Axis, Point, Size};
 use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::keyboard::{Key, NamedKey};
 use xilem::masonry::core::{
-    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, PaintCtx, PropertiesMut,
-    PropertiesRef, RegisterCtx, TextEvent, Widget, WidgetId, WidgetMut, WidgetPod,
+    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, PaintCtx, PointerEvent,
+    PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::layout::{LenReq, Length};
@@ -88,6 +88,18 @@ impl Widget for EscapeCatcher {
 
     fn accepts_focus(&self) -> bool {
         true
+    }
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        if !ctx.has_focus_target() && matches!(event, PointerEvent::Down(_) | PointerEvent::Move(_))
+        {
+            ctx.request_focus();
+        }
     }
 
     fn on_text_event(

@@ -231,6 +231,10 @@ impl PopupLayer {
 impl Widget for PopupLayer {
     type Action = NoAction;
 
+    fn accepts_focus(&self) -> bool {
+        true
+    }
+
     fn on_text_event(
         &mut self,
         ctx: &mut EventCtx<'_>,
@@ -404,6 +408,12 @@ impl AnchoredPopupHost {
 
     fn trigger_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> WidgetMut<'t, dyn Widget> {
         this.ctx.get_mut(&mut this.widget.trigger)
+    }
+
+    /// Returns the active Masonry `Layer` root ID when the popup is currently mounted.
+    #[must_use]
+    pub fn layer_id(&self) -> Option<WidgetId> {
+        self.layer_id
     }
 
     fn remove_active_layer_with(layer_id: Option<WidgetId>, mut remove_fn: impl FnMut(WidgetId)) {

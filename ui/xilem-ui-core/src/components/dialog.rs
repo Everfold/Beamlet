@@ -6,7 +6,7 @@ use std::sync::Arc;
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::kurbo::Vec2;
 use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
+use xilem::masonry::layout::{AsUnit, Dim, UnitPoint};
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, MainAxisAlignment, flex_col, flex_row, label};
@@ -52,7 +52,7 @@ impl<V, State, Action> UiDialog<V, State, Action> {
     fn shell_config(&self) -> ModalShellConfig {
         ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::width(self.width.px()),
+            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
             padding: Padding::all(24.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
@@ -276,7 +276,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::width(self.width.px()),
+            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
             padding: Padding::all(24.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
@@ -299,7 +299,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::width(self.width.px()),
+            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
             padding: Padding::all(24.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),

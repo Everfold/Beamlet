@@ -189,7 +189,7 @@ fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     .alignment(UnitPoint::BOTTOM);
 
     zstack((
-        workspace.alignment(UnitPoint::CENTER),
+        workspace.alignment(UnitPoint::TOP_LEFT),
         fab_layer,
         toast_layer,
         sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
