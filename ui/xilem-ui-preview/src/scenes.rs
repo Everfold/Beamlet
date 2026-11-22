@@ -452,6 +452,14 @@ fn render_overlays_page(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>
                 outlined_button("Time Dialog", |s: &mut SceneState| {
                     s.show_time_dialog = true;
                 }),
+                subtle_button("Show Toast", |s: &mut SceneState| {
+                    s.toasts.show(
+                        "Preview toast fired",
+                        Some("Dismiss"),
+                        ToastDuration::Short,
+                        true,
+                    );
+                }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px()),
@@ -644,6 +652,13 @@ fn render_platform_native_page(state: &mut SceneState) -> Box<AnyWidgetView<Scen
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(10.px()),
         ),
+        expander(
+            "Advanced Mica Options",
+            None::<&str>,
+            state.expander_open,
+            |s: &mut SceneState| s.expander_open = !s.expander_open,
+            body_small("Expanded Fluent panel content."),
+        ),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .gap(10.px());
@@ -789,10 +804,11 @@ fn wrap_overlays<V: WidgetView<SceneState>>(
                     s.show_side_sheet = false;
                 }),
             ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(10.px()),
             |s: &mut SceneState| s.show_side_sheet = false,
         )
-        .extent(320.0)
+        .extent(360.0)
     });
     let date_dlg = state.show_date_dialog.then(|| {
         date_picker_dialog(
@@ -816,10 +832,22 @@ fn wrap_overlays<V: WidgetView<SceneState>>(
             .padding(Padding::all(18.px()))
             .alignment(UnitPoint::BOTTOM_RIGHT)
     });
+    let toast_layer = sized_box(
+        toast_host(&state.toasts, |s: &mut SceneState| {
+            let _ = s.toasts.dismiss_current();
+        })
+        .on_action(|s: &mut SceneState| {
+            let _ = s.toasts.dismiss_current();
+        }),
+    )
+    .dims(Dimensions::MAX)
+    .padding(Padding::all(16.px()))
+    .alignment(UnitPoint::BOTTOM);
 
     zstack((
-        base.alignment(UnitPoint::CENTER),
+        base.alignment(UnitPoint::TOP_LEFT),
         dock_layer,
+        Some(toast_layer),
         sheet.map(|v| v.alignment(UnitPoint::CENTER)),
         drawer.map(|v| v.alignment(UnitPoint::CENTER)),
         date_dlg.map(|v| v.alignment(UnitPoint::CENTER)),

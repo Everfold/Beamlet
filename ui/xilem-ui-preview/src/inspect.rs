@@ -5,8 +5,10 @@ use std::fmt::Write as _;
 
 use serde::Serialize;
 use xilem::Color;
+use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::{Widget, WidgetId, WidgetRef};
 use xilem_ui::prelude::DesignSpec;
+use xilem_ui_core::foundation::AnchoredPopupHost;
 
 use crate::harness::PreviewHarness;
 
@@ -67,8 +69,9 @@ pub fn dump_layout_tree<State: 'static>(harness: &mut PreviewHarness<State>) -> 
     let focused_id = inner.focused_widget_id();
     let mut ids = Vec::new();
     let mut tree = {
-        let root = inner.render_root().get_layer_root(0);
-        snapshot_node(&root, focused_id, &mut ids)
+        let rr: &RenderRoot = inner.render_root();
+        let root = rr.get_layer_root(0);
+        snapshot_node(&root, rr, focused_id, &mut ids)
     };
     let roles: HashMap<u64, String> = ids
         .into_iter()
@@ -84,6 +87,7 @@ pub fn dump_layout_tree<State: 'static>(harness: &mut PreviewHarness<State>) -> 
 
 fn snapshot_node(
     node: &WidgetRef<'_, dyn Widget>,
+    render_root: &RenderRoot,
     focused_id: Option<WidgetId>,
     ids: &mut Vec<(u64, WidgetId)>,
 ) -> LayoutNode {
@@ -96,11 +100,17 @@ fn snapshot_node(
     let origin = ctx.window_transform() * box_rect.origin();
     let text = node.inner().get_debug_text().filter(|s| !s.is_empty());
 
-    let children = node
+    let mut children: Vec<LayoutNode> = node
         .children()
         .iter()
-        .map(|c| snapshot_node(c, focused_id, ids))
+        .map(|c| snapshot_node(c, render_root, focused_id, ids))
         .collect();
+    if let Some(host) = node.downcast::<AnchoredPopupHost>()
+        && let Some(layer_id) = host.inner().layer_id()
+        && let Some(layer_node) = render_root.get_widget(layer_id)
+    {
+        children.push(snapshot_node(&layer_node, render_root, focused_id, ids));
+    }
 
     LayoutNode {
         id: raw,
@@ -210,6 +220,7 @@ fn allows_child_overflow(type_name: &str) -> bool {
             | "FocusFrame"
             | "ScrollBar"
             | "Badged"
+            | "AnchoredPopupHost"
     )
 }
 

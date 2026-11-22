@@ -11,6 +11,8 @@ use masonry_testing::{TestHarness, TestHarnessParams};
 use xilem::core::{
     DynMessage, MessageCtx, ProxyError, RawProxy, SendMessage, View, ViewId, ViewPathTracker as _,
 };
+use xilem::kurbo::Point;
+use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
 use xilem::masonry::core::{KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef};
 use xilem::masonry::dpi::PhysicalSize;
@@ -20,6 +22,7 @@ use xilem::style::Style as _;
 use xilem::view::sized_box;
 use xilem::{AnyWidgetView, ViewCtx, WidgetView};
 use xilem_ui::prelude::*;
+use xilem_ui_core::foundation::AnchoredPopupHost;
 
 #[derive(Debug)]
 struct NoopRawProxy;
@@ -242,8 +245,7 @@ impl<State: 'static> PreviewHarness<State> {
         let view_state = &mut self.view_state;
         let view_ctx = &mut self.view_ctx;
         let app_state = &mut self.state;
-        self.harness.render_root().edit_base_layer(|mut root| {
-            let mut root = root.downcast::<Passthrough>();
+        self.harness.edit_root_widget(|mut root| {
             next_view.rebuild(
                 current_view,
                 view_state,
@@ -266,8 +268,7 @@ impl<State: 'static> PreviewHarness<State> {
             let view = &self.current_view;
             let view_state = &mut self.view_state;
             let app_state = &mut self.state;
-            let result = self.harness.render_root().edit_base_layer(|mut root| {
-                let mut root = root.downcast::<Passthrough>();
+            let result = self.harness.edit_root_widget(|mut root| {
                 view.message(view_state, &mut msg_ctx, root.reborrow_mut(), app_state)
             });
             *self.view_ctx.environment() = msg_ctx.finish().0;
@@ -278,15 +279,17 @@ impl<State: 'static> PreviewHarness<State> {
     }
 
     fn find_button_id_by_label(&mut self, needle: &str) -> Option<WidgetId> {
-        let root = self.harness.render_root().get_layer_root(0);
-        find_button_exact_then_contains(&root, needle)
+        let rr: &RenderRoot = self.harness.render_root();
+        let root = rr.get_layer_root(0);
+        find_button_exact_then_contains(&root, rr, needle)
     }
 
     fn find_widget_id_by_type(&mut self, type_name: &str, index: usize) -> Option<WidgetId> {
-        let root = self.harness.render_root().get_layer_root(0);
+        let rr: &RenderRoot = self.harness.render_root();
+        let root = rr.get_layer_root(0);
         let mut exact = Vec::new();
         let mut partial = Vec::new();
-        collect_matching_type(&root, type_name, &mut exact, &mut partial);
+        collect_matching_type(&root, rr, type_name, &mut exact, &mut partial);
         exact
             .get(index)
             .copied()
@@ -309,9 +312,7 @@ impl<State: 'static> PreviewHarness<State> {
                 let id = self
                     .find_button_id_by_label(label)
                     .with_context(|| format!("button matching label '{label}' not found"))?;
-                self.harness
-                    .mouse_click_on(id, Some(PointerButton::Primary));
-                self.pump_actions();
+                self.click_widget_id(id);
             }
             PreviewStep::ClickType { type_name, index } => {
                 let id = self
@@ -319,9 +320,7 @@ impl<State: 'static> PreviewHarness<State> {
                     .with_context(|| {
                         format!("widget matching type '{type_name}' index {index} not found")
                     })?;
-                self.harness
-                    .mouse_click_on(id, Some(PointerButton::Primary));
-                self.pump_actions();
+                self.click_widget_id(id);
             }
             PreviewStep::FocusType { type_name, index } => {
                 let id = self
@@ -438,6 +437,104 @@ impl<State: 'static> PreviewHarness<State> {
     pub fn state_mut(&mut self) -> &mut State {
         &mut self.state
     }
+
+    /// Moves the pointer to window coordinates `(x, y)`, clicks the primary button, and pumps actions.
+    pub fn click_point(&mut self, x: f64, y: f64) {
+        let _ = self.harness.redraw();
+        self.harness.mouse_move(Point::new(x, y));
+        self.harness
+            .mouse_button_press(Some(PointerButton::Primary));
+        self.harness
+            .mouse_button_release(Some(PointerButton::Primary));
+        self.pump_actions();
+    }
+
+    /// Returns all widget IDs in tree order matching `type_name` (exact match first, substring fallback).
+    pub fn find_widget_ids(&mut self, type_name: &str) -> Vec<WidgetId> {
+        let _ = self.harness.redraw();
+        let rr: &RenderRoot = self.harness.render_root();
+        let root = rr.get_layer_root(0);
+        let mut exact = Vec::new();
+        let mut partial = Vec::new();
+        collect_matching_type(&root, rr, type_name, &mut exact, &mut partial);
+        if exact.is_empty() { partial } else { exact }
+    }
+
+    /// Clicks widget `id` with the primary mouse button (scrolling into view if needed) and pumps actions.
+    pub fn click_widget_id(&mut self, id: WidgetId) {
+        if let Some((x, y, w, h)) = self.widget_rect(id) {
+            let (vw, vh) = self.viewport();
+            if x < 0.0 || y < 0.0 || x + w > vw || y + h > vh {
+                self.harness.scroll_into_view(id);
+                let _ = self.harness.redraw();
+            }
+            if let Some((sx, sy, sw, sh)) = self.widget_rect(id) {
+                self.click_point(sx + sw * 0.5, sy + sh * 0.5);
+                return;
+            }
+        }
+        self.harness
+            .mouse_click_on(id, Some(PointerButton::Primary));
+        self.pump_actions();
+    }
+
+    /// Returns a widget's `(x, y, width, height)` border-box in window coordinates, if present.
+    pub fn widget_rect(&mut self, id: WidgetId) -> Option<(f64, f64, f64, f64)> {
+        let _ = self.harness.redraw();
+        let w = self.harness.try_get_widget(id)?;
+        let box_rect = w.ctx().border_box();
+        let origin = w.ctx().window_transform() * box_rect.origin();
+        Some((origin.x, origin.y, box_rect.width(), box_rect.height()))
+    }
+
+    /// Clicks inside the `index`-th widget matching `type_name` at fractional `(x_frac, y_frac)`.
+    pub fn click_type_at(
+        &mut self,
+        type_name: &str,
+        index: usize,
+        x_frac: f64,
+        y_frac: f64,
+    ) -> anyhow::Result<()> {
+        let id = self
+            .find_widget_id_by_type(type_name, index)
+            .with_context(|| format!("widget '{type_name}' index {index} not found"))?;
+        let (x, y, w, h) = self
+            .widget_rect(id)
+            .with_context(|| format!("failed reading rect for '{type_name}' index {index}"))?;
+        self.click_point(x + w * x_frac, y + h * y_frac);
+        Ok(())
+    }
+
+    /// Drags inside the `index`-th widget matching `type_name` between fractional `(from)` and `(to)` positions.
+    pub fn drag_type(
+        &mut self,
+        type_name: &str,
+        index: usize,
+        from: (f64, f64),
+        to: (f64, f64),
+    ) -> anyhow::Result<()> {
+        let id = self
+            .find_widget_id_by_type(type_name, index)
+            .with_context(|| format!("widget '{type_name}' index {index} not found"))?;
+        let (x, y, w, h) = self
+            .widget_rect(id)
+            .with_context(|| format!("failed reading rect for '{type_name}' index {index}"))?;
+        let p0 = Point::new(x + w * from.0, y + h * from.1);
+        let p1 = Point::new(
+            x + w * ((from.0 + to.0) * 0.5),
+            y + h * ((from.1 + to.1) * 0.5),
+        );
+        let p2 = Point::new(x + w * to.0, y + h * to.1);
+        self.harness.mouse_move(p0);
+        self.harness
+            .mouse_button_press(Some(PointerButton::Primary));
+        self.harness.mouse_move(p1);
+        self.harness.mouse_move(p2);
+        self.harness
+            .mouse_button_release(Some(PointerButton::Primary));
+        self.pump_actions();
+        Ok(())
+    }
 }
 
 fn subtree_text(node: &WidgetRef<'_, dyn Widget>, needle: &str, exact: bool) -> bool {
@@ -457,24 +554,38 @@ fn subtree_text(node: &WidgetRef<'_, dyn Widget>, needle: &str, exact: bool) -> 
 
 fn find_button_exact_then_contains(
     root: &WidgetRef<'_, dyn Widget>,
+    render_root: &RenderRoot,
     needle: &str,
 ) -> Option<WidgetId> {
-    fn walk(node: &WidgetRef<'_, dyn Widget>, needle: &str, exact: bool) -> Option<WidgetId> {
+    fn walk(
+        node: &WidgetRef<'_, dyn Widget>,
+        render_root: &RenderRoot,
+        needle: &str,
+        exact: bool,
+    ) -> Option<WidgetId> {
         if node.inner().short_type_name().contains("Button") && subtree_text(node, needle, exact) {
             return Some(node.id());
         }
         for child in node.children() {
-            if let Some(id) = walk(&child, needle, exact) {
+            if let Some(id) = walk(&child, render_root, needle, exact) {
                 return Some(id);
             }
         }
+        if let Some(host) = node.downcast::<AnchoredPopupHost>()
+            && let Some(layer_id) = host.inner().layer_id()
+            && let Some(layer_node) = render_root.get_widget(layer_id)
+            && let Some(id) = walk(&layer_node, render_root, needle, exact)
+        {
+            return Some(id);
+        }
         None
     }
-    walk(root, needle, true).or_else(|| walk(root, needle, false))
+    walk(root, render_root, needle, true).or_else(|| walk(root, render_root, needle, false))
 }
 
 fn collect_matching_type(
     node: &WidgetRef<'_, dyn Widget>,
+    render_root: &RenderRoot,
     needle: &str,
     exact: &mut Vec<WidgetId>,
     partial: &mut Vec<WidgetId>,
@@ -486,7 +597,13 @@ fn collect_matching_type(
         partial.push(node.id());
     }
     for child in node.children() {
-        collect_matching_type(&child, needle, exact, partial);
+        collect_matching_type(&child, render_root, needle, exact, partial);
+    }
+    if let Some(host) = node.downcast::<AnchoredPopupHost>()
+        && let Some(layer_id) = host.inner().layer_id()
+        && let Some(layer_node) = render_root.get_widget(layer_id)
+    {
+        collect_matching_type(&layer_node, render_root, needle, exact, partial);
     }
 }
 
