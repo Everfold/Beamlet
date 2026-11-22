@@ -14,7 +14,7 @@ pub use foundation::{
 };
 pub use style_engine::{build_default_properties, current_spec, ui_scope, ui_window, with_spec};
 pub use tokens::{
-    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel, InputFocusStyle,
-    MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette, ShortcutConvention,
-    StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowSizeClass,
+    Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
+    InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowSizeClass,
 };

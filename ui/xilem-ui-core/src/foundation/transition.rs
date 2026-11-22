@@ -278,11 +278,17 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+        let (offset, duration_ms) = if reduced {
+            (Vec2::ZERO, 0)
+        } else {
+            (self.offset, self.duration.as_millis())
+        };
         let (child_pod, child_state) = self.child.build(ctx, app_state);
         let pod = ctx.create_pod(SlideTransition::new(
             child_pod.new_widget,
-            self.offset,
-            self.duration.as_millis(),
+            offset,
+            duration_ms,
             self.easing,
         ));
         (pod, child_state)
@@ -297,12 +303,13 @@ where
         app_state: &mut State,
     ) {
         if self.key != prev.key {
-            SlideTransition::restart(
-                &mut element,
-                self.offset,
-                self.duration.as_millis(),
-                self.easing,
-            );
+            let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+            let (offset, duration_ms) = if reduced {
+                (Vec2::ZERO, 0)
+            } else {
+                (self.offset, self.duration.as_millis())
+            };
+            SlideTransition::restart(&mut element, offset, duration_ms, self.easing);
         }
         let mut child = SlideTransition::child_mut(&mut element);
         self.child

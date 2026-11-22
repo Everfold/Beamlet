@@ -4,8 +4,8 @@ use xilem::masonry::core::FromDynWidget;
 use xilem::{WidgetView, WindowId, WindowView};
 use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
+    Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
+    NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::palette::{FluentAccent, fluent_palette};
@@ -17,8 +17,10 @@ pub struct FluentTheme {
     pub brightness: Brightness,
     /// Accent color preset.
     pub accent: FluentAccent,
-    /// Compact desktop type ramp.
+    /// Fluent 2 desktop type ramp.
     pub typography: TypeScale,
+    /// Disables entrance/transition motion durations and spatial offsets when `true`.
+    pub reduced_motion: bool,
 }
 
 impl FluentTheme {
@@ -28,7 +30,8 @@ impl FluentTheme {
         Self {
             brightness: Brightness::Light,
             accent: FluentAccent::WindowsBlue,
-            typography: TypeScale::compact_desktop(14.0),
+            typography: TypeScale::fluent2(),
+            reduced_motion: false,
         }
     }
 
@@ -38,7 +41,8 @@ impl FluentTheme {
         Self {
             brightness: Brightness::Dark,
             accent: FluentAccent::WindowsBlue,
-            typography: TypeScale::compact_desktop(14.0),
+            typography: TypeScale::fluent2(),
+            reduced_motion: false,
         }
     }
 
@@ -53,6 +57,13 @@ impl FluentTheme {
     #[must_use]
     pub fn with_typography(mut self, typography: TypeScale) -> Self {
         self.typography = typography;
+        self
+    }
+
+    /// Sets accessibility reduced-motion preference.
+    #[must_use]
+    pub const fn with_reduced_motion(mut self, reduced: bool) -> Self {
+        self.reduced_motion = reduced;
         self
     }
 
@@ -101,6 +112,8 @@ impl FluentTheme {
             nav_indicator: NavIndicatorStyle::LeadingAccentBar,
             dialog_action_order: DialogActionOrder::PrimaryLeading,
             shortcut_convention: ShortcutConvention::Control,
+            control_border: ControlBorderStyle::BeveledElevation,
+            reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
         }
     }

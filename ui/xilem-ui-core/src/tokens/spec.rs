@@ -267,6 +267,20 @@ pub enum DialogActionOrder {
     PrimaryLeading,
 }
 
+/// Surface and button border strategy distinguishing flat, standard-outlined, and beveled controls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ControlBorderStyle {
+    /// Uniform 1px perimeter border on secondary/elevated controls (Material 3, Neutral).
+    #[default]
+    UniformHairline,
+    /// Windows Fluent 2 beveled elevation border (darker bottom edge in light mode, brighter top edge in dark mode).
+    BeveledElevation,
+    /// macOS HIG crisp hairline border with subtle elevation shadow.
+    CrispElevation,
+    /// GNOME Adwaita borderless flat tonal fill on secondary/regular buttons.
+    BorderlessFlat,
+}
+
 /// Platform keyboard shortcut modifier display convention.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ShortcutConvention {
@@ -320,6 +334,10 @@ pub struct DesignSpec {
     pub dialog_action_order: DialogActionOrder,
     /// Keyboard shortcut modifier display convention.
     pub shortcut_convention: ShortcutConvention,
+    /// Control and button border grammar (`BorderlessFlat`, `BeveledElevation`, etc.).
+    pub control_border: ControlBorderStyle,
+    /// Accessibility / preference switch disabling entrance slide/fade offsets and durations.
+    pub reduced_motion: bool,
     /// 15-role typography ramp and optional font family.
     pub typography: TypeScale,
 }
@@ -441,6 +459,8 @@ impl DesignSpec {
             nav_indicator: NavIndicatorStyle::RoundedRow,
             dialog_action_order: DialogActionOrder::PrimaryTrailing,
             shortcut_convention: ShortcutConvention::Control,
+            control_border: ControlBorderStyle::UniformHairline,
+            reduced_motion: false,
             typography: TypeScale::baseline(),
         }
     }

@@ -3,14 +3,16 @@
 use std::marker::PhantomData;
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::ArcStr;
+use xilem::masonry::core::{ArcStr, NewWidget, PropertySet, StyleProperty};
+use xilem::masonry::parley::LineHeight;
+use xilem::masonry::parley::style::FontFamily;
 use xilem::masonry::properties::ContentColor;
 use xilem::masonry::widgets;
-use xilem::view::{Label, Prose, label, prose};
+use xilem::view::{Label, label};
 use xilem::{Color, Pod, ViewCtx};
 
 use crate::style_engine::current_spec_arc;
-use crate::tokens::TypeRole;
+use crate::tokens::{TextStyleSpec, TypeRole};
 
 /// Label view styled via a semantic [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
 #[must_use = "View values do nothing unless provided to Xilem."]
@@ -127,63 +129,121 @@ impl<State, Action> UiProse<State, Action> {
         self.color = Some(color);
         self
     }
-
-    fn inner_view(&self, ctx: &ViewCtx) -> Prose<State, Action> {
-        let spec = current_spec_arc(ctx);
-        let style = spec.typography.get(self.role);
-        let view: Prose<State, Action> = prose(self.text.clone())
-            .text_size(style.font_size)
-            .weight(style.weight);
-        if let Some(c) = self.color {
-            view.text_color(c)
-        } else {
-            view
-        }
-    }
 }
 
 impl<State: 'static, Action: 'static> ViewMarker for UiProse<State, Action> {}
 
 impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<State, Action> {
     type Element = Pod<widgets::Prose>;
-    type ViewState = Prose<State, Action>;
+    type ViewState = (
+        ArcStr,
+        TextStyleSpec,
+        Option<FontFamily<'static>>,
+        Option<Color>,
+    );
 
-    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let inner = self.inner_view(ctx);
-        let (pod, ()) = inner.build(ctx, app_state);
-        (pod, inner)
+    fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec_arc(ctx);
+        let style = spec.typography.get(self.role);
+        let font = spec.typography.font_family().cloned();
+        let mut text_area = widgets::TextArea::new_immutable(&self.text)
+            .with_style(StyleProperty::FontSize(style.font_size))
+            .with_style(StyleProperty::FontWeight(style.weight))
+            .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
+                style.line_height,
+            )))
+            .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
+            .with_word_wrap(true);
+        if let Some(f) = &font {
+            text_area = text_area.with_style(StyleProperty::FontFamily(f.clone()));
+        }
+
+        let mut props = PropertySet::new();
+        if let Some(c) = self.color {
+            props.insert(ContentColor::new(c));
+        }
+        let area_pod = NewWidget::new(text_area).with_props(props);
+        let pod = ctx.create_pod(widgets::Prose::from_text_area(area_pod).with_clip(true));
+        (pod, (self.text.clone(), style, font, self.color))
     }
 
     fn rebuild(
         &self,
         _prev: &Self,
-        prev_inner: &mut Self::ViewState,
+        (prev_text, prev_style, prev_font, prev_color): &mut Self::ViewState,
         ctx: &mut ViewCtx,
-        element: Mut<'_, Self::Element>,
-        app_state: &mut State,
+        mut element: Mut<'_, Self::Element>,
+        _app_state: &mut State,
     ) {
-        let next_inner = self.inner_view(ctx);
-        next_inner.rebuild(prev_inner, &mut (), ctx, element, app_state);
-        *prev_inner = next_inner;
+        let spec = current_spec_arc(ctx);
+        let next_style = spec.typography.get(self.role);
+        let next_font = spec.typography.font_family().cloned();
+
+        let mut text_area = widgets::Prose::text_mut(&mut element);
+        if *prev_color != self.color {
+            if let Some(c) = self.color {
+                text_area.insert_prop(ContentColor::new(c));
+            } else {
+                text_area.remove_prop::<ContentColor>();
+            }
+            *prev_color = self.color;
+        }
+        if *prev_text != self.text {
+            widgets::TextArea::reset_text(&mut text_area, &self.text);
+            *prev_text = self.text.clone();
+        }
+        if prev_style.font_size != next_style.font_size {
+            widgets::TextArea::insert_style(
+                &mut text_area,
+                StyleProperty::FontSize(next_style.font_size),
+            );
+        }
+        if prev_style.weight != next_style.weight {
+            widgets::TextArea::insert_style(
+                &mut text_area,
+                StyleProperty::FontWeight(next_style.weight),
+            );
+        }
+        if prev_style.line_height != next_style.line_height {
+            widgets::TextArea::insert_style(
+                &mut text_area,
+                StyleProperty::LineHeight(LineHeight::Absolute(next_style.line_height)),
+            );
+        }
+        if prev_style.letter_spacing != next_style.letter_spacing {
+            widgets::TextArea::insert_style(
+                &mut text_area,
+                StyleProperty::LetterSpacing(next_style.letter_spacing),
+            );
+        }
+        if *prev_font != next_font {
+            if let Some(f) = &next_font {
+                widgets::TextArea::insert_style(
+                    &mut text_area,
+                    StyleProperty::FontFamily(f.clone()),
+                );
+            }
+            *prev_font = next_font;
+        }
+        *prev_style = next_style;
     }
 
     fn teardown(
         &self,
-        prev_inner: &mut Self::ViewState,
-        ctx: &mut ViewCtx,
-        element: Mut<'_, Self::Element>,
+        _view_state: &mut Self::ViewState,
+        _ctx: &mut ViewCtx,
+        _element: Mut<'_, Self::Element>,
     ) {
-        prev_inner.teardown(&mut (), ctx, element);
     }
 
     fn message(
         &self,
-        prev_inner: &mut Self::ViewState,
-        message: &mut MessageCtx,
-        element: Mut<'_, Self::Element>,
-        app_state: &mut State,
+        _view_state: &mut Self::ViewState,
+        _message: &mut MessageCtx,
+        _element: Mut<'_, Self::Element>,
+        _app_state: &mut State,
     ) -> MessageResult<Action> {
-        prev_inner.message(&mut (), message, element, app_state)
+        MessageResult::Stale
     }
 }
 

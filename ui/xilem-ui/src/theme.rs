@@ -138,6 +138,8 @@ pub struct UiTheme {
     pub accent: UiAccent,
     /// Elevated contrast tier (mainly strengthens MD3 tonal contrast).
     pub high_contrast: bool,
+    /// Disables entrance/transition motion durations and spatial offsets when `true`.
+    pub reduced_motion: bool,
 }
 
 impl UiTheme {
@@ -161,6 +163,7 @@ impl UiTheme {
             brightness,
             accent: UiAccent::Default,
             high_contrast: false,
+            reduced_motion: false,
         }
     }
 
@@ -175,6 +178,13 @@ impl UiTheme {
     #[must_use]
     pub const fn with_high_contrast(mut self, high_contrast: bool) -> Self {
         self.high_contrast = high_contrast;
+        self
+    }
+
+    /// Sets accessibility reduced-motion preference.
+    #[must_use]
+    pub const fn with_reduced_motion(mut self, reduced_motion: bool) -> Self {
+        self.reduced_motion = reduced_motion;
         self
     }
 
@@ -201,6 +211,7 @@ impl UiTheme {
                     };
                     xilem_md3::Md3Theme::from_seed(seed, self.brightness)
                         .with_contrast(seed, contrast)
+                        .with_reduced_motion(self.reduced_motion)
                         .to_spec()
                 }
                 #[cfg(not(feature = "md3"))]
@@ -225,6 +236,7 @@ impl UiTheme {
                     xilem_fluent::FluentTheme {
                         brightness: self.brightness,
                         accent,
+                        reduced_motion: self.reduced_motion,
                         ..xilem_fluent::FluentTheme::light()
                     }
                     .to_spec()
@@ -250,6 +262,7 @@ impl UiTheme {
                     xilem_hig::HigTheme {
                         brightness: self.brightness,
                         accent,
+                        reduced_motion: self.reduced_motion,
                         ..xilem_hig::HigTheme::light()
                     }
                     .to_spec()
@@ -276,6 +289,7 @@ impl UiTheme {
                     xilem_adwaita::AdwaitaTheme {
                         brightness: self.brightness,
                         accent,
+                        reduced_motion: self.reduced_motion,
                         ..xilem_adwaita::AdwaitaTheme::light()
                     }
                     .to_spec()

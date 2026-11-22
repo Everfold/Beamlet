@@ -87,6 +87,7 @@ pub fn tokens_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let metrics_summary = with_spec(move |spec: &DesignSpec, _| {
         let m = &spec.metrics;
+        let body_spec = spec.typography.get(TypeRole::BodyMedium);
         let lines = [
             format!(
                 "设计语言：{} ({theme_name}) · 明暗模式：{:?}",
@@ -97,13 +98,17 @@ pub fn tokens_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                 m.button_height, m.button_radius, m.chip_height, m.top_bar_height, m.sidebar_width
             ),
             format!(
-                "交互规范：输入框聚焦={:?}，选项卡指示器={:?}，导航指示器={:?}",
-                spec.input_focus, spec.tab_indicator, spec.nav_indicator
+                "交互与边框：输入框聚焦={:?}，选项卡指示器={:?}，导航指示器={:?}，边框模式={:?}",
+                spec.input_focus, spec.tab_indicator, spec.nav_indicator, spec.control_border
             ),
             format!(
-                "平台惯例：弹窗按钮序={:?}，保存快捷键={}",
+                "平台惯例与排版：弹窗按钮序={:?}，保存快捷键={}，正文排版={}px/{}px (字距 {:+.2})，减弱动效={}",
                 spec.dialog_action_order,
-                spec.shortcut_convention.format_primary("S")
+                spec.shortcut_convention.format_primary("S"),
+                body_spec.font_size,
+                body_spec.line_height,
+                body_spec.letter_spacing,
+                spec.reduced_motion
             ),
         ];
         flex_col(

@@ -16,7 +16,7 @@ use xilem::masonry::widgets::{
 use crate::foundation::FocusFrame;
 use crate::foundation::state_layer::{resolve_interactive_colors, with_opacity};
 use crate::style_engine::classes;
-use crate::tokens::{Brightness, DesignSpec, ElevationLevel};
+use crate::tokens::{Brightness, ControlBorderStyle, DesignSpec, ElevationLevel};
 
 #[expect(
     clippy::too_many_arguments,
@@ -76,7 +76,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     let mut stack = PropertyStack::new();
     let p = &spec.palette;
     let m = &spec.metrics;
-    let std_pad = Padding::from_vh(6.px(), m.button_pad_h.px());
+    let std_pad = Padding::from_vh(0.px(), m.button_pad_h.px());
     let btn_dims = Some(Dimensions::height(m.button_height.px()));
 
     insert_button_variant(
@@ -90,13 +90,18 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         std_pad,
         btn_dims,
     );
+    let secondary_border = if spec.control_border == ControlBorderStyle::BorderlessFlat {
+        None
+    } else {
+        Some((p.border, 1.0))
+    };
     insert_button_variant(
         &mut stack,
         classes::BTN_SECONDARY,
         spec,
         p.secondary_container,
         p.on_secondary_container,
-        Some((p.border, 1.0)),
+        secondary_border,
         m.button_radius,
         std_pad,
         btn_dims,
@@ -135,7 +140,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         None,
         m.button_radius,
-        Padding::from_vh(6.px(), 10.px()),
+        Padding::from_vh(0.px(), 10.px()),
         btn_dims,
     );
     insert_button_variant(
@@ -271,14 +276,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         );
     }
 
-    let chip_pad = Padding::from_vh(
-        if m.chip_height <= 24.0 {
-            2.px()
-        } else {
-            4.px()
-        },
-        12.px(),
-    );
+    let chip_pad = Padding::from_vh(0.px(), 12.px());
     let chip_dims = Some(Dimensions::height(m.chip_height.px()));
     insert_button_variant(
         &mut stack,

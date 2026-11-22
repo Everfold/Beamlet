@@ -4,8 +4,8 @@ use xilem::masonry::core::FromDynWidget;
 use xilem::{Color, WidgetView, WindowId, WindowView};
 use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
+    Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
+    NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::color::{ColorScheme, ContrastLevel};
@@ -15,8 +15,10 @@ use crate::color::{ColorScheme, ContrastLevel};
 pub struct Md3Theme {
     /// Material 3 dynamic color scheme.
     pub scheme: ColorScheme,
-    /// Typographic scale (defaults to Material 3 15-role baseline scale).
+    /// Typographic scale (defaults to Material 3 15-role official ramp).
     pub typography: TypeScale,
+    /// Disables entrance/transition motion durations and spatial offsets when `true`.
+    pub reduced_motion: bool,
 }
 
 impl Md3Theme {
@@ -25,7 +27,8 @@ impl Md3Theme {
     pub fn light() -> Self {
         Self {
             scheme: ColorScheme::baseline_light(),
-            typography: TypeScale::baseline(),
+            typography: TypeScale::md3(),
+            reduced_motion: false,
         }
     }
 
@@ -34,7 +37,8 @@ impl Md3Theme {
     pub fn dark() -> Self {
         Self {
             scheme: ColorScheme::baseline_dark(),
-            typography: TypeScale::baseline(),
+            typography: TypeScale::md3(),
+            reduced_motion: false,
         }
     }
 
@@ -43,7 +47,8 @@ impl Md3Theme {
     pub fn from_seed(seed: Color, brightness: Brightness) -> Self {
         Self {
             scheme: ColorScheme::from_seed(seed, brightness, ContrastLevel::Standard),
-            typography: TypeScale::baseline(),
+            typography: TypeScale::md3(),
+            reduced_motion: false,
         }
     }
 
@@ -58,6 +63,13 @@ impl Md3Theme {
     #[must_use]
     pub fn with_typography(mut self, typography: TypeScale) -> Self {
         self.typography = typography;
+        self
+    }
+
+    /// Sets accessibility reduced-motion preference.
+    #[must_use]
+    pub const fn with_reduced_motion(mut self, reduced: bool) -> Self {
+        self.reduced_motion = reduced;
         self
     }
 
@@ -109,6 +121,8 @@ impl Md3Theme {
             nav_indicator: NavIndicatorStyle::PillBackground,
             dialog_action_order: DialogActionOrder::PrimaryTrailing,
             shortcut_convention: ShortcutConvention::Control,
+            control_border: ControlBorderStyle::UniformHairline,
+            reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
         }
     }

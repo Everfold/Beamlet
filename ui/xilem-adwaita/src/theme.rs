@@ -4,8 +4,8 @@ use xilem::masonry::core::FromDynWidget;
 use xilem::{WidgetView, WindowId, WindowView};
 use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
+    Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
+    NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::palette::{AdwaitaAccent, adwaita_palette};
@@ -19,6 +19,8 @@ pub struct AdwaitaTheme {
     pub accent: AdwaitaAccent,
     /// Desktop Adwaita typography ramp (`15px` body base).
     pub typography: TypeScale,
+    /// Disables entrance/transition motion durations and spatial offsets when `true`.
+    pub reduced_motion: bool,
 }
 
 impl AdwaitaTheme {
@@ -28,7 +30,8 @@ impl AdwaitaTheme {
         Self {
             brightness: Brightness::Light,
             accent: AdwaitaAccent::Blue,
-            typography: TypeScale::compact_desktop(15.0),
+            typography: TypeScale::adwaita(),
+            reduced_motion: false,
         }
     }
 
@@ -38,7 +41,8 @@ impl AdwaitaTheme {
         Self {
             brightness: Brightness::Dark,
             accent: AdwaitaAccent::Blue,
-            typography: TypeScale::compact_desktop(15.0),
+            typography: TypeScale::adwaita(),
+            reduced_motion: false,
         }
     }
 
@@ -53,6 +57,13 @@ impl AdwaitaTheme {
     #[must_use]
     pub fn with_typography(mut self, typography: TypeScale) -> Self {
         self.typography = typography;
+        self
+    }
+
+    /// Sets accessibility reduced-motion preference.
+    #[must_use]
+    pub const fn with_reduced_motion(mut self, reduced: bool) -> Self {
+        self.reduced_motion = reduced;
         self
     }
 
@@ -104,6 +115,8 @@ impl AdwaitaTheme {
             nav_indicator: NavIndicatorStyle::RoundedRow,
             dialog_action_order: DialogActionOrder::PrimaryTrailing,
             shortcut_convention: ShortcutConvention::Control,
+            control_border: ControlBorderStyle::BorderlessFlat,
+            reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
         }
     }
