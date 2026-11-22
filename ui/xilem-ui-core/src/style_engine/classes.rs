@@ -60,9 +60,13 @@ pub const CHIP_FILTER_SELECTED: &str = "ui.chip.filter.selected";
 pub const CHIP_INPUT: &str = "ui.chip.input";
 /// Suggestion chip.
 pub const CHIP_SUGGESTION: &str = "ui.chip.suggestion";
+/// Chip row wrapper bounding container height (`chip_height`).
+pub const CHIP_ROW: &str = "ui.chip.row";
 
 /// Checked state marker for checkboxes, radios, and toggles.
 pub const CHECKED: &str = "ui.checked";
+/// Search bar container surface.
+pub const SEARCH_BAR: &str = "ui.search_bar";
 /// Filled text field input styling.
 pub const TEXT_FIELD_FILLED: &str = "ui.tf.filled";
 /// Outlined / desktop crisp text field input styling.

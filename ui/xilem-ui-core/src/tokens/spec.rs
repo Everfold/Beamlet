@@ -249,6 +249,46 @@ pub enum NavIndicatorStyle {
     RoundedRow,
 }
 
+/// Platform convention for ordering confirm vs cancel actions inside modal dialogs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum DialogActionOrder {
+    /// Cancel/secondary on the left, primary/confirm on the right (MD3, macOS HIG, GNOME Adwaita).
+    #[default]
+    PrimaryTrailing,
+    /// Primary/confirm on the left, cancel/secondary on the right (Windows Fluent).
+    PrimaryLeading,
+}
+
+/// Platform keyboard shortcut modifier display convention.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ShortcutConvention {
+    /// `Ctrl+` / `Alt+` / `Shift+` (Windows Fluent, GNOME Adwaita, Material 3).
+    #[default]
+    Control,
+    /// `⌘` / `⌥` / `⇧` (macOS Apple HIG).
+    Command,
+}
+
+impl ShortcutConvention {
+    /// Formats a primary-modifier shortcut chord such as `"S"` into `"⌘S"` or `"Ctrl+S"`.
+    #[must_use]
+    pub fn format_primary(self, key: &str) -> String {
+        match self {
+            Self::Control => format!("Ctrl+{key}"),
+            Self::Command => format!("⌘{key}"),
+        }
+    }
+
+    /// Formats a primary+shift shortcut chord such as `"Z"` into `"⇧⌘Z"` or `"Ctrl+Shift+Z"`.
+    #[must_use]
+    pub fn format_primary_shift(self, key: &str) -> String {
+        match self {
+            Self::Control => format!("Ctrl+Shift+{key}"),
+            Self::Command => format!("⇧⌘{key}"),
+        }
+    }
+}
+
 /// Complete cross-theme design specification passed through [`ui_scope`](crate::style_engine::ui_scope).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesignSpec {
@@ -268,6 +308,10 @@ pub struct DesignSpec {
     pub tab_indicator: TabIndicatorStyle,
     /// Sidebar active item indicator strategy.
     pub nav_indicator: NavIndicatorStyle,
+    /// Dialog primary/secondary button ordering convention.
+    pub dialog_action_order: DialogActionOrder,
+    /// Keyboard shortcut modifier display convention.
+    pub shortcut_convention: ShortcutConvention,
     /// 15-role typography ramp and optional font family.
     pub typography: TypeScale,
 }
@@ -379,6 +423,8 @@ impl DesignSpec {
             input_focus: InputFocusStyle::Outline2px,
             tab_indicator: TabIndicatorStyle::Underline { height: 2.0 },
             nav_indicator: NavIndicatorStyle::RoundedRow,
+            dialog_action_order: DialogActionOrder::PrimaryTrailing,
+            shortcut_convention: ShortcutConvention::Control,
             typography: TypeScale::baseline(),
         }
     }
@@ -409,5 +455,28 @@ impl DesignSpec {
     #[must_use]
     pub fn box_shadow(&self, level: ElevationLevel) -> BoxShadow {
         level.box_shadow(self.palette.shadow)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shortcut_conventions_format_platform_chords() {
+        assert_eq!(ShortcutConvention::Control.format_primary("S"), "Ctrl+S");
+        assert_eq!(ShortcutConvention::Command.format_primary("S"), "⌘S");
+        assert_eq!(
+            ShortcutConvention::Control.format_primary_shift("Z"),
+            "Ctrl+Shift+Z"
+        );
+        assert_eq!(ShortcutConvention::Command.format_primary_shift("Z"), "⇧⌘Z");
+    }
+
+    #[test]
+    fn neutral_fallback_defaults_match_conventions() {
+        let spec = DesignSpec::neutral_fallback(Brightness::Light);
+        assert_eq!(spec.dialog_action_order, DialogActionOrder::PrimaryTrailing);
+        assert_eq!(spec.shortcut_convention, ShortcutConvention::Control);
     }
 }

@@ -2,8 +2,8 @@
 
 use xilem::Color;
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, InputFocusStyle, NavIndicatorStyle, StateFeedbackMode,
-    TabIndicatorStyle, TypeScale,
+    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::color::{ColorScheme, ContrastLevel};
@@ -105,6 +105,8 @@ impl Md3Theme {
             input_focus: InputFocusStyle::Outline2px,
             tab_indicator: TabIndicatorStyle::Underline { height: 3.0 },
             nav_indicator: NavIndicatorStyle::PillBackground,
+            dialog_action_order: DialogActionOrder::PrimaryTrailing,
+            shortcut_convention: ShortcutConvention::Control,
             typography: self.typography.clone(),
         }
     }

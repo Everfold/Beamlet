@@ -11,7 +11,7 @@ pub use layout::{
 };
 pub use motion::{MotionDuration, MotionEasing};
 pub use spec::{
-    ControlMetrics, DesignSpec, ElevationLevel, InputFocusStyle, NavIndicatorStyle,
-    SemanticPalette, StateFeedbackMode, TabIndicatorStyle,
+    ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel, InputFocusStyle,
+    NavIndicatorStyle, SemanticPalette, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle,
 };
 pub use typography::{TextStyleSpec, TypeRole, TypeScale};

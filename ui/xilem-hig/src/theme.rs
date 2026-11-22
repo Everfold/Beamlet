@@ -1,8 +1,8 @@
 //! `HigTheme` constructing an Apple Human Interface Guidelines [`DesignSpec`].
 
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, InputFocusStyle, NavIndicatorStyle, StateFeedbackMode,
-    TabIndicatorStyle, TypeScale,
+    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::palette::{HigAccent, hig_palette};
@@ -96,6 +96,8 @@ impl HigTheme {
             input_focus: InputFocusStyle::OuterHalo3px,
             tab_indicator: TabIndicatorStyle::SegmentedThumb,
             nav_indicator: NavIndicatorStyle::RoundedRow,
+            dialog_action_order: DialogActionOrder::PrimaryTrailing,
+            shortcut_convention: ShortcutConvention::Command,
             typography: self.typography.clone(),
         }
     }

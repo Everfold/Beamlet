@@ -13,9 +13,10 @@ use xilem::masonry::widgets::{
     Spinner, Switch, TextArea, TextInput,
 };
 
+use crate::foundation::FocusFrame;
 use crate::foundation::state_layer::{resolve_interactive_colors, with_opacity};
 use crate::style_engine::classes;
-use crate::tokens::{Brightness, DesignSpec, ElevationLevel, InputFocusStyle};
+use crate::tokens::{Brightness, DesignSpec, ElevationLevel};
 
 #[expect(
     clippy::too_many_arguments,
@@ -539,7 +540,25 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(BorderWidth { width: 0.px() })
             .with(Padding::from_vh(2.px(), 6.px())),
     );
+    sized_stack.push_layer(
+        Selector::classes(&[classes::CHIP_ROW]),
+        PropertySet::new().with(Dimensions::height(m.chip_height.px())),
+    );
     props.insert_stack::<SizedBox>(sized_stack);
+
+    let mut focus_stack = PropertyStack::new();
+    focus_stack.push_layer(
+        Selector::classes(&[classes::SEARCH_BAR]),
+        PropertySet::new()
+            .with(Background::Color(p.surface_highest))
+            .with(BorderColor::new(p.border))
+            .with(BorderWidth { width: 1.px() })
+            .with(CornerRadius {
+                radius: m.search_radius.px(),
+            })
+            .with(Dimensions::height(m.search_height.px())),
+    );
+    props.insert_stack::<FocusFrame>(focus_stack);
 }
 
 fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
@@ -641,17 +660,7 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
     });
     props.insert::<Spinner, _>(TrackThickness(Length::px(3.5)));
 
-    // TextInput property stack driven by InputFocusStyle
-    let focus_border_width = match spec.input_focus {
-        InputFocusStyle::Outline2px => 2.px(),
-        InputFocusStyle::BottomAccentLine2px | InputFocusStyle::OuterHalo3px => 1.px(),
-    };
-    let focus_border_color = match spec.input_focus {
-        InputFocusStyle::Outline2px => p.accent,
-        InputFocusStyle::BottomAccentLine2px => p.border,
-        InputFocusStyle::OuterHalo3px => p.accent,
-    };
-
+    // TextInput property stack (FocusFrame owns outer focus ring / bottom bar)
     let mut tf_stack = PropertyStack::new();
     let base_pad = Padding::from_vh(m.input_pad_v.px(), m.input_pad_h.px());
     tf_stack.push_layer(
@@ -699,17 +708,15 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
         tf_stack.push_layer(
             Selector::classes(&[cls]).with_focused(true),
             PropertySet::new()
-                .with(BorderColor::new(focus_border_color))
-                .with(BorderWidth {
-                    width: focus_border_width,
-                }),
+                .with(BorderColor::new(p.accent))
+                .with(BorderWidth { width: 1.px() }),
         );
     }
     tf_stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_ERROR]),
         PropertySet::new()
             .with(BorderColor::new(p.error))
-            .with(BorderWidth { width: 2.px() }),
+            .with(BorderWidth { width: 1.px() }),
     );
     tf_stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_OUTLINED]).with_disabled(true),

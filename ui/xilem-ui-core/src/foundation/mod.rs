@@ -2,12 +2,14 @@
 //! Masonry class injection, and window overlay primitives.
 
 pub mod class_view;
+pub mod focus_frame;
 pub mod icon;
 pub mod overlay;
 pub mod state_layer;
 pub mod transition;
 
 pub use class_view::{UiClassExt, WithClass};
+pub use focus_frame::{FocusFrame, FocusFrameView, focus_frame};
 pub use icon::{icons, ui_icon};
 pub use overlay::{
     AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,

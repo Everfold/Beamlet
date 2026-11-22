@@ -1,8 +1,8 @@
 //! `FluentTheme` constructing a Windows 11 / WinUI 3 [`DesignSpec`].
 
 use xilem_ui_core::tokens::{
-    Brightness, ControlMetrics, DesignSpec, InputFocusStyle, NavIndicatorStyle, StateFeedbackMode,
-    TabIndicatorStyle, TypeScale,
+    Brightness, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle, NavIndicatorStyle,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
 };
 
 use crate::palette::{FluentAccent, fluent_palette};
@@ -96,6 +96,8 @@ impl FluentTheme {
             input_focus: InputFocusStyle::BottomAccentLine2px,
             tab_indicator: TabIndicatorStyle::ShortPill,
             nav_indicator: NavIndicatorStyle::LeadingAccentBar,
+            dialog_action_order: DialogActionOrder::PrimaryLeading,
+            shortcut_convention: ShortcutConvention::Control,
             typography: self.typography.clone(),
         }
     }
