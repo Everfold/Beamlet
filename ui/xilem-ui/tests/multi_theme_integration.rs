@@ -429,6 +429,7 @@ fn modal_dialog_dismisses_on_escape_key() {
             }))
             .dialog(dlg)
             .build()
+            .boxed()
         },
         (520, 400),
     );

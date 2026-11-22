@@ -1,18 +1,21 @@
-//! Assist, filter, input, and suggestion chips driven by [`DesignSpec`].
+//! Assist, filter, input, and suggestion chips returning concrete `Pod<widgets::SizedBox>`.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Dimensions;
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::view::{CrossAxisAlignment, button, flex_row, label};
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
-use crate::style_engine::classes;
+use crate::style_engine::{classes, current_spec};
 use crate::tokens::{DesignSpec, TypeRole};
+
+const CHIP_CHILD_VIEW_ID: ViewId = ViewId::new(0x5549_3710);
 
 /// Callback type for chip clicks and close actions.
 pub type ChipCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
@@ -25,7 +28,7 @@ enum ChipKind {
     Suggestion,
 }
 
-/// Multi-theme interactive chip view.
+/// Multi-theme interactive chip view exposing `Pod<widgets::SizedBox>` directly.
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct UiChip<State, Action> {
@@ -61,7 +64,7 @@ impl<State, Action> UiChip<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_inner(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
     where
         State: 'static,
         Action: 'static,
@@ -107,22 +110,89 @@ impl<State, Action> UiChip<State, Action> {
             })
             .disabled(self.disabled)
             .ui_class(classes::ICON_BTN_STD);
-            sized_box(
-                flex_row((main_chip, close_btn))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(2.px()),
-            )
-            .dims(Dimensions::height(spec.metrics.chip_height.px()))
-            .boxed()
-        } else {
-            sized_box(main_chip)
-                .dims(Dimensions::height(spec.metrics.chip_height.px()))
+            flex_row((main_chip, close_btn))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(2.px())
                 .boxed()
+        } else {
+            main_chip.boxed()
         }
     }
 }
 
-crate::impl_spec_view!(UiChip<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiChip<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiChip<State, Action> {
+    type Element = Pod<widgets::SizedBox>;
+    type ViewState = (
+        Box<AnyWidgetView<State, Action>>,
+        <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec(ctx);
+        let inner = self.build_inner(&spec);
+        let (child_pod, child_state) =
+            ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| inner.build(ctx, app_state));
+        let mut pod = ctx.create_pod(widgets::SizedBox::new(child_pod.new_widget.erased()));
+        pod.new_widget.classes.insert(classes::CHIP_ROW.to_string());
+        (pod, (inner, child_state))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_inner, child_state): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec(ctx);
+        let next_inner = self.build_inner(&spec);
+        let mut child_dyn =
+            widgets::SizedBox::child_mut(&mut element).expect("UiChip SizedBox always has child");
+        ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| {
+            next_inner.rebuild(
+                prev_inner,
+                child_state,
+                ctx,
+                child_dyn.downcast(),
+                app_state,
+            );
+        });
+        *prev_inner = next_inner;
+    }
+
+    fn teardown(
+        &self,
+        (inner, child_state): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+    ) {
+        let mut child_dyn =
+            widgets::SizedBox::child_mut(&mut element).expect("UiChip SizedBox always has child");
+        ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| {
+            inner.teardown(child_state, ctx, child_dyn.downcast());
+        });
+    }
+
+    fn message(
+        &self,
+        (inner, child_state): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        match message.take_first() {
+            Some(CHIP_CHILD_VIEW_ID) => {
+                let mut child_dyn = widgets::SizedBox::child_mut(&mut element)
+                    .expect("UiChip SizedBox always has child");
+                inner.message(child_state, message, child_dyn.downcast(), app_state)
+            }
+            _ => MessageResult::Stale,
+        }
+    }
+}
 
 fn make_chip<State, Action, F>(
     kind: ChipKind,
@@ -145,7 +215,7 @@ where
     }
 }
 
-/// Assist chip triggering an contextual action.
+/// Assist chip triggering a contextual action.
 pub fn assist_chip<State: 'static, Action: 'static, F>(
     text: impl Into<ArcStr>,
     on_click: F,
@@ -168,7 +238,7 @@ where
     make_chip(ChipKind::Filter, text, selected, on_click)
 }
 
-/// Input chip (often paired with `.on_remove(...)`).
+/// Input token chip with click action and optional `.on_remove(...)` close affordance.
 pub fn input_chip<State: 'static, Action: 'static, F>(
     text: impl Into<ArcStr>,
     on_click: F,
@@ -179,7 +249,7 @@ where
     make_chip(ChipKind::Input, text, false, on_click)
 }
 
-/// Suggestion chip presenting recommended options.
+/// Suggestion chip offering quick prompts or choices.
 pub fn suggestion_chip<State: 'static, Action: 'static, F>(
     text: impl Into<ArcStr>,
     on_click: F,

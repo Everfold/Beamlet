@@ -1,4 +1,4 @@
-//! Cross-theme navigation bars, rails, permanent/modal drawers honoring [`NavIndicatorStyle`], and adaptive scaffold.
+//! Cross-theme navigation bars, rails, and permanent/modal drawers honoring [`NavIndicatorStyle`].
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -9,6 +9,7 @@ use xilem::kurbo::Vec2;
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::{AsUnit, UnitPoint};
 use xilem::masonry::properties::{Dimensions, Padding};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
     AnyFlexChild, CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row,
@@ -21,11 +22,11 @@ use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::foundation::{UiClassExt, ui_icon};
 use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, MotionDuration, NavIndicatorStyle, TypeRole, WindowSizeClass};
+use crate::tokens::{DesignSpec, MotionDuration, NavIndicatorStyle, TypeRole};
 
-/// Navigation item metadata shared across bottom bar, rail, drawer, and adaptive scaffold.
+/// Navigation item metadata shared across bottom bar, rail, drawer, and platform navigation views.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NavDestination {
     /// Destination title.
@@ -95,6 +96,7 @@ where
         let spec = crate::style_engine::current_spec(ctx);
         let next_h = spec.metrics.top_bar_height;
         if (*prev_h - next_h).abs() > 1e-6 {
+            ctx.mark_prop_changed::<Dimensions>(element.id());
             element.insert_prop(Dimensions::height(next_h.px()));
             *prev_h = next_h;
         }
@@ -139,7 +141,7 @@ pub fn top_bar<State: 'static, Action: 'static>(
     title: impl Into<ArcStr>,
     leading: Option<Box<AnyWidgetView<State, Action>>>,
     trailing: Option<Box<AnyWidgetView<State, Action>>>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let title: ArcStr = title.into();
     let title_view = with_spec(move |spec: &DesignSpec, _| {
         spec.typography
@@ -154,7 +156,6 @@ pub fn top_bar<State: 'static, Action: 'static>(
         inner: row,
         phantom: PhantomData,
     }
-    .boxed()
 }
 
 fn nav_badge_view<State: 'static, Action: 'static>(
@@ -177,7 +178,7 @@ pub fn navigation_bar<State: 'static, Action: 'static, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -235,9 +236,7 @@ where
             .ui_class(classes::BOTTOM_BAR),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .boxed()
     })
-    .boxed()
 }
 
 /// Medium-width vertical icon navigation rail.
@@ -245,7 +244,7 @@ pub fn navigation_rail<State: 'static, Action: 'static, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -304,9 +303,7 @@ where
             vertical_divider(),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .boxed()
     })
-    .boxed()
 }
 
 /// Persistent sidebar navigation drawer honoring [`NavIndicatorStyle`]:
@@ -318,7 +315,7 @@ pub fn navigation_drawer<State: 'static, Action: 'static, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -398,9 +395,7 @@ where
             vertical_divider(),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .boxed()
     })
-    .boxed()
 }
 
 /// Modal drawer view created by [`modal_navigation_drawer`].
@@ -507,70 +502,11 @@ where
     S: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
-    let drawer = navigation_drawer(header_title, destinations, selected, on_select);
+    let drawer = navigation_drawer(header_title, destinations, selected, on_select).boxed();
     UiModalDrawer {
         drawer,
         width: 260.0,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
-    }
-}
-
-/// Adaptive navigation layout mode derived from [`WindowSizeClass`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NavigationSuiteType {
-    /// Bottom navigation bar (`Compact`).
-    NavigationBar,
-    /// Vertical icon rail (`Medium`).
-    NavigationRail,
-    /// Permanent sidebar drawer (`Expanded`).
-    NavigationDrawer,
-}
-
-impl NavigationSuiteType {
-    /// Chooses the canonical navigation chrome for `size_class`.
-    #[must_use]
-    pub const fn from_window_size(size_class: WindowSizeClass) -> Self {
-        match size_class {
-            WindowSizeClass::Compact => Self::NavigationBar,
-            WindowSizeClass::Medium => Self::NavigationRail,
-            WindowSizeClass::Expanded => Self::NavigationDrawer,
-        }
-    }
-}
-
-/// Responsive scaffold switching automatically between [`navigation_bar`], [`navigation_rail`],
-/// and [`navigation_drawer`] according to `size_class`.
-pub fn adaptive_scaffold<State: 'static, Action: 'static, V, F>(
-    size_class: WindowSizeClass,
-    destinations: &[NavDestination],
-    selected: usize,
-    on_select: F,
-    body: V,
-) -> Box<AnyWidgetView<State, Action>>
-where
-    V: WidgetView<State, Action>,
-    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
-{
-    let _ = icons::MENU;
-    match NavigationSuiteType::from_window_size(size_class) {
-        NavigationSuiteType::NavigationBar => {
-            let nav = navigation_bar(destinations, selected, on_select);
-            flex_col((body.flex(1.0), nav))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .boxed()
-        }
-        NavigationSuiteType::NavigationRail => {
-            let nav = navigation_rail(destinations, selected, on_select);
-            flex_row((nav, body.flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .boxed()
-        }
-        NavigationSuiteType::NavigationDrawer => {
-            let nav = navigation_drawer(Some("Navigation"), destinations, selected, on_select);
-            flex_row((nav, body.flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .boxed()
-        }
     }
 }

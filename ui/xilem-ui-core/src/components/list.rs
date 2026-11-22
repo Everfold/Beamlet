@@ -1,18 +1,23 @@
-//! Spec-driven 1/2/3-line list items (static and clickable) with slots and dividers.
+//! Spec-driven 1/2/3-line list items and open-content list row helpers.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use xilem::Color;
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
 use xilem::masonry::properties::Padding;
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_col, flex_row, label};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::view::{
+    CrossAxisAlignment, Flex, FlexExt, button, flex_col, flex_row, label, sized_box,
+};
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::components::divider::horizontal_divider;
 use crate::foundation::UiClassExt;
-use crate::style_engine::classes;
+use crate::style_engine::{classes, current_spec};
 use crate::tokens::{DesignSpec, TypeRole};
 
 /// Slot view factory stored in [`UiListItem`].
@@ -22,7 +27,16 @@ pub type ListSlotFactory<State, Action> =
 /// List click handler type.
 pub type ListClickCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
 
-/// Reusable 1/2/3-line list row component.
+type ListOuterFlex<State, Action> = Flex<
+    (
+        Box<AnyWidgetView<State, Action>>,
+        Option<Box<AnyWidgetView<State, Action>>>,
+    ),
+    State,
+    Action,
+>;
+
+/// Reusable 1/2/3-line list row component exposing `Pod<widgets::Flex>` directly.
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[expect(missing_debug_implementations, reason = "Contains slot view closures")]
 pub struct UiListItem<State, Action> {
@@ -86,7 +100,7 @@ impl<State, Action> UiListItem<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_flex(&self, spec: &DesignSpec) -> ListOuterFlex<State, Action>
     where
         State: 'static,
         Action: 'static,
@@ -142,7 +156,7 @@ impl<State, Action> UiListItem<State, Action> {
             let bg = if self.selected {
                 p.secondary_container
             } else {
-                xilem::Color::TRANSPARENT
+                Color::TRANSPARENT
             };
             row.padding(Padding::from_vh(8.px(), 12.px()))
                 .background_color(bg)
@@ -150,15 +164,60 @@ impl<State, Action> UiListItem<State, Action> {
                 .boxed()
         };
 
-        if self.show_divider {
-            flex_col((item, horizontal_divider())).boxed()
-        } else {
-            item
-        }
+        let div = self.show_divider.then(|| horizontal_divider().boxed());
+        flex_col((item, div)).cross_axis_alignment(CrossAxisAlignment::Stretch)
     }
 }
 
-crate::impl_spec_view!(UiListItem<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiListItem<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiListItem<State, Action> {
+    type Element = Pod<widgets::Flex>;
+    type ViewState = (
+        ListOuterFlex<State, Action>,
+        <ListOuterFlex<State, Action> as View<State, Action, ViewCtx>>::ViewState,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec(ctx);
+        let flex = self.build_flex(&spec);
+        let (pod, st) = flex.build(ctx, app_state);
+        (pod, (flex, st))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_flex, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec(ctx);
+        let next_flex = self.build_flex(&spec);
+        next_flex.rebuild(prev_flex, st, ctx, element, app_state);
+        *prev_flex = next_flex;
+    }
+
+    fn teardown(
+        &self,
+        (prev_flex, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        prev_flex.teardown(st, ctx, element);
+    }
+
+    fn message(
+        &self,
+        (prev_flex, st): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        prev_flex.message(st, message, element, app_state)
+    }
+}
 
 /// Non-interactive list item row.
 pub fn list_item<State: 'static, Action: 'static>(
@@ -196,4 +255,29 @@ where
         on_click: Some(Arc::new(on_click)),
         phantom: PhantomData,
     }
+}
+
+/// Non-interactive list row hosting arbitrary custom view content with standard list padding and radius.
+pub fn list_item_view<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
+    content: V,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    sized_box(content).padding(Padding::from_vh(8.px(), 12.px()))
+}
+
+/// Interactive list row hosting arbitrary custom view content with native theme hover/press feedback.
+pub fn clickable_list_item_view<State: 'static, Action: 'static, V, F>(
+    content: V,
+    selected: bool,
+    on_click: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Button>
+where
+    V: WidgetView<State, Action>,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    let cls = if selected {
+        classes::LIST_ITEM_SELECTED
+    } else {
+        classes::LIST_ITEM
+    };
+    button(content, on_click).ui_class(cls)
 }

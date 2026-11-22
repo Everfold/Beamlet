@@ -1,19 +1,21 @@
-//! Outlined & Filled single-line text fields adapting focus rings per [`DesignSpec`].
+//! Outlined & Filled single-line text fields with reactive [`FocusFrame`](crate::foundation::FocusFrame) indicators.
 
 use std::sync::Arc;
 
-use xilem::Color;
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Dimensions;
+use xilem::masonry::properties::{ContentColor, Gap};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box, text_input};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::view::{
+    CrossAxisAlignment, Flex, FlexExt, Label, Prop, button, flex_col, flex_row, label, text_input,
+};
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
-use crate::foundation::state_layer::with_opacity;
-use crate::foundation::{UiClassExt, icons, ui_icon};
-use crate::style_engine::classes;
-use crate::tokens::{DesignSpec, InputFocusStyle, TypeRole};
+use crate::foundation::{FocusFrameView, UiClassExt, focus_frame, icons, ui_icon};
+use crate::style_engine::{classes, current_spec};
+use crate::tokens::{DesignSpec, TypeRole};
 
 /// Text field surface variant.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -35,7 +37,22 @@ pub type TrailingAction<State, Action> = (
     Arc<dyn Fn(&mut State) -> Action + Send + Sync>,
 );
 
-/// Cross-theme text field view honoring [`InputFocusStyle`].
+type TextFieldFlex<State, Action> = Prop<
+    Gap,
+    Flex<
+        (
+            Option<Prop<ContentColor, Label, State, Action>>,
+            FocusFrameView<Box<AnyWidgetView<State, Action>>, State, Action>,
+            Option<Box<AnyWidgetView<State, Action>>>,
+        ),
+        State,
+        Action,
+    >,
+    State,
+    Action,
+>;
+
+/// Cross-theme text field view exposing `Pod<widgets::Flex>` directly and reacting to keyboard focus.
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct UiTextField<State, Action> {
@@ -111,7 +128,7 @@ impl<State, Action> UiTextField<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_flex(&self, spec: &DesignSpec) -> TextFieldFlex<State, Action>
     where
         State: 'static,
         Action: 'static,
@@ -173,7 +190,7 @@ impl<State, Action> UiTextField<State, Action> {
             });
             let trail = self.trailing_action.as_ref().map(|(icon, cb)| {
                 let cb = cb.clone();
-                xilem::view::button(
+                button(
                     ui_icon(icon, 16.0, if is_error { p.error } else { sub_ink }),
                     move |s: &mut State| cb(s),
                 )
@@ -194,30 +211,7 @@ impl<State, Action> UiTextField<State, Action> {
             ti.ui_class(class).boxed()
         };
 
-        // Platform-authentic focus ring / bottom bar ornament
-        let decorated: Box<AnyWidgetView<State, Action>> = match spec.input_focus {
-            InputFocusStyle::Outline2px => input_widget,
-            InputFocusStyle::BottomAccentLine2px => {
-                let line_c = if is_error { p.error } else { p.accent };
-                let bar = sized_box(label(""))
-                    .dims(Dimensions::height(2.px()))
-                    .background_color(line_c);
-                flex_col((input_widget, bar))
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .boxed()
-            }
-            InputFocusStyle::OuterHalo3px => {
-                let halo_c = if is_error {
-                    with_opacity(p.error, 0.25)
-                } else {
-                    with_opacity(p.accent, 0.22)
-                };
-                sized_box(input_widget)
-                    .border(halo_c, 2.px())
-                    .corner_radius((spec.metrics.input_radius + 2.0).px())
-                    .boxed()
-            }
-        };
+        let frame = focus_frame(input_widget).error(is_error);
 
         let msg_text = self.error_text.as_ref().or(self.supporting_text.as_ref());
         let counter_text = self
@@ -244,21 +238,68 @@ impl<State, Action> UiTextField<State, Action> {
                     cnt_view,
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px()),
+                .gap(8.px())
+                .boxed(),
             )
         } else {
             None
         };
 
-        let _ = Color::TRANSPARENT;
-        flex_col((top_label, decorated, bottom_row))
+        flex_col((top_label, frame, bottom_row))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px())
-            .boxed()
     }
 }
 
-crate::impl_spec_view!(UiTextField<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiTextField<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextField<State, Action> {
+    type Element = Pod<widgets::Flex>;
+    type ViewState = (
+        TextFieldFlex<State, Action>,
+        <TextFieldFlex<State, Action> as View<State, Action, ViewCtx>>::ViewState,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec(ctx);
+        let flex = self.build_flex(&spec);
+        let (pod, st) = flex.build(ctx, app_state);
+        (pod, (flex, st))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_flex, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec(ctx);
+        let next_flex = self.build_flex(&spec);
+        next_flex.rebuild(prev_flex, st, ctx, element, app_state);
+        *prev_flex = next_flex;
+    }
+
+    fn teardown(
+        &self,
+        (prev_flex, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        prev_flex.teardown(st, ctx, element);
+    }
+
+    fn message(
+        &self,
+        (prev_flex, st): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        prev_flex.message(st, message, element, app_state)
+    }
+}
 
 fn make_tf<State, Action, F>(
     variant: TextFieldVariant,
@@ -284,7 +325,7 @@ where
     }
 }
 
-/// Outlined text field driven by [`DesignSpec`].
+/// Outlined text field driven by [`DesignSpec`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn text_field<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,
@@ -295,7 +336,7 @@ where
     make_tf(TextFieldVariant::Outlined, value, on_change)
 }
 
-/// Filled tonal container text field driven by [`DesignSpec`].
+/// Filled tonal container text field driven by [`DesignSpec`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn filled_text_field<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,

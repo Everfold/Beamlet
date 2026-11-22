@@ -1,16 +1,18 @@
-//! Typographic text components bound to the active [`DesignSpec`] scale.
+//! Typographic text components bound to the active [`DesignSpec`](crate::tokens::DesignSpec) scale.
 
 use std::marker::PhantomData;
 
-use xilem::Color;
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::core::ArcStr;
-use xilem::style::Style as _;
-use xilem::view::{Prose, label, prose};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::masonry::properties::ContentColor;
+use xilem::masonry::widgets;
+use xilem::view::{Label, Prose, label, prose};
+use xilem::{Color, Pod, ViewCtx};
 
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::current_spec;
+use crate::tokens::TypeRole;
 
-/// Label view styled via a semantic [`TypeRole`] from the active [`DesignSpec`].
+/// Label view styled via a semantic [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[derive(Debug)]
 pub struct UiLabel<State, Action> {
@@ -27,25 +29,76 @@ impl<State, Action> UiLabel<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
-    where
-        State: 'static,
-        Action: 'static,
-    {
-        let styled = spec
-            .typography
-            .style_label(self.role, label(self.text.clone()));
-        if let Some(c) = self.color {
-            styled.color(c).boxed()
-        } else {
-            styled.boxed()
-        }
+    fn inner_view(&self, ctx: &ViewCtx) -> Label {
+        let spec = current_spec(ctx);
+        spec.typography
+            .style_label(self.role, label(self.text.clone()))
     }
 }
 
-crate::impl_spec_view!(UiLabel<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiLabel<State, Action> {}
 
-/// Creates a semantic label styled using `role` from the active [`DesignSpec`].
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<State, Action> {
+    type Element = Pod<widgets::Label>;
+    type ViewState = (Label, Option<Color>);
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let inner = self.inner_view(ctx);
+        let (mut pod, ()) = View::<State, Action, ViewCtx>::build(&inner, ctx, app_state);
+        if let Some(c) = self.color {
+            pod.new_widget.properties.insert(ContentColor::new(c));
+        }
+        (pod, (inner, self.color))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_inner, prev_color): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let next_inner = self.inner_view(ctx);
+        View::<State, Action, ViewCtx>::rebuild(
+            &next_inner,
+            prev_inner,
+            &mut (),
+            ctx,
+            element.reborrow_mut(),
+            app_state,
+        );
+        if *prev_color != self.color {
+            ctx.mark_prop_changed::<ContentColor>(element.id());
+            if let Some(c) = self.color {
+                element.insert_prop(ContentColor::new(c));
+            }
+            *prev_color = self.color;
+        }
+        *prev_inner = next_inner;
+    }
+
+    fn teardown(
+        &self,
+        (prev_inner, _): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        View::<State, Action, ViewCtx>::teardown(prev_inner, &mut (), ctx, element);
+    }
+
+    fn message(
+        &self,
+        (prev_inner, _): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        View::<State, Action, ViewCtx>::message(prev_inner, &mut (), message, element, app_state)
+    }
+}
+
+/// Creates a semantic label styled using `role` from the active [`DesignSpec`](crate::tokens::DesignSpec).
 pub fn ui_label<State: 'static, Action: 'static>(
     role: TypeRole,
     text: impl Into<ArcStr>,
@@ -58,7 +111,7 @@ pub fn ui_label<State: 'static, Action: 'static>(
     }
 }
 
-/// Multi-line wrapping prose view styled via [`TypeRole`] from the active [`DesignSpec`].
+/// Multi-line wrapping prose view styled via [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[derive(Debug)]
 pub struct UiProse<State, Action> {
@@ -75,23 +128,64 @@ impl<State, Action> UiProse<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
-    where
-        State: 'static,
-        Action: 'static,
-    {
+    fn inner_view(&self, ctx: &ViewCtx) -> Prose<State, Action> {
+        let spec = current_spec(ctx);
         let style = spec.typography.get(self.role);
-        let mut view: Prose<State, Action> = prose(self.text.clone())
+        let view: Prose<State, Action> = prose(self.text.clone())
             .text_size(style.font_size)
             .weight(style.weight);
         if let Some(c) = self.color {
-            view = view.text_color(c);
+            view.text_color(c)
+        } else {
+            view
         }
-        view.boxed()
     }
 }
 
-crate::impl_spec_view!(UiProse<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiProse<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<State, Action> {
+    type Element = Pod<widgets::Prose>;
+    type ViewState = Prose<State, Action>;
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let inner = self.inner_view(ctx);
+        let (pod, ()) = inner.build(ctx, app_state);
+        (pod, inner)
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        prev_inner: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let next_inner = self.inner_view(ctx);
+        next_inner.rebuild(prev_inner, &mut (), ctx, element, app_state);
+        *prev_inner = next_inner;
+    }
+
+    fn teardown(
+        &self,
+        prev_inner: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        prev_inner.teardown(&mut (), ctx, element);
+    }
+
+    fn message(
+        &self,
+        prev_inner: &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        prev_inner.message(&mut (), message, element, app_state)
+    }
+}
 
 /// Creates wrapping prose text styled using `role`.
 pub fn ui_prose<State: 'static, Action: 'static>(

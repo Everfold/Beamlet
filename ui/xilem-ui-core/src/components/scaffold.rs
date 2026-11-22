@@ -2,6 +2,7 @@
 
 use xilem::masonry::layout::{AsUnit, UnitPoint};
 use xilem::masonry::properties::Padding;
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, sized_box, zstack};
 use xilem::{AnyWidgetView, WidgetView};
@@ -67,7 +68,7 @@ impl<State: 'static, Action: 'static> UiScaffold<State, Action> {
     }
 
     /// Finalizes the scaffold into a single composable [`WidgetView`].
-    pub fn build(self) -> Box<AnyWidgetView<State, Action>> {
+    pub fn build(self) -> impl WidgetView<State, Action, Widget = widgets::ZStack> {
         let base_col = flex_col((self.top_bar, self.body.flex(1.0), self.bottom_bar))
             .cross_axis_alignment(CrossAxisAlignment::Stretch);
 
@@ -95,7 +96,6 @@ impl<State: 'static, Action: 'static> UiScaffold<State, Action> {
             sheet_layer,
             dialog_layer,
         ))
-        .boxed()
     }
 }
 
@@ -112,13 +112,5 @@ pub fn scaffold<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
         sheet: None,
         dialog: None,
         toast: None,
-    }
-}
-
-impl<State: 'static, Action: 'static> From<UiScaffold<State, Action>>
-    for Box<AnyWidgetView<State, Action>>
-{
-    fn from(s: UiScaffold<State, Action>) -> Self {
-        s.build()
     }
 }

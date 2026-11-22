@@ -77,6 +77,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     let p = &spec.palette;
     let m = &spec.metrics;
     let std_pad = Padding::from_vh(6.px(), m.button_pad_h.px());
+    let btn_dims = Some(Dimensions::height(m.button_height.px()));
 
     insert_button_variant(
         &mut stack,
@@ -87,7 +88,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         m.button_radius,
         std_pad,
-        None,
+        btn_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -98,7 +99,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border, 1.0)),
         m.button_radius,
         std_pad,
-        None,
+        btn_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -109,7 +110,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border, 1.0)),
         m.button_radius,
         std_pad,
-        None,
+        btn_dims,
     );
     stack.push_layer(
         Selector::classes(&[classes::BTN_ELEVATED]),
@@ -124,7 +125,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border_strong, 1.0)),
         m.button_radius,
         std_pad,
-        None,
+        btn_dims,
     );
     insert_button_variant(
         &mut stack,
@@ -135,7 +136,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         m.button_radius,
         Padding::from_vh(6.px(), 10.px()),
-        None,
+        btn_dims,
     );
 
     let icon_dims = Some(Dimensions::fixed(
@@ -233,6 +234,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     );
 
     let fab_pad = Padding::all(16.px());
+    let fab_dims = Some(Dimensions::height(56.px()));
     for (cls, bg, fg) in [
         (
             classes::FAB_PRIMARY,
@@ -251,7 +253,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
             p.on_tertiary_container,
         ),
     ] {
-        insert_button_variant(&mut stack, cls, spec, bg, fg, None, 16.0, fab_pad, None);
+        insert_button_variant(&mut stack, cls, spec, bg, fg, None, 16.0, fab_pad, fab_dims);
         stack.push_layer(
             Selector::classes(&[cls]),
             PropertySet::new().with(spec.box_shadow(ElevationLevel::Level3)),
@@ -447,6 +449,7 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
     props.insert::<Divider, _>(ContentColor::new(p.divider));
 
     let mut sized_stack = PropertyStack::new();
+    let card_pad = Padding::all(m.card_pad.px());
     sized_stack.push_layer(
         Selector::classes(&[classes::CARD_ELEVATED]),
         PropertySet::new()
@@ -456,6 +459,7 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             })
             .with(BorderWidth { width: 1.px() })
             .with(BorderColor::new(p.border))
+            .with(card_pad)
             .with(spec.box_shadow(ElevationLevel::Level1)),
     );
     sized_stack.push_layer(
@@ -466,6 +470,7 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
                 radius: m.card_radius.px(),
             })
             .with(BorderWidth { width: 0.px() })
+            .with(card_pad)
             .with(BoxShadow::default()),
     );
     sized_stack.push_layer(
@@ -477,6 +482,7 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             })
             .with(BorderWidth { width: 1.px() })
             .with(BorderColor::new(p.border))
+            .with(card_pad)
             .with(BoxShadow::default()),
     );
     sized_stack.push_layer(

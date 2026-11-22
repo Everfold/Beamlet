@@ -1,4 +1,4 @@
-//! Theme environment scope (`ui_scope`), root window wrapper (`ui_window`), and `impl_spec_view!`.
+//! Theme environment scope (`ui_scope`) and root window wrapper (`ui_window`).
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -9,7 +9,7 @@ use xilem::masonry::core::{DefaultProperties, FromDynWidget};
 use xilem::masonry::properties::Dimensions;
 use xilem::style::Style as _;
 use xilem::view::sized_box;
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView, WindowId, WindowView, window};
+use xilem::{Pod, ViewCtx, WidgetView, WindowId, WindowView, window};
 
 use crate::style_engine::build_default_properties;
 use crate::tokens::{Brightness, DesignSpec};
@@ -247,147 +247,6 @@ where
     ) -> MessageResult<Action> {
         prev_view.message(view_state, message, element, app_state)
     }
-}
-
-/// Internal runtime state stored by [`impl_spec_view!`].
-#[doc(hidden)]
-#[expect(
-    missing_debug_implementations,
-    reason = "Holds type-erased child view and ViewState"
-)]
-pub struct SpecViewState<State: 'static, Action: 'static> {
-    spec: DesignSpec,
-    view: Box<AnyWidgetView<State, Action>>,
-    state: <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
-}
-
-#[doc(hidden)]
-pub fn spec_view_build<State: 'static, Action: 'static>(
-    ctx: &mut ViewCtx,
-    app_state: &mut State,
-    render: impl FnOnce(&DesignSpec) -> Box<AnyWidgetView<State, Action>>,
-) -> (
-    Pod<xilem::masonry::widgets::Passthrough>,
-    SpecViewState<State, Action>,
-) {
-    let spec = current_spec(ctx);
-    let view = render(&spec);
-    let (el, state) = view.build(ctx, app_state);
-    (el, SpecViewState { spec, view, state })
-}
-
-#[doc(hidden)]
-pub fn spec_view_rebuild<State: 'static, Action: 'static>(
-    view_state: &mut SpecViewState<State, Action>,
-    ctx: &mut ViewCtx,
-    element: Mut<'_, Pod<xilem::masonry::widgets::Passthrough>>,
-    app_state: &mut State,
-    render: impl FnOnce(&DesignSpec) -> Box<AnyWidgetView<State, Action>>,
-) {
-    let next_spec = current_spec(ctx);
-    let next_view = render(&next_spec);
-    next_view.rebuild(
-        &view_state.view,
-        &mut view_state.state,
-        ctx,
-        element,
-        app_state,
-    );
-    view_state.spec = next_spec;
-    view_state.view = next_view;
-}
-
-#[doc(hidden)]
-pub fn spec_view_teardown<State: 'static, Action: 'static>(
-    view_state: &mut SpecViewState<State, Action>,
-    ctx: &mut ViewCtx,
-    element: Mut<'_, Pod<xilem::masonry::widgets::Passthrough>>,
-) {
-    view_state
-        .view
-        .teardown(&mut view_state.state, ctx, element);
-}
-
-#[doc(hidden)]
-pub fn spec_view_message<State: 'static, Action: 'static>(
-    view_state: &mut SpecViewState<State, Action>,
-    message: &mut MessageCtx,
-    element: Mut<'_, Pod<xilem::masonry::widgets::Passthrough>>,
-    app_state: &mut State,
-) -> MessageResult<Action> {
-    view_state
-        .view
-        .message(&mut view_state.state, message, element, app_state)
-}
-
-/// Implements [`View`] + [`ViewMarker`] for any component view struct defining
-/// `fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>`.
-#[macro_export]
-macro_rules! impl_spec_view {
-    ($ty:ident < State, Action $(, $gen:ident )* > $(where $($bounds:tt)+)?) => {
-        impl<State, Action $(, $gen)*> xilem::core::ViewMarker for $ty<State, Action $(, $gen)*>
-        $(where $($bounds)+)?
-        {}
-
-        impl<State, Action $(, $gen)*> xilem::core::View<State, Action, xilem::ViewCtx>
-            for $ty<State, Action $(, $gen)*>
-        where
-            State: 'static,
-            Action: 'static,
-            $($($bounds)+)?
-        {
-            type Element = xilem::Pod<xilem::masonry::widgets::Passthrough>;
-            type ViewState = $crate::style_engine::scope::SpecViewState<State, Action>;
-
-            fn build(
-                &self,
-                ctx: &mut xilem::ViewCtx,
-                app_state: &mut State,
-            ) -> (Self::Element, Self::ViewState) {
-                $crate::style_engine::scope::spec_view_build(ctx, app_state, |spec| {
-                    self.render_with_spec(spec)
-                })
-            }
-
-            fn rebuild(
-                &self,
-                _prev: &Self,
-                view_state: &mut Self::ViewState,
-                ctx: &mut xilem::ViewCtx,
-                element: xilem::core::Mut<'_, Self::Element>,
-                app_state: &mut State,
-            ) {
-                $crate::style_engine::scope::spec_view_rebuild(
-                    view_state,
-                    ctx,
-                    element,
-                    app_state,
-                    |spec| self.render_with_spec(spec),
-                );
-            }
-
-            fn teardown(
-                &self,
-                view_state: &mut Self::ViewState,
-                ctx: &mut xilem::ViewCtx,
-                element: xilem::core::Mut<'_, Self::Element>,
-            ) {
-                $crate::style_engine::scope::spec_view_teardown(view_state, ctx, element);
-            }
-
-            fn message(
-                &self,
-                view_state: &mut Self::ViewState,
-                message: &mut xilem::core::MessageCtx,
-                element: xilem::core::Mut<'_, Self::Element>,
-                app_state: &mut State,
-            ) -> xilem::core::MessageResult<Action> {
-                $crate::style_engine::scope::spec_view_message(
-                    view_state, message, element, app_state,
-                )
-            }
-        }
-    };
 }
 
 #[cfg(test)]

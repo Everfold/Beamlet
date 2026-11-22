@@ -16,7 +16,7 @@ use xilem::masonry::layout::{AsUnit, LenReq, Length};
 use xilem::masonry::properties::{Dimensions, TrackColor};
 use xilem::style::Style as _;
 use xilem::view::{progress_bar, sized_box, spinner};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use xilem::{Pod, ViewCtx, WidgetView};
 
 /// Custom linear progress bar rendering indeterminate sweeping track + determinate stop dot.
 #[derive(Debug)]
@@ -207,7 +207,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
 /// Spec-themed linear progress bar (`Some(0.0..=1.0)` determinate, `None` indeterminate).
 pub fn linear_progress<State: 'static, Action: 'static>(
     progress: Option<f64>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = LinearProgressWidget> {
     if progress.is_some() {
         let _ = progress_bar(progress);
     }
@@ -215,7 +215,6 @@ pub fn linear_progress<State: 'static, Action: 'static>(
         progress,
         phantom: PhantomData,
     }
-    .boxed()
 }
 
 /// Indeterminate circular progress spinner (`40px`).
@@ -376,13 +375,5 @@ pub fn determinate_circular_progress<State: 'static, Action: 'static>(
     UiDeterminateCircular {
         progress,
         phantom: PhantomData,
-    }
-}
-
-impl<State: 'static, Action: 'static> From<UiLinearProgress<State, Action>>
-    for Box<AnyWidgetView<State, Action>>
-{
-    fn from(v: UiLinearProgress<State, Action>) -> Self {
-        v.boxed()
     }
 }

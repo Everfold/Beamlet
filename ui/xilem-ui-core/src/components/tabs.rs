@@ -6,6 +6,7 @@ use xilem::Color;
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
 use xilem::masonry::properties::{Dimensions, Padding};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
     AnyFlexChild, CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row,
@@ -19,16 +20,15 @@ use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, TabIndicatorStyle, TypeRole};
 
 fn render_tabs<State: 'static, Action: 'static, F>(
-    titles: &[ArcStr],
+    titles: Vec<ArcStr>,
     selected: usize,
     force_underline: Option<f64>,
     scrollable: bool,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
-    let titles: Vec<ArcStr> = titles.to_vec();
     let cb = Arc::new(on_select);
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
@@ -138,50 +138,50 @@ where
                     .boxed()
             };
 
-        if scrollable {
+        let inner = if scrollable {
             portal(container).constrain_vertical(true).boxed()
         } else {
             container
-        }
+        };
+        sized_box(inner)
     })
-    .boxed()
 }
 
 /// Primary tab strip adapting to the active theme's [`TabIndicatorStyle`].
-pub fn tabs<State: 'static, Action: 'static, F>(
-    titles: &[impl Into<ArcStr> + Clone],
+pub fn tabs<State: 'static, Action: 'static, T: Into<ArcStr> + Clone, F>(
+    titles: &[T],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, T, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(&list, selected, None, false, on_select)
+    render_tabs(list, selected, None, false, on_select)
 }
 
 /// Secondary hairline-underline tab strip (`2px` indicator).
-pub fn secondary_tabs<State: 'static, Action: 'static, F>(
-    titles: &[impl Into<ArcStr> + Clone],
+pub fn secondary_tabs<State: 'static, Action: 'static, T: Into<ArcStr> + Clone, F>(
+    titles: &[T],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, T, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(&list, selected, Some(2.0), false, on_select)
+    render_tabs(list, selected, Some(2.0), false, on_select)
 }
 
 /// Horizontally scrollable tab strip for many destinations.
-pub fn scrollable_tabs<State: 'static, Action: 'static, F>(
-    titles: &[impl Into<ArcStr> + Clone],
+pub fn scrollable_tabs<State: 'static, Action: 'static, T: Into<ArcStr> + Clone, F>(
+    titles: &[T],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, T, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(&list, selected, None, true, on_select)
+    render_tabs(list, selected, None, true, on_select)
 }

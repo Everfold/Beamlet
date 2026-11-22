@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use xilem::WidgetView;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Background, CornerRadius, Padding};
-use xilem::style::Style as _;
+use xilem::masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
+use xilem::masonry::widgets;
 use xilem::view::sized_box;
 
 use crate::foundation::UiClassExt;
@@ -37,38 +37,40 @@ impl CardVariant {
     }
 }
 
+/// Wraps `child` in a card container styled with `variant`.
+pub fn card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
+    variant: CardVariant,
+    child: V,
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    sized_box(child).ui_class(variant.class_name())
+}
+
 /// Returns an elevated card container wrapping `child`.
 pub fn elevated_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action> {
-    sized_box(child)
-        .padding(Padding::all(16.px()))
-        .ui_class(CardVariant::Elevated.class_name())
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    card(CardVariant::Elevated, child)
 }
 
 /// Returns a filled container card wrapping `child`.
 pub fn filled_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action> {
-    sized_box(child)
-        .padding(Padding::all(16.px()))
-        .ui_class(CardVariant::Filled.class_name())
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    card(CardVariant::Filled, child)
 }
 
 /// Returns an outlined bordered card wrapping `child`.
 pub fn outlined_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action> {
-    sized_box(child)
-        .padding(Padding::all(16.px()))
-        .ui_class(CardVariant::Outlined.class_name())
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    card(CardVariant::Outlined, child)
 }
 
 /// Returns a grouped card surface suitable for Fluent SettingsCards / HIG FormGroups / Adwaita PreferencesGroups.
 pub fn grouped_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action> {
-    sized_box(child).ui_class(CardVariant::Grouped.class_name())
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+    card(CardVariant::Grouped, child)
 }
 
 /// Tonal surface container rendered with explicit [`ElevationLevel`] tint and drop shadow.
@@ -146,6 +148,11 @@ where
         let bg = self.elevation.tinted_surface(p.surface, p.accent);
         let rad = self.radius.unwrap_or(spec.metrics.card_radius);
         let pad = self.padding.unwrap_or(12.0);
+        let id = element.id();
+        ctx.mark_prop_changed::<Background>(id);
+        ctx.mark_prop_changed::<CornerRadius>(id);
+        ctx.mark_prop_changed::<Padding>(id);
+        ctx.mark_prop_changed::<BoxShadow>(id);
         element.insert_prop(Background::Color(bg));
         element.insert_prop(CornerRadius { radius: rad.px() });
         element.insert_prop(Padding::all(pad.px()));

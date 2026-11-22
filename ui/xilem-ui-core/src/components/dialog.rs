@@ -20,7 +20,7 @@ use crate::foundation::overlay::{
 use crate::foundation::ui_icon;
 use crate::style_engine::classes;
 use crate::style_engine::current_spec;
-use crate::tokens::{MotionDuration, TypeRole};
+use crate::tokens::{DialogActionOrder, MotionDuration, TypeRole};
 
 /// Callback invoked when a dialog closes via scrim, Escape, or action buttons.
 pub type DialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
@@ -157,6 +157,8 @@ pub struct BasicDialog<State, Action> {
     body: ArcStr,
     confirm_text: ArcStr,
     dismiss_text: Option<ArcStr>,
+    width: f64,
+    dismiss_on_scrim: bool,
     on_confirm: DialogCallback<State, Action>,
     on_dismiss: DialogCallback<State, Action>,
 }
@@ -171,6 +173,18 @@ impl<State, Action> BasicDialog<State, Action> {
     /// Sets an optional secondary cancel/dismiss action button label.
     pub fn dismiss_text(mut self, text: impl Into<ArcStr>) -> Self {
         self.dismiss_text = Some(text.into());
+        self
+    }
+
+    /// Overrides the modal dialog card width (defaults to `380px`).
+    pub fn width(mut self, width: f64) -> Self {
+        self.width = width;
+        self
+    }
+
+    /// Configures whether clicking the dimmed backdrop scrim triggers `on_dismiss`.
+    pub fn dismiss_on_scrim(mut self, dismiss: bool) -> Self {
+        self.dismiss_on_scrim = dismiss;
         self
     }
 
@@ -195,11 +209,29 @@ impl<State, Action> BasicDialog<State, Action> {
         let cancel_btn = self
             .dismiss_text
             .as_ref()
-            .map(|txt| subtle_button(txt.clone(), move |s: &mut State| on_dismiss(s)));
+            .map(|txt| subtle_button(txt.clone(), move |s: &mut State| on_dismiss(s)).boxed());
         let confirm_btn = primary_button(self.confirm_text.clone(), move |s: &mut State| {
             on_confirm(s)
-        });
-        let actions = flex_row((cancel_btn, confirm_btn))
+        })
+        .boxed();
+        let ordered_btns: Vec<Box<AnyWidgetView<State, Action>>> = match spec.dialog_action_order {
+            DialogActionOrder::PrimaryLeading => {
+                let mut v = vec![confirm_btn];
+                if let Some(c) = cancel_btn {
+                    v.push(c);
+                }
+                v
+            }
+            DialogActionOrder::PrimaryTrailing => {
+                let mut v = Vec::new();
+                if let Some(c) = cancel_btn {
+                    v.push(c);
+                }
+                v.push(confirm_btn);
+                v
+            }
+        };
+        let actions = flex_row(ordered_btns)
             .main_axis_alignment(MainAxisAlignment::End)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px());
@@ -229,12 +261,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::width(380.px()),
+            dims: Dimensions::width(self.width.px()),
             padding: Padding::all(24.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
             duration: MotionDuration::Medium2,
-            dismiss_on_scrim: true,
+            dismiss_on_scrim: self.dismiss_on_scrim,
         };
         let (el, shell) = modal_shell_build(ctx, app_state, cfg, &content, self.on_dismiss.clone());
         (el, (content, shell))
@@ -252,12 +284,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::width(380.px()),
+            dims: Dimensions::width(self.width.px()),
             padding: Padding::all(24.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
             duration: MotionDuration::Medium2,
-            dismiss_on_scrim: true,
+            dismiss_on_scrim: self.dismiss_on_scrim,
         };
         modal_shell_rebuild(
             shell,
@@ -317,6 +349,8 @@ where
         body: body.into(),
         confirm_text: confirm_text.into(),
         dismiss_text: None,
+        width: 380.0,
+        dismiss_on_scrim: true,
         on_confirm: Arc::new(on_confirm),
         on_dismiss: Arc::new(on_dismiss),
     }

@@ -1,16 +1,19 @@
-//! Pill/rounded search bar honoring `search_height` and `search_radius` tokens.
+//! Pill/rounded search bar backed directly by a reactive [`FocusFrame`].
 
 use std::sync::Arc;
 
+use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Dimensions, Padding};
+use xilem::masonry::properties::Padding;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, sized_box, text_input};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, text_input};
+use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
-use crate::foundation::{UiClassExt, icons, ui_icon};
-use crate::style_engine::classes;
+use crate::foundation::{
+    FocusFrame, FocusFrameView, UiClassExt, WithClass, focus_frame, icons, ui_icon,
+};
+use crate::style_engine::{classes, current_spec};
 use crate::tokens::{DesignSpec, TypeRole};
 
 /// Callback invoked when the search query text changes.
@@ -20,7 +23,10 @@ pub type SearchChangeCallback<State, Action> =
 /// Callback invoked when the user clears or submits the search bar.
 pub type SearchActionCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
 
-/// Spec-aware search bar with leading search icon and optional clear action.
+type SearchBarFrame<State, Action> =
+    WithClass<FocusFrameView<Box<AnyWidgetView<State, Action>>, State, Action>, State, Action>;
+
+/// Spec-aware search bar exposing `Pod<FocusFrame>` directly for styling and reactive focus indicators.
 #[must_use = "View values do nothing unless provided to Xilem."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct UiSearchBar<State, Action> {
@@ -46,7 +52,7 @@ impl<State, Action> UiSearchBar<State, Action> {
         self
     }
 
-    fn render_with_spec(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_frame(&self, spec: &DesignSpec) -> SearchBarFrame<State, Action>
     where
         State: 'static,
         Action: 'static,
@@ -80,25 +86,71 @@ impl<State, Action> UiSearchBar<State, Action> {
             None
         };
 
-        sized_box(
-            flex_row((
-                ui_icon(icons::SEARCH, 18.0, p.text_secondary),
-                ti.ui_class(classes::TEXT_FIELD_FLUSH).flex(1.0),
-                clear_btn,
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px())
-            .padding(Padding::from_vh(0.px(), 14.px())),
-        )
-        .dims(Dimensions::height(m.search_height.px()))
-        .background_color(p.surface_highest)
-        .border(p.border, 1.px())
-        .corner_radius(m.search_radius.px())
-        .boxed()
+        let inner = flex_row((
+            ui_icon(icons::SEARCH, 18.0, p.text_secondary),
+            ti.ui_class(classes::TEXT_FIELD_FLUSH).flex(1.0),
+            clear_btn,
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(8.px())
+        .padding(Padding::from_vh(0.px(), 14.px()))
+        .boxed();
+
+        focus_frame(inner)
+            .radius(m.search_radius)
+            .ui_class(classes::SEARCH_BAR)
     }
 }
 
-crate::impl_spec_view!(UiSearchBar<State, Action>);
+impl<State: 'static, Action: 'static> ViewMarker for UiSearchBar<State, Action> {}
+
+impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSearchBar<State, Action> {
+    type Element = Pod<FocusFrame>;
+    type ViewState = (
+        SearchBarFrame<State, Action>,
+        <SearchBarFrame<State, Action> as View<State, Action, ViewCtx>>::ViewState,
+    );
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec(ctx);
+        let frame = self.build_frame(&spec);
+        let (pod, st) = frame.build(ctx, app_state);
+        (pod, (frame, st))
+    }
+
+    fn rebuild(
+        &self,
+        _prev: &Self,
+        (prev_frame, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let spec = current_spec(ctx);
+        let next_frame = self.build_frame(&spec);
+        next_frame.rebuild(prev_frame, st, ctx, element, app_state);
+        *prev_frame = next_frame;
+    }
+
+    fn teardown(
+        &self,
+        (prev_frame, st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        prev_frame.teardown(st, ctx, element);
+    }
+
+    fn message(
+        &self,
+        (prev_frame, st): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        prev_frame.message(st, message, element, app_state)
+    }
+}
 
 /// Creates a spec-styled search input bar.
 pub fn search_bar<State: 'static, Action: 'static, F>(

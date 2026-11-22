@@ -15,6 +15,7 @@ use xilem::masonry::core::{
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::layout::{AsUnit, Dim, LenReq, Length};
 use xilem::masonry::properties::{CornerRadius, Dimensions, Padding};
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, label, sized_box};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
@@ -129,7 +130,7 @@ pub fn toast<State: 'static, Action: 'static>(
     data: &ToastData,
     on_action: Option<ToastCallback<State, Action>>,
     on_dismiss: Option<ToastCallback<State, Action>>,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let data = data.clone();
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
@@ -175,9 +176,7 @@ pub fn toast<State: 'static, Action: 'static>(
         .background_color(p.inverse_surface)
         .corner_radius(spec.metrics.button_radius.max(8.0).px())
         .box_shadow(spec.box_shadow(ElevationLevel::Level3))
-        .boxed()
     })
-    .boxed()
 }
 
 /// Internal action emitted by [`ToastTimerHost`] when a toast's display duration expires.
@@ -310,7 +309,7 @@ pub struct UiToastHost<State: 'static, Action: 'static> {
 impl<State: 'static, Action: 'static> UiToastHost<State, Action> {
     fn child_view(&self) -> Box<AnyWidgetView<State, Action>> {
         if let Some(data) = &self.current {
-            toast(data, self.on_action.clone(), Some(self.on_dismiss.clone()))
+            toast(data, self.on_action.clone(), Some(self.on_dismiss.clone())).boxed()
         } else {
             empty_slot().boxed()
         }

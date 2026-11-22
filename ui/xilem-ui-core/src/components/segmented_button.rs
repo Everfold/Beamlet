@@ -1,12 +1,14 @@
-//! Single-choice and multi-choice segmented button rows styled from [`DesignSpec`].
+//! Single-choice and multi-choice segmented button rows returning concrete `Pod<widgets::Flex>`.
 
 use std::sync::Arc;
 
+use xilem::AnyWidgetView;
+use xilem::WidgetView;
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, button, flex_row, label};
-use xilem::{AnyWidgetView, WidgetView};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
 use crate::style_engine::{classes, with_spec};
@@ -17,7 +19,7 @@ pub fn segmented_button<State: 'static, Action: 'static, F>(
     options: &[&str],
     selected: usize,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -59,16 +61,14 @@ where
         flex_row(btns)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
-            .boxed()
     })
-    .boxed()
 }
 
 /// Multi-choice toggleable segmented button bar (`(label, is_selected)` slice).
 pub fn multi_choice_segmented_button<State: 'static, Action: 'static, F>(
     options: &[(&str, bool)],
     on_toggle: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -112,7 +112,5 @@ where
         flex_row(btns)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
-            .boxed()
     })
-    .boxed()
 }

@@ -8,9 +8,11 @@ use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, label};
-use xilem::{AnyWidgetView, WidgetView};
+use xilem::{Pod, WidgetView};
 
-use crate::foundation::overlay::{AnchoredPopupView, PopupEntrySpec, PopupLayerSpec};
+use crate::foundation::overlay::{
+    AnchoredPopupHost, AnchoredPopupView, PopupEntrySpec, PopupLayerSpec,
+};
 use crate::foundation::{UiClassExt, icons, ui_icon};
 use crate::style_engine::classes;
 use crate::tokens::{DesignSpec, TypeRole};
@@ -178,7 +180,8 @@ pub fn select<State, Action, OnToggle, OnSelect, OnDismiss>(
     on_toggle: OnToggle,
     on_select: OnSelect,
     on_dismiss: OnDismiss,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = AnchoredPopupHost>
++ use<State, Action, OnToggle, OnSelect, OnDismiss>
 where
     State: 'static,
     Action: 'static,
@@ -226,8 +229,8 @@ where
             move |s: &mut State| on_t(s),
         )
         .ui_class(classes::BTN_OUTLINED)
-        .boxed()
     });
 
-    dropdown_menu(trigger, open, entries, on_select, on_dismiss).boxed()
+    let _ = PhantomData::<Pod<AnchoredPopupHost>>;
+    dropdown_menu(trigger, open, entries, on_select, on_dismiss)
 }

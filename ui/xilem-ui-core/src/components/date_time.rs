@@ -5,6 +5,7 @@ use std::sync::Arc;
 use xilem::Color;
 use xilem::masonry::layout::AsUnit;
 use xilem::masonry::properties::Dimensions;
+use xilem::masonry::widgets;
 use xilem::style::Style as _;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
@@ -14,9 +15,9 @@ use xilem::{AnyWidgetView, WidgetView};
 use crate::components::button::{primary_button, subtle_button};
 use crate::components::dialog::dialog;
 use crate::components::icon_button::icon_button;
-use crate::foundation::{UiClassExt, icons};
+use crate::foundation::{EscapeCatcher, UiClassExt, icons};
 use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::tokens::{DesignSpec, DialogActionOrder, TypeRole};
 
 /// Proleptic Gregorian calendar date (`year`, `month` `1..=12`, `day` `1..=31`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -163,7 +164,7 @@ fn month_name(month: u8) -> &'static str {
 pub fn date_picker<State: 'static, Action: 'static, F>(
     selected: CalendarDate,
     on_select: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
 where
     F: Fn(&mut State, CalendarDate) -> Action + Send + Sync + 'static,
 {
@@ -263,43 +264,60 @@ where
         flex_col((header, weekday_row, flex_col(rows).gap(4.px())))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(8.px())
-            .boxed()
     })
-    .boxed()
 }
 
-/// Modal dialog wrapping [`date_picker`] with Cancel / OK footer actions.
+fn picker_dialog_actions<State: 'static, Action: 'static, FOke, FDis>(
+    on_confirm: FOke,
+    on_dismiss: FDis,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+where
+    FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
+    FDis: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    let confirm_cb = Arc::new(on_confirm);
+    let dismiss_cb = Arc::new(on_dismiss);
+    with_spec(move |spec: &DesignSpec, _| {
+        let ok = confirm_cb.clone();
+        let dis = dismiss_cb.clone();
+        let cancel_btn = subtle_button("Cancel", move |s| dis(s)).boxed();
+        let ok_btn = primary_button("OK", move |s| ok(s)).boxed();
+        let btns = match spec.dialog_action_order {
+            DialogActionOrder::PrimaryLeading => vec![ok_btn, cancel_btn],
+            DialogActionOrder::PrimaryTrailing => vec![cancel_btn, ok_btn],
+        };
+        flex_row(btns)
+            .main_axis_alignment(MainAxisAlignment::End)
+            .gap(8.px())
+    })
+}
+
+/// Modal dialog wrapping [`date_picker`] with Cancel / OK footer actions ordered per platform convention.
 pub fn date_picker_dialog<State: 'static, Action: 'static, FSel, FOke, FDis>(
     selected: CalendarDate,
     on_select: FSel,
     on_confirm: FOke,
     on_dismiss: FDis,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = EscapeCatcher>
 where
     FSel: Fn(&mut State, CalendarDate) -> Action + Send + Sync + 'static,
     FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
     FDis: Fn(&mut State) -> Action + Send + Sync + 'static + Clone,
 {
     let picker = date_picker(selected, on_select);
-    let dis_btn = on_dismiss.clone();
-    let actions = flex_row((
-        subtle_button("Cancel", dis_btn),
-        primary_button("OK", on_confirm),
-    ))
-    .main_axis_alignment(MainAxisAlignment::End)
-    .gap(8.px());
+    let actions = picker_dialog_actions(on_confirm, on_dismiss.clone());
 
     let content = flex_col((picker, actions))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(16.px());
-    dialog(content, on_dismiss).width(340.0).boxed()
+    dialog(content, on_dismiss).width(340.0)
 }
 
 /// Interactive numeric 24-hour / 12-hour stepper time selector.
 pub fn time_picker<State: 'static, Action: 'static, F>(
     selected: TimeOfDay,
     on_change: F,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = widgets::Flex>
 where
     F: Fn(&mut State, TimeOfDay) -> Action + Send + Sync + 'static,
 {
@@ -407,36 +425,28 @@ where
             .main_axis_alignment(MainAxisAlignment::Center)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(10.px())
-            .boxed()
     })
-    .boxed()
 }
 
-/// Modal dialog wrapping [`time_picker`] with Cancel / OK footer actions.
+/// Modal dialog wrapping [`time_picker`] with Cancel / OK footer actions ordered per platform convention.
 pub fn time_picker_dialog<State: 'static, Action: 'static, FSel, FOke, FDis>(
     selected: TimeOfDay,
     on_change: FSel,
     on_confirm: FOke,
     on_dismiss: FDis,
-) -> Box<AnyWidgetView<State, Action>>
+) -> impl WidgetView<State, Action, Widget = EscapeCatcher>
 where
     FSel: Fn(&mut State, TimeOfDay) -> Action + Send + Sync + 'static,
     FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
     FDis: Fn(&mut State) -> Action + Send + Sync + 'static + Clone,
 {
     let picker = time_picker(selected, on_change);
-    let dis_btn = on_dismiss.clone();
-    let actions = flex_row((
-        subtle_button("Cancel", dis_btn),
-        primary_button("OK", on_confirm),
-    ))
-    .main_axis_alignment(MainAxisAlignment::End)
-    .gap(8.px());
+    let actions = picker_dialog_actions(on_confirm, on_dismiss.clone());
 
     let content = flex_col((picker, actions))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(16.px());
-    dialog(content, on_dismiss).width(340.0).boxed()
+    dialog(content, on_dismiss).width(340.0)
 }
 
 #[cfg(test)]
