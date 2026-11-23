@@ -188,6 +188,14 @@ mod tests {
             "[{label}] a11y errors: {a11y_errors:#?}"
         );
 
+        let mut portal_overflows = Vec::new();
+        collect_portal_horizontal_overflows(&tree, &mut portal_overflows);
+        assert!(
+            portal_overflows.is_empty(),
+            "[{label}] horizontal portal overflows:\n{}",
+            portal_overflows.join("\n")
+        );
+
         let (vw, vh) = h.viewport();
         assert!((tree.rect.width - vw).abs() < 1.0 && (tree.rect.height - vh).abs() < 1.0);
         let img = h.render_image();
@@ -205,6 +213,35 @@ mod tests {
             .into_iter()
             .filter(|i| i.kind == "overflow")
             .collect()
+    }
+
+    fn collect_portal_horizontal_overflows(node: &LayoutNode, out: &mut Vec<String>) {
+        fn check_children(portal_x0: f64, portal_x1: f64, n: &LayoutNode, out: &mut Vec<String>) {
+            for c in &n.children {
+                if c.rect.width > 1.0 && c.rect.height > 1.0 {
+                    if c.rect.x < portal_x0 - 2.0 || c.rect.x + c.rect.width > portal_x1 + 2.0 {
+                        out.push(format!(
+                            "{} #{} ({:.1}..{:.1}) overflows portal ({:.1}..{:.1})",
+                            c.type_name,
+                            c.id,
+                            c.rect.x,
+                            c.rect.x + c.rect.width,
+                            portal_x0,
+                            portal_x1
+                        ));
+                    }
+                    check_children(portal_x0, portal_x1, c, out);
+                }
+            }
+        }
+        if (node.type_name == "Portal" || node.type_name == "ScrollPortal") && node.rect.width > 1.0
+        {
+            check_children(node.rect.x, node.rect.x + node.rect.width, node, out);
+            return;
+        }
+        for c in &node.children {
+            collect_portal_horizontal_overflows(c, out);
+        }
     }
 
     fn tree_has_text(node: &LayoutNode, needle: &str) -> bool {
@@ -237,7 +274,18 @@ mod tests {
     #[test]
     fn gallery_window_resize_preserves_layout_integrity() {
         let (layout_cfg, a11y_cfg) = gallery_lint_configs();
-        let viewports = [(1440, 900), (960, 720), (760, 600), (600, 520), (1200, 800)];
+        let viewports = [
+            (1440, 900),
+            (960, 720),
+            (760, 600),
+            (640, 360),
+            (520, 560),
+            (480, 640),
+            (400, 600),
+            (360, 640),
+            (320, 480),
+            (1200, 800),
+        ];
 
         let mut all_overflows = Vec::new();
         for lang in DesignLanguage::ALL {
@@ -251,7 +299,7 @@ mod tests {
                         &a11y_cfg,
                         &format!("{lang:?}/{tab:?}@{w}x{height}"),
                     );
-                    if !overflows.is_empty() && w >= 600 {
+                    if !overflows.is_empty() {
                         all_overflows.push((lang, tab, w, height, overflows));
                     }
                 }
@@ -259,7 +307,7 @@ mod tests {
         }
         assert!(
             all_overflows.is_empty(),
-            "unexpected overflow warnings at standard desktop widths (>= 960px): {all_overflows:#?}"
+            "unexpected overflow warnings across resized viewports: {all_overflows:#?}"
         );
     }
 
@@ -502,8 +550,8 @@ mod tests {
                 .perf
                 .memoized_builds
                 .load(std::sync::atomic::Ordering::Relaxed),
-            memo_after_mount + 1,
-            "memoize_with_spec must rebuild when memo_tag changes"
+            memo_after_mount + 2,
+            "memoize_with_spec must rebuild when memo_tag changes (wide + narrow shell branches)"
         );
 
         h.run_step(&PreviewStep::ClickLabel("#5000".into()))
@@ -626,6 +674,7 @@ mod tests {
         let mut issues = Vec::new();
         collect_icon_misalignments(&tree, &mut issues);
         collect_clipped_layers(&tree, vw, vh, &mut issues);
+        collect_portal_horizontal_overflows(&tree, &mut issues);
         assert!(
             issues.is_empty(),
             "visual invariant failures ({ctx}):\n{}",
@@ -650,6 +699,7 @@ mod tests {
             let mut local = Vec::new();
             collect_icon_misalignments(&tree, &mut local);
             collect_clipped_layers(&tree, vw, vh, &mut local);
+            collect_portal_horizontal_overflows(&tree, &mut local);
             for m in local {
                 issues.push(format!("[{name}] {m}"));
             }
@@ -741,6 +791,56 @@ mod tests {
         {
             let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Layout);
             save(&mut h, "18_adwaita_layout.png", &mut issues);
+        }
+
+        // 19-24: Narrow & short responsive screenshots (360x640, 320x480, 640x360)
+        for (lang, tab, w, height, file) in [
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Components,
+                360,
+                640,
+                "19_narrow_360x640_md3_components.png",
+            ),
+            (
+                DesignLanguage::Adwaita,
+                GalleryTab::Layout,
+                360,
+                640,
+                "20_narrow_360x640_adwaita_layout.png",
+            ),
+            (
+                DesignLanguage::Fluent,
+                GalleryTab::Lab,
+                360,
+                640,
+                "21_narrow_360x640_fluent_lab.png",
+            ),
+            (
+                DesignLanguage::Hig,
+                GalleryTab::Native,
+                360,
+                640,
+                "22_narrow_360x640_hig_native.png",
+            ),
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Overlays,
+                640,
+                360,
+                "24_short_640x360_md3_overlays.png",
+            ),
+        ] {
+            let mut h = make_gallery_harness(lang, tab);
+            h.resize(w, height);
+            save(&mut h, file, &mut issues);
+        }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Overlays);
+            h.resize(320, 480);
+            h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
+                .unwrap();
+            save(&mut h, "23_narrow_320x480_adwaita_alert.png", &mut issues);
         }
 
         assert!(

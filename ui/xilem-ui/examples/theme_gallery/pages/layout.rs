@@ -23,23 +23,33 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
     };
     let clamp_w = CLAMP_WIDTHS[state.layout.clamp_idx.min(CLAMP_WIDTHS.len() - 1)];
 
+    let seg_gap = || {
+        segmented_button(
+            &["4", "8", "12", "16", "24"],
+            state.layout.spacing_idx,
+            |s: &mut GalleryState, idx| s.layout.spacing_idx = idx,
+        )
+    };
+    let seg_align = || {
+        segmented_button(
+            &["Start", "Center", "Stretch"],
+            state.layout.align_idx,
+            |s: &mut GalleryState, idx| s.layout.align_idx = idx,
+        )
+    };
+
     let flex_lab = elevated_card(
         flex_col((
             title_medium("Flex 间距与比例"),
-            flex_row((
-                segmented_button(
-                    &["4", "8", "12", "16", "24"],
-                    state.layout.spacing_idx,
-                    |s: &mut GalleryState, idx| s.layout.spacing_idx = idx,
-                ),
-                segmented_button(
-                    &["Start", "Center", "Stretch"],
-                    state.layout.align_idx,
-                    |s: &mut GalleryState, idx| s.layout.align_idx = idx,
-                ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px()),
+            breakpoint_bin(
+                540.0,
+                flex_row((seg_gap(), seg_align()))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(12.px()),
+                flex_col((seg_gap(), seg_align()))
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .gap(8.px()),
+            ),
             with_spec(move |spec: &DesignSpec, _| {
                 let p = &spec.palette;
                 let cell = |title: &'static str, bg: xilem::Color| {
@@ -95,9 +105,11 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let adaptive_container: Box<xilem::AnyWidgetView<GalleryState>> =
         if state.layout.simulate_compact {
-            sized_box(breakpoint_bin(520.0, breakpoint_wide, breakpoint_narrow))
-                .dims(Dimensions::width(420.px()))
-                .boxed()
+            clamp(
+                420.0,
+                breakpoint_bin(520.0, breakpoint_wide, breakpoint_narrow),
+            )
+            .boxed()
         } else {
             breakpoint_bin(520.0, breakpoint_wide, breakpoint_narrow).boxed()
         };
@@ -122,37 +134,62 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
         .gap(12.px()),
     );
 
+    let bevel_pair = || {
+        (
+            beveled_surface(sized_box(body_small("BeveledBorder")).padding(Padding::all(14.px()))),
+            sized_box(zstack((
+                surface_box(ElevationLevel::Level1, body_small("ZStack"))
+                    .alignment(UnitPoint::TOP_LEFT),
+                sized_box(info_badge(InfoBarSeverity::Success, Some("TOP_RIGHT")))
+                    .padding(Padding::all(6.px()))
+                    .alignment(UnitPoint::TOP_RIGHT),
+                sized_box(info_badge(InfoBarSeverity::Warning, Some("BOTTOM_RIGHT")))
+                    .padding(Padding::all(6.px()))
+                    .alignment(UnitPoint::BOTTOM_RIGHT),
+            )))
+            .dims(Dimensions::height(88.px())),
+        )
+    };
+    let (b_w, z_w) = bevel_pair();
+    let (b_n, z_n) = bevel_pair();
+
     let elevation_and_zstack = filled_card(
         flex_col((
             title_medium("层级与 ZStack"),
-            flex_row((
-                surface_box(ElevationLevel::Level0, body_small("Level 0")).flex(1.0),
-                surface_box(ElevationLevel::Level1, body_small("Level 1")).flex(1.0),
-                surface_box(ElevationLevel::Level2, body_small("Level 2")).flex(1.0),
-                surface_box(ElevationLevel::Level3, body_small("Level 3")).flex(1.0),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
-            flex_row((
-                beveled_surface(
-                    sized_box(body_small("BeveledBorder")).padding(Padding::all(14.px())),
-                )
-                .flex(1.0),
-                sized_box(zstack((
-                    surface_box(ElevationLevel::Level1, body_small("ZStack"))
-                        .alignment(UnitPoint::TOP_LEFT),
-                    sized_box(info_badge(InfoBarSeverity::Success, Some("TOP_RIGHT")))
-                        .padding(Padding::all(6.px()))
-                        .alignment(UnitPoint::TOP_RIGHT),
-                    sized_box(info_badge(InfoBarSeverity::Warning, Some("BOTTOM_RIGHT")))
-                        .padding(Padding::all(6.px()))
-                        .alignment(UnitPoint::BOTTOM_RIGHT),
-                )))
-                .dims(Dimensions::height(88.px()))
-                .flex(1.0),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .gap(12.px()),
+            breakpoint_bin(
+                440.0,
+                flex_row((
+                    surface_box(ElevationLevel::Level0, body_small("Level 0")).flex(1.0),
+                    surface_box(ElevationLevel::Level1, body_small("Level 1")).flex(1.0),
+                    surface_box(ElevationLevel::Level2, body_small("Level 2")).flex(1.0),
+                    surface_box(ElevationLevel::Level3, body_small("Level 3")).flex(1.0),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(10.px()),
+                flex_col((
+                    flex_row((
+                        surface_box(ElevationLevel::Level0, body_small("Level 0")).flex(1.0),
+                        surface_box(ElevationLevel::Level1, body_small("Level 1")).flex(1.0),
+                    ))
+                    .gap(8.px()),
+                    flex_row((
+                        surface_box(ElevationLevel::Level2, body_small("Level 2")).flex(1.0),
+                        surface_box(ElevationLevel::Level3, body_small("Level 3")).flex(1.0),
+                    ))
+                    .gap(8.px()),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(8.px()),
+            ),
+            breakpoint_bin(
+                440.0,
+                flex_row((b_w.flex(1.0), z_w.flex(1.0)))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(12.px()),
+                flex_col((b_n, z_n))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(8.px()),
+            ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),

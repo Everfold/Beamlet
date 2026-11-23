@@ -92,11 +92,16 @@ where
     } else {
         (config.enter_offset, config.duration.as_millis())
     };
-    let slide = NewWidget::new(SlideTransition::new(
+    let clamp_axes = (
+        config.alignment != UnitPoint::BOTTOM,
+        config.alignment != UnitPoint::RIGHT,
+    );
+    let slide = NewWidget::new(SlideTransition::new_with_clamp(
         card,
         enter_offset,
         duration_ms,
         MotionEasing::EmphasizedDecelerate,
+        clamp_axes,
     ));
 
     let zstack = ZStack::new()

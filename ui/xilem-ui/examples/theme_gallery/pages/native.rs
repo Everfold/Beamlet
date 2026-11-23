@@ -12,73 +12,67 @@ use crate::state::{GalleryState, GalleryTab};
 pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let clicks = state.components.click_count;
 
+    let make_custom_items = || {
+        let save_btn = button_view(
+            ButtonVariant::Primary,
+            with_spec(|spec, _| {
+                let shortcut = spec.shortcut_convention.format_primary("S");
+                flex_row((
+                    ui_icon(icons::CHECK, 16.0, spec.palette.on_accent),
+                    label("保存").color(spec.palette.on_accent),
+                    sized_box(
+                        label(shortcut)
+                            .text_size(11.0)
+                            .color(spec.palette.on_accent),
+                    )
+                    .padding(Padding::from_vh(2.px(), 6.px()))
+                    .border(spec.palette.on_accent, 1.px())
+                    .corner_radius(4.px()),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px())
+            }),
+            |s: &mut GalleryState| s.components.click_count += 1,
+        );
+        let wide_btn = primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        })
+        .width(150.px())
+        .corner_radius(3.px());
+        let list_row = list_item_view(
+            flex_row((
+                ui_icon(icons::INFO, 16.0, Color::from_rgb8(0x4E, 0x8C, 0xE8)),
+                body_medium("list_item_view").flex(1.0),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(8.px()),
+        );
+        (save_btn, wide_btn, list_row)
+    };
+    let (sb_w, wb_w, lr_w) = make_custom_items();
+    let (sb_n, wb_n, lr_n) = make_custom_items();
+
     let custom_card = outlined_card(
         flex_col((
             title_medium("自定义插槽与样式覆写"),
-            flex_row((
-                button_view(
-                    ButtonVariant::Primary,
-                    with_spec(|spec, _| {
-                        let shortcut = spec.shortcut_convention.format_primary("S");
-                        flex_row((
-                            ui_icon(icons::CHECK, 16.0, spec.palette.on_accent),
-                            label("保存").color(spec.palette.on_accent),
-                            sized_box(
-                                label(shortcut)
-                                    .text_size(11.0)
-                                    .color(spec.palette.on_accent),
-                            )
-                            .padding(Padding::from_vh(2.px(), 6.px()))
-                            .border(spec.palette.on_accent, 1.px())
-                            .corner_radius(4.px()),
-                        ))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(8.px())
-                    }),
-                    |s: &mut GalleryState| s.components.click_count += 1,
-                ),
-                primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
-                    s.components.click_count += 1;
-                })
-                .width(180.px())
-                .corner_radius(3.px()),
-                list_item_view(
-                    flex_row((
-                        ui_icon(icons::INFO, 16.0, Color::from_rgb8(0x4E, 0x8C, 0xE8)),
-                        body_medium("list_item_view").flex(1.0),
-                    ))
+            breakpoint_bin(
+                520.0,
+                flex_row((sb_w, wb_w, lr_w))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(10.px()),
+                flex_col((sb_n, wb_n, lr_n))
+                    .cross_axis_alignment(CrossAxisAlignment::Start)
                     .gap(8.px()),
-                ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
+            ),
         ))
-        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(10.px()),
     );
 
     let suite: Box<AnyWidgetView<GalleryState>> = match state.theme.language {
-        DesignLanguage::Md3 => filled_card(
-            flex_col((
-                title_medium("Material 3"),
-                top_app_bar_slots(
-                    TopAppBarVariant::CenterAligned,
-                    "TopAppBar",
-                    Some(
-                        icon_button(icons::MENU, |s: &mut GalleryState| {
-                            s.components.click_count += 1;
-                        })
-                        .boxed(),
-                    ),
-                    vec![
-                        icon_button(icons::SEARCH, |s: &mut GalleryState| {
-                            s.components.click_count += 1;
-                        })
-                        .boxed(),
-                    ],
-                ),
-                flex_row((
+        DesignLanguage::Md3 => {
+            let make_fabs = || {
+                (
                     small_fab(icons::EDIT, FabColor::Surface, |s: &mut GalleryState| {
                         s.components.click_count += 1;
                     }),
@@ -94,28 +88,63 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                         FabColor::Secondary,
                         |s: &mut GalleryState| s.components.click_count += 1,
                     ),
+                )
+            };
+            let (sf_w, f_w, lf_w, ef_w) = make_fabs();
+            let (sf_n, f_n, lf_n, ef_n) = make_fabs();
+            filled_card(
+                flex_col((
+                    title_medium("Material 3"),
+                    top_app_bar_slots(
+                        TopAppBarVariant::CenterAligned,
+                        "TopAppBar",
+                        Some(
+                            icon_button(icons::MENU, |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                            })
+                            .boxed(),
+                        ),
+                        vec![
+                            icon_button(icons::SEARCH, |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                            })
+                            .boxed(),
+                        ],
+                    ),
+                    breakpoint_bin(
+                        340.0,
+                        flex_row((sf_w, f_w, lf_w, ef_w))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(12.px()),
+                        flex_col((
+                            flex_row((sf_n, f_n, ef_n))
+                                .cross_axis_alignment(CrossAxisAlignment::Center)
+                                .gap(10.px()),
+                            lf_n,
+                        ))
+                        .cross_axis_alignment(CrossAxisAlignment::Start)
+                        .gap(8.px()),
+                    ),
+                    floating_toolbar(vec![
+                        icon_button(icons::ARROW_BACK, |s: &mut GalleryState| {
+                            s.components.click_count += 1;
+                        })
+                        .boxed(),
+                        icon_button(icons::COPY, |s: &mut GalleryState| {
+                            s.components.click_count += 1;
+                        })
+                        .boxed(),
+                        primary_button("发布", |s: &mut GalleryState| {
+                            s.components.click_count += 1;
+                        })
+                        .boxed(),
+                    ]),
                 ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(12.px()),
-                floating_toolbar(vec![
-                    icon_button(icons::ARROW_BACK, |s: &mut GalleryState| {
-                        s.components.click_count += 1;
-                    })
-                    .boxed(),
-                    icon_button(icons::COPY, |s: &mut GalleryState| {
-                        s.components.click_count += 1;
-                    })
-                    .boxed(),
-                    primary_button("发布", |s: &mut GalleryState| {
-                        s.components.click_count += 1;
-                    })
-                    .boxed(),
-                ]),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .gap(10.px()),
-        )
-        .boxed(),
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(10.px()),
+            )
+            .boxed()
+        }
 
         DesignLanguage::Fluent => {
             let crumbs = ["设置", "个性化", "颜色", "强调色"];

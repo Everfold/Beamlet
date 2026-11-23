@@ -30,6 +30,7 @@ pub struct SlideTransition {
     elapsed_ns: u64,
     exiting: bool,
     easing: MotionEasing,
+    clamp_axes: (bool, bool),
 }
 
 impl SlideTransition {
@@ -41,6 +42,18 @@ impl SlideTransition {
         duration_ms: u64,
         easing: MotionEasing,
     ) -> Self {
+        Self::new_with_clamp(child, offset, duration_ms, easing, (false, false))
+    }
+
+    /// Creates a [`SlideTransition`] that caps child extent against available context size per axis.
+    #[must_use]
+    pub(crate) fn new_with_clamp(
+        child: NewWidget<impl Widget + ?Sized>,
+        offset: Vec2,
+        duration_ms: u64,
+        easing: MotionEasing,
+        clamp_axes: (bool, bool),
+    ) -> Self {
         Self {
             child: child.erased().to_pod(),
             offset,
@@ -48,6 +61,7 @@ impl SlideTransition {
             elapsed_ns: 0,
             exiting: false,
             easing,
+            clamp_axes,
         }
     }
 
@@ -156,7 +170,16 @@ impl Widget for SlideTransition {
         _len_req: LenReq,
         cross_length: Option<Length>,
     ) -> Length {
-        ctx.redirect_measurement(&mut self.child, axis, cross_length)
+        let len = ctx.redirect_measurement(&mut self.child, axis, cross_length);
+        let should_clamp = match axis {
+            Axis::Horizontal => self.clamp_axes.0,
+            Axis::Vertical => self.clamp_axes.1,
+        };
+        if should_clamp && let Some(avail) = ctx.context_size().length(axis) {
+            let cap = (avail.get() - 24.0).max(120.0);
+            return Length::px(len.get().min(cap));
+        }
+        len
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {

@@ -78,11 +78,15 @@ impl Widget for AdwBreakpointBin {
         cross_length: Option<Length>,
     ) -> Length {
         let use_narrow = match (axis, len_req) {
+            (Axis::Horizontal, LenReq::MinContent) => true,
             (Axis::Horizontal, LenReq::FitContent(space)) => space.get() < self.breakpoint_px,
-            (Axis::Vertical, _) => {
-                cross_length.map_or(self.is_narrow, |w| w.get() < self.breakpoint_px)
-            }
-            _ => self.is_narrow,
+            (Axis::Horizontal, LenReq::MaxContent) => ctx
+                .context_size()
+                .length(Axis::Horizontal)
+                .map_or(self.is_narrow, |w| w.get() < self.breakpoint_px),
+            (Axis::Vertical, _) => cross_length
+                .or_else(|| ctx.context_size().length(Axis::Horizontal))
+                .map_or(self.is_narrow, |w| w.get() < self.breakpoint_px),
         };
         let active = if use_narrow {
             &mut self.narrow

@@ -6,7 +6,7 @@ use xilem::masonry::layout::AsUnit;
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, Color, WidgetView};
+use xilem::{Color, WidgetView};
 use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;
@@ -16,7 +16,7 @@ fn swatch<State: 'static, Action: 'static>(
     name: &'static str,
     fill: Color,
     ink: Color,
-) -> Box<AnyWidgetView<State, Action>> {
+) -> impl WidgetView<State, Action> + use<State, Action> {
     sized_box(
         spec.typography
             .style_label(TypeRole::LabelSmall, label(name))
@@ -26,8 +26,7 @@ fn swatch<State: 'static, Action: 'static>(
     .background_color(fill)
     .border(spec.palette.border, 1.px())
     .corner_radius(6.px())
-    .dims(Dimensions::fixed(150.px(), 36.px()))
-    .boxed()
+    .dims(Dimensions::height(36.px()))
 }
 
 pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
@@ -60,33 +59,50 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         )
     });
 
+    let btn_inc = move || {
+        primary_button(
+            format!("无关状态 +1 ({ticks})"),
+            |s: &mut GalleryState| {
+                s.perf.unrelated_ticks += 1;
+            },
+        )
+    };
+    let btn_key = || {
+        secondary_button("切换 Key", |s: &mut GalleryState| {
+            s.perf.memo_tag = if s.perf.memo_tag == "Alpha" {
+                "Beta".to_owned()
+            } else {
+                "Alpha".to_owned()
+            };
+        })
+    };
+    let btn_reset = || {
+        outlined_button("清零", |s: &mut GalleryState| {
+            s.perf.unmemoized_builds.store(0, Ordering::Relaxed);
+            s.perf.memoized_builds.store(0, Ordering::Relaxed);
+        })
+    };
+
     let incremental_lab = elevated_card(
         flex_col((
             title_medium("memoize_with_spec"),
-            flex_row((
-                primary_button(
-                    format!("无关状态 +1 ({ticks})"),
-                    |s: &mut GalleryState| {
-                        s.perf.unrelated_ticks += 1;
-                    },
-                ),
-                secondary_button("切换 Key", |s: &mut GalleryState| {
-                    s.perf.memo_tag = if s.perf.memo_tag == "Alpha" {
-                        "Beta".to_owned()
-                    } else {
-                        "Alpha".to_owned()
-                    };
-                }),
-                outlined_button("清零", |s: &mut GalleryState| {
-                    s.perf.unmemoized_builds.store(0, Ordering::Relaxed);
-                    s.perf.memoized_builds.store(0, Ordering::Relaxed);
-                }),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
-            flex_row((unmemoized_panel.flex(1.0), memoized_panel.flex(1.0)))
+            breakpoint_bin(
+                420.0,
+                flex_row((btn_inc(), btn_key(), btn_reset()))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(10.px()),
+                flex_col((
+                    btn_inc(),
+                    flex_row((btn_key(), btn_reset()))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(8.px()),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(8.px()),
+            ),
+            flex_col((unmemoized_panel, memoized_panel))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .gap(12.px()),
+                .gap(8.px()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),
@@ -144,53 +160,114 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
     let spec_card = filled_card(with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let m = &spec.metrics;
-        let row1 = flex_row((
-            swatch(spec, "accent", p.accent, p.on_accent),
+        let semantic_wide = flex_row((
+            swatch(spec, "accent", p.accent, p.on_accent).flex(1.0),
             swatch(
                 spec,
                 "secondary",
                 p.secondary_container,
                 p.on_secondary_container,
-            ),
-            swatch(spec, "success", p.success, p.on_success),
-            swatch(spec, "warning", p.warning, p.on_warning),
+            )
+            .flex(1.0),
+            swatch(spec, "success", p.success, p.on_success).flex(1.0),
+            swatch(spec, "warning", p.warning, p.on_warning).flex(1.0),
+            swatch(spec, "error", p.error, p.on_error).flex(1.0),
+        ))
+        .gap(8.px());
+
+        let semantic_narrow = flex_col((
+            flex_row((
+                swatch(spec, "accent", p.accent, p.on_accent).flex(1.0),
+                swatch(
+                    spec,
+                    "secondary",
+                    p.secondary_container,
+                    p.on_secondary_container,
+                )
+                .flex(1.0),
+            ))
+            .gap(6.px()),
+            flex_row((
+                swatch(spec, "success", p.success, p.on_success).flex(1.0),
+                swatch(spec, "warning", p.warning, p.on_warning).flex(1.0),
+            ))
+            .gap(6.px()),
             swatch(spec, "error", p.error, p.on_error),
         ))
-        .gap(8.px());
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(6.px());
 
-        let row2 = flex_row((
-            swatch(spec, "window_bg", p.window_bg, p.text_primary),
-            swatch(spec, "surface_low", p.surface_low, p.text_primary),
-            swatch(spec, "surface", p.surface, p.text_primary),
-            swatch(spec, "surface_high", p.surface_high, p.text_primary),
-            swatch(spec, "header_bar", p.header_bar_bg, p.text_primary),
+        let surface_wide = flex_row((
+            swatch(spec, "window_bg", p.window_bg, p.text_primary).flex(1.0),
+            swatch(spec, "surface_low", p.surface_low, p.text_primary).flex(1.0),
+            swatch(spec, "surface", p.surface, p.text_primary).flex(1.0),
+            swatch(spec, "surface_high", p.surface_high, p.text_primary).flex(1.0),
+            swatch(spec, "header_bar", p.header_bar_bg, p.text_primary).flex(1.0),
         ))
         .gap(8.px());
 
-        flex_col((
-            title_medium("DesignSpec"),
-            body_small(format!(
-                "{} · {:?} · {:?} · btn={}px/r={}px · 快捷键={}",
-                spec.name,
-                spec.brightness,
-                spec.backdrop,
-                m.button_height,
-                m.button_radius,
-                spec.shortcut_convention.format_primary("S"),
-            )),
-            row1,
-            row2,
+        let surface_narrow = flex_col((
             flex_row((
-                display_small("Display"),
-                headline_small("Headline"),
+                swatch(spec, "window_bg", p.window_bg, p.text_primary).flex(1.0),
+                swatch(spec, "surface_low", p.surface_low, p.text_primary).flex(1.0),
+            ))
+            .gap(6.px()),
+            flex_row((
+                swatch(spec, "surface", p.surface, p.text_primary).flex(1.0),
+                swatch(spec, "surface_high", p.surface_high, p.text_primary).flex(1.0),
+            ))
+            .gap(6.px()),
+            swatch(spec, "header_bar", p.header_bar_bg, p.text_primary),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(6.px());
+
+        let type_wide = flex_row((
+            display_small("Display"),
+            headline_small("Headline"),
+            title_medium("Title"),
+            body_medium("Body"),
+            label_small("Label"),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(12.px());
+
+        let type_narrow = flex_col((
+            flex_row((display_small("Display"), headline_small("Headline")))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(10.px()),
+            flex_row((
                 title_medium("Title"),
                 body_medium("Body"),
                 label_small("Label"),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px()),
+            .gap(10.px()),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Start)
+        .gap(6.px());
+
+        flex_col((
+            title_medium("DesignSpec"),
+            flex_col((
+                body_small(format!(
+                    "{} · {:?} · {:?}",
+                    spec.name, spec.brightness, spec.backdrop,
+                )),
+                body_small(format!(
+                    "btn={}px / r={}px · 快捷键={}",
+                    m.button_height,
+                    m.button_radius,
+                    spec.shortcut_convention.format_primary("S"),
+                )),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(2.px()),
+            breakpoint_bin(480.0, semantic_wide, semantic_narrow),
+            breakpoint_bin(480.0, surface_wide, surface_narrow),
+            breakpoint_bin(440.0, type_wide, type_narrow),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(10.px())
     }));
 
