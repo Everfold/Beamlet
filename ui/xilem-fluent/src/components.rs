@@ -3,24 +3,30 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Size};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::keyboard::{Key, NamedKey};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::keyboard::{Key, NamedKey};
+use masonry::core::{
     AccessCtx, ArcStr, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, PaintCtx,
     PointerEvent, PointerScrollEvent, PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Widget,
     WidgetMut, WidgetPod,
 };
-use xilem::masonry::dpi::PhysicalPosition;
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LenReq, Length};
-use xilem::masonry::parley::style::FontWeight;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_col, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, Color, Pod, ViewCtx, WidgetView};
+use masonry::dpi::PhysicalPosition;
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Size};
+use masonry::layout::{AsUnit, LenReq, Length};
+use masonry::parley::style::FontWeight;
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, button, flex_col, flex_row, label, sized_box,
+};
 use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
 use xilem_ui_core::components::{MenuEntry, NavDestination, dropdown_menu, icon_button};
 use xilem_ui_core::foundation::state_layer::blend_over;
@@ -591,8 +597,8 @@ pub fn info_badge<State: 'static, Action: 'static>(
                         .color(ink)
                         .boxed(),
                     Dimensions::new(
-                        xilem::masonry::layout::Dim::MaxContent,
-                        xilem::masonry::layout::Dim::MaxContent,
+                        masonry::layout::Dim::MaxContent,
+                        masonry::layout::Dim::MaxContent,
                     ),
                     Padding::from_vh(2.px(), 7.px()),
                 ),

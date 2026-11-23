@@ -4,23 +4,24 @@
 
 use std::sync::Arc;
 
-use xilem::dpi::LogicalSize;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
-use xilem::style::Style as _;
-use xilem::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
-};
-use xilem::{AppState, EventLoop, WidgetView, Xilem};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_fluent::{
     Brightness, FluentAccent, FluentTheme, InfoBarSeverity, NavDestination, basic_dialog,
-    body_small, breadcrumb_bar, command_bar_with_overflow, expander, fluent_window, headline_small,
+    body_small, breadcrumb_bar, command_bar_with_overflow, expander, headline_small,
     horizontal_divider, icons, info_badge, info_bar, menu_item, navigation_view_collapsible,
     number_box, primary_button, settings_card, settings_expander, subtle_button, switch,
 };
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
+};
+use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct SettingsApp {
-    window_id: xilem::WindowId,
+    window_id: WindowId,
     running: bool,
     brightness: Brightness,
     accent: FluentAccent,
@@ -45,7 +46,7 @@ impl AppState for SettingsApp {
 impl Default for SettingsApp {
     fn default() -> Self {
         Self {
-            window_id: xilem::WindowId::next(),
+            window_id: WindowId::next(),
             running: true,
             brightness: Brightness::Light,
             accent: FluentAccent::WindowsBlue,
@@ -247,19 +248,17 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
 fn main() {
     let initial = SettingsApp::default();
     let props = xilem_fluent::build_default_properties(&initial.current_theme().to_spec());
-    let app = Xilem::new(initial, |state: &mut SettingsApp| {
-        let theme = state.current_theme();
+    AppRunner::new(initial, |state: &mut SettingsApp| {
+        let spec = state.current_theme().to_spec();
         let wid = state.window_id;
         std::iter::once(
-            fluent_window(wid, "WinUI 3 Fluent 设置", &theme, app_view(state)).with_options(
-                |opts| {
-                    opts.on_close(|s: &mut SettingsApp| s.running = false)
-                        .with_initial_inner_size(LogicalSize::new(1080.0, 740.0))
-                },
-            ),
+            desktop_window(wid, "WinUI 3 Fluent 设置", &spec, app_view(state)).with_config(|cfg| {
+                cfg.on_close(|s: &mut SettingsApp| s.running = false)
+                    .with_initial_inner_size(LogicalSize::new(1080.0, 740.0))
+            }),
         )
     })
-    .with_default_properties(props);
-    app.run_in(EventLoop::with_user_event())
-        .expect("fluent_settings event loop exited cleanly");
+    .with_default_properties(props)
+    .run()
+    .expect("fluent_settings event loop exited cleanly");
 }

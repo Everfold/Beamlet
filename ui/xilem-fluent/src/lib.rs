@@ -13,7 +13,7 @@ pub use components::{
     settings_expander,
 };
 pub use palette::{FluentAccent, fluent_palette};
-pub use theme::{FluentTheme, fluent_scope, fluent_window};
+pub use theme::{FluentTheme, fluent_scope};
 pub use xilem_ui_core::components::*;
 pub use xilem_ui_core::foundation::{
     AnchoredPopupHost, AnchoredPopupView, BeveledBorder, BeveledBorderView, EscapeCatcher,

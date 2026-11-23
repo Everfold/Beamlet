@@ -1,6 +1,6 @@
 //! Windows 11 Mica surface layers and Fluent accent color presets.
 
-use xilem::Color;
+use masonry::peniko::Color;
 use xilem_ui_core::foundation::state_layer::blend_over;
 use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
