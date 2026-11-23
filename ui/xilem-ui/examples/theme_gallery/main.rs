@@ -961,6 +961,47 @@ mod tests {
             }
             save(&mut h, "27_md3_context_menu_open.png", &mut issues);
         }
+        {
+            let mut h = PreviewHarness::with_dynamic_properties(
+                {
+                    let mut st = GalleryState::default();
+                    st.theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark);
+                    st.active_tab = GalleryTab::Layout;
+                    st
+                },
+                UiTheme::new(DesignLanguage::Md3, Brightness::Dark).default_properties(),
+                |st: &GalleryState| {
+                    let spec = st.theme.to_spec();
+                    Some(cached_default_properties(&spec))
+                },
+                crate::app_view,
+                PreviewConfig {
+                    width: 1180,
+                    height: 800,
+                    ..PreviewConfig::default()
+                },
+            );
+            save(&mut h, "28_md3_dark_layout_split.png", &mut issues);
+        }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Overlays);
+            h.resize(320, 480);
+            h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
+                .unwrap();
+            save(&mut h, "29_narrow_320x480_fluent_popover.png", &mut issues);
+        }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+            h.settle_animations();
+            if let Some(&ta_id) = h.find_widget_ids("TextArea").get(2) {
+                h.inner_harness_mut().scroll_into_view(ta_id);
+            }
+            save(
+                &mut h,
+                "30_md3_components_scrolled_textarea.png",
+                &mut issues,
+            );
+        }
 
         assert!(
             issues.is_empty(),
