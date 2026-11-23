@@ -21,13 +21,13 @@ members = [
   "crates/app-support/beamlet-app-config",
   "crates/app-support/beamlet-host",
 
-  "ui/xilem-ui-core",
-  "ui/xilem-md3",
+  "ui/xilem-adwaita",
   "ui/xilem-fluent",
   "ui/xilem-hig",
-  "ui/xilem-adwaita",
-  "ui/xilem-ui",
+  "ui/xilem-md3",
   "ui/xilem-preview",
+  "ui/xilem-ui",
+  "ui/xilem-ui-core",
 ]
 
 [workspace.package]
@@ -90,17 +90,17 @@ clap = { version = "4.6", features = ["derive", "string", "unicode"] }
 reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboard"] }
 tachyonfx = "0.25"
 
-xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
+image = { version = "0.25", default-features = false, features = ["png"] }
 masonry_testing = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
 usvg = "0.47"
-image = { version = "0.25.10", default-features = false, features = ["png"] }
-xilem-ui-core = { path = "ui/xilem-ui-core" }
-xilem-md3 = { path = "ui/xilem-md3" }
+xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
+xilem-adwaita = { path = "ui/xilem-adwaita" }
 xilem-fluent = { path = "ui/xilem-fluent" }
 xilem-hig = { path = "ui/xilem-hig" }
-xilem-adwaita = { path = "ui/xilem-adwaita" }
-xilem-ui = { path = "ui/xilem-ui" }
+xilem-md3 = { path = "ui/xilem-md3" }
 xilem-preview = { path = "ui/xilem-preview" }
+xilem-ui = { path = "ui/xilem-ui" }
+xilem-ui-core = { path = "ui/xilem-ui-core" }
 
 foundations = "5.11"
 opentelemetry = "0.33"

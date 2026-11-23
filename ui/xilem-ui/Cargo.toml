@@ -8,19 +8,19 @@ repository.workspace = true
 license.workspace = true
 
 [features]
-default = ["md3", "fluent", "hig", "adwaita"]
-md3 = ["dep:xilem-md3"]
+default = ["adwaita", "fluent", "hig", "md3"]
+adwaita = ["dep:xilem-adwaita"]
 fluent = ["dep:xilem-fluent"]
 hig = ["dep:xilem-hig"]
-adwaita = ["dep:xilem-adwaita"]
+md3 = ["dep:xilem-md3"]
 
 [dependencies]
 xilem.workspace = true
-xilem-ui-core.workspace = true
-xilem-md3 = { workspace = true, optional = true }
+xilem-adwaita = { workspace = true, optional = true }
 xilem-fluent = { workspace = true, optional = true }
 xilem-hig = { workspace = true, optional = true }
-xilem-adwaita = { workspace = true, optional = true }
+xilem-md3 = { workspace = true, optional = true }
+xilem-ui-core.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
