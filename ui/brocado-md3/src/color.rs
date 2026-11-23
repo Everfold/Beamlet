@@ -1,7 +1,7 @@
 //! Perceptual OKLCH dynamic Material Design 3 `ColorScheme` generator and contrast helpers.
 
+use brocado_core::tokens::{Brightness, SemanticPalette};
 use masonry::peniko::Color;
-use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// Accessibility contrast tier for dynamic Material 3 palettes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

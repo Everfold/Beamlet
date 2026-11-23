@@ -1,7 +1,16 @@
-//! Standalone Material Design 3 Notes & Tasks example using `xilem-md3` directly without `xilem-ui`.
+//! Standalone Material Design 3 Notes & Tasks example using `brocado-md3` directly without `brocado`.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+use brocado_md3::{
+    Brightness, ContrastLevel, FabColor, Md3Theme, NavDestination, ToastDuration, ToastHostState,
+    TopAppBarVariant, basic_dialog, body_medium, body_small, destructive_button, elevated_card,
+    extended_fab, filter_chip, floating_toolbar, headline_small, horizontal_divider, icon_button,
+    icons, large_fab, list_item_view, navigation_rail_with_fab, outlined_card, primary_button,
+    ripple_layer, search_bar, small_fab, subtle_button, title_medium, toast_host,
+    top_app_bar_slots,
+};
+use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
 use masonry::dpi::LogicalSize;
 use masonry::layout::{AsUnit, UnitPoint};
 use masonry::peniko::Color;
@@ -11,15 +20,6 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
 };
-use xilem_md3::{
-    Brightness, ContrastLevel, FabColor, Md3Theme, NavDestination, ToastDuration, ToastHostState,
-    TopAppBarVariant, basic_dialog, body_medium, body_small, destructive_button, elevated_card,
-    extended_fab, filter_chip, floating_toolbar, headline_small, horizontal_divider, icon_button,
-    icons, large_fab, list_item_view, navigation_rail_with_fab, outlined_card, primary_button,
-    ripple_layer, search_bar, small_fab, subtle_button, title_medium, toast_host,
-    top_app_bar_slots,
-};
-use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct NoteItem {
     title: String,
@@ -189,7 +189,7 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
         flex_row((
             flex_col((
                 headline_small("Expressive M3 专属组件体系"),
-                body_medium("完全脱离 xilem-ui 门面，直接使用 xilem-md3::md3_window、navigation_rail_with_fab 与 floating_toolbar 构建。"),
+                body_medium("完全脱离 brocado 门面，直接使用 brocado-md3、brocado-winit::desktop_window、navigation_rail_with_fab 与 floating_toolbar 构建。"),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(4.px())
@@ -307,7 +307,7 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
 
 fn main() {
     let initial = NotesApp::default();
-    let props = xilem_md3::build_default_properties(&initial.current_theme().to_spec());
+    let props = brocado_md3::build_default_properties(&initial.current_theme().to_spec());
     AppRunner::new(initial, |state: &mut NotesApp| {
         let spec = state.current_theme().to_spec();
         let wid = state.window_id;
