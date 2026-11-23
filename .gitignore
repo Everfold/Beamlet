@@ -111,4 +111,5 @@ rust-project.json
 licenses.html
 _apalache-out
 *.png
-ui/xilem-ui-preview/screenshots/
+ui/xilem-preview/screenshots/
+ui/xilem-ui/screenshots/

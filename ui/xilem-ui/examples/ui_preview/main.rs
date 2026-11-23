@@ -7,14 +7,20 @@ use std::time::Instant;
 use anyhow::{Context as _, bail};
 use clap::Parser;
 use image::ImageFormat;
+use xilem_preview::harness::{PreviewConfig, PreviewStep};
+use xilem_preview::inspect::{IssueSeverity, format_tree_text};
 use xilem_ui::prelude::*;
-use xilem_ui_preview::harness::{PreviewConfig, PreviewStep};
-use xilem_ui_preview::inspect::{IssueSeverity, format_tree_text};
-use xilem_ui_preview::scenes::{ALL_SCENES, run_scene_preview};
+
+#[allow(dead_code)]
+#[path = "../../tests/preview_support/mod.rs"]
+mod preview_support;
+
+use preview_support::scenes::{ALL_SCENES, SceneOutput, build_scene_harness, run_scene_preview};
+use preview_support::{lint_spec_contrast, lint_ui_layout};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "xilem-ui-preview",
+    name = "ui_preview",
     about = "Render Beamlet UI scenes offline to PNG + Layout JSON/Tree + Lint diagnostics"
 )]
 struct Cli {
@@ -193,15 +199,13 @@ fn main() -> anyhow::Result<()> {
 
                 let t0 = Instant::now();
                 let output = if cli.no_settle {
-                    let mut h =
-                        xilem_ui_preview::scenes::build_scene_harness(scene_id, theme, config)?;
+                    let mut h = build_scene_harness(scene_id, theme, config)?;
                     h.run_steps(&steps)?;
                     let image = h.render_image();
-                    let tree = xilem_ui_preview::inspect::dump_layout_tree(&mut h);
-                    let layout_issues = xilem_ui_preview::inspect::lint_layout(&tree, h.viewport());
-                    let contrast_issues =
-                        xilem_ui_preview::inspect::lint_spec_contrast(h.current_spec());
-                    xilem_ui_preview::scenes::SceneOutput {
+                    let tree = xilem_preview::inspect::dump_layout_tree(&mut h);
+                    let layout_issues = lint_ui_layout(&tree, h.viewport());
+                    let contrast_issues = lint_spec_contrast(&h.state().theme.to_spec());
+                    SceneOutput {
                         image,
                         tree,
                         layout_issues,

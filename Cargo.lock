@@ -5729,16 +5729,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "xilem-preview"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "masonry_testing",
+ "serde",
+ "tokio",
+ "xilem",
+]
+
+[[package]]
 name = "xilem-ui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "clap",
+ "image",
  "masonry_testing",
+ "serde_json",
  "tokio",
  "xilem",
  "xilem-adwaita",
  "xilem-fluent",
  "xilem-hig",
  "xilem-md3",
+ "xilem-preview",
  "xilem-ui-core",
 ]
 
@@ -5750,22 +5767,6 @@ dependencies = [
  "tracing",
  "usvg",
  "xilem",
-]
-
-[[package]]
-name = "xilem-ui-preview"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "image",
- "masonry_testing",
- "serde",
- "serde_json",
- "tokio",
- "xilem",
- "xilem-ui",
- "xilem-ui-core",
 ]
 
 [[package]]

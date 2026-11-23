@@ -13,10 +13,10 @@ use xilem::view::{
 use xilem::{AnyWidgetView, Color, WidgetView};
 use xilem_ui::prelude::*;
 
-use crate::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use crate::inspect::{
-    ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree, lint_layout, lint_spec_contrast,
-};
+use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+use xilem_preview::inspect::{ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree};
+
+use super::{build_ui_harness, lint_spec_contrast, lint_ui_layout};
 
 /// Metadata describing a built-in preview scene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1185,7 +1185,7 @@ pub fn build_scene_harness(
         other => bail!("unknown preview scene '{other}'; run --list to see available scenes"),
     };
 
-    Ok(PreviewHarness::new(
+    Ok(build_ui_harness(
         SceneState::with_theme(theme),
         |s| s.theme.clone(),
         logic,
@@ -1208,8 +1208,8 @@ pub fn run_scene_preview(
     }
     let image = harness.render_image();
     let tree = dump_layout_tree(&mut harness);
-    let layout_issues = lint_layout(&tree, harness.viewport());
-    let contrast_issues = lint_spec_contrast(harness.current_spec());
+    let layout_issues = lint_ui_layout(&tree, harness.viewport());
+    let contrast_issues = lint_spec_contrast(&harness.state().theme.to_spec());
     Ok(SceneOutput {
         image,
         tree,

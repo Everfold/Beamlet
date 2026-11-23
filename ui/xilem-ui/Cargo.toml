@@ -23,5 +23,10 @@ xilem-hig = { workspace = true, optional = true }
 xilem-adwaita = { workspace = true, optional = true }
 
 [dev-dependencies]
+anyhow.workspace = true
+clap.workspace = true
+image.workspace = true
 masonry_testing.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
+xilem-preview.workspace = true

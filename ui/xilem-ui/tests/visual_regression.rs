@@ -3,10 +3,15 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use xilem_preview::harness::{PreviewConfig, PreviewStep};
+use xilem_preview::inspect::{IssueSeverity, dump_layout_tree};
 use xilem_ui::prelude::{Brightness, DesignLanguage, UiTheme};
-use xilem_ui_preview::harness::{PreviewConfig, PreviewStep};
-use xilem_ui_preview::inspect::{IssueSeverity, dump_layout_tree, lint_layout, lint_spec_contrast};
-use xilem_ui_preview::scenes::build_scene_harness;
+
+#[allow(dead_code)]
+mod preview_support;
+
+use preview_support::scenes::build_scene_harness;
+use preview_support::{lint_spec_contrast, lint_ui_layout};
 
 fn assert_scene_snapshot(
     scene_id: &str,
@@ -32,7 +37,7 @@ fn assert_scene_snapshot(
     }
 
     let tree = dump_layout_tree(&mut harness);
-    let layout_errors: Vec<_> = lint_layout(&tree, harness.viewport())
+    let layout_errors: Vec<_> = lint_ui_layout(&tree, harness.viewport())
         .into_iter()
         .filter(|issue| issue.severity == IssueSeverity::Error)
         .collect();
@@ -41,7 +46,7 @@ fn assert_scene_snapshot(
         "expected zero layout errors for {snapshot_name}, got: {layout_errors:#?}"
     );
 
-    let contrast_issues = lint_spec_contrast(harness.current_spec());
+    let contrast_issues = lint_spec_contrast(&harness.state().theme.to_spec());
     assert!(
         contrast_issues.is_empty(),
         "expected zero contrast issues for {snapshot_name}, got: {contrast_issues:#?}"

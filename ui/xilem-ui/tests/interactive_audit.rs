@@ -2,12 +2,15 @@
 
 use std::collections::HashSet;
 
+use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+use xilem_preview::inspect::{IssueSeverity, LayoutNode, dump_layout_tree};
 use xilem_ui::prelude::{Brightness, DesignLanguage, ToggleableState, UiTheme};
-use xilem_ui_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use xilem_ui_preview::inspect::{
-    IssueSeverity, LayoutNode, dump_layout_tree, lint_layout, lint_spec_contrast,
-};
-use xilem_ui_preview::scenes::{ALL_SCENES, SceneState, build_scene_harness};
+
+#[allow(dead_code)]
+mod preview_support;
+
+use preview_support::scenes::{ALL_SCENES, SceneState, build_scene_harness};
+use preview_support::{build_ui_harness, lint_spec_contrast, lint_ui_layout};
 
 fn default_harness(scene_id: &str, language: DesignLanguage) -> PreviewHarness<SceneState> {
     build_scene_harness(
@@ -21,7 +24,7 @@ fn default_harness(scene_id: &str, language: DesignLanguage) -> PreviewHarness<S
 fn assert_healthy(harness: &mut PreviewHarness<SceneState>, ctx_label: &str) {
     harness.settle_animations();
     let tree = dump_layout_tree(harness);
-    let issues = lint_layout(&tree, harness.viewport());
+    let issues = lint_ui_layout(&tree, harness.viewport());
     let errors: Vec<_> = issues
         .iter()
         .filter(|issue| issue.severity == IssueSeverity::Error)
@@ -30,7 +33,7 @@ fn assert_healthy(harness: &mut PreviewHarness<SceneState>, ctx_label: &str) {
         errors.is_empty(),
         "layout errors in {ctx_label}: {errors:#?}"
     );
-    let contrast = lint_spec_contrast(harness.current_spec());
+    let contrast = lint_spec_contrast(&harness.state().theme.to_spec());
     assert!(
         contrast.is_empty(),
         "contrast issues in {ctx_label}: {contrast:#?}"
@@ -449,7 +452,7 @@ fn audit_overlays_and_pickers_across_all_themes() {
         assert!(h.state().show_side_sheet);
         h.settle_animations();
         let sheet_tree = dump_layout_tree(&mut h);
-        let sheet_issues = lint_layout(&sheet_tree, h.viewport());
+        let sheet_issues = lint_ui_layout(&sheet_tree, h.viewport());
         assert!(
             sheet_issues.is_empty(),
             "[{lang:?}] side sheet should have 0 lint errors & warnings, got: {sheet_issues:#?}"
@@ -816,13 +819,13 @@ fn audit_desktop_all_scenes_themes_brightness() {
                 .expect("scene builds");
                 h.settle_animations();
                 let tree = dump_layout_tree(&mut h);
-                let issues = lint_layout(&tree, h.viewport());
+                let issues = lint_ui_layout(&tree, h.viewport());
                 assert!(
                     issues.is_empty(),
                     "desktop matrix expected 0 layout issues for {}/{lang:?}/{brightness:?}, got: {issues:#?}",
                     scene.id
                 );
-                let contrast = lint_spec_contrast(h.current_spec());
+                let contrast = lint_spec_contrast(&h.state().theme.to_spec());
                 assert!(
                     contrast.is_empty(),
                     "desktop matrix expected 0 contrast issues for {}/{lang:?}/{brightness:?}, got: {contrast:#?}",
@@ -853,7 +856,7 @@ fn audit_toast_host_without_outer_max_dims_stays_compact() {
         toasts: ToastHostState::new(),
     };
 
-    let mut h = PreviewHarness::new(
+    let mut h = build_ui_harness(
         initial,
         |s| s.theme.clone(),
         |s| {
@@ -909,11 +912,11 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
     fn find_first_focus_frame_and_text_area(
         node: &LayoutNode,
     ) -> Option<(
-        xilem_ui_preview::inspect::LayoutRect,
-        xilem_ui_preview::inspect::LayoutRect,
+        xilem_preview::inspect::LayoutRect,
+        xilem_preview::inspect::LayoutRect,
     )> {
         if node.type_name == "FocusFrame" {
-            fn find_text_area(n: &LayoutNode) -> Option<xilem_ui_preview::inspect::LayoutRect> {
+            fn find_text_area(n: &LayoutNode) -> Option<xilem_preview::inspect::LayoutRect> {
                 if n.type_name == "TextArea" {
                     return Some(n.rect);
                 }
@@ -993,7 +996,7 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
             disabled_clicks: 0,
         };
 
-        let mut h = PreviewHarness::new(
+        let mut h = build_ui_harness(
             initial,
             |s| s.theme.clone(),
             |s| {
@@ -1121,7 +1124,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
             height: 800,
             ..PreviewConfig::default()
         };
-        PreviewHarness::new(
+        build_ui_harness(
             AdwResponsiveState {
                 theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
                 tab: 0,
@@ -1249,7 +1252,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
     assert!(narrow_h.state().show_alert);
     narrow_h.settle_animations();
     let tree = dump_layout_tree(&mut narrow_h);
-    let issues = lint_layout(&tree, narrow_h.viewport());
+    let issues = lint_ui_layout(&tree, narrow_h.viewport());
     let errors: Vec<_> = issues
         .iter()
         .filter(|i| i.severity == IssueSeverity::Error)
@@ -1266,7 +1269,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
 
     // Also render wide Adwaita tree to verify 0 errors.
     let wide_tree = dump_layout_tree(&mut wide_h);
-    let wide_errors: Vec<_> = lint_layout(&wide_tree, wide_h.viewport())
+    let wide_errors: Vec<_> = lint_ui_layout(&wide_tree, wide_h.viewport())
         .into_iter()
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
@@ -1293,7 +1296,7 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
     }
 
     let build = |reduced_motion: bool| {
-        PreviewHarness::new(
+        build_ui_harness(
             Phase4State {
                 theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
                     .with_reduced_motion(reduced_motion),
@@ -1335,7 +1338,7 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
     //    and both MD3 floating-label text fields accept typing cleanly with 0 layout errors.
     let mut h = build(false);
     let tree = dump_layout_tree(&mut h);
-    let errors: Vec<_> = lint_layout(&tree, h.viewport())
+    let errors: Vec<_> = lint_ui_layout(&tree, h.viewport())
         .into_iter()
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
@@ -1425,7 +1428,7 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
         num: f64,
     }
 
-    let mut fh = PreviewHarness::new(
+    let mut fh = build_ui_harness(
         FluentPhase5 {
             theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
             collapsed: false,
@@ -1502,7 +1505,7 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
         (compact_nav_w - 52.0).abs() < 2.0,
         "collapsed NavigationView width expected 52px, got {compact_nav_w}"
     );
-    let compact_errors: Vec<_> = lint_layout(&compact_tree, fh.viewport())
+    let compact_errors: Vec<_> = lint_ui_layout(&compact_tree, fh.viewport())
         .into_iter()
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
@@ -1564,7 +1567,7 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
         dismissed: usize,
     }
 
-    let mut hh = PreviewHarness::new(
+    let mut hh = build_ui_harness(
         HigPhase5 {
             theme: UiTheme::new(DesignLanguage::Hig, Brightness::Light),
             text: "Aqua".to_owned(),
@@ -1663,7 +1666,7 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
     assert!(hh.state().show_alert);
     hh.settle_animations();
     let alert_tree = dump_layout_tree(&mut hh);
-    let alert_errors: Vec<_> = lint_layout(&alert_tree, hh.viewport())
+    let alert_errors: Vec<_> = lint_ui_layout(&alert_tree, hh.viewport())
         .into_iter()
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
@@ -1717,7 +1720,7 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
     }
 
     let build_harness = |reduced_motion: bool| {
-        PreviewHarness::new(
+        build_ui_harness(
             ModalTrapState {
                 theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
                     .with_reduced_motion(reduced_motion),
@@ -1857,7 +1860,7 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
     let bg_btn_raw_id = find_btn_id_by_text(&tree_before, "BgBtn").unwrap_or_else(|| {
         panic!(
             "BgBtn present in tree:\n{}",
-            xilem_ui_preview::inspect::format_tree_text(&tree_before)
+            xilem_preview::inspect::format_tree_text(&tree_before)
         )
     });
 

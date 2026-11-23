@@ -1,14 +1,11 @@
 //! Widget geometry/accessibility tree dumper and automated layout + WCAG contrast linter.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use serde::Serialize;
 use xilem::Color;
-use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::{Widget, WidgetId, WidgetRef};
-use xilem_ui::prelude::DesignSpec;
-use xilem_ui_core::foundation::AnchoredPopupHost;
 
 use crate::harness::PreviewHarness;
 
@@ -58,20 +55,35 @@ pub struct LayoutNode {
     pub disabled: bool,
     /// Computed window-space bounding rectangle.
     pub rect: LayoutRect,
-    /// Child layout nodes in paint order.
+    /// Child layout nodes in paint order (plus any active overlay layers attached at the root).
     pub children: Vec<LayoutNode>,
 }
 
-/// Walks the laid-out widget tree (calling `redraw()` first) and returns the root [`LayoutNode`].
+/// Walks the laid-out widget tree and any active overlay layers (calling `redraw()` first)
+/// and returns the root [`LayoutNode`].
 pub fn dump_layout_tree<State: 'static>(harness: &mut PreviewHarness<State>) -> LayoutNode {
     let inner = harness.inner_harness_mut();
-    let _ = inner.redraw();
+    let (visual_layers, _) = inner.redraw();
     let focused_id = inner.focused_widget_id();
+    let mut visited = HashSet::new();
     let mut ids = Vec::new();
     let mut tree = {
-        let rr: &RenderRoot = inner.render_root();
+        let rr = inner.render_root();
         let root = rr.get_layer_root(0);
-        snapshot_node(&root, rr, focused_id, &mut ids)
+        let mut root_node = snapshot_node(&root, focused_id, &mut visited, &mut ids);
+        for layer in &visual_layers.layers {
+            if !visited.contains(&layer.widget_id)
+                && let Some(layer_root) = rr.get_widget(layer.widget_id)
+            {
+                root_node.children.push(snapshot_node(
+                    &layer_root,
+                    focused_id,
+                    &mut visited,
+                    &mut ids,
+                ));
+            }
+        }
+        root_node
     };
     let roles: HashMap<u64, String> = ids
         .into_iter()
@@ -87,11 +99,12 @@ pub fn dump_layout_tree<State: 'static>(harness: &mut PreviewHarness<State>) -> 
 
 fn snapshot_node(
     node: &WidgetRef<'_, dyn Widget>,
-    render_root: &RenderRoot,
     focused_id: Option<WidgetId>,
+    visited: &mut HashSet<WidgetId>,
     ids: &mut Vec<(u64, WidgetId)>,
 ) -> LayoutNode {
     let wid = node.id();
+    visited.insert(wid);
     let raw = wid.to_raw();
     ids.push((raw, wid));
 
@@ -100,17 +113,11 @@ fn snapshot_node(
     let origin = ctx.window_transform() * box_rect.origin();
     let text = node.inner().get_debug_text().filter(|s| !s.is_empty());
 
-    let mut children: Vec<LayoutNode> = node
-        .children()
-        .iter()
-        .filter(|c| !c.ctx().is_stashed())
-        .map(|c| snapshot_node(c, render_root, focused_id, ids))
-        .collect();
-    if let Some(host) = node.downcast::<AnchoredPopupHost>()
-        && let Some(layer_id) = host.inner().layer_id()
-        && let Some(layer_node) = render_root.get_widget(layer_id)
-    {
-        children.push(snapshot_node(&layer_node, render_root, focused_id, ids));
+    let mut children = Vec::new();
+    for c in node.children() {
+        if !c.ctx().is_stashed() && !visited.contains(&c.id()) {
+            children.push(snapshot_node(&c, focused_id, visited, ids));
+        }
     }
 
     LayoutNode {
@@ -180,7 +187,7 @@ pub enum IssueSeverity {
     Error,
 }
 
-/// Automated layout diagnostic produced by [`lint_layout`].
+/// Automated layout diagnostic produced by [`lint_layout`] or [`lint_layout_with`].
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LayoutIssue {
     /// Severity tier.
@@ -195,46 +202,90 @@ pub struct LayoutIssue {
     pub message: String,
 }
 
-fn is_visible_leaf_type(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "Button"
-            | "TextInput"
-            | "Checkbox"
-            | "UiCheckbox"
-            | "Switch"
-            | "UiSwitch"
-            | "Slider"
-            | "UiSlider"
-            | "RadioButton"
-            | "UiRadioButton"
-            | "Svg"
-            | "RangeSliderWidget"
-            | "LinearProgressWidget"
-            | "DeterminateCircularWidget"
-    )
+/// Customizes widget type allowlists evaluated by [`lint_layout_with`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LintConfig {
+    /// Widget `short_type_name()` values treated as interactive/visible leaf controls that must
+    /// not collapse to zero size or sit completely outside the viewport.
+    pub visible_leaf_types: Vec<String>,
+    /// Container `short_type_name()` values allowed to clip, scroll, or intentionally overflow their
+    /// children beyond their own border-box.
+    pub overflow_containers: Vec<String>,
 }
 
-fn allows_child_overflow(type_name: &str) -> bool {
-    matches!(
-        type_name,
-        "Portal"
-            | "ZStack"
-            | "EscapeCatcher"
-            | "Passthrough"
-            | "FocusFrame"
-            | "ScrollBar"
-            | "Badged"
-            | "AnchoredPopupHost"
-    )
+impl Default for LintConfig {
+    fn default() -> Self {
+        Self {
+            visible_leaf_types: [
+                "Button",
+                "TextInput",
+                "Checkbox",
+                "Switch",
+                "Slider",
+                "RadioButton",
+                "Svg",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+            overflow_containers: ["Portal", "ZStack", "Passthrough", "ScrollBar"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        }
+    }
 }
 
-/// Scans `root` against `viewport` `(width, height)` for zero-sized controls, parent overflow,
-/// sibling overlaps inside `Flex`, and offscreen non-scrollable controls.
+impl LintConfig {
+    /// Appends additional visible leaf widget type names to inspect for zero-size and offscreen bounds.
+    #[must_use]
+    pub fn with_visible_leaf_types<I, S>(mut self, types: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.visible_leaf_types
+            .extend(types.into_iter().map(Into::into));
+        self
+    }
+
+    /// Appends additional container widget type names allowed to overflow their border-box.
+    #[must_use]
+    pub fn with_overflow_containers<I, S>(mut self, types: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.overflow_containers
+            .extend(types.into_iter().map(Into::into));
+        self
+    }
+
+    fn is_visible_leaf_type(&self, type_name: &str) -> bool {
+        self.visible_leaf_types.iter().any(|t| t == type_name)
+    }
+
+    fn allows_child_overflow(&self, type_name: &str) -> bool {
+        self.overflow_containers.iter().any(|t| t == type_name)
+    }
+}
+
+/// Scans `root` against `viewport` `(width, height)` using [`LintConfig::default()`].
 #[must_use]
 pub fn lint_layout(root: &LayoutNode, viewport: (f64, f64)) -> Vec<LayoutIssue> {
+    lint_layout_with(root, viewport, &LintConfig::default())
+}
+
+/// Scans `root` against `viewport` `(width, height)` using custom widget classification `config`
+/// for zero-sized controls, parent overflow, sibling overlaps inside `Flex`, and offscreen controls.
+#[must_use]
+pub fn lint_layout_with(
+    root: &LayoutNode,
+    viewport: (f64, f64),
+    config: &LintConfig,
+) -> Vec<LayoutIssue> {
     let mut issues = Vec::new();
-    lint_walk(root, viewport, false, &mut issues);
+    lint_walk(root, viewport, false, config, &mut issues);
     issues
 }
 
@@ -242,12 +293,13 @@ fn lint_walk(
     node: &LayoutNode,
     viewport: (f64, f64),
     inside_portal: bool,
+    config: &LintConfig,
     issues: &mut Vec<LayoutIssue>,
 ) {
     let in_portal = inside_portal || node.type_name == "Portal";
 
     let is_nonempty_label = node.type_name == "Label" && node.text.is_some();
-    if (is_visible_leaf_type(&node.type_name) || is_nonempty_label)
+    if (config.is_visible_leaf_type(&node.type_name) || is_nonempty_label)
         && (node.rect.width <= 0.5 || node.rect.height <= 0.5)
     {
         issues.push(LayoutIssue {
@@ -263,7 +315,7 @@ fn lint_walk(
     }
 
     if !in_portal
-        && (is_visible_leaf_type(&node.type_name) || is_nonempty_label)
+        && (config.is_visible_leaf_type(&node.type_name) || is_nonempty_label)
         && node.rect.is_non_empty()
         && (node.rect.right() < 0.0
             || node.rect.bottom() < 0.0
@@ -289,7 +341,7 @@ fn lint_walk(
         });
     }
 
-    if node.rect.is_non_empty() && !allows_child_overflow(&node.type_name) {
+    if node.rect.is_non_empty() && !config.allows_child_overflow(&node.type_name) {
         const TOL: f64 = 2.5;
         for child in &node.children {
             if !child.rect.is_non_empty() || child.type_name == "ScrollBar" {
@@ -355,11 +407,37 @@ fn lint_walk(
     }
 
     for child in &node.children {
-        lint_walk(child, viewport, in_portal, issues);
+        lint_walk(child, viewport, in_portal, config, issues);
     }
 }
 
-/// WCAG 2.1 contrast failure reported by [`lint_spec_contrast`].
+/// Specification for one WCAG 2.1 foreground/background contrast check.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContrastCheck {
+    /// Semantic color pair name.
+    pub pair: &'static str,
+    /// Foreground color.
+    pub fg: Color,
+    /// Background color.
+    pub bg: Color,
+    /// Required minimum WCAG 2.1 contrast ratio.
+    pub minimum: f64,
+}
+
+impl ContrastCheck {
+    /// Creates a new contrast requirement between `fg` and `bg`.
+    #[must_use]
+    pub const fn new(pair: &'static str, fg: Color, bg: Color, minimum: f64) -> Self {
+        Self {
+            pair,
+            fg,
+            bg,
+            minimum,
+        }
+    }
+}
+
+/// WCAG 2.1 contrast failure reported by [`lint_contrast`].
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ContrastIssue {
     /// Semantic color pair name.
@@ -383,41 +461,26 @@ fn srgb_luminance(color: Color) -> f64 {
     0.2126 * lin(rgba.r) + 0.7152 * lin(rgba.g) + 0.0722 * lin(rgba.b)
 }
 
-fn contrast_ratio(fg: Color, bg: Color) -> f64 {
+/// Computes the WCAG 2.1 relative-luminance contrast ratio between `fg` and `bg` (`1.0..=21.0`).
+#[must_use]
+pub fn contrast_ratio(fg: Color, bg: Color) -> f64 {
     let l1 = srgb_luminance(fg);
     let l2 = srgb_luminance(bg);
     let (hi, lo) = if l1 > l2 { (l1, l2) } else { (l2, l1) };
     (hi + 0.05) / (lo + 0.05)
 }
 
-/// Audits semantic foreground/background pairs inside `spec` against WCAG 2.1 thresholds.
+/// Audits arbitrary foreground/background [`ContrastCheck`] pairs against WCAG 2.1 thresholds.
 #[must_use]
-pub fn lint_spec_contrast(spec: &DesignSpec) -> Vec<ContrastIssue> {
-    let p = &spec.palette;
-    let checks = [
-        ("text_primary/surface", p.text_primary, p.surface, 4.5),
-        ("text_primary/window_bg", p.text_primary, p.window_bg, 4.5),
-        ("text_secondary/surface", p.text_secondary, p.surface, 3.0),
-        ("on_accent/accent", p.on_accent, p.accent, 3.0),
-        (
-            "on_accent_container/accent_container",
-            p.on_accent_container,
-            p.accent_container,
-            4.5,
-        ),
-        ("on_error/error", p.on_error, p.error, 3.0),
-        ("on_success/success", p.on_success, p.success, 3.0),
-        ("on_warning/warning", p.on_warning, p.warning, 3.0),
-    ];
-
+pub fn lint_contrast(checks: &[ContrastCheck]) -> Vec<ContrastIssue> {
     checks
-        .into_iter()
-        .filter_map(|(pair, fg, bg, minimum)| {
-            let ratio = contrast_ratio(fg, bg);
-            (ratio < minimum).then_some(ContrastIssue {
-                pair,
+        .iter()
+        .filter_map(|check| {
+            let ratio = contrast_ratio(check.fg, check.bg);
+            (ratio < check.minimum).then_some(ContrastIssue {
+                pair: check.pair,
                 ratio,
-                minimum,
+                minimum: check.minimum,
             })
         })
         .collect()
@@ -425,14 +488,13 @@ pub fn lint_spec_contrast(spec: &DesignSpec) -> Vec<ContrastIssue> {
 
 #[cfg(test)]
 mod tests {
-    use xilem::WidgetView;
     use xilem::masonry::layout::AsUnit;
+    use xilem::masonry::theme::{BACKGROUND_COLOR, TEXT_COLOR};
     use xilem::style::Style as _;
-    use xilem::view::{flex_col, sized_box};
-    use xilem_ui::prelude::*;
+    use xilem::view::{flex_col, label, sized_box, text_button};
 
     use super::*;
-    use crate::harness::{PreviewConfig, PreviewHarness};
+    use crate::harness::PreviewConfig;
 
     fn dummy_node(
         id: u64,
@@ -510,30 +572,94 @@ mod tests {
     }
 
     #[test]
-    fn dump_and_lint_clean_tree_reports_zero_issues() {
-        struct S {
-            theme: UiTheme,
-        }
-        let mut h = PreviewHarness::new(
-            S {
-                theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+    fn custom_lint_config_and_contrast_checks() {
+        let zero_custom = dummy_node(
+            2,
+            "CustomControl",
+            LayoutRect {
+                x: 10.0,
+                y: 10.0,
+                width: 0.0,
+                height: 24.0,
             },
-            |s| s.theme.clone(),
+            vec![],
+        );
+        let wide_child = dummy_node(
+            4,
+            "Label",
+            LayoutRect {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 20.0,
+            },
+            vec![],
+        );
+        let custom_overlay = dummy_node(
+            3,
+            "CustomOverlay",
+            LayoutRect {
+                x: 10.0,
+                y: 40.0,
+                width: 50.0,
+                height: 20.0,
+            },
+            vec![wide_child],
+        );
+        let root = dummy_node(
+            1,
+            "Flex",
+            LayoutRect {
+                x: 0.0,
+                y: 0.0,
+                width: 300.0,
+                height: 200.0,
+            },
+            vec![zero_custom, custom_overlay],
+        );
+
+        let config = LintConfig::default()
+            .with_visible_leaf_types(["CustomControl"])
+            .with_overflow_containers(["CustomOverlay"]);
+        let issues = lint_layout_with(&root, (300.0, 200.0), &config);
+        assert!(issues.iter().any(|i| i.kind == "zero-size"));
+        assert!(!issues.iter().any(|i| i.kind == "overflow"));
+
+        let bw = contrast_ratio(Color::BLACK, Color::WHITE);
+        assert!((bw - 21.0).abs() < 0.05);
+
+        let failed = lint_contrast(&[
+            ContrastCheck::new("black/white", Color::BLACK, Color::WHITE, 4.5),
+            ContrastCheck::new(
+                "gray/gray",
+                Color::from_rgb8(0x88, 0x88, 0x88),
+                Color::from_rgb8(0x99, 0x99, 0x99),
+                4.5,
+            ),
+        ]);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].pair, "gray/gray");
+    }
+
+    #[test]
+    fn dump_and_lint_clean_pure_xilem_tree_reports_zero_issues() {
+        struct S;
+        let mut h = PreviewHarness::new(
+            S,
             |_| {
                 sized_box(
                     flex_col((
-                        title_medium("Clean Heading"),
-                        primary_button("Action", |_: &mut S| {}),
+                        label("Clean Heading"),
+                        text_button("Action", |_: &mut S| {}),
                     ))
                     .gap(8.px()),
                 )
                 .padding(16.px())
-                .boxed()
             },
             PreviewConfig {
                 width: 480,
                 height: 320,
-                ..Default::default()
+                ..PreviewConfig::default()
             },
         );
         let tree = dump_layout_tree(&mut h);
@@ -547,7 +673,12 @@ mod tests {
             "unexpected layout issues: {layout_issues:?}"
         );
 
-        let contrast_issues = lint_spec_contrast(h.current_spec());
+        let contrast_issues = lint_contrast(&[ContrastCheck::new(
+            "fg/bg",
+            TEXT_COLOR,
+            BACKGROUND_COLOR,
+            4.5,
+        )]);
         assert!(
             contrast_issues.is_empty(),
             "unexpected contrast issues: {contrast_issues:?}"

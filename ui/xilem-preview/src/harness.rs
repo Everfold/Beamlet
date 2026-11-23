@@ -1,5 +1,6 @@
 //! Headless CPU preview runner wrapping `masonry_testing::TestHarness` for Xilem views.
 
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs;
 use std::path::Path;
@@ -14,15 +15,13 @@ use xilem::core::{
 use xilem::kurbo::Point;
 use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
-use xilem::masonry::core::{KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef};
+use xilem::masonry::core::{
+    DefaultProperties, KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef,
+};
 use xilem::masonry::dpi::PhysicalSize;
-use xilem::masonry::properties::Dimensions;
+use xilem::masonry::theme::{BACKGROUND_COLOR, default_property_set};
 use xilem::masonry::widgets::Passthrough;
-use xilem::style::Style as _;
-use xilem::view::sized_box;
-use xilem::{AnyWidgetView, ViewCtx, WidgetView};
-use xilem_ui::prelude::*;
-use xilem_ui_core::foundation::AnchoredPopupHost;
+use xilem::{AnyWidgetView, Color, ViewCtx, WidgetView};
 
 #[derive(Debug)]
 struct NoopRawProxy;
@@ -48,6 +47,8 @@ pub struct PreviewConfig {
     pub scale_factor: f64,
     /// Maximum compressed PNG byte size allowed by snapshot checks.
     pub max_screenshot_size: u32,
+    /// Clear background color passed to `TestHarnessParams`.
+    pub background: Color,
 }
 
 impl Default for PreviewConfig {
@@ -57,6 +58,7 @@ impl Default for PreviewConfig {
             height: 800,
             scale_factor: 1.0,
             max_screenshot_size: 512 * 1024,
+            background: BACKGROUND_COLOR,
         }
     }
 }
@@ -116,7 +118,7 @@ fn parse_type_and_index(spec: &str) -> anyhow::Result<(String, usize)> {
 }
 
 impl PreviewStep {
-    /// Parses a CLI `--step` specification such as `"click:Open Basic Dialog"` or `"focus:TextArea:0"`.
+    /// Parses a CLI `--step` specification such as `"click:Save"` or `"focus:TextArea:0"`.
     pub fn parse(spec: &str) -> anyhow::Result<Self> {
         if let Some(arg) = spec.strip_prefix("click:") {
             anyhow::ensure!(!arg.is_empty(), "click: requires a non-empty button label");
@@ -162,6 +164,8 @@ impl PreviewStep {
 }
 
 type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCtx>>::ViewState;
+type RootLogic<State> = Box<dyn FnMut(&mut State) -> Box<AnyWidgetView<State>>>;
+type PropertiesHook<State> = Box<dyn FnMut(&State) -> Option<Arc<DefaultProperties>>>;
 
 /// Reusable headless Xilem/Masonry harness capable of CPU rasterization, DOM inspection, and interaction replay.
 #[expect(
@@ -170,74 +174,118 @@ type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCt
 )]
 pub struct PreviewHarness<State: 'static> {
     state: State,
-    theme_fn: fn(&State) -> UiTheme,
-    logic: fn(&mut State) -> Box<AnyWidgetView<State>>,
+    logic: RootLogic<State>,
+    properties_hook: Option<PropertiesHook<State>>,
     view_ctx: ViewCtx,
     current_view: Box<AnyWidgetView<State>>,
     view_state: RootViewState<State>,
-    last_spec: DesignSpec,
     config: PreviewConfig,
     harness: TestHarness<Passthrough>,
 }
 
 impl<State: 'static> PreviewHarness<State> {
-    /// Builds a headless preview window at `config` viewport using `theme_fn` and root `logic`.
-    pub fn new(
-        mut state: State,
-        theme_fn: fn(&State) -> UiTheme,
-        logic: fn(&mut State) -> Box<AnyWidgetView<State>>,
+    /// Builds a headless preview window at `config` viewport using Masonry's default theme
+    /// properties and root view builder `logic`.
+    pub fn new<V, F>(state: State, logic: F, config: PreviewConfig) -> Self
+    where
+        V: WidgetView<State> + 'static,
+        F: FnMut(&mut State) -> V + 'static,
+    {
+        Self::with_default_properties(state, default_property_set(), logic, config)
+    }
+
+    /// Builds a headless preview window initialized with explicit static Masonry `default_properties`.
+    pub fn with_default_properties<V, F>(
+        state: State,
+        default_properties: DefaultProperties,
+        logic: F,
         config: PreviewConfig,
-    ) -> Self {
+    ) -> Self
+    where
+        V: WidgetView<State> + 'static,
+        F: FnMut(&mut State) -> V + 'static,
+    {
+        Self::build_internal(state, default_properties, None, logic, config)
+    }
+
+    /// Builds a headless preview window with a hook that returns replacement `Arc<DefaultProperties>`
+    /// whenever the application theme changes across rebuilds.
+    pub fn with_dynamic_properties<V, F, P>(
+        state: State,
+        initial_properties: DefaultProperties,
+        properties_hook: P,
+        logic: F,
+        config: PreviewConfig,
+    ) -> Self
+    where
+        V: WidgetView<State> + 'static,
+        F: FnMut(&mut State) -> V + 'static,
+        P: FnMut(&State) -> Option<Arc<DefaultProperties>> + 'static,
+    {
+        Self::build_internal(
+            state,
+            initial_properties,
+            Some(Box::new(properties_hook)),
+            logic,
+            config,
+        )
+    }
+
+    fn build_internal<V, F>(
+        mut state: State,
+        initial_properties: DefaultProperties,
+        properties_hook: Option<PropertiesHook<State>>,
+        mut logic: F,
+        config: PreviewConfig,
+    ) -> Self
+    where
+        V: WidgetView<State> + 'static,
+        F: FnMut(&mut State) -> V + 'static,
+    {
         let rt = Arc::new(tokio::runtime::Runtime::new().expect("tokio preview runtime"));
         let mut view_ctx = ViewCtx::new(Arc::new(NoopRawProxy), rt);
-        let theme = theme_fn(&state);
-        let spec = theme.to_spec();
-        let scoped_view = ui_scope(
-            &theme,
-            sized_box(logic(&mut state))
-                .dims(Dimensions::STRETCH)
-                .background_color(spec.palette.window_bg),
-        )
-        .boxed();
+        let initial_view = logic(&mut state).boxed();
 
-        let (pod, view_state) = scoped_view.build(&mut view_ctx, &mut state);
+        let (pod, view_state) = initial_view.build(&mut view_ctx, &mut state);
         let params = TestHarnessParams::default()
             .with_size(PhysicalSize::new(config.width, config.height))
-            .with_background(spec.palette.window_bg)
+            .with_background(config.background)
             .with_padding(0)
             .with_scale(config.scale_factor)
             .with_max_screenshot_size(config.max_screenshot_size);
-        let harness = TestHarness::create_with(theme.default_properties(), pod.new_widget, params);
+        let harness = TestHarness::create_with(initial_properties, pod.new_widget, params);
+
+        let logic_fn: RootLogic<State> = Box::new(move |s| logic(s).boxed());
 
         Self {
             state,
-            theme_fn,
-            logic,
+            logic: logic_fn,
+            properties_hook,
             view_ctx,
-            current_view: scoped_view,
+            current_view: initial_view,
             view_state,
-            last_spec: spec,
             config,
             harness,
         }
     }
 
-    /// Rebuilds the view tree cleanly after state mutations, updating Masonry `DefaultProperties` on theme changes.
+    /// Replaces the window's active Masonry `DefaultProperties` immediately.
+    pub fn set_default_properties(&mut self, properties: impl Into<Arc<DefaultProperties>>) {
+        self.harness
+            .render_root()
+            .set_default_properties(properties.into());
+    }
+
+    /// Rebuilds the view tree cleanly after state mutations, applying any updated `DefaultProperties`.
     pub fn rebuild(&mut self) {
-        let theme = (self.theme_fn)(&self.state);
-        let next_spec = theme.to_spec();
-        if next_spec != self.last_spec {
-            let props = cached_default_properties(&next_spec);
-            self.harness.render_root().set_default_properties(props);
-            self.last_spec = next_spec.clone();
+        if let Some(hook) = &mut self.properties_hook
+            && let Some(next_props) = hook(&self.state)
+        {
+            self.harness
+                .render_root()
+                .set_default_properties(next_props);
         }
-        let next_view = ui_scope(
-            &theme,
-            sized_box((self.logic)(&mut self.state))
-                .dims(Dimensions::STRETCH)
-                .background_color(next_spec.palette.window_bg),
-        )
-        .boxed();
+        let next_view = (self.logic)(&mut self.state);
 
         self.view_ctx.reset_changed_props();
         self.view_ctx.reset_changed_transforms();
@@ -278,22 +326,46 @@ impl<State: 'static> PreviewHarness<State> {
         }
     }
 
+    fn layer_roots_after_redraw(&mut self) -> Vec<WidgetId> {
+        let (visual_layers, _) = self.harness.redraw();
+        let rr = self.harness.render_root();
+        let base_id = rr.get_layer_root(0).id();
+        let mut roots = vec![base_id];
+        let mut seen = HashSet::from([base_id]);
+        for layer in &visual_layers.layers {
+            if seen.insert(layer.widget_id) {
+                roots.push(layer.widget_id);
+            }
+        }
+        roots
+    }
+
     fn find_button_id_by_label(&mut self, needle: &str) -> Option<WidgetId> {
+        let roots = self.layer_roots_after_redraw();
         let rr: &RenderRoot = self.harness.render_root();
-        let root = rr.get_layer_root(0);
-        find_button_exact_then_contains(&root, rr, needle)
+        find_button_exact_then_contains(&roots, rr, needle)
     }
 
     fn find_widget_id_by_type(&mut self, type_name: &str, index: usize) -> Option<WidgetId> {
-        let rr: &RenderRoot = self.harness.render_root();
-        let root = rr.get_layer_root(0);
-        let mut exact = Vec::new();
-        let mut partial = Vec::new();
-        collect_matching_type(&root, rr, type_name, &mut exact, &mut partial);
+        let (exact, partial) = self.collect_widget_ids_by_type(type_name);
         exact
             .get(index)
             .copied()
             .or_else(|| partial.get(index).copied())
+    }
+
+    fn collect_widget_ids_by_type(&mut self, type_name: &str) -> (Vec<WidgetId>, Vec<WidgetId>) {
+        let roots = self.layer_roots_after_redraw();
+        let rr: &RenderRoot = self.harness.render_root();
+        let mut exact = Vec::new();
+        let mut partial = Vec::new();
+        let mut visited = HashSet::new();
+        for root_id in roots {
+            if let Some(node) = rr.get_widget(root_id) {
+                collect_matching_type(&node, type_name, &mut visited, &mut exact, &mut partial);
+            }
+        }
+        (exact, partial)
     }
 
     fn move_pointer_to_widget(&mut self, id: WidgetId) {
@@ -423,12 +495,6 @@ impl<State: 'static> PreviewHarness<State> {
         &mut self.harness
     }
 
-    /// Active [`DesignSpec`] corresponding to the latest build/rebuild.
-    #[must_use]
-    pub fn current_spec(&self) -> &DesignSpec {
-        &self.last_spec
-    }
-
     /// Configured viewport dimensions `(width, height)` in logical pixels.
     #[must_use]
     pub fn viewport(&self) -> (f64, f64) {
@@ -459,12 +525,7 @@ impl<State: 'static> PreviewHarness<State> {
 
     /// Returns all widget IDs in tree order matching `type_name` (exact match first, substring fallback).
     pub fn find_widget_ids(&mut self, type_name: &str) -> Vec<WidgetId> {
-        let _ = self.harness.redraw();
-        let rr: &RenderRoot = self.harness.render_root();
-        let root = rr.get_layer_root(0);
-        let mut exact = Vec::new();
-        let mut partial = Vec::new();
-        collect_matching_type(&root, rr, type_name, &mut exact, &mut partial);
+        let (exact, partial) = self.collect_widget_ids_by_type(type_name);
         if exact.is_empty() { partial } else { exact }
     }
 
@@ -561,47 +622,51 @@ fn subtree_text(node: &WidgetRef<'_, dyn Widget>, needle: &str, exact: bool) -> 
 }
 
 fn find_button_exact_then_contains(
-    root: &WidgetRef<'_, dyn Widget>,
+    roots: &[WidgetId],
     render_root: &RenderRoot,
     needle: &str,
 ) -> Option<WidgetId> {
     fn walk(
         node: &WidgetRef<'_, dyn Widget>,
-        render_root: &RenderRoot,
         needle: &str,
         exact: bool,
+        visited: &mut HashSet<WidgetId>,
     ) -> Option<WidgetId> {
-        if node.ctx().is_stashed() {
+        if !visited.insert(node.id()) || node.ctx().is_stashed() {
             return None;
         }
         if node.inner().short_type_name().contains("Button") && subtree_text(node, needle, exact) {
             return Some(node.id());
         }
         for child in node.children() {
-            if let Some(id) = walk(&child, render_root, needle, exact) {
+            if let Some(id) = walk(&child, needle, exact, visited) {
                 return Some(id);
             }
         }
-        if let Some(host) = node.downcast::<AnchoredPopupHost>()
-            && let Some(layer_id) = host.inner().layer_id()
-            && let Some(layer_node) = render_root.get_widget(layer_id)
-            && let Some(id) = walk(&layer_node, render_root, needle, exact)
-        {
-            return Some(id);
-        }
         None
     }
-    walk(root, render_root, needle, true).or_else(|| walk(root, render_root, needle, false))
+
+    for exact in [true, false] {
+        let mut visited = HashSet::new();
+        for &root_id in roots {
+            if let Some(node) = render_root.get_widget(root_id)
+                && let Some(id) = walk(&node, needle, exact, &mut visited)
+            {
+                return Some(id);
+            }
+        }
+    }
+    None
 }
 
 fn collect_matching_type(
     node: &WidgetRef<'_, dyn Widget>,
-    render_root: &RenderRoot,
     needle: &str,
+    visited: &mut HashSet<WidgetId>,
     exact: &mut Vec<WidgetId>,
     partial: &mut Vec<WidgetId>,
 ) {
-    if node.ctx().is_stashed() {
+    if !visited.insert(node.id()) || node.ctx().is_stashed() {
         return;
     }
     let name = node.inner().short_type_name();
@@ -611,18 +676,16 @@ fn collect_matching_type(
         partial.push(node.id());
     }
     for child in node.children() {
-        collect_matching_type(&child, render_root, needle, exact, partial);
-    }
-    if let Some(host) = node.downcast::<AnchoredPopupHost>()
-        && let Some(layer_id) = host.inner().layer_id()
-        && let Some(layer_node) = render_root.get_widget(layer_id)
-    {
-        collect_matching_type(&layer_node, render_root, needle, exact, partial);
+        collect_matching_type(&child, needle, visited, exact, partial);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use xilem::masonry::layout::AsUnit;
+    use xilem::style::Style as _;
+    use xilem::view::{flex_col, label, text_button};
+
     use super::*;
 
     #[test]
@@ -658,5 +721,41 @@ mod tests {
             PreviewStep::PressTab { shift: true }
         );
         assert!(PreviewStep::parse("unknown:foo").is_err());
+    }
+
+    #[test]
+    fn pure_xilem_counter_click_and_render() {
+        struct CounterState {
+            count: u32,
+        }
+
+        let mut harness = PreviewHarness::new(
+            CounterState { count: 0 },
+            |s| {
+                flex_col((
+                    label(format!("Count: {}", s.count)),
+                    text_button("Increment", |st: &mut CounterState| st.count += 1),
+                ))
+                .gap(8.px())
+            },
+            PreviewConfig {
+                width: 320,
+                height: 200,
+                ..PreviewConfig::default()
+            },
+        );
+
+        harness
+            .run_step(&PreviewStep::ClickLabel("Increment".into()))
+            .unwrap();
+        assert_eq!(harness.state().count, 1);
+
+        let img = harness.render_image();
+        assert_eq!(img.dimensions(), (320, 200));
+        let distinct: HashSet<[u8; 4]> = img.pixels().step_by(17).map(|p| p.0).collect();
+        assert!(
+            distinct.len() >= 2,
+            "expected non-uniform rendered counter image"
+        );
     }
 }

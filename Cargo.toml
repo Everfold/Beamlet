@@ -27,7 +27,7 @@ members = [
   "ui/xilem-hig",
   "ui/xilem-adwaita",
   "ui/xilem-ui",
-  "ui/xilem-ui-preview",
+  "ui/xilem-preview",
 ]
 
 [workspace.package]
@@ -93,13 +93,14 @@ tachyonfx = "0.25"
 xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
 masonry_testing = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
 usvg = "0.47"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 xilem-ui-core = { path = "ui/xilem-ui-core" }
 xilem-md3 = { path = "ui/xilem-md3" }
 xilem-fluent = { path = "ui/xilem-fluent" }
 xilem-hig = { path = "ui/xilem-hig" }
 xilem-adwaita = { path = "ui/xilem-adwaita" }
 xilem-ui = { path = "ui/xilem-ui" }
-xilem-ui-preview = { path = "ui/xilem-ui-preview" }
+xilem-preview = { path = "ui/xilem-preview" }
 
 foundations = "5.11"
 opentelemetry = "0.33"
