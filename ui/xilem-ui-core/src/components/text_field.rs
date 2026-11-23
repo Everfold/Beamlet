@@ -3,23 +3,27 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::{Axis, Point, Size};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ArcStr, ChildrenIds, LayoutCtx, MeasureCtx, PaintCtx, PropertiesMut, PropertiesRef,
     RegisterCtx, Update, UpdateCtx, Widget, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef, UnitPoint};
-use xilem::masonry::properties::{ContentColor, Gap, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Size};
+use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef, UnitPoint};
+use masonry::properties::{ContentColor, Gap, Padding};
+use masonry::widgets;
+use masonry::widgets::InsertNewline;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     CrossAxisAlignment, Flex, FlexExt, Label, Prop, ZStackExt, button, flex_col, flex_row, label,
     portal, sized_box, text_input, zstack,
 };
-use xilem::{AnyWidgetView, InsertNewline, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::{UiClassExt, focus_frame, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
@@ -380,7 +384,7 @@ where
 fn build_top_label<State: 'static, Action: 'static>(
     spec: &DesignSpec,
     label_text: Option<&ArcStr>,
-    label_color: xilem::masonry::peniko::Color,
+    label_color: masonry::peniko::Color,
 ) -> Option<Prop<ContentColor, Label, State, Action>> {
     label_text.map(|t| {
         spec.typography
@@ -395,7 +399,7 @@ fn build_floating_label<State: 'static, Action: 'static>(
     is_empty: bool,
     is_error: bool,
     disabled: bool,
-    label_color: xilem::masonry::peniko::Color,
+    label_color: masonry::peniko::Color,
 ) -> Prop<ContentColor, Label, State, Action> {
     let p = &spec.palette;
     let float_text = label_text.unwrap_or_default();
@@ -411,7 +415,7 @@ fn build_floating_label<State: 'static, Action: 'static>(
 }
 
 fn wrap_outlined_floating_notch<State: 'static, Action: 'static>(
-    surface: xilem::masonry::peniko::Color,
+    surface: masonry::peniko::Color,
     input_widget: Box<AnyWidgetView<State, Action>>,
     float_lbl: Prop<ContentColor, Label, State, Action>,
     is_error: bool,
@@ -495,7 +499,7 @@ impl HeightRangeWidget {
 }
 
 impl Widget for HeightRangeWidget {
-    type Action = xilem::masonry::core::NoAction;
+    type Action = masonry::core::NoAction;
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);

@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
-use xilem::AnyWidgetView;
-use xilem::WidgetView;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, button, flex_row, label};
+use masonry::core::ArcStr;
+use masonry::layout::AsUnit;
+use masonry::widgets;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, label};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
 use crate::style_engine::{classes, with_spec};

@@ -4,19 +4,20 @@ use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::{Axis, Circle, Point, Rect, Size, Stroke};
-use xilem::masonry::accesskit::{Node, Orientation, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Orientation, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx, PointerButton,
     PointerButtonEvent, PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef, Property,
     RegisterCtx, TextEvent, Update, UpdateCtx, UsesProperty, Widget, WidgetMut,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LenReq, Length};
-use xilem::masonry::properties::{ThumbColor, ThumbRadius, TrackColor, TrackThickness};
-use xilem::{Pod, ViewCtx};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Circle, Point, Rect, Size, Stroke};
+use masonry::layout::{LenReq, Length};
+use masonry::peniko::Color;
+use masonry::properties::{ThumbColor, ThumbRadius, TrackColor, TrackThickness};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
 
 use crate::components::selection::ControlVisualTheme;
 use crate::foundation::state_layer::with_opacity;

@@ -3,8 +3,8 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::WidgetView;
-use xilem::masonry::core::ArcStr;
+use masonry::core::ArcStr;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::overlay::{HoverTooltipView, TooltipContentSpec};
 use crate::tokens::DesignSpec;

@@ -1,9 +1,9 @@
 //! Multi-theme design system specification protocol (`DesignSpec`).
 
-use xilem::Color;
-use xilem::kurbo::Point;
-use xilem::masonry::layout::Length;
-use xilem::masonry::properties::BoxShadow;
+use masonry::kurbo::Point;
+use masonry::layout::Length;
+use masonry::peniko::Color;
+use masonry::properties::BoxShadow;
 
 use crate::foundation::state_layer::{blend_over, with_opacity};
 use crate::tokens::{Brightness, TypeScale};

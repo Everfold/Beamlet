@@ -1,6 +1,6 @@
 //! Brightness polarity, responsive window breakpoints, and canonical spacing constants.
 
-use xilem::masonry::layout::Length;
+use masonry::layout::Length;
 
 /// Color scheme brightness polarity.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

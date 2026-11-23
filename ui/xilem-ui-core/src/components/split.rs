@@ -3,21 +3,23 @@
 
 use std::marker::PhantomData;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Line, Point, Rect, RoundedRect, Size, Stroke};
-use xilem::masonry::accesskit::{ActionData, Node, Orientation, Role};
-use xilem::masonry::core::keyboard::{Key, NamedKey};
-use xilem::masonry::core::{
+use masonry::accesskit::{ActionData, Node, Orientation, Role};
+use masonry::core::keyboard::{Key, NamedKey};
+use masonry::core::{
     AccessCtx, AccessEvent, ChildrenIds, CursorIcon, EventCtx, FromDynWidget, LayoutCtx,
     MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton, PointerButtonEvent, PointerEvent,
     PointerUpdate, PropertiesMut, PropertiesRef, QueryCtx, RegisterCtx, TextEvent, Update,
     UpdateCtx, Widget, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LayoutSize, LenReq, Length};
-use xilem::masonry::peniko::Color;
-use xilem::masonry::widgets::SplitPoint;
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Line, Point, Rect, RoundedRect, Size, Stroke};
+use masonry::layout::{AsUnit, LayoutSize, LenReq, Length};
+use masonry::peniko::Color;
+use masonry::widgets::SplitPoint;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::with_opacity;
 use crate::style_engine::current_spec_arc;
@@ -455,9 +457,9 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Widget for UiSplitWidget<
         let step = (split_space / 50.0).max(2.0);
         let mut child1_len = split_space * self.split_point_effective;
         match event.action {
-            xilem::masonry::accesskit::Action::Increment => child1_len += step,
-            xilem::masonry::accesskit::Action::Decrement => child1_len -= step,
-            xilem::masonry::accesskit::Action::SetValue => match &event.data {
+            masonry::accesskit::Action::Increment => child1_len += step,
+            masonry::accesskit::Action::Decrement => child1_len -= step,
+            masonry::accesskit::Action::SetValue => match &event.data {
                 Some(ActionData::NumericValue(v)) => child1_len = *v,
                 Some(ActionData::Value(v)) => {
                     if let Ok(parsed) = v.parse() {
@@ -664,9 +666,9 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Widget for UiSplitWidget<
         node.set_max_numeric_value(max_l);
         node.set_numeric_value_step((split_space / 50.0).max(1.0));
         if self.draggable && !ctx.is_disabled() {
-            node.add_action(xilem::masonry::accesskit::Action::SetValue);
-            node.add_action(xilem::masonry::accesskit::Action::Increment);
-            node.add_action(xilem::masonry::accesskit::Action::Decrement);
+            node.add_action(masonry::accesskit::Action::SetValue);
+            node.add_action(masonry::accesskit::Action::Increment);
+            node.add_action(masonry::accesskit::Action::Decrement);
         }
     }
 

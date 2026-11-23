@@ -1,18 +1,15 @@
-//! Theme environment scope (`ui_scope`) and root window wrapper (`ui_window`).
+//! Headless theme environment scope (`ui_scope`) and reactive spec helpers.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::sync::{Arc, LazyLock, Mutex};
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::{DefaultProperties, FromDynWidget};
-use xilem::masonry::properties::Dimensions;
-use xilem::style::Style as _;
-use xilem::view::sized_box;
-use xilem::{Pod, ViewCtx, WidgetView, WindowId, WindowView, window};
+use masonry::core::{DefaultProperties, FromDynWidget};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::{Pod, ViewCtx, WidgetView};
 
 use crate::style_engine::build_default_properties;
-use crate::tokens::{Brightness, DesignSpec, WindowBackdrop};
+use crate::tokens::{Brightness, DesignSpec};
 
 thread_local! {
     static SPEC_STACK: RefCell<Vec<Arc<DesignSpec>>> = const { RefCell::new(Vec::new()) };
@@ -165,90 +162,6 @@ where
     V::Widget: FromDynWidget,
 {
     ui_scope_arc(Arc::new(spec), child)
-}
-
-/// Resolves the root window backdrop fill for `backdrop`.
-///
-/// Translucent materials (`Mica`, `MicaAlt`, `Acrylic`, `MacosVibrancy`) require host OS
-/// compositor support (`winit` transparent surface + Windows DWM / macOS `NSVisualEffectView`);
-/// when rendered in standard opaque or headless surfaces, all modes fall back gracefully to
-/// `spec.palette.window_bg`.
-fn resolve_window_backdrop_fill(spec: &DesignSpec, backdrop: WindowBackdrop) -> xilem::Color {
-    match backdrop {
-        WindowBackdrop::Opaque
-        | WindowBackdrop::Mica
-        | WindowBackdrop::MicaAlt
-        | WindowBackdrop::Acrylic
-        | WindowBackdrop::MacosVibrancy => spec.palette.window_bg,
-    }
-}
-
-/// Convenience helper constructing an opinionated desktop [`WindowView`] from a shared
-/// [`Arc<DesignSpec>`] and explicit [`WindowBackdrop`] material.
-pub fn ui_window_arc_with_backdrop<State: 'static, V>(
-    window_id: WindowId,
-    title: impl Into<String>,
-    spec: &Arc<DesignSpec>,
-    backdrop: WindowBackdrop,
-    child: V,
-) -> WindowView<State>
-where
-    V: WidgetView<State>,
-    V::Widget: FromDynWidget,
-{
-    let bg = resolve_window_backdrop_fill(spec, backdrop);
-    let default_props = cached_default_properties(spec);
-    let root = sized_box(child)
-        .dims(Dimensions::STRETCH)
-        .background_color(bg);
-    window(window_id, title.into(), ui_scope_arc(spec.clone(), root))
-        .with_base_color(bg)
-        .with_default_properties(default_props)
-}
-
-/// Convenience helper constructing an opinionated desktop [`WindowView`] from `spec` and an
-/// explicit [`WindowBackdrop`] material.
-pub fn ui_window_with_backdrop<State: 'static, V>(
-    window_id: WindowId,
-    title: impl Into<String>,
-    spec: &DesignSpec,
-    backdrop: WindowBackdrop,
-    child: V,
-) -> WindowView<State>
-where
-    V: WidgetView<State>,
-    V::Widget: FromDynWidget,
-{
-    ui_window_arc_with_backdrop(window_id, title, &Arc::new(spec.clone()), backdrop, child)
-}
-
-/// Convenience helper constructing an opinionated desktop [`WindowView`] from a shared [`Arc<DesignSpec>`].
-pub fn ui_window_arc<State: 'static, V>(
-    window_id: WindowId,
-    title: impl Into<String>,
-    spec: &Arc<DesignSpec>,
-    child: V,
-) -> WindowView<State>
-where
-    V: WidgetView<State>,
-    V::Widget: FromDynWidget,
-{
-    ui_window_arc_with_backdrop(window_id, title, spec, spec.backdrop, child)
-}
-
-/// Convenience helper constructing an opinionated desktop [`WindowView`] whose backdrop,
-/// Masonry [`DefaultProperties`], and Xilem ambient [`DesignSpec`] stay synced with `spec`.
-pub fn ui_window<State: 'static, V>(
-    window_id: WindowId,
-    title: impl Into<String>,
-    spec: &DesignSpec,
-    child: V,
-) -> WindowView<State>
-where
-    V: WidgetView<State>,
-    V::Widget: FromDynWidget,
-{
-    ui_window_arc(window_id, title, &Arc::new(spec.clone()), child)
 }
 
 /// Creates a lazily evaluated view that reads the active [`DesignSpec`] on every build/rebuild.
@@ -420,7 +333,7 @@ where
     Action: 'static,
     F: Fn(&DesignSpec, &mut State) -> V + Send + Sync + 'static,
     V: WidgetView<State, Action>,
-    V::Widget: xilem::masonry::core::FromDynWidget,
+    V::Widget: FromDynWidget,
 {
     type Element = Pod<V::Widget>;
     type ViewState = (Arc<DesignSpec>, V, V::ViewState);

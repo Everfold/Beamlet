@@ -3,13 +3,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::Pod;
-use xilem::ViewCtx;
-use xilem::WidgetView;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::Vec2;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
+use masonry::kurbo::Vec2;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::{Dimensions, Padding};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,

@@ -2,13 +2,16 @@
 
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Padding;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, text_input};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::core::ArcStr;
+use masonry::layout::AsUnit;
+use masonry::properties::Padding;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, button, flex_row, text_input};
 
 use crate::foundation::{
     FocusFrame, FocusFrameView, UiClassExt, WithClass, focus_frame, icons, ui_icon,

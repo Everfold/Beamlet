@@ -8,9 +8,11 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+masonry.workspace = true
 tracing.workspace = true
 usvg.workspace = true
-xilem.workspace = true
+xilem_core.workspace = true
+xilem_masonry.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

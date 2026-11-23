@@ -2,19 +2,21 @@
 
 use std::marker::PhantomData;
 
-use tracing::{Span, trace_span};
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Rect, Size, Stroke};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
     PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Update, UpdateCtx, Widget, WidgetId,
     WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LenReq, Length};
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Rect, Size, Stroke};
+use masonry::layout::{LenReq, Length};
+use masonry::peniko::Color;
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::state_layer::with_opacity;
 use crate::style_engine::current_spec_arc;

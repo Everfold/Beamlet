@@ -2,20 +2,21 @@
 
 use std::marker::PhantomData;
 
-use tracing::{Span, trace_span};
-use xilem::core::{
-    AppendVec, ElementSplice, MessageCtx, MessageResult, Mut, View, ViewMarker, ViewSequence,
-};
-use xilem::kurbo::{Axis, Point, Size};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PropertiesRef,
     RegisterCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef};
-use xilem::masonry::properties::types::CrossAxisAlignment;
-use xilem::{Pod, ViewCtx};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Size};
+use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef};
+use masonry::properties::types::CrossAxisAlignment;
+use tracing::{Span, trace_span};
+use xilem_core::{
+    AppendVec, ElementSplice, MessageCtx, MessageResult, Mut, View, ViewMarker, ViewSequence,
+};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
 
 struct PlannedItem {
     index: usize,

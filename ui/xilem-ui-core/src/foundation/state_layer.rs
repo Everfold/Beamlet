@@ -1,7 +1,7 @@
 //! Alpha blending and interactive state-color synthesis across `StateFeedbackMode`s.
 
-use xilem::Color;
-use xilem::masonry::palette::css::TRANSPARENT;
+use masonry::palette::css::TRANSPARENT;
+use masonry::peniko::Color;
 
 use crate::tokens::{Brightness, StateFeedbackMode};
 

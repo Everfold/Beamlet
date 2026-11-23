@@ -1,10 +1,10 @@
 //! Notification dot and counter badges styled from [`DesignSpec`](crate::tokens::DesignSpec).
 
-use xilem::WidgetView;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{badged_optional, label, sized_box};
+use masonry::core::ArcStr;
+use masonry::widgets;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{badged_optional, label, sized_box};
 
 use crate::foundation::UiClassExt;
 use crate::style_engine::{classes, with_spec};

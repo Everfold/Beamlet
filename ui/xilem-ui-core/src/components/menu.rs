@@ -3,12 +3,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::kurbo::Vec2;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, label};
-use xilem::{Pod, WidgetView};
+use masonry::core::ArcStr;
+use masonry::kurbo::Vec2;
+use masonry::layout::AsUnit;
+use xilem_masonry::Pod;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, button, flex_row, label};
 
 use crate::foundation::overlay::{
     AnchoredPopupHost, AnchoredPopupView, ContextMenuView, PopupEntrySpec, PopupLayerSpec,

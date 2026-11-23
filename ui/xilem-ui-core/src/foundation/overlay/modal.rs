@@ -2,13 +2,16 @@
 
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewPathTracker as _};
-use xilem::kurbo::Vec2;
-use xilem::masonry::core::{CollectionWidget, NewWidget};
-use xilem::masonry::layout::UnitPoint;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets::{self, Passthrough, ZStack};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::core::{CollectionWidget, NewWidget};
+use masonry::kurbo::Vec2;
+use masonry::layout::UnitPoint;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets::{self, Passthrough, ZStack};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewPathTracker as _};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::overlay::focus_bridge::collect_modal_focusables;
 use crate::foundation::overlay::{EscapeCatcher, EscapePressed, ui_scrim};

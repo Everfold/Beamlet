@@ -3,14 +3,17 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::core::ArcStr;
+use masonry::layout::AsUnit;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
@@ -120,7 +123,7 @@ impl<State, Action> UiChip<State, Action> {
             let (chip_bg, chip_border) = match self.kind {
                 ChipKind::Filter if self.selected => (p.secondary_container, None),
                 ChipKind::Filter => (
-                    xilem::Color::TRANSPARENT,
+                    masonry::peniko::Color::TRANSPARENT,
                     Some(spec.content_color(p.border_strong, self.disabled)),
                 ),
                 ChipKind::Input => (
@@ -128,13 +131,13 @@ impl<State, Action> UiChip<State, Action> {
                     Some(spec.content_color(p.border, self.disabled)),
                 ),
                 ChipKind::Assist | ChipKind::Suggestion => (
-                    xilem::Color::TRANSPARENT,
+                    masonry::peniko::Color::TRANSPARENT,
                     Some(spec.content_color(p.border, self.disabled)),
                 ),
             };
             let (border_color, border_w) = match chip_border {
                 Some(c) => (c, 1.px()),
-                None => (xilem::Color::TRANSPARENT, 0.px()),
+                None => (masonry::peniko::Color::TRANSPARENT, 0.px()),
             };
             sized_box(
                 flex_row((main_chip, close_btn))

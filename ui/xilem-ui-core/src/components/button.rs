@@ -3,13 +3,16 @@
 use std::any::type_name;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::masonry::core::{ArcStr, PointerButton};
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::widgets::{self, ButtonPress};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, flex_row};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::core::{ArcStr, PointerButton};
+use masonry::layout::AsUnit;
+use masonry::widgets::{self, ButtonPress};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, flex_row};
 
 use crate::foundation::ui_icon;
 use crate::style_engine::{classes, current_spec_arc};
@@ -213,7 +216,10 @@ impl<State, Action> UiButton<State, Action> {
         let fg = spec.content_color(active_fg, self.disabled);
         let lbl = spec
             .typography
-            .style_label(TypeRole::LabelLarge, xilem::view::label(self.text.clone()))
+            .style_label(
+                TypeRole::LabelLarge,
+                xilem_masonry::view::label(self.text.clone()),
+            )
             .color(fg);
 
         if self.leading_icon.is_some() || self.trailing_icon.is_some() {

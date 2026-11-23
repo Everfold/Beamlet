@@ -4,23 +4,25 @@ use std::marker::PhantomData;
 use std::ops::Range;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::{Affine, Axis, Point, Rect, RoundedRect, Size};
-use xilem::masonry::accesskit::{self, Node, Role};
-use xilem::masonry::core::keyboard::{Key, NamedKey};
-use xilem::masonry::core::{
+use masonry::accesskit::{self, Node, Role};
+use masonry::core::keyboard::{Key, NamedKey};
+use masonry::core::{
     AccessCtx, AccessEvent, ArcStr, BrushIndex, ChildrenIds, CursorIcon, EventCtx, LayoutCtx,
     MeasureCtx, PaintCtx, PointerButton, PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef,
     QueryCtx, RegisterCtx, StyleProperty, TextEvent, Update, UpdateCtx, Widget, WidgetMut,
     render_text,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LenReq, Length};
-use xilem::masonry::parley::layout::AlignmentOptions;
-use xilem::masonry::parley::style::{FontStyle, FontWeight, GenericFamily, LineHeight};
-use xilem::masonry::parley::{Affinity, Cursor, FontFamily, Layout, Selection};
-use xilem::masonry::peniko::{Brush, Color};
-use xilem::{Pod, TextAlign, ViewCtx};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Affine, Axis, Point, Rect, RoundedRect, Size};
+use masonry::layout::{LenReq, Length};
+use masonry::parley::Alignment as TextAlign;
+use masonry::parley::layout::AlignmentOptions;
+use masonry::parley::style::{FontStyle, FontWeight, GenericFamily, LineHeight};
+use masonry::parley::{Affinity, Cursor, FontFamily, Layout, Selection};
+use masonry::peniko::{Brush, Color};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
 
 use crate::foundation::with_opacity;
 use crate::style_engine::current_spec_arc;
@@ -349,8 +351,8 @@ impl RichTextWidget {
 
     fn build_parley_layout(
         &self,
-        font_ctx: &mut xilem::masonry::parley::FontContext,
-        layout_ctx: &mut xilem::masonry::parley::LayoutContext<BrushIndex>,
+        font_ctx: &mut masonry::parley::FontContext,
+        layout_ctx: &mut masonry::parley::LayoutContext<BrushIndex>,
         max_advance: Option<f32>,
     ) -> Layout<BrushIndex> {
         let mut layout = Layout::new();

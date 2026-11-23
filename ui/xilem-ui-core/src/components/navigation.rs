@@ -3,19 +3,22 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::Vec2;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::core::ArcStr;
+use masonry::kurbo::Vec2;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     AnyFlexChild, CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row,
     label, sized_box,
 };
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::components::divider::{horizontal_divider, vertical_divider};
 use crate::foundation::overlay::{
@@ -68,14 +71,14 @@ impl<V, State: 'static, Action: 'static> View<State, Action, ViewCtx>
 where
     V: WidgetView<State, Action>,
 {
-    type Element = Pod<xilem::masonry::widgets::SizedBox>;
+    type Element = Pod<masonry::widgets::SizedBox>;
     type ViewState = (f64, V::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec = crate::style_engine::current_spec_arc(ctx);
         let h = spec.metrics.top_bar_height;
         let (child_pod, child_state) = self.inner.build(ctx, app_state);
-        let mut pod = ctx.create_pod(xilem::masonry::widgets::SizedBox::new(
+        let mut pod = ctx.create_pod(masonry::widgets::SizedBox::new(
             child_pod.new_widget.erased(),
         ));
         pod.new_widget
@@ -100,7 +103,7 @@ where
             element.insert_prop(Dimensions::height(next_h.px()));
             *prev_h = next_h;
         }
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("top bar SizedBox always has child");
         self.inner.rebuild(
             &prev.inner,
@@ -117,7 +120,7 @@ where
         ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
     ) {
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("top bar SizedBox always has child");
         self.inner.teardown(child_state, ctx, child_dyn.downcast());
     }
@@ -129,7 +132,7 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) -> MessageResult<Action> {
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("top bar SizedBox always has child");
         self.inner
             .message(child_state, message, child_dyn.downcast(), app_state)

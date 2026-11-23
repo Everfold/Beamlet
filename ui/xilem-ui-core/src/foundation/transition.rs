@@ -2,19 +2,21 @@
 
 use std::marker::PhantomData;
 
-use tracing::{Span, trace_span};
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::{Axis, Point, Size, Vec2};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, ComposeCtx, EventCtx, LayoutCtx, MeasureCtx, NewWidget, NoAction,
     PaintCtx, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget,
     WidgetId, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::{Composite, GroupRef, Painter};
-use xilem::masonry::layout::{LenReq, Length};
-use xilem::masonry::peniko;
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::{Composite, GroupRef, Painter};
+use masonry::kurbo::{Axis, Point, Size, Vec2};
+use masonry::layout::{LenReq, Length};
+use masonry::peniko;
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::tokens::{MotionDuration, MotionEasing};
 

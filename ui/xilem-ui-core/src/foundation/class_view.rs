@@ -2,9 +2,11 @@
 
 use std::marker::PhantomData;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::FromDynWidget;
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::core::FromDynWidget;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 /// Wraps a [`WidgetView`] to attach a Masonry class selector without altering the widget hierarchy.
 #[must_use = "View values do nothing unless provided to Xilem."]

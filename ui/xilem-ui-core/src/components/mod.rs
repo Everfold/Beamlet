@@ -49,6 +49,7 @@ pub use list::{
     UiListItem, clickable_list_item, clickable_list_item_view, list_item, list_item_view,
     virtual_list,
 };
+pub use masonry::widgets::InsertNewline;
 pub use menu::{MenuEntry, context_menu, dropdown_menu, menu_divider, menu_item, select};
 pub use navigation::{
     NavDestination, modal_navigation_drawer, navigation_bar, navigation_drawer, navigation_rail,
@@ -81,4 +82,3 @@ pub use typography::{
     headline_large, headline_medium, headline_small, label_large, label_medium, label_small,
     title_large, title_medium, title_small, ui_label, ui_prose,
 };
-pub use xilem::InsertNewline;

@@ -4,19 +4,21 @@ use std::any::TypeId;
 use std::f64::consts::TAU;
 use std::marker::PhantomData;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::{Arc as KurboArc, Axis, Point, Rect, Size, Stroke, Vec2};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NoAction, PaintCtx, PropertiesMut,
     PropertiesRef, Property, RegisterCtx, Update, UpdateCtx, UsesProperty, Widget, WidgetMut,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LenReq, Length};
-use xilem::masonry::properties::{Dimensions, TrackColor};
-use xilem::style::Style as _;
-use xilem::view::{progress_bar, sized_box, spinner};
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Arc as KurboArc, Axis, Point, Rect, Size, Stroke, Vec2};
+use masonry::layout::{AsUnit, LenReq, Length};
+use masonry::properties::{Dimensions, TrackColor};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{progress_bar, sized_box, spinner};
 
 /// Custom linear progress bar rendering indeterminate sweeping track + determinate stop dot.
 #[derive(Debug)]

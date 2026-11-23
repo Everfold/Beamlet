@@ -1,11 +1,12 @@
 //! Application screen scaffold coordinating top bar, body, bottom bar, FAB, sheets, dialogs, and toasts.
 
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, sized_box, zstack};
-use xilem::{AnyWidgetView, WidgetView};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
+use masonry::widgets;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, sized_box, zstack};
 
 /// Screen layout scaffold holding body content plus optional chrome and modal overlay slots.
 #[must_use = "View values do nothing unless provided to Xilem."]

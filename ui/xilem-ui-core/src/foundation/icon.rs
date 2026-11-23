@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use xilem::Color;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Dimensions;
-use xilem::style::Style as _;
-use xilem::view::{sized_box, svg};
+use masonry::layout::AsUnit;
+use masonry::peniko::Color;
+use masonry::properties::Dimensions;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{sized_box, svg};
 
 /// Built-in 24×24 SVG `<path d="..."/>` constants covering common UI actions and chrome.
 pub mod icons {
@@ -149,7 +149,7 @@ pub fn ui_icon<State: 'static, Action: 'static>(
     svg_path: &'static str,
     size_px: f64,
     color: Color,
-) -> impl xilem::WidgetView<State, Action> + use<State, Action> {
+) -> impl xilem_masonry::WidgetView<State, Action> + use<State, Action> {
     let tree = cached_icon_tree(svg_path, color);
     sized_box(svg(tree)).dims(Dimensions::fixed(size_px.px(), size_px.px()))
 }

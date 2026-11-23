@@ -2,14 +2,16 @@
 
 use std::marker::PhantomData;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::{ArcStr, NewWidget, PropertySet, StyleProperty};
-use xilem::masonry::parley::LineHeight;
-use xilem::masonry::parley::style::FontFamily;
-use xilem::masonry::properties::ContentColor;
-use xilem::masonry::widgets;
-use xilem::view::{Label, label};
-use xilem::{Color, Pod, ViewCtx};
+use masonry::core::{ArcStr, NewWidget, PropertySet, StyleProperty};
+use masonry::parley::LineHeight;
+use masonry::parley::style::FontFamily;
+use masonry::peniko::Color;
+use masonry::properties::ContentColor;
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::view::{Label, label};
 
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{TextStyleSpec, TypeRole};

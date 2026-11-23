@@ -3,24 +3,25 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use tracing::{Span, trace_span};
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Rect, Size, Vec2};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ArcStr, ChildrenIds, EventCtx, Layer, LayerType, LayoutCtx, MeasureCtx, NewWidget,
     NoAction, PaintCtx, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
     Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
-use xilem::masonry::parley::style::FontWeight;
-use xilem::masonry::properties::types::CrossAxisAlignment;
-use xilem::masonry::properties::{
-    Background, ContentColor, CornerRadius, Dimensions, Gap, Padding,
-};
-use xilem::masonry::widgets::{Flex, Label, SizedBox};
-use xilem::{Color, Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
+use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
+use masonry::parley::style::FontWeight;
+use masonry::peniko::Color;
+use masonry::properties::types::CrossAxisAlignment;
+use masonry::properties::{Background, ContentColor, CornerRadius, Dimensions, Gap, Padding};
+use masonry::widgets::{Flex, Label, SizedBox};
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::style_engine::scope::current_spec_arc;
 use crate::tokens::{DesignSpec, ElevationLevel};
@@ -81,8 +82,8 @@ impl TooltipContentSpec {
                     Padding::from_vh(12.px(), 16.px()),
                     ElevationLevel::Level2.box_shadow(self.shadow_color),
                     Dimensions::new(
-                        xilem::masonry::layout::Dim::MaxContent,
-                        xilem::masonry::layout::Dim::MaxContent,
+                        masonry::layout::Dim::MaxContent,
+                        masonry::layout::Dim::MaxContent,
                     ),
                 ))
                 .erased()

@@ -2,17 +2,18 @@
 
 use std::sync::Arc;
 
-use xilem::Color;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::core::ArcStr;
+use masonry::layout::AsUnit;
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     AnyFlexChild, CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row,
     label, portal, sized_box,
 };
-use xilem::{AnyWidgetView, WidgetView};
 
 use crate::components::divider::horizontal_divider;
 use crate::foundation::UiClassExt;
@@ -55,7 +56,7 @@ where
                         let bar = sized_box(label(""))
                             .dims(
                                 Dimensions::height(height.px())
-                                    .with_width(xilem::masonry::layout::Dim::Stretch),
+                                    .with_width(masonry::layout::Dim::Stretch),
                             )
                             .background_color(ind_color);
                         let btn =

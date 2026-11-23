@@ -4,26 +4,29 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use tracing::{Span, trace_span};
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Rect, Size, Vec2};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::keyboard::{Key, NamedKey};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::keyboard::{Key, NamedKey};
+use masonry::core::{
     AccessCtx, AccessEvent, ActionCtx, ArcStr, ChildrenIds, ErasedAction, EventCtx, Layer,
     LayerType, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton,
     PointerButtonEvent, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
     TextEvent, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
-use xilem::masonry::parley::style::FontWeight;
-use xilem::masonry::properties::types::CrossAxisAlignment;
-use xilem::masonry::properties::{
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
+use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
+use masonry::parley::style::FontWeight;
+use masonry::peniko::Color;
+use masonry::properties::types::CrossAxisAlignment;
+use masonry::properties::{
     Background, BorderColor, BorderWidth, ContentColor, CornerRadius, Dimensions, Gap, Padding,
 };
-use xilem::masonry::widgets::{self, ButtonPress, Divider, Flex, Label, SizedBox, Svg};
-use xilem::{Color, Pod, ViewCtx, WidgetView};
+use masonry::widgets::{self, ButtonPress, Divider, Flex, Label, SizedBox, Svg};
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::icon::cached_icon_tree;
 use crate::style_engine::scope::current_spec_arc;
@@ -205,8 +208,8 @@ impl PopupLayer {
                 BorderWidth { width: 0.px() },
                 BorderColor::new(Color::TRANSPARENT),
                 Dimensions::new(
-                    xilem::masonry::layout::Dim::MaxContent,
-                    xilem::masonry::layout::Dim::MaxContent,
+                    masonry::layout::Dim::MaxContent,
+                    masonry::layout::Dim::MaxContent,
                 ),
             ));
 

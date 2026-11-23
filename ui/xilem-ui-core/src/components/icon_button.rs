@@ -2,10 +2,13 @@
 
 use std::sync::Arc;
 
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::widgets;
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::peniko::Color;
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::components::button::{
     ButtonCallback, class_button_build, class_button_message, class_button_rebuild,

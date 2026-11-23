@@ -2,11 +2,11 @@
 
 use std::marker::PhantomData;
 
-use xilem::WidgetView;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
-use xilem::masonry::widgets;
-use xilem::view::sized_box;
+use masonry::layout::AsUnit;
+use masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
+use masonry::widgets;
+use xilem_masonry::WidgetView;
+use xilem_masonry::view::sized_box;
 
 use crate::foundation::UiClassExt;
 use crate::style_engine::classes;
@@ -98,21 +98,21 @@ impl<V, State, Action> SurfaceBox<V, State, Action> {
     }
 }
 
-impl<V, State, Action> xilem::core::ViewMarker for SurfaceBox<V, State, Action> {}
+impl<V, State, Action> xilem_core::ViewMarker for SurfaceBox<V, State, Action> {}
 
-impl<V, State, Action> xilem::core::View<State, Action, xilem::ViewCtx>
+impl<V, State, Action> xilem_core::View<State, Action, xilem_masonry::ViewCtx>
     for SurfaceBox<V, State, Action>
 where
     State: 'static,
     Action: 'static,
     V: WidgetView<State, Action>,
 {
-    type Element = xilem::Pod<xilem::masonry::widgets::SizedBox>;
-    type ViewState = ((xilem::Color, f64, f64, BoxShadow), V::ViewState);
+    type Element = xilem_masonry::Pod<masonry::widgets::SizedBox>;
+    type ViewState = ((masonry::peniko::Color, f64, f64, BoxShadow), V::ViewState);
 
     fn build(
         &self,
-        ctx: &mut xilem::ViewCtx,
+        ctx: &mut xilem_masonry::ViewCtx,
         app_state: &mut State,
     ) -> (Self::Element, Self::ViewState) {
         let spec = crate::style_engine::current_spec_arc(ctx);
@@ -122,7 +122,7 @@ where
         let pad = self.padding.unwrap_or(12.0);
         let shadow = spec.box_shadow(self.elevation);
         let (child_pod, child_state) = self.child.build(ctx, app_state);
-        let mut pod = ctx.create_pod(xilem::masonry::widgets::SizedBox::new(
+        let mut pod = ctx.create_pod(masonry::widgets::SizedBox::new(
             child_pod.new_widget.erased(),
         ));
         pod.new_widget.properties.insert(Background::Color(bg));
@@ -138,8 +138,8 @@ where
         &self,
         prev: &Self,
         ((prev_bg, prev_rad, prev_pad, prev_shadow), view_state): &mut Self::ViewState,
-        ctx: &mut xilem::ViewCtx,
-        mut element: xilem::core::Mut<'_, Self::Element>,
+        ctx: &mut xilem_masonry::ViewCtx,
+        mut element: xilem_core::Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
         let spec = crate::style_engine::current_spec_arc(ctx);
@@ -170,7 +170,7 @@ where
             *prev_shadow = shadow;
         }
 
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("SurfaceBox SizedBox always holds a child");
         self.child.rebuild(
             &prev.child,
@@ -184,10 +184,10 @@ where
     fn teardown(
         &self,
         (_props_cache, view_state): &mut Self::ViewState,
-        ctx: &mut xilem::ViewCtx,
-        mut element: xilem::core::Mut<'_, Self::Element>,
+        ctx: &mut xilem_masonry::ViewCtx,
+        mut element: xilem_core::Mut<'_, Self::Element>,
     ) {
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("SurfaceBox SizedBox always holds a child");
         self.child.teardown(view_state, ctx, child_dyn.downcast());
     }
@@ -195,11 +195,11 @@ where
     fn message(
         &self,
         (_props_cache, view_state): &mut Self::ViewState,
-        message: &mut xilem::core::MessageCtx,
-        mut element: xilem::core::Mut<'_, Self::Element>,
+        message: &mut xilem_core::MessageCtx,
+        mut element: xilem_core::Mut<'_, Self::Element>,
         app_state: &mut State,
-    ) -> xilem::core::MessageResult<Action> {
-        let mut child_dyn = xilem::masonry::widgets::SizedBox::child_mut(&mut element)
+    ) -> xilem_core::MessageResult<Action> {
+        let mut child_dyn = masonry::widgets::SizedBox::child_mut(&mut element)
             .expect("SurfaceBox SizedBox always holds a child");
         self.child
             .message(view_state, message, child_dyn.downcast(), app_state)

@@ -8,7 +8,7 @@
 
 use std::cell::RefCell;
 
-use xilem::masonry::core::WidgetId;
+use masonry::core::WidgetId;
 
 thread_local! {
     static MODAL_FOCUS_COLLECTOR: RefCell<Option<Vec<WidgetId>>> = const { RefCell::new(None) };
@@ -69,8 +69,8 @@ pub(crate) fn next_focus_target(
 
 #[cfg(test)]
 mod tests {
-    use xilem::masonry::core::NewWidget;
-    use xilem::masonry::widgets::Label;
+    use masonry::core::NewWidget;
+    use masonry::widgets::Label;
 
     use super::*;
 

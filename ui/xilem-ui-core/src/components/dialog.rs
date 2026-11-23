@@ -3,14 +3,17 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::Vec2;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::{AsUnit, Dim, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, MainAxisAlignment, flex_col, flex_row, label};
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
+use masonry::core::ArcStr;
+use masonry::kurbo::Vec2;
+use masonry::layout::{AsUnit, Dim, UnitPoint};
+use masonry::properties::{Dimensions, Padding};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, MainAxisAlignment, flex_col, flex_row, label};
 
 use crate::components::button::{destructive_button, primary_button, subtle_button};
 use crate::foundation::overlay::{

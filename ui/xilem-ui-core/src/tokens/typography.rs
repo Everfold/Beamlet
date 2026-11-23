@@ -1,9 +1,9 @@
 //! Shared 15-role typography ramp, line-height/tracking tokens, and platform font stacks.
 
-use xilem::FontWeight;
-use xilem::masonry::parley::style::FontFamily;
-use xilem::masonry::parley::{GenericFamily, LineHeight};
-use xilem::view::Label;
+use masonry::parley::style::FontFamily;
+use masonry::parley::style::FontWeight;
+use masonry::parley::{GenericFamily, LineHeight};
+use xilem_masonry::view::Label;
 
 /// The 15 semantic typography roles used across component specifications.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

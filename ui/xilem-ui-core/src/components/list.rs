@@ -3,17 +3,20 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Padding;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::core::ArcStr;
+use masonry::layout::AsUnit;
+use masonry::peniko::Color;
+use masonry::properties::Padding;
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     CrossAxisAlignment, Flex, FlexExt, button, flex_col, flex_row, label, sized_box,
 };
-use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::components::divider::horizontal_divider;
 use crate::foundation::UiClassExt;
@@ -283,7 +286,7 @@ where
 }
 
 /// Virtualized lazy-mounted vertical list backed by Xilem's
-/// [`virtual_scroll`](xilem::view::virtual_scroll).
+/// [`virtual_scroll`](xilem_masonry::view::virtual_scroll).
 ///
 /// Only rows intersecting the visible viewport (plus a small scroll buffer) are built and mounted,
 /// keeping view build, layout, and paint proportional to the visible window (`O(viewport)`)
@@ -295,7 +298,7 @@ where
 pub fn virtual_list<State, Action, V, F>(
     item_count: usize,
     row_builder: F,
-) -> xilem::view::VirtualScroll<
+) -> xilem_masonry::view::VirtualScroll<
     State,
     Action,
     V,
@@ -308,5 +311,5 @@ where
     State: 'static,
     Action: 'static,
 {
-    xilem::view::virtual_scroll(item_count, row_builder)
+    xilem_masonry::view::virtual_scroll(item_count, row_builder)
 }

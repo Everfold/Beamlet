@@ -1,10 +1,11 @@
 //! Spec-styled arbitrary interactive popover overlay surface (`NSPopover` / `GtkPopover` / Fluent `Flyout`).
 
-use xilem::kurbo::Vec2;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, button, flex_col, label, sized_box, zstack};
-use xilem::{WidgetView, masonry::layout::AsUnit};
+use masonry::kurbo::Vec2;
+use masonry::layout::AsUnit;
+use masonry::properties::{Dimensions, Padding};
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, button, flex_col, label, sized_box, zstack};
 
 use crate::foundation::{PopoverAnchorRect, UiClassExt, escape_catcher, popover_place};
 use crate::style_engine::classes;

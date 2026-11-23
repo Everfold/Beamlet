@@ -2,19 +2,21 @@
 
 use std::marker::PhantomData;
 
-use tracing::{Span, trace_span};
-use xilem::Color;
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Circle, Point, Size};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton,
     PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, UpdateCtx, Widget, WidgetId,
     WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LenReq, Length};
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Circle, Point, Size};
+use masonry::layout::{LenReq, Length};
+use masonry::peniko::Color;
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 use crate::foundation::state_layer::with_opacity;
 use crate::style_engine::current_spec_arc;
@@ -33,7 +35,7 @@ struct RippleConfig {
 /// Masonry single-child wrapper painting a clipped radial ink wave on primary pointer press.
 ///
 /// Leaves `propagates_pointer_interaction()` enabled and never consumes pointer events so wrapped
-/// controls (such as [`Button`](xilem::masonry::widgets::Button)) handle clicks normally.
+/// controls (such as [`Button`](masonry::widgets::Button)) handle clicks normally.
 #[expect(
     missing_debug_implementations,
     reason = "Holds an erased Masonry WidgetPod"
@@ -79,7 +81,7 @@ impl Widget for RippleLayer {
 
     fn on_pointer_event(
         &mut self,
-        ctx: &mut xilem::masonry::core::EventCtx<'_>,
+        ctx: &mut masonry::core::EventCtx<'_>,
         _props: &mut PropertiesMut<'_>,
         event: &PointerEvent,
     ) {

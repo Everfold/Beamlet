@@ -1,11 +1,11 @@
 //! Spec-colored horizontal, vertical, and inset dividers.
 
-use xilem::WidgetView;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Padding;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{divider_h, divider_v};
+use masonry::layout::AsUnit;
+use masonry::properties::Padding;
+use masonry::widgets;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{divider_h, divider_v};
 
 use crate::style_engine::with_spec;
 

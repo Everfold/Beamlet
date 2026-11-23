@@ -5,15 +5,15 @@
 //! combinators, keeping selector resolution constant-time and predictable across live theme
 //! switches.
 
-use xilem::Color;
-use xilem::masonry::core::{DefaultProperties, PropertySet, PropertyStack, Selector};
-use xilem::masonry::layout::{AsUnit, Dim, Length};
-use xilem::masonry::properties::{
+use masonry::core::{DefaultProperties, PropertySet, PropertyStack, Selector};
+use masonry::layout::{AsUnit, Dim, Length};
+use masonry::peniko::Color;
+use masonry::properties::{
     Background, BorderColor, BorderWidth, BoxShadow, CaretColor, CheckmarkColor,
     CheckmarkStrokeWidth, ContentColor, CornerRadius, Dimensions, Gap, Padding, PlaceholderColor,
     SelectionColor, ThumbColor, ThumbRadius, TrackColor, TrackThickness,
 };
-use xilem::masonry::widgets::{
+use masonry::widgets::{
     Button, Checkbox, Divider, Flex, Label, ProgressBar, Prose, RadioButton, SizedBox, Slider,
     Spinner, Switch, TextArea, TextInput,
 };
