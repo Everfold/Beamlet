@@ -13,6 +13,7 @@ pub mod menu;
 pub mod navigation;
 pub mod progress;
 pub mod range_slider;
+pub mod rich_text;
 pub mod scaffold;
 pub mod search_bar;
 pub mod segmented_button;
@@ -57,6 +58,7 @@ pub use progress::{
     determinate_circular_progress, linear_progress, small_circular_progress,
 };
 pub use range_slider::{RangeSlider, RangeSliderWidget, range_slider};
+pub use rich_text::{RichTextAction, RichTextWidget, SpanStyle, TextSpan, UiRichProse, rich_prose};
 pub use scaffold::scaffold;
 pub use search_bar::{UiSearchBar, search_bar};
 pub use segmented_button::{multi_choice_segmented_button, segmented_button};
