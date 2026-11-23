@@ -2,17 +2,19 @@
 
 use std::marker::PhantomData;
 
-use tracing::{Span, trace_span};
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Size};
-use xilem::masonry::accesskit::{Node, Role};
-use xilem::masonry::core::{
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
     AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PropertiesRef,
     RegisterCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
-use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LayoutSize, LenReq, Length};
-use xilem::{Pod, ViewCtx, WidgetView};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Size};
+use masonry::layout::{LayoutSize, LenReq, Length};
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 const CLAMP_CHILD_ID: ViewId = ViewId::new(0x5549_3801);
 

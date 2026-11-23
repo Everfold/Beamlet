@@ -4,21 +4,24 @@
 
 use std::sync::Arc;
 
-use xilem::dpi::LogicalSize;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, portal, sized_box, zstack};
-use xilem::{AppState, EventLoop, WidgetView, Xilem};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_adwaita::{
-    AdwaitaAccent, AdwaitaTheme, Brightness, action_row, adwaita_window, alert_dialog, banner,
-    breakpoint_bin, clamp, clickable_action_row, combo_row, destructive_button, entry_row,
-    expander_row, header_bar, header_bar_with_title, icon_button, icons, preferences_group,
-    status_page, switch_row, view_switcher, view_switcher_bar,
+    AdwaitaAccent, AdwaitaTheme, Brightness, action_row, alert_dialog, banner, breakpoint_bin,
+    clamp, clickable_action_row, combo_row, destructive_button, entry_row, expander_row,
+    header_bar, header_bar_with_title, icon_button, icons, preferences_group, status_page,
+    switch_row, view_switcher, view_switcher_bar,
 };
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, portal, sized_box, zstack,
+};
+use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct PrefsApp {
-    window_id: xilem::WindowId,
+    window_id: WindowId,
     running: bool,
     brightness: Brightness,
     accent: AdwaitaAccent,
@@ -42,7 +45,7 @@ impl AppState for PrefsApp {
 impl Default for PrefsApp {
     fn default() -> Self {
         Self {
-            window_id: xilem::WindowId::next(),
+            window_id: WindowId::next(),
             running: true,
             brightness: Brightness::Light,
             accent: AdwaitaAccent::Blue,
@@ -340,19 +343,19 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
 fn main() {
     let initial = PrefsApp::default();
     let props = xilem_adwaita::build_default_properties(&initial.current_theme().to_spec());
-    let app = Xilem::new(initial, |state: &mut PrefsApp| {
-        let theme = state.current_theme();
+    AppRunner::new(initial, |state: &mut PrefsApp| {
+        let spec = state.current_theme().to_spec();
         let wid = state.window_id;
         std::iter::once(
-            adwaita_window(wid, "GNOME Libadwaita 首选项", &theme, app_view(state)).with_options(
-                |opts| {
-                    opts.on_close(|s: &mut PrefsApp| s.running = false)
+            desktop_window(wid, "GNOME Libadwaita 首选项", &spec, app_view(state)).with_config(
+                |cfg| {
+                    cfg.on_close(|s: &mut PrefsApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(980.0, 740.0))
                 },
             ),
         )
     })
-    .with_default_properties(props);
-    app.run_in(EventLoop::with_user_event())
-        .expect("adwaita_preferences event loop exited cleanly");
+    .with_default_properties(props)
+    .run()
+    .expect("adwaita_preferences event loop exited cleanly");
 }

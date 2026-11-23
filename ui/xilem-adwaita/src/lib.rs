@@ -17,7 +17,7 @@ pub use components::{
     view_switcher, view_switcher_bar,
 };
 pub use palette::{AdwaitaAccent, adwaita_palette};
-pub use theme::{AdwaitaTheme, adwaita_scope, adwaita_window};
+pub use theme::{AdwaitaTheme, adwaita_scope};
 pub use xilem_ui_core::components::*;
 pub use xilem_ui_core::foundation::{
     AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,

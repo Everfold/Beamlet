@@ -8,6 +8,11 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+masonry.workspace = true
 tracing.workspace = true
-xilem.workspace = true
 xilem-ui-core.workspace = true
+xilem_core.workspace = true
+xilem_masonry.workspace = true
+
+[dev-dependencies]
+xilem-ui-winit.workspace = true

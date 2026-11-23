@@ -1,6 +1,6 @@
 //! GNOME Libadwaita surface tokens and 9 named system accent colors.
 
-use xilem::Color;
+use masonry::peniko::Color;
 use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// GNOME Libadwaita system accent color presets (`org.gnome.desktop.interface accent-color`).
