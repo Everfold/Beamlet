@@ -9,21 +9,24 @@ use std::time::Instant;
 
 use anyhow::{Context as _, bail};
 use image::{ImageFormat, RgbaImage};
-use masonry_testing::{TestHarness, TestHarnessParams};
-use xilem::core::{
-    DynMessage, MessageCtx, ProxyError, RawProxy, SendMessage, View, ViewId, ViewPathTracker as _,
-};
-use xilem::kurbo::Point;
-use xilem::masonry::app::RenderRoot;
-use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
-use xilem::masonry::core::{
+use masonry::app::RenderRoot;
+use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
+use masonry::core::{
     DefaultProperties, KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef,
     WindowEvent,
 };
-use xilem::masonry::dpi::PhysicalSize;
-use xilem::masonry::theme::{BACKGROUND_COLOR, default_property_set};
-use xilem::masonry::widgets::Passthrough;
-use xilem::{AnyWidgetView, Color, ViewCtx, WidgetView};
+use masonry::dpi::PhysicalSize;
+use masonry::kurbo::Point;
+use masonry::peniko::Color;
+use masonry::theme::{BACKGROUND_COLOR, default_property_set};
+use masonry::widgets::Passthrough;
+use masonry_testing::{TestHarness, TestHarnessParams};
+use xilem_core::{
+    DynMessage, MessageCtx, ProxyError, RawProxy, SendMessage, View, ViewId, ViewPathTracker as _,
+};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
 
 #[derive(Debug)]
 struct NoopRawProxy;
@@ -350,13 +353,13 @@ impl<State: 'static> PreviewHarness<State> {
             });
             *self.view_ctx.environment() = msg_ctx.finish().0;
             match result {
-                xilem::core::MessageResult::Action(()) => {
+                xilem_core::MessageResult::Action(()) => {
                     self.rebuild();
                 }
-                xilem::core::MessageResult::RequestRebuild => {
+                xilem_core::MessageResult::RequestRebuild => {
                     self.rebuild_current_view();
                 }
-                xilem::core::MessageResult::Nop | xilem::core::MessageResult::Stale => {}
+                xilem_core::MessageResult::Nop | xilem_core::MessageResult::Stale => {}
             }
         }
     }
@@ -752,9 +755,9 @@ fn collect_matching_type(
 
 #[cfg(test)]
 mod tests {
-    use xilem::masonry::layout::AsUnit;
-    use xilem::style::Style as _;
-    use xilem::view::{flex_col, label, text_button};
+    use masonry::layout::AsUnit;
+    use xilem_masonry::style::Style as _;
+    use xilem_masonry::view::{flex_col, label, text_button};
 
     use super::*;
 

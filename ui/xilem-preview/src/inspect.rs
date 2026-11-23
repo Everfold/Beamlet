@@ -3,11 +3,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
+use masonry::accesskit::Role;
+use masonry::app::RenderRoot;
+use masonry::core::{Widget, WidgetId, WidgetRef};
+use masonry::peniko::Color;
 use serde::Serialize;
-use xilem::Color;
-use xilem::masonry::accesskit::Role;
-use xilem::masonry::app::RenderRoot;
-use xilem::masonry::core::{Widget, WidgetId, WidgetRef};
 
 use crate::harness::PreviewHarness;
 
@@ -686,10 +686,10 @@ fn collect_visible_widgets(
 
 #[cfg(test)]
 mod tests {
-    use xilem::masonry::layout::AsUnit;
-    use xilem::masonry::theme::{BACKGROUND_COLOR, TEXT_COLOR};
-    use xilem::style::Style as _;
-    use xilem::view::{flex_col, label, sized_box, text_button};
+    use masonry::layout::AsUnit;
+    use masonry::theme::{BACKGROUND_COLOR, TEXT_COLOR};
+    use xilem_masonry::style::Style as _;
+    use xilem_masonry::view::{flex_col, label, sized_box, text_button};
 
     use super::*;
     use crate::harness::PreviewConfig;

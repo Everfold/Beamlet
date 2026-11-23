@@ -10,7 +10,9 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 image.workspace = true
+masonry.workspace = true
 masonry_testing.workspace = true
 serde.workspace = true
 tokio.workspace = true
-xilem.workspace = true
+xilem_core.workspace = true
+xilem_masonry.workspace = true
