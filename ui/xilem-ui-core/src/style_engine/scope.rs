@@ -462,4 +462,30 @@ mod tests {
         assert!(Arc::ptr_eq(&a, &b));
         assert!(!Arc::ptr_eq(&a, &c));
     }
+
+    #[test]
+    fn cached_default_properties_enforces_lru_capacity_bound() {
+        let mut first = DesignSpec::neutral_fallback(Brightness::Light);
+        first.metrics.button_height = 500.0;
+        let first_arc = cached_default_properties(&first);
+
+        for idx in 1..=20 {
+            let mut other = DesignSpec::neutral_fallback(Brightness::Light);
+            other.metrics.button_height = 500.0 + f64::from(idx);
+            let _ = cached_default_properties(&other);
+        }
+
+        let cache_len = DEFAULT_PROPS_CACHE
+            .lock()
+            .expect("default properties cache mutex poisoned")
+            .len();
+        assert!(
+            cache_len <= 16,
+            "cache exceeded capacity bound 16: {cache_len}"
+        );
+
+        // First entry must have been evicted by 20 subsequent distinct inserts.
+        let reloaded = cached_default_properties(&first);
+        assert!(!Arc::ptr_eq(&first_arc, &reloaded));
+    }
 }

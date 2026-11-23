@@ -1,4 +1,9 @@
-//! Synthesizes Masonry [`DefaultProperties`] and class `PropertyStack` layers from a [`DesignSpec`].
+//! Synthesizes Masonry [`DefaultProperties`] and shallow class `PropertyStack` layers from a [`DesignSpec`].
+//!
+//! Every selector emitted here matches at most **one** semantic class (plus optional Masonry
+//! pseudo-states `hovered`, `active`, `focused`, `disabled`) without descendant or sibling
+//! combinators, keeping selector resolution constant-time and predictable across live theme
+//! switches.
 
 use xilem::Color;
 use xilem::masonry::core::{DefaultProperties, PropertySet, PropertyStack, Selector};
@@ -32,6 +37,7 @@ fn insert_button_variant(
     radius: f64,
     padding: Padding,
     dims: Option<Dimensions>,
+    shadow: Option<BoxShadow>,
 ) {
     let states = resolve_interactive_colors(
         base,
@@ -48,6 +54,9 @@ fn insert_button_variant(
         .with(padding);
     if let Some(d) = dims {
         base_set = base_set.with(d);
+    }
+    if let Some(s) = shadow {
+        base_set = base_set.with(s);
     }
     if let Some((b_col, b_w)) = border {
         base_set = base_set
@@ -89,6 +98,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         std_pad,
         btn_dims,
+        None,
     );
     let secondary_border = if spec.control_border == ControlBorderStyle::BorderlessFlat {
         None
@@ -105,6 +115,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         std_pad,
         btn_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -116,10 +127,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         std_pad,
         btn_dims,
-    );
-    stack.push_layer(
-        Selector::classes(&[classes::BTN_ELEVATED]),
-        PropertySet::new().with(spec.box_shadow(ElevationLevel::Level1)),
+        Some(spec.box_shadow(ElevationLevel::Level1)),
     );
     insert_button_variant(
         &mut stack,
@@ -131,6 +139,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         std_pad,
         btn_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -142,6 +151,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         Padding::from_vh(0.px(), 10.px()),
         btn_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -153,6 +163,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         std_pad,
         btn_dims,
+        None,
     );
 
     let icon_dims = Some(Dimensions::fixed(
@@ -170,6 +181,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -181,6 +193,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -192,6 +205,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -203,6 +217,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -214,6 +229,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -225,6 +241,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -236,6 +253,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -247,10 +265,12 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.icon_btn_radius,
         icon_pad,
         icon_dims,
+        None,
     );
 
     let fab_pad = Padding::all(16.px());
     let fab_dims = Some(Dimensions::height(56.px()));
+    let fab_shadow = Some(spec.box_shadow(ElevationLevel::Level3));
     for (cls, bg, fg) in [
         (
             classes::FAB_PRIMARY,
@@ -269,10 +289,8 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
             p.on_tertiary_container,
         ),
     ] {
-        insert_button_variant(&mut stack, cls, spec, bg, fg, None, 16.0, fab_pad, fab_dims);
-        stack.push_layer(
-            Selector::classes(&[cls]),
-            PropertySet::new().with(spec.box_shadow(ElevationLevel::Level3)),
+        insert_button_variant(
+            &mut stack, cls, spec, bg, fg, None, 16.0, fab_pad, fab_dims, fab_shadow,
         );
     }
 
@@ -288,6 +306,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.chip_radius,
         chip_pad,
         chip_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -299,6 +318,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.chip_radius,
         chip_pad,
         chip_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -310,6 +330,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.chip_radius,
         chip_pad,
         chip_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -321,6 +342,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.chip_radius,
         chip_pad,
         chip_dims,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -332,6 +354,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.chip_radius,
         chip_pad,
         chip_dims,
+        None,
     );
 
     insert_button_variant(
@@ -344,6 +367,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.nav_pill_radius,
         Padding::from_vh(6.px(), 10.px()),
         None,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -354,6 +378,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         m.nav_pill_radius,
         Padding::from_vh(6.px(), 10.px()),
+        None,
         None,
     );
 
@@ -367,6 +392,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.button_radius,
         Padding::from_vh(6.px(), 14.px()),
         None,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -377,6 +403,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Some((p.border_strong, 1.0)),
         m.button_radius,
         Padding::from_vh(6.px(), 14.px()),
+        None,
         None,
     );
 
@@ -390,6 +417,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         m.nav_pill_radius,
         Padding::from_vh(8.px(), 12.px()),
         None,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -400,6 +428,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         m.nav_pill_radius,
         Padding::from_vh(8.px(), 12.px()),
+        None,
         None,
     );
 
@@ -413,6 +442,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         (m.menu_radius - 2.0).max(4.0),
         Padding::from_vh(8.px(), 12.px()),
         None,
+        None,
     );
     insert_button_variant(
         &mut stack,
@@ -423,6 +453,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         (m.menu_radius - 2.0).max(4.0),
         Padding::from_vh(8.px(), 12.px()),
+        None,
         None,
     );
 
@@ -435,6 +466,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
         (m.button_radius - 2.0).max(4.0),
         Padding::from_vh(8.px(), 12.px()),
+        None,
         None,
     );
 
@@ -684,36 +716,10 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
     });
     props.insert::<Spinner, _>(TrackThickness(Length::px(3.5)));
 
-    // TextInput property stack (FocusFrame owns outer focus ring / bottom bar)
-    let mut tf_stack = PropertyStack::new();
+    // TextInput + composite UiTextField Flex host share the same shallow outlined/filled rules.
     let base_pad = Padding::from_vh(m.input_pad_v.px(), m.input_pad_h.px());
-    tf_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_OUTLINED]),
-        PropertySet::new()
-            .with(Background::Color(match spec.brightness {
-                Brightness::Light => p.surface,
-                Brightness::Dark => p.surface_low,
-            }))
-            .with(BorderColor::new(p.border_strong))
-            .with(BorderWidth { width: 1.px() })
-            .with(CornerRadius {
-                radius: m.input_radius.px(),
-            })
-            .with(base_pad)
-            .with(PlaceholderColor::new(p.text_secondary)),
-    );
-    tf_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_FILLED]),
-        PropertySet::new()
-            .with(Background::Color(p.surface_highest))
-            .with(BorderColor::new(p.border))
-            .with(BorderWidth { width: 1.px() })
-            .with(CornerRadius {
-                radius: m.input_radius.px(),
-            })
-            .with(base_pad)
-            .with(PlaceholderColor::new(p.text_secondary)),
-    );
+    let mut tf_stack = PropertyStack::new();
+    push_text_field_rules(&mut tf_stack, spec, base_pad, true);
     tf_stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_FLUSH]),
         PropertySet::new()
@@ -725,97 +731,76 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(Dimensions::height(Dim::MaxContent))
             .with(PlaceholderColor::new(p.text_secondary)),
     );
-    for cls in [classes::TEXT_FIELD_OUTLINED, classes::TEXT_FIELD_FILLED] {
-        tf_stack.push_layer(
-            Selector::classes(&[cls]).with_hovered(true),
-            PropertySet::new().with(BorderColor::new(p.text_primary)),
-        );
-        tf_stack.push_layer(
-            Selector::classes(&[cls]).with_focused(true),
-            PropertySet::new()
-                .with(BorderColor::new(p.accent))
-                .with(BorderWidth { width: 1.px() }),
-        );
-    }
-    tf_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_ERROR]),
-        PropertySet::new()
-            .with(BorderColor::new(p.error))
-            .with(BorderWidth { width: 1.px() }),
-    );
-    tf_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_OUTLINED]).with_disabled(true),
-        PropertySet::new()
-            .with(Background::Color(spec.disabled_container()))
-            .with(BorderColor::new(with_opacity(p.text_primary, 0.16))),
-    );
-    tf_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_FILLED]).with_disabled(true),
-        PropertySet::new()
-            .with(Background::Color(spec.disabled_container()))
-            .with(BorderColor::new(Color::TRANSPARENT)),
-    );
     props.insert_stack::<TextInput>(tf_stack);
 
-    // Composite UiTextField rows (prefix/suffix/trailing action) host a flush TextInput inside Flex.
     let mut flex_stack = PropertyStack::new();
-    let row_pad = Padding::from_vh(m.input_pad_v.px(), m.input_pad_h.px());
-    flex_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_OUTLINED]),
-        PropertySet::new()
-            .with(Background::Color(match spec.brightness {
-                Brightness::Light => p.surface,
-                Brightness::Dark => p.surface_low,
-            }))
-            .with(BorderColor::new(p.border_strong))
-            .with(BorderWidth { width: 1.px() })
-            .with(CornerRadius {
-                radius: m.input_radius.px(),
-            })
-            .with(row_pad),
-    );
-    flex_stack.push_layer(
-        Selector::classes(&[classes::TEXT_FIELD_FILLED]),
-        PropertySet::new()
-            .with(Background::Color(p.surface_highest))
-            .with(BorderColor::new(p.border))
-            .with(BorderWidth { width: 1.px() })
-            .with(CornerRadius {
-                radius: m.input_radius.px(),
-            })
-            .with(row_pad),
-    );
+    push_text_field_rules(&mut flex_stack, spec, base_pad, false);
+    props.insert_stack::<Flex>(flex_stack);
+}
+
+fn push_text_field_rules(
+    stack: &mut PropertyStack,
+    spec: &DesignSpec,
+    pad: Padding,
+    include_placeholder: bool,
+) {
+    let p = &spec.palette;
+    let m = &spec.metrics;
+    let mut outlined = PropertySet::new()
+        .with(Background::Color(match spec.brightness {
+            Brightness::Light => p.surface,
+            Brightness::Dark => p.surface_low,
+        }))
+        .with(BorderColor::new(p.border_strong))
+        .with(BorderWidth { width: 1.px() })
+        .with(CornerRadius {
+            radius: m.input_radius.px(),
+        })
+        .with(pad);
+    let mut filled = PropertySet::new()
+        .with(Background::Color(p.surface_highest))
+        .with(BorderColor::new(p.border))
+        .with(BorderWidth { width: 1.px() })
+        .with(CornerRadius {
+            radius: m.input_radius.px(),
+        })
+        .with(pad);
+    if include_placeholder {
+        outlined = outlined.with(PlaceholderColor::new(p.text_secondary));
+        filled = filled.with(PlaceholderColor::new(p.text_secondary));
+    }
+    stack.push_layer(Selector::classes(&[classes::TEXT_FIELD_OUTLINED]), outlined);
+    stack.push_layer(Selector::classes(&[classes::TEXT_FIELD_FILLED]), filled);
     for cls in [classes::TEXT_FIELD_OUTLINED, classes::TEXT_FIELD_FILLED] {
-        flex_stack.push_layer(
+        stack.push_layer(
             Selector::classes(&[cls]).with_hovered(true),
             PropertySet::new().with(BorderColor::new(p.text_primary)),
         );
-        flex_stack.push_layer(
+        stack.push_layer(
             Selector::classes(&[cls]).with_focused(true),
             PropertySet::new()
                 .with(BorderColor::new(p.accent))
                 .with(BorderWidth { width: 1.px() }),
         );
     }
-    flex_stack.push_layer(
+    stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_ERROR]),
         PropertySet::new()
             .with(BorderColor::new(p.error))
             .with(BorderWidth { width: 1.px() }),
     );
-    flex_stack.push_layer(
+    stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_OUTLINED]).with_disabled(true),
         PropertySet::new()
             .with(Background::Color(spec.disabled_container()))
             .with(BorderColor::new(with_opacity(p.text_primary, 0.16))),
     );
-    flex_stack.push_layer(
+    stack.push_layer(
         Selector::classes(&[classes::TEXT_FIELD_FILLED]).with_disabled(true),
         PropertySet::new()
             .with(Background::Color(spec.disabled_container()))
             .with(BorderColor::new(Color::TRANSPARENT)),
     );
-    props.insert_stack::<Flex>(flex_stack);
 }
 
 /// Builds a complete Masonry [`DefaultProperties`] bundle for `spec`.
@@ -826,4 +811,21 @@ pub fn build_default_properties(spec: &DesignSpec) -> DefaultProperties {
     configure_surfaces(&mut props, spec);
     configure_inputs(&mut props, spec);
     props
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_default_properties_handles_light_and_dark_specs_deterministically() {
+        for brightness in [Brightness::Light, Brightness::Dark] {
+            let spec = DesignSpec::neutral_fallback(brightness);
+            let a = format!("{:?}", build_default_properties(&spec));
+            let b = format!("{:?}", build_default_properties(&spec));
+            assert!(!a.is_empty());
+            assert!(a.contains("PropertyStack"));
+            assert_eq!(a.len(), b.len());
+        }
+    }
 }
