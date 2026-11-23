@@ -1,7 +1,9 @@
-//! Self-owned desktop Winit + `masonry_winit` host runtime for Beamlet UI.
+//! Self-owned desktop Winit + `masonry_winit` host runtime for Brocado.
 //!
-//! Replaces the monolithic top-level `xilem` runner shell with direct control over
-//! [`WindowChrome`], compositor [`WindowBackdrop`](xilem_ui_core::tokens::WindowBackdrop) hints,
+//! Upstream provenance: replaces upstream `linebender/xilem` (`xilem/src/lib.rs`) as Brocado's
+//! desktop launcher shell, building directly on upstream `masonry_winit` while adapting driver
+//! and window lifecycle patterns from `linebender/xilem` (`xilem/src/{app,driver,window_options,window_view}.rs`)
+//! with direct control over [`WindowChrome`], compositor [`WindowBackdrop`](brocado_core::tokens::WindowBackdrop) hints,
 //! raw Winit attributes, and reactive [`DesktopWindow`] lifecycles.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
@@ -27,10 +29,10 @@ pub use window::{
 
 #[cfg(test)]
 mod tests {
+    use brocado_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
     use masonry::dpi::LogicalSize;
     use masonry_winit::winit::window::Theme as WinitTheme;
     use xilem_masonry::view::label;
-    use xilem_ui_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
 
     use super::*;
 

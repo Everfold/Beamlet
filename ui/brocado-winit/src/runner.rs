@@ -1,4 +1,7 @@
 //! Desktop application event loop builder ([`AppRunner`]) and [`AppState`] trait.
+//!
+//! Upstream provenance: `AppRunner`, `AppState`, `ExitOnClose`, and `new_simple_with_tokio` are
+//! adapted from upstream `linebender/xilem` (`xilem/src/app.rs`, `Xilem` / `ExitOnClose`).
 
 use std::iter::Once;
 use std::sync::Arc;

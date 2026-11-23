@@ -1,5 +1,5 @@
 [package]
-name = "xilem-ui-winit"
+name = "brocado-winit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,10 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+brocado-core.workspace = true
 masonry.workspace = true
 masonry_winit.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 xilem_core.workspace = true
 xilem_masonry.workspace = true
-xilem-ui-core.workspace = true

@@ -1,7 +1,13 @@
 //! Reactive [`DesktopWindow`] view wrapping [`MasonryRoot`] and OS window attributes.
+//!
+//! Upstream provenance: `PodWindow` and `DesktopWindow`'s `View<State, (), ViewCtx>` delegation
+//! to `MasonryRoot` are adapted from upstream `linebender/xilem` (`xilem/src/window_view.rs`,
+//! `PodWindow` / `WindowView`), extended with Brocado `DesignSpec`, `WindowBackdrop`, and OS theme polarity sync.
 
 use std::sync::Arc;
 
+use brocado_core::style_engine::{cached_default_properties, ui_scope_arc};
+use brocado_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
 use masonry::core::{DefaultProperties, FromDynWidget};
 use masonry::peniko::Color;
 use masonry::properties::Dimensions;
@@ -11,8 +17,6 @@ use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewElement, ViewMarker};
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::sized_box;
 use xilem_masonry::{InitialRootWidget, MasonryRoot, ViewCtx, WidgetView};
-use xilem_ui_core::style_engine::{cached_default_properties, ui_scope_arc};
-use xilem_ui_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
 
 use crate::config::{WindowChrome, WindowConfig};
 

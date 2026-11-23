@@ -1,4 +1,7 @@
 //! Custom [`AppDriver`] connecting [`DesktopWindow`]s with [`masonry_winit`].
+//!
+//! Upstream provenance: `DesktopDriver`, `WindowProxy`, `async_action`, and `AppDriver` dispatch/lifecycle
+//! are adapted from upstream `linebender/xilem` (`xilem/src/driver.rs`, `MasonryDriver`).
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;

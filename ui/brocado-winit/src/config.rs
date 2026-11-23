@@ -1,13 +1,17 @@
 //! Desktop window configuration, chrome presets, and reactive attribute diffing.
+//!
+//! Upstream provenance: reactive vs initial `WindowAttributes` diffing structure is adapted from
+//! upstream `linebender/xilem` (`xilem/src/window_options.rs`, `WindowOptions`), extended with
+//! Brocado `WindowChrome`, `WindowBackdrop` translucency, `Brightness` theme sync, and `raw_attributes` hook.
 
 use std::sync::Arc;
 
+use brocado_core::tokens::{Brightness, WindowBackdrop};
 use masonry_winit::winit::dpi::{Position, Size};
 use masonry_winit::winit::window::{
     Cursor, Icon, Theme as WinitTheme, Window as WinitWindow, WindowAttributes, WindowButtons,
     WindowLevel,
 };
-use xilem_ui_core::tokens::{Brightness, WindowBackdrop};
 
 /// Window frame chrome strategy decoupling native OS decorations from custom titlebars.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
