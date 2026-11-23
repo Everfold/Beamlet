@@ -6,8 +6,10 @@
 pub mod prelude;
 pub mod theme;
 
-pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window, ui_window_with_backdrop};
-pub use xilem_ui_core as core;
+pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
+#[cfg(feature = "winit")]
+pub use theme::{themed_window, themed_window_with_backdrop};
+pub use xilem_ui_core as core_ui;
 pub use xilem_ui_core::components;
 pub use xilem_ui_core::foundation::{
     BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
@@ -24,6 +26,19 @@ pub use xilem_ui_core::tokens::{
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowBackdrop,
     WindowSizeClass,
+};
+pub use xilem_ui_core::{
+    AnyWidgetView, Color, FontWeight, InitialRootWidget, InsertNewline, MasonryRoot, Pod,
+    TextAlign, ViewCtx, WidgetView, WidgetViewSequence, core, dpi, kurbo, masonry, reactive, style,
+    view,
+};
+
+#[cfg(feature = "winit")]
+pub use xilem_ui_winit as host;
+#[cfg(feature = "winit")]
+pub use xilem_ui_winit::{
+    AppRunner, AppState, DesktopWindow, EventLoop, EventLoopBuilder, ExitOnClose, WindowChrome,
+    WindowConfig, WindowId, desktop_window, desktop_window_arc,
 };
 
 #[cfg(feature = "md3")]

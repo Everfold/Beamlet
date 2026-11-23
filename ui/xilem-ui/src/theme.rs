@@ -2,14 +2,16 @@
 
 use std::sync::{Arc, LazyLock, Mutex};
 
-use xilem::masonry::core::DefaultProperties;
-use xilem::masonry::core::FromDynWidget;
-use xilem::{Color, WidgetView, WindowId, WindowView};
-use xilem_ui_core::style_engine::scope::{
-    UiScope, ui_scope_arc as core_ui_scope_arc, ui_window_arc as core_ui_window_arc,
-    ui_window_arc_with_backdrop as core_ui_window_arc_with_backdrop,
-};
+use masonry::core::DefaultProperties;
+use masonry::core::FromDynWidget;
+use masonry::peniko::Color;
+use xilem_masonry::WidgetView;
+use xilem_ui_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
 use xilem_ui_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
+#[cfg(feature = "winit")]
+use xilem_ui_winit::{
+    DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop,
+};
 
 type ThemeSpecCache = Vec<(UiTheme, Arc<DesignSpec>)>;
 
@@ -346,34 +348,36 @@ where
     core_ui_scope_arc(theme.cached_spec(), child)
 }
 
-/// Wraps an entire Xilem desktop window with backdrop color, Masonry `DefaultProperties`, and `UiScope` synced to `theme`.
-pub fn ui_window<State: 'static, V>(
+/// Wraps an entire desktop [`DesktopWindow`] with backdrop color, Masonry `DefaultProperties`, OS theme polarity, and `UiScope` synced to `theme`.
+#[cfg(feature = "winit")]
+pub fn themed_window<State: 'static, V>(
     window_id: WindowId,
     title: impl Into<String>,
     theme: &UiTheme,
     child: V,
-) -> WindowView<State>
+) -> DesktopWindow<State>
 where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    core_ui_window_arc(window_id, title, &theme.cached_spec(), child)
+    desktop_window_arc(window_id, title, &theme.cached_spec(), child)
 }
 
-/// Wraps an entire Xilem desktop window with an explicit [`WindowBackdrop`] override, Masonry
-/// `DefaultProperties`, and `UiScope` synced to `theme`.
-pub fn ui_window_with_backdrop<State: 'static, V>(
+/// Wraps an entire desktop [`DesktopWindow`] with an explicit [`WindowBackdrop`] override, Masonry
+/// `DefaultProperties`, OS theme polarity, and `UiScope` synced to `theme`.
+#[cfg(feature = "winit")]
+pub fn themed_window_with_backdrop<State: 'static, V>(
     window_id: WindowId,
     title: impl Into<String>,
     theme: &UiTheme,
     backdrop: WindowBackdrop,
     child: V,
-) -> WindowView<State>
+) -> DesktopWindow<State>
 where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    core_ui_window_arc_with_backdrop(window_id, title, &theme.cached_spec(), backdrop, child)
+    desktop_window_arc_with_backdrop(window_id, title, &theme.cached_spec(), backdrop, child)
 }
 
 #[cfg(test)]
