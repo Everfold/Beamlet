@@ -5,6 +5,8 @@ use std::fmt::Write as _;
 
 use serde::Serialize;
 use xilem::Color;
+use xilem::masonry::accesskit::Role;
+use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::{Widget, WidgetId, WidgetRef};
 
 use crate::harness::PreviewHarness;
@@ -493,6 +495,195 @@ pub fn lint_contrast(checks: &[ContrastCheck]) -> Vec<ContrastIssue> {
         .collect()
 }
 
+/// Automated AccessKit semantics diagnostic produced by [`lint_accessibility`] or
+/// [`lint_accessibility_with`].
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct A11yIssue {
+    /// Severity tier.
+    pub severity: IssueSeverity,
+    /// Diagnostic category (`"missing-access-node"`, `"invalid-role"`, `"numeric-out-of-range"`,
+    /// `"non-modal-dialog"`).
+    pub kind: &'static str,
+    /// Offending widget ID.
+    pub widget_id: u64,
+    /// Offending widget type name.
+    pub widget_type: String,
+    /// Human-readable description of the accessibility anomaly.
+    pub message: String,
+}
+
+/// Customizes widget type allowlists inspected by [`lint_accessibility_with`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct A11yLintConfig {
+    /// Widget `short_type_name()` values treated as interactive/semantic controls that must
+    /// publish an AccessKit node with a concrete semantic `Role`.
+    pub interactive_types: Vec<String>,
+    /// Container `short_type_name()` values that represent modal dialog wrappers when exposing
+    /// `Role::Dialog`.
+    pub dialog_types: Vec<String>,
+}
+
+impl Default for A11yLintConfig {
+    fn default() -> Self {
+        Self {
+            interactive_types: [
+                "Button",
+                "TextArea",
+                "Checkbox",
+                "Switch",
+                "Slider",
+                "RadioButton",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+            dialog_types: Vec::new(),
+        }
+    }
+}
+
+impl A11yLintConfig {
+    /// Appends additional interactive widget type names to verify for valid AccessKit roles.
+    #[must_use]
+    pub fn with_interactive_types<I, S>(mut self, types: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.interactive_types
+            .extend(types.into_iter().map(Into::into));
+        self
+    }
+
+    /// Appends widget type names checked for `modal = true` when exposing `Role::Dialog`.
+    #[must_use]
+    pub fn with_dialog_types<I, S>(mut self, types: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.dialog_types.extend(types.into_iter().map(Into::into));
+        self
+    }
+
+    fn is_interactive(&self, type_name: &str) -> bool {
+        self.interactive_types.iter().any(|t| t == type_name)
+    }
+
+    fn is_dialog_container(&self, type_name: &str) -> bool {
+        self.dialog_types.iter().any(|t| t == type_name)
+    }
+}
+
+/// Audits the live AccessKit tree of `harness` using [`A11yLintConfig::default()`].
+pub fn lint_accessibility<State: 'static>(harness: &mut PreviewHarness<State>) -> Vec<A11yIssue> {
+    lint_accessibility_with(harness, &A11yLintConfig::default())
+}
+
+/// Audits the live AccessKit tree of `harness` using `config` for semantic roles, numeric bounds,
+/// and modal dialog invariants.
+pub fn lint_accessibility_with<State: 'static>(
+    harness: &mut PreviewHarness<State>,
+    config: &A11yLintConfig,
+) -> Vec<A11yIssue> {
+    let inner = harness.inner_harness_mut();
+    let (visual_layers, _) = inner.redraw();
+    let mut visited = HashSet::new();
+    let mut nodes: Vec<(WidgetId, String)> = Vec::new();
+    {
+        let rr: &RenderRoot = inner.render_root();
+        let root = rr.get_layer_root(0);
+        collect_visible_widgets(&root, &mut visited, &mut nodes);
+        for layer in &visual_layers.layers {
+            if !visited.contains(&layer.widget_id)
+                && let Some(layer_root) = rr.get_widget(layer.widget_id)
+            {
+                collect_visible_widgets(&layer_root, &mut visited, &mut nodes);
+            }
+        }
+    }
+
+    let mut issues = Vec::new();
+    for (wid, type_name) in nodes {
+        let raw_id = wid.to_raw();
+        let is_interactive = config.is_interactive(&type_name);
+        let access_node = inner.access_node(wid);
+
+        if is_interactive {
+            let Some(ref a11y) = access_node else {
+                issues.push(A11yIssue {
+                    severity: IssueSeverity::Error,
+                    kind: "missing-access-node",
+                    widget_id: raw_id,
+                    widget_type: type_name,
+                    message: format!("interactive widget #{raw_id} lacks an AccessKit node"),
+                });
+                continue;
+            };
+            let role = a11y.role();
+            if matches!(role, Role::Unknown | Role::GenericContainer) {
+                issues.push(A11yIssue {
+                    severity: IssueSeverity::Error,
+                    kind: "invalid-role",
+                    widget_id: raw_id,
+                    widget_type: type_name.clone(),
+                    message: format!(
+                        "{type_name} #{raw_id} published non-semantic AccessKit role {role:?}"
+                    ),
+                });
+            }
+            if matches!(role, Role::Slider | Role::ProgressIndicator)
+                && let (Some(val), Some(min), Some(max)) = (
+                    a11y.numeric_value(),
+                    a11y.data().min_numeric_value(),
+                    a11y.data().max_numeric_value(),
+                )
+                && (val < min - 1e-6 || val > max + 1e-6)
+            {
+                issues.push(A11yIssue {
+                    severity: IssueSeverity::Error,
+                    kind: "numeric-out-of-range",
+                    widget_id: raw_id,
+                    widget_type: type_name.clone(),
+                    message: format!(
+                        "{type_name} #{raw_id} numeric_value={val} outside [{min}, {max}]"
+                    ),
+                });
+            }
+        }
+
+        if let Some(a11y) = access_node
+            && (a11y.role() == Role::Dialog
+                || (config.is_dialog_container(&type_name) && a11y.role() == Role::Dialog))
+            && !a11y.is_modal()
+        {
+            issues.push(A11yIssue {
+                severity: IssueSeverity::Error,
+                kind: "non-modal-dialog",
+                widget_id: raw_id,
+                widget_type: type_name,
+                message: format!("dialog #{raw_id} exposed Role::Dialog without is_modal=true"),
+            });
+        }
+    }
+    issues
+}
+
+fn collect_visible_widgets(
+    node: &WidgetRef<'_, dyn Widget>,
+    visited: &mut HashSet<WidgetId>,
+    out: &mut Vec<(WidgetId, String)>,
+) {
+    let wid = node.id();
+    if !visited.insert(wid) || node.ctx().is_stashed() {
+        return;
+    }
+    out.push((wid, node.inner().short_type_name().to_string()));
+    for child in node.children() {
+        collect_visible_widgets(&child, visited, out);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use xilem::masonry::layout::AsUnit;
@@ -689,6 +880,12 @@ mod tests {
         assert!(
             contrast_issues.is_empty(),
             "unexpected contrast issues: {contrast_issues:?}"
+        );
+
+        let a11y_issues = lint_accessibility(&mut h);
+        assert!(
+            a11y_issues.is_empty(),
+            "unexpected accessibility issues: {a11y_issues:?}"
         );
     }
 }

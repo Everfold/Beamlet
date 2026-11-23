@@ -10,7 +10,9 @@ use xilem_ui::prelude::{Brightness, DesignLanguage, ToggleableState, UiTheme};
 mod preview_support;
 
 use preview_support::scenes::{ALL_SCENES, SceneState, build_scene_harness};
-use preview_support::{build_ui_harness, lint_spec_contrast, lint_ui_layout};
+use preview_support::{
+    build_ui_harness, lint_spec_contrast, lint_ui_accessibility, lint_ui_layout,
+};
 
 fn default_harness(scene_id: &str, language: DesignLanguage) -> PreviewHarness<SceneState> {
     build_scene_harness(
@@ -32,6 +34,15 @@ fn assert_healthy(harness: &mut PreviewHarness<SceneState>, ctx_label: &str) {
     assert!(
         errors.is_empty(),
         "layout errors in {ctx_label}: {errors:#?}"
+    );
+    let a11y_issues = lint_ui_accessibility(harness);
+    let a11y_errors: Vec<_> = a11y_issues
+        .iter()
+        .filter(|issue| issue.severity == IssueSeverity::Error)
+        .collect();
+    assert!(
+        a11y_errors.is_empty(),
+        "accessibility errors in {ctx_label}: {a11y_errors:#?}"
     );
     let contrast = lint_spec_contrast(&harness.state().theme.to_spec());
     assert!(
@@ -2141,4 +2152,56 @@ fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
     assert!(errors.is_empty(), "virtual_list layout errors: {errors:#?}");
+}
+
+#[test]
+fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
+    use xilem::WidgetView as _;
+    use xilem::view::flex_col;
+    use xilem_ui::prelude::*;
+
+    struct QaState {
+        theme: UiTheme,
+        clicks: u32,
+        toggled: bool,
+    }
+
+    let mut h = build_ui_harness(
+        QaState {
+            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+            clicks: 0,
+            toggled: false,
+        },
+        |s| s.theme.clone(),
+        |s| {
+            flex_col((
+                primary_button("First", |st: &mut QaState| st.clicks += 1),
+                secondary_button("Second", |st: &mut QaState| st.clicks += 1),
+                switch(s.toggled, |st: &mut QaState, v| st.toggled = v),
+            ))
+            .boxed()
+        },
+        PreviewConfig {
+            width: 480,
+            height: 320,
+            ..PreviewConfig::default()
+        },
+    );
+
+    let timings = h.measure_frame_timings();
+    assert!(timings.rebuild_us < 5_000_000);
+    assert!(timings.layout_and_paint_us < 5_000_000);
+
+    let cycle = h.collect_tab_cycle(6);
+    let unique_focused: HashSet<_> = cycle.into_iter().flatten().collect();
+    assert!(
+        unique_focused.len() >= 2,
+        "Tab cycle must visit multiple focusable controls, visited: {unique_focused:?}"
+    );
+
+    let a11y_issues = lint_ui_accessibility(&mut h);
+    assert!(
+        a11y_issues.is_empty(),
+        "unexpected accessibility issues: {a11y_issues:#?}"
+    );
 }

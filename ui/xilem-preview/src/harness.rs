@@ -5,6 +5,7 @@ use std::fmt::Debug;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::{Context as _, bail};
 use image::{ImageFormat, RgbaImage};
@@ -161,6 +162,15 @@ impl PreviewStep {
             "invalid preview step '{spec}'; expected click:, click-type:, focus:, type:, hover:, hover-type:, animate:, or key:"
         )
     }
+}
+
+/// Measured microsecond timings for a single rebuild + layout/paint pass in [`PreviewHarness`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameTimings {
+    /// Time elapsed running `logic` + Xilem `View::rebuild`, in microseconds.
+    pub rebuild_us: u64,
+    /// Time elapsed running Masonry `redraw()` (measure, layout, accessibility, scene paint), in microseconds.
+    pub layout_and_paint_us: u64,
 }
 
 type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCtx>>::ViewState;
@@ -628,6 +638,32 @@ impl<State: 'static> PreviewHarness<State> {
         self.pump_actions();
         Ok(())
     }
+
+    /// Runs one full `rebuild()` followed by `redraw()` and returns microsecond timings for each phase.
+    pub fn measure_frame_timings(&mut self) -> FrameTimings {
+        let t0 = Instant::now();
+        self.rebuild();
+        let rebuild_us = u64::try_from(t0.elapsed().as_micros()).unwrap_or(u64::MAX);
+
+        let t1 = Instant::now();
+        let _ = self.harness.redraw();
+        let layout_and_paint_us = u64::try_from(t1.elapsed().as_micros()).unwrap_or(u64::MAX);
+
+        FrameTimings {
+            rebuild_us,
+            layout_and_paint_us,
+        }
+    }
+
+    /// Presses `Tab` `steps` times and returns the sequence of focused [`WidgetId`]s observed after each step.
+    pub fn collect_tab_cycle(&mut self, steps: usize) -> Vec<Option<WidgetId>> {
+        let mut out = Vec::with_capacity(steps);
+        for _ in 0..steps {
+            let _ = self.run_step(&PreviewStep::PressTab { shift: false });
+            out.push(self.harness.focused_widget_id());
+        }
+        out
+    }
 }
 
 fn subtree_text(node: &WidgetRef<'_, dyn Widget>, needle: &str, exact: bool) -> bool {
@@ -773,6 +809,11 @@ mod tests {
             .run_step(&PreviewStep::ClickLabel("Increment".into()))
             .unwrap();
         assert_eq!(harness.state().count, 1);
+
+        let timings = harness.measure_frame_timings();
+        assert!(timings.rebuild_us < 5_000_000);
+        let cycle = harness.collect_tab_cycle(2);
+        assert_eq!(cycle.len(), 2);
 
         let img = harness.render_image();
         assert_eq!(img.dimensions(), (320, 200));

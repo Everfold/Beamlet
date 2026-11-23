@@ -8,8 +8,8 @@ use xilem::style::Style as _;
 use xilem::view::sized_box;
 use xilem_preview::harness::{PreviewConfig, PreviewHarness};
 use xilem_preview::inspect::{
-    ContrastCheck, ContrastIssue, LayoutIssue, LayoutNode, LintConfig, lint_contrast,
-    lint_layout_with,
+    A11yIssue, A11yLintConfig, ContrastCheck, ContrastIssue, LayoutIssue, LayoutNode, LintConfig,
+    lint_accessibility_with, lint_contrast, lint_layout_with,
 };
 use xilem_ui::prelude::*;
 
@@ -36,6 +36,30 @@ pub fn ui_lint_config() -> LintConfig {
 #[must_use]
 pub fn lint_ui_layout(root: &LayoutNode, viewport: (f64, f64)) -> Vec<LayoutIssue> {
     lint_layout_with(root, viewport, &ui_lint_config())
+}
+
+/// Returns an [`A11yLintConfig`] extended with `xilem-ui` / `xilem-ui-core` custom widgets and
+/// modal dialog wrappers.
+#[must_use]
+pub fn ui_a11y_lint_config() -> A11yLintConfig {
+    A11yLintConfig::default()
+        .with_interactive_types([
+            "UiCheckbox",
+            "UiSwitch",
+            "UiSlider",
+            "UiRadioButton",
+            "RangeSliderWidget",
+            "LinearProgressWidget",
+            "DeterminateCircularWidget",
+        ])
+        .with_dialog_types(["EscapeCatcher"])
+}
+
+/// Runs [`lint_accessibility_with`] using [`ui_a11y_lint_config()`].
+pub fn lint_ui_accessibility<State: 'static>(
+    harness: &mut PreviewHarness<State>,
+) -> Vec<A11yIssue> {
+    lint_accessibility_with(harness, &ui_a11y_lint_config())
 }
 
 /// Audits semantic foreground/background pairs inside `spec` against WCAG 2.1 thresholds.
