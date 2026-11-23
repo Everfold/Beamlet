@@ -31,5 +31,5 @@ pub use xilem_ui_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextStyleSpec, TypeRole, TypeScale,
-    WindowSizeClass,
+    WindowBackdrop, WindowSizeClass,
 };

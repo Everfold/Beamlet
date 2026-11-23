@@ -1,6 +1,7 @@
 //! Shared cross-theme overlay primitives: scrims, Escape-key handling, modal shells,
 //! hover tooltips, and anchored popup layers.
 
+pub(crate) mod focus_bridge;
 pub mod modal;
 pub mod popup_layer;
 pub mod tooltip_host;
@@ -139,20 +140,13 @@ impl Widget for EscapeCatcher {
                 ctx.submit_action::<Self::Action>(EscapePressed);
             } else if self.trap_focus && key_event.key == Key::Named(NamedKey::Tab) {
                 let backward = key_event.modifiers.shift();
-                if self.focus_ring.is_empty() {
-                    ctx.request_focus();
-                } else {
-                    let cur_pos = ctx
-                        .focus_target_id()
-                        .and_then(|id| self.focus_ring.iter().position(|ring_id| *ring_id == id));
-                    let next_idx = match (cur_pos, backward) {
-                        (Some(idx), false) => (idx + 1) % self.focus_ring.len(),
-                        (Some(0), true) => self.focus_ring.len() - 1,
-                        (Some(idx), true) => idx - 1,
-                        (None, false) => 0,
-                        (None, true) => self.focus_ring.len() - 1,
-                    };
-                    ctx.set_focus(self.focus_ring[next_idx]);
+                match focus_bridge::next_focus_target(
+                    &self.focus_ring,
+                    ctx.focus_target_id(),
+                    backward,
+                ) {
+                    Some(target) => ctx.set_focus(target),
+                    None => ctx.request_focus(),
                 }
                 ctx.set_handled();
             }

@@ -65,7 +65,7 @@ pub(crate) fn class_button_build<State: 'static, Action: 'static, V: WidgetView<
         pod.new_widget.classes.insert(class.to_string());
         pod.new_widget.options.disabled = disabled;
         if !disabled {
-            crate::foundation::overlay::modal::record_modal_focusable(pod.new_widget.id());
+            crate::foundation::overlay::focus_bridge::record_modal_focusable(pod.new_widget.id());
         }
         pod
     });

@@ -6,7 +6,7 @@
 pub mod prelude;
 pub mod theme;
 
-pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window};
+pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window, ui_window_with_backdrop};
 pub use xilem_ui_core as core;
 pub use xilem_ui_core::components;
 pub use xilem_ui_core::foundation::{
@@ -21,7 +21,8 @@ pub use xilem_ui_core::style_engine::{
 pub use xilem_ui_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowSizeClass,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowBackdrop,
+    WindowSizeClass,
 };
 
 #[cfg(feature = "md3")]

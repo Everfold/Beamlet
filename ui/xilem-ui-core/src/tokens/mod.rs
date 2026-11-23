@@ -13,6 +13,6 @@ pub use motion::{MotionDuration, MotionEasing};
 pub use spec::{
     ControlBorderStyle, ControlMetrics, ControlVisualGrammar, DesignSpec, DialogActionOrder,
     ElevationLevel, InputFocusStyle, NavIndicatorStyle, SemanticPalette, ShortcutConvention,
-    StateFeedbackMode, TabIndicatorStyle,
+    StateFeedbackMode, TabIndicatorStyle, WindowBackdrop,
 };
 pub use typography::{TextStyleSpec, TypeRole, TypeScale};

@@ -6,6 +6,7 @@ use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
     NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
+    WindowBackdrop,
 };
 
 use crate::color::{ColorScheme, ContrastLevel};
@@ -110,6 +111,7 @@ impl Md3Theme {
         DesignSpec {
             name: "Material 3",
             brightness: self.scheme.brightness,
+            backdrop: WindowBackdrop::Opaque,
             palette: self.scheme.to_semantic_palette(),
             metrics: Self::metrics(),
             feedback: StateFeedbackMode::TintedStateLayer {

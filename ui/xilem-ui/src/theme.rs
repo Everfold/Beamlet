@@ -7,8 +7,9 @@ use xilem::masonry::core::FromDynWidget;
 use xilem::{Color, WidgetView, WindowId, WindowView};
 use xilem_ui_core::style_engine::scope::{
     UiScope, ui_scope_arc as core_ui_scope_arc, ui_window_arc as core_ui_window_arc,
+    ui_window_arc_with_backdrop as core_ui_window_arc_with_backdrop,
 };
-use xilem_ui_core::tokens::{Brightness, DesignSpec};
+use xilem_ui_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
 
 type ThemeSpecCache = Vec<(UiTheme, Arc<DesignSpec>)>;
 
@@ -359,6 +360,22 @@ where
     core_ui_window_arc(window_id, title, &theme.cached_spec(), child)
 }
 
+/// Wraps an entire Xilem desktop window with an explicit [`WindowBackdrop`] override, Masonry
+/// `DefaultProperties`, and `UiScope` synced to `theme`.
+pub fn ui_window_with_backdrop<State: 'static, V>(
+    window_id: WindowId,
+    title: impl Into<String>,
+    theme: &UiTheme,
+    backdrop: WindowBackdrop,
+    child: V,
+) -> WindowView<State>
+where
+    V: WidgetView<State>,
+    V::Widget: FromDynWidget,
+{
+    core_ui_window_arc_with_backdrop(window_id, title, &theme.cached_spec(), backdrop, child)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,5 +390,33 @@ mod tests {
             assert_ne!(light.palette.window_bg, dark.palette.window_bg);
             assert_ne!(light.palette.text_primary, dark.palette.text_primary);
         }
+    }
+
+    #[test]
+    fn ui_theme_assigns_expected_platform_backdrops() {
+        assert_eq!(
+            UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                .to_spec()
+                .backdrop,
+            WindowBackdrop::Opaque
+        );
+        assert_eq!(
+            UiTheme::new(DesignLanguage::Fluent, Brightness::Light)
+                .to_spec()
+                .backdrop,
+            WindowBackdrop::Mica
+        );
+        assert_eq!(
+            UiTheme::new(DesignLanguage::Hig, Brightness::Light)
+                .to_spec()
+                .backdrop,
+            WindowBackdrop::MacosVibrancy
+        );
+        assert_eq!(
+            UiTheme::new(DesignLanguage::Adwaita, Brightness::Light)
+                .to_spec()
+                .backdrop,
+            WindowBackdrop::Opaque
+        );
     }
 }

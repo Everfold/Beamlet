@@ -1,52 +1,20 @@
 //! Shared modal overlay shell composing `EscapeCatcher`, scrim backdrop, `ZStack`, and `SlideTransition`.
 
-use std::cell::RefCell;
 use std::sync::Arc;
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewPathTracker as _};
 use xilem::kurbo::Vec2;
-use xilem::masonry::core::{CollectionWidget, NewWidget, WidgetId};
+use xilem::masonry::core::{CollectionWidget, NewWidget};
 use xilem::masonry::layout::UnitPoint;
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets::{self, Passthrough, ZStack};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
+use crate::foundation::overlay::focus_bridge::collect_modal_focusables;
 use crate::foundation::overlay::{EscapeCatcher, EscapePressed, ui_scrim};
 use crate::foundation::transition::SlideTransition;
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{MotionDuration, MotionEasing};
-
-thread_local! {
-    static MODAL_FOCUS_COLLECTOR: RefCell<Option<Vec<WidgetId>>> = const { RefCell::new(None) };
-}
-
-pub(crate) fn record_modal_focusable(id: WidgetId) {
-    MODAL_FOCUS_COLLECTOR.with(|cell| {
-        if let Some(list) = cell.borrow_mut().as_mut() {
-            list.push(id);
-        }
-    });
-}
-
-fn collect_modal_focusables<R>(f: impl FnOnce() -> R) -> (R, Vec<WidgetId>) {
-    struct Reset(Option<Vec<WidgetId>>);
-    impl Drop for Reset {
-        fn drop(&mut self) {
-            let prev = self.0.take();
-            MODAL_FOCUS_COLLECTOR.with(|cell| {
-                *cell.borrow_mut() = prev;
-            });
-        }
-    }
-
-    let prev = MODAL_FOCUS_COLLECTOR.with(|cell| cell.borrow_mut().replace(Vec::new()));
-    let _guard = Reset(prev);
-    let out = f();
-    let collected = MODAL_FOCUS_COLLECTOR
-        .with(|cell| cell.borrow_mut().take())
-        .unwrap_or_default();
-    (out, collected)
-}
 
 const MODAL_SCRIM_ID: ViewId = ViewId::new(0x5549_3430);
 const MODAL_CONTENT_ID: ViewId = ViewId::new(0x5549_3431);

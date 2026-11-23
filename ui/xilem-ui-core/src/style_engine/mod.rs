@@ -21,5 +21,6 @@ pub mod scope;
 pub use builder::build_default_properties;
 pub use scope::{
     MemoizeWithSpec, WithSpec, cached_default_properties, current_spec, current_spec_arc,
-    memoize_with_spec, ui_scope, ui_scope_arc, ui_window, ui_window_arc, with_spec,
+    memoize_with_spec, ui_scope, ui_scope_arc, ui_window, ui_window_arc,
+    ui_window_arc_with_backdrop, ui_window_with_backdrop, with_spec,
 };

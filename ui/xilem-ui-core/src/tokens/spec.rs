@@ -324,6 +324,34 @@ impl ShortcutConvention {
     }
 }
 
+/// OS window compositor backdrop material requested by a design system.
+///
+/// Desktop host runners with transparent compositor surfaces can inspect [`DesignSpec::backdrop`]
+/// to enable Windows 11 DWM Mica/Acrylic or macOS `NSVisualEffectView` vibrancy; headless or
+/// software-composited surfaces fall back gracefully to [`SemanticPalette::window_bg`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum WindowBackdrop {
+    /// Standard opaque window background (`spec.palette.window_bg`).
+    #[default]
+    Opaque,
+    /// Windows 11 Fluent 2 Mica material.
+    Mica,
+    /// Windows 11 Fluent 2 Mica Alt material (tabbed titlebars).
+    MicaAlt,
+    /// Windows 11 Fluent 2 transient Acrylic material.
+    Acrylic,
+    /// macOS HIG `NSVisualEffectView` vibrancy material.
+    MacosVibrancy,
+}
+
+impl WindowBackdrop {
+    /// Returns `true` if this material requests OS compositor translucency/vibrancy.
+    #[must_use]
+    pub const fn is_translucent(self) -> bool {
+        !matches!(self, Self::Opaque)
+    }
+}
+
 /// Complete cross-theme design specification passed through [`ui_scope`](crate::style_engine::ui_scope).
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesignSpec {
@@ -331,6 +359,8 @@ pub struct DesignSpec {
     pub name: &'static str,
     /// Light or Dark polarity.
     pub brightness: Brightness,
+    /// Requested OS window compositor backdrop material.
+    pub backdrop: WindowBackdrop,
     /// Semantic color tokens.
     pub palette: SemanticPalette,
     /// Control geometry & density tokens.
@@ -436,6 +466,7 @@ impl DesignSpec {
         Self {
             name: "Neutral",
             brightness,
+            backdrop: WindowBackdrop::Opaque,
             palette,
             metrics: ControlMetrics {
                 button_height: 36.0,
@@ -538,6 +569,12 @@ mod tests {
         let spec = DesignSpec::neutral_fallback(Brightness::Light);
         assert_eq!(spec.dialog_action_order, DialogActionOrder::PrimaryTrailing);
         assert_eq!(spec.shortcut_convention, ShortcutConvention::Control);
+        assert_eq!(spec.backdrop, WindowBackdrop::Opaque);
+        assert!(!WindowBackdrop::Opaque.is_translucent());
+        assert!(WindowBackdrop::Mica.is_translucent());
+        assert!(WindowBackdrop::MicaAlt.is_translucent());
+        assert!(WindowBackdrop::Acrylic.is_translucent());
+        assert!(WindowBackdrop::MacosVibrancy.is_translucent());
     }
 
     #[test]

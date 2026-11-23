@@ -6,6 +6,7 @@ use xilem_ui_core::style_engine::scope::{UiScope, ui_scope, ui_window};
 use xilem_ui_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
     NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
+    WindowBackdrop,
 };
 
 use crate::palette::{AdwaitaAccent, adwaita_palette};
@@ -104,6 +105,7 @@ impl AdwaitaTheme {
         DesignSpec {
             name: "GNOME Adwaita",
             brightness: self.brightness,
+            backdrop: WindowBackdrop::Opaque,
             palette: adwaita_palette(self.accent, self.brightness),
             metrics: Self::metrics(),
             feedback: StateFeedbackMode::AlphaOverlay {
