@@ -451,19 +451,38 @@ impl Widget for PopupLayer {
             cross_length,
         );
         if axis == Axis::Horizontal {
-            Length::px(len.get().clamp(self.min_width, self.max_width))
+            let vp_cap = if self.window_size.width > 0.0 {
+                (self.window_size.width - 16.0).max(0.0)
+            } else {
+                self.max_width
+            };
+            let max_w = self.max_width.min(vp_cap);
+            let min_w = self.min_width.min(max_w);
+            Length::px(len.get().clamp(min_w, max_w))
+        } else if self.window_size.height > 0.0 {
+            let max_h = (self.window_size.height - 16.0).max(0.0);
+            Length::px(len.get().min(max_h))
         } else {
             len
         }
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        let fit = ctx.compute_size(&mut self.child, SizeDef::fit(size), size.into());
+        let vp_w = if self.window_size.width > 0.0 {
+            size.width.min((self.window_size.width - 16.0).max(0.0))
+        } else {
+            size.width
+        };
+        let vp_h = if self.window_size.height > 0.0 {
+            size.height.min((self.window_size.height - 16.0).max(0.0))
+        } else {
+            size.height
+        };
+        let bounded = Size::new(vp_w, vp_h);
+        let fit = ctx.compute_size(&mut self.child, SizeDef::fit(bounded), bounded.into());
         let child_size = Size::new(
-            fit.width
-                .max(self.min_width.min(size.width))
-                .min(size.width),
-            fit.height.min(size.height),
+            fit.width.max(self.min_width.min(vp_w)).min(vp_w),
+            fit.height.min(vp_h),
         );
         ctx.run_layout(&mut self.child, child_size);
         ctx.place_child(&mut self.child, Point::ORIGIN);

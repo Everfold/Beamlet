@@ -450,11 +450,14 @@ impl RichTextWidget {
         color: Color,
         radius: f64,
         pad_x: f64,
+        max_width: f64,
     ) {
         let start = Cursor::from_byte_index(layout, range.start, Affinity::Downstream);
         let end = Cursor::from_byte_index(layout, range.end, Affinity::Upstream);
         Selection::new(start, end).geometry_with(layout, |bb, _| {
-            let r = Rect::new(bb.x0 - pad_x, bb.y0, bb.x1 + pad_x, bb.y1);
+            let x0 = (bb.x0 - pad_x).max(0.0);
+            let x1 = (bb.x1 + pad_x).min(max_width.max(x0));
+            let r = Rect::new(x0, bb.y0, x1, bb.y1);
             if radius > 0.0 {
                 painter
                     .fill(RoundedRect::from_rect(r, radius), color)
@@ -525,6 +528,9 @@ impl Widget for RichTextWidget {
                 }
             }
             PointerEvent::Leave(_) => {
+                self.hovered_link = None;
+            }
+            PointerEvent::Cancel(_) => {
                 self.hovered_link = None;
                 self.dragging = false;
                 self.pressed_link = None;
@@ -597,7 +603,9 @@ impl Widget for RichTextWidget {
                 LenReq::MaxContent => None,
                 LenReq::FitContent(space) => Some(space.get() as f32),
             },
-            Axis::Vertical => cross_length.map(|l| l.get() as f32),
+            Axis::Vertical => cross_length
+                .or_else(|| ctx.context_size().length(Axis::Horizontal))
+                .map(|l| l.get().max(1.0) as f32),
         };
         let (fctx, lctx) = ctx.text_contexts();
         let layout = self.build_parley_layout(fctx, lctx, max_advance);
@@ -621,20 +629,29 @@ impl Widget for RichTextWidget {
 
     fn paint(
         &mut self,
-        _ctx: &mut PaintCtx<'_>,
+        ctx: &mut PaintCtx<'_>,
         _props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
         let Some(layout) = &self.layout else {
             return;
         };
+        let content_w = ctx.content_box().size().width;
         for span in &self.spans {
             if let Some(bg) = span.resolved_bg {
-                Self::paint_range_bg(painter, layout, span.range.clone(), bg, 4.0, 3.0);
+                Self::paint_range_bg(painter, layout, span.range.clone(), bg, 4.0, 3.0, content_w);
             }
         }
         if let Some(sel) = self.selected_range() {
-            Self::paint_range_bg(painter, layout, sel, self.selection_color, 0.0, 0.0);
+            Self::paint_range_bg(
+                painter,
+                layout,
+                sel,
+                self.selection_color,
+                0.0,
+                0.0,
+                content_w,
+            );
         }
         render_text(painter, Affine::IDENTITY, layout, &self.brushes, true);
     }

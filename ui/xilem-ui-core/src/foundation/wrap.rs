@@ -189,7 +189,7 @@ impl Widget for WrapWidget {
                 Length::px(total_w)
             }
             (Axis::Horizontal, LenReq::FitContent(space)) => {
-                let avail_w = space.get();
+                let avail_w = space.get().max(0.0);
                 for (idx, c) in self.children.iter_mut().enumerate() {
                     let w = ctx
                         .compute_length(
@@ -209,7 +209,7 @@ impl Widget for WrapWidget {
             (Axis::Vertical, _) => {
                 let avail_w = cross_length
                     .or_else(|| ctx.context_size().length(Axis::Horizontal))
-                    .map_or(f64::INFINITY, |l| l.get());
+                    .map_or(f64::INFINITY, |l| l.get().max(0.0));
                 for (idx, c) in self.children.iter_mut().enumerate() {
                     let w = ctx
                         .compute_length(
@@ -239,25 +239,24 @@ impl Widget for WrapWidget {
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+        let avail_w = size.width.max(0.0);
         let mut sizes: Vec<(usize, Size)> = Vec::new();
         for (idx, c) in self.children.iter_mut().enumerate() {
             let child_def = SizeDef::new(LenDef::MaxContent, LenDef::MaxContent);
             let mut c_sz = ctx.compute_size(c, child_def, LayoutSize::NONE);
-            if c_sz.width > size.width {
-                let constrained_def = SizeDef::new(
-                    LenDef::FitContent(Length::px(size.width)),
-                    LenDef::MaxContent,
-                );
+            if c_sz.width > avail_w {
+                let constrained_def =
+                    SizeDef::new(LenDef::FitContent(Length::px(avail_w)), LenDef::MaxContent);
                 c_sz = ctx.compute_size(
                     c,
                     constrained_def,
-                    LayoutSize::one(Axis::Horizontal, Length::px(size.width)),
+                    LayoutSize::one(Axis::Horizontal, Length::px(avail_w)),
                 );
-                c_sz.width = c_sz.width.min(size.width);
+                c_sz.width = c_sz.width.min(avail_w);
             }
             sizes.push((idx, c_sz));
         }
-        let (runs, _) = plan_runs(&sizes, size.width, self.gap, self.run_gap);
+        let (runs, _) = plan_runs(&sizes, avail_w, self.gap, self.run_gap);
 
         let mut first_baseline = None;
         for run in runs {

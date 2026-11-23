@@ -68,7 +68,7 @@ pub use selection::{
     ToggleableState, checkbox, radio, radio_group, slider, switch, tri_state_checkbox,
 };
 pub use sheet::{bottom_sheet, side_sheet};
-pub use split::{UiSplit, split_view};
+pub use split::{UiSplit, UiSplitWidget, split_view};
 pub use tabs::{scrollable_tabs, secondary_tabs, tabs};
 pub use text_field::{
     TextFieldVariant, UiTextArea, UiTextField, filled_text_area, filled_text_field, text_area,

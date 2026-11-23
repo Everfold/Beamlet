@@ -525,7 +525,16 @@ impl Widget for HeightRangeWidget {
         let context_size = LayoutSize::maybe(axis.cross(), cross_length);
         let len = ctx.compute_length(&mut self.child, len_def, context_size, axis, cross_length);
         match axis {
-            Axis::Vertical => Length::px(len.get().clamp(self.min_height, self.max_height)),
+            Axis::Vertical => {
+                let (lo, hi) = match len_req {
+                    LenReq::FitContent(space) => (
+                        self.min_height.min(space.get()),
+                        self.max_height.min(space.get()),
+                    ),
+                    _ => (self.min_height, self.max_height),
+                };
+                Length::px(len.get().clamp(lo, hi.max(lo)))
+            }
             Axis::Horizontal => len,
         }
     }
@@ -817,7 +826,8 @@ impl<State, Action> UiTextArea<State, Action> {
                     focus_frame(container).error(is_error).boxed()
                 }
                 TextFieldVariant::Outlined => {
-                    let input_widget = sized_box(bounded_portal)
+                    let input_widget = flex_col((bounded_portal,))
+                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
                         .ui_class(base_class)
                         .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
                         .boxed();
@@ -825,7 +835,8 @@ impl<State, Action> UiTextArea<State, Action> {
                 }
             }
         } else {
-            let input_widget = sized_box(bounded_portal)
+            let input_widget = flex_col((bounded_portal,))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .ui_class(base_class)
                 .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
                 .boxed();

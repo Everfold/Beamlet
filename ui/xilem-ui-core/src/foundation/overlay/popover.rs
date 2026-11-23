@@ -13,7 +13,7 @@ use xilem::masonry::core::{
     UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use xilem::masonry::imaging::Painter;
-use xilem::masonry::layout::{LenReq, Length, SizeDef};
+use xilem::masonry::layout::{LayoutSize, LenDef, LenReq, Length, SizeDef};
 use xilem::{Pod, ViewCtx, WidgetView};
 
 use super::clamp_anchored_layer_origin;
@@ -407,11 +407,18 @@ impl Widget for PopoverPlacementWidget {
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        let max_size = Size::new(
-            (size.width - 16.0).max(80.0),
-            (size.height - 16.0).max(80.0),
+        let max_size = Size::new((size.width - 16.0).max(0.0), (size.height - 16.0).max(0.0));
+        // First measure intrinsic content size so compact popovers hug tightly, then fit-clamp on tight screens.
+        let natural = ctx.compute_size(
+            &mut self.child,
+            SizeDef::new(LenDef::MaxContent, LenDef::MaxContent),
+            LayoutSize::NONE,
         );
-        let child_size = ctx.compute_size(&mut self.child, SizeDef::fit(max_size), size.into());
+        let child_size = if natural.width > max_size.width || natural.height > max_size.height {
+            ctx.compute_size(&mut self.child, SizeDef::fit(max_size), max_size.into())
+        } else {
+            natural
+        };
         let clamped_size = Size::new(
             child_size.width.min(max_size.width),
             child_size.height.min(max_size.height),

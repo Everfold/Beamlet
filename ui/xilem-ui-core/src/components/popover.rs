@@ -1,7 +1,6 @@
 //! Spec-styled arbitrary interactive popover overlay surface (`NSPopover` / `GtkPopover` / Fluent `Flyout`).
 
 use xilem::kurbo::Vec2;
-use xilem::masonry::layout::Dim;
 use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::style::Style as _;
 use xilem::view::{CrossAxisAlignment, button, flex_col, label, sized_box, zstack};
@@ -35,8 +34,7 @@ where
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .padding(Padding::all(12.px())),
     )
-    .ui_class(classes::POPOVER_SURFACE)
-    .dims(Dimensions::new(Dim::MaxContent, Dim::MaxContent));
+    .ui_class(classes::POPOVER_SURFACE);
 
     let placed = popover_place(anchor_rect, Vec2::new(0.0, 6.0), panel).dims(Dimensions::STRETCH);
 
