@@ -5699,33 +5699,44 @@ dependencies = [
 name = "xilem-adwaita"
 version = "0.1.0"
 dependencies = [
+ "masonry",
  "tracing",
- "xilem",
  "xilem-ui-core",
+ "xilem-ui-winit",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
 name = "xilem-fluent"
 version = "0.1.0"
 dependencies = [
- "xilem",
+ "masonry",
  "xilem-ui-core",
+ "xilem-ui-winit",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
 name = "xilem-hig"
 version = "0.1.0"
 dependencies = [
- "xilem",
+ "masonry",
  "xilem-ui-core",
+ "xilem-ui-winit",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
 name = "xilem-md3"
 version = "0.1.0"
 dependencies = [
- "xilem",
+ "masonry",
  "xilem-ui-core",
+ "xilem-ui-winit",
+ "xilem_masonry",
 ]
 
 [[package]]
@@ -5734,10 +5745,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "image",
+ "masonry",
  "masonry_testing",
  "serde",
  "tokio",
- "xilem",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
@@ -5747,26 +5760,44 @@ dependencies = [
  "anyhow",
  "clap",
  "image",
+ "masonry",
  "masonry_testing",
  "serde_json",
  "tokio",
- "xilem",
  "xilem-adwaita",
  "xilem-fluent",
  "xilem-hig",
  "xilem-md3",
  "xilem-preview",
  "xilem-ui-core",
+ "xilem-ui-winit",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
 name = "xilem-ui-core"
 version = "0.1.0"
 dependencies = [
+ "masonry",
  "tokio",
  "tracing",
  "usvg",
- "xilem",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "xilem-ui-winit"
+version = "0.1.0"
+dependencies = [
+ "masonry",
+ "masonry_winit",
+ "tokio",
+ "tracing",
+ "xilem-ui-core",
+ "xilem_core",
+ "xilem_masonry",
 ]
 
 [[package]]
