@@ -66,7 +66,10 @@ pub use selection::{
 pub use sheet::{bottom_sheet, side_sheet};
 pub use split::{UiSplit, split_view};
 pub use tabs::{scrollable_tabs, secondary_tabs, tabs};
-pub use text_field::{TextFieldVariant, UiTextField, filled_text_field, text_field};
+pub use text_field::{
+    TextFieldVariant, UiTextArea, UiTextField, filled_text_area, filled_text_field, text_area,
+    text_field,
+};
 pub use toast::{ToastData, ToastDuration, ToastHostState, toast, toast_host};
 pub use tooltip::{plain_tooltip, rich_tooltip};
 pub use typography::{
@@ -74,3 +77,4 @@ pub use typography::{
     headline_large, headline_medium, headline_small, label_large, label_medium, label_small,
     title_large, title_medium, title_small, ui_label, ui_prose,
 };
+pub use xilem::InsertNewline;
