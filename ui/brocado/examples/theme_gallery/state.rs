@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
-use xilem_ui::prelude::*;
+use brocado::prelude::*;
 
 /// Showcase navigation tabs (5 focused views).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

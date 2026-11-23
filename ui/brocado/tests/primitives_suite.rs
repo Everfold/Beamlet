@@ -1,6 +1,9 @@
 //! Headless integration tests for the 6 standard UI library primitives:
 //! `wrap`, `split_view`, `text_area`, `rich_prose`, `context_menu`, and `popover`.
 
+use brocado::prelude::*;
+use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+use brocado_preview::inspect::{LayoutNode, dump_layout_tree};
 use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
 use masonry::core::pointer::{PointerId, PointerInfo, PointerType};
 use masonry::core::{KeyboardEvent, PointerButton, PointerEvent, TextEvent};
@@ -10,9 +13,6 @@ use masonry::properties::{Dimensions, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, label, sized_box, zstack};
-use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use xilem_preview::inspect::{LayoutNode, dump_layout_tree};
-use xilem_ui::prelude::*;
 
 #[allow(dead_code)]
 mod preview_support;

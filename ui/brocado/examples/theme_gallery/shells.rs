@@ -1,12 +1,12 @@
 //! Responsive platform-native shells switching cleanly between wide sidebars/rails and compact bottom navigation.
 
+use brocado::prelude::*;
 use masonry::layout::AsUnit;
 use masonry::properties::Padding;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, portal, sized_box};
-use xilem_ui::prelude::*;
 
 use crate::overlays::wrap_with_overlays;
 use crate::pages;
@@ -162,7 +162,7 @@ fn responsive_shell<S: WidgetView<GalleryState> + 'static>(
 pub fn md3_shell(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let dests = destinations();
     let rail = navigation_rail_with_fab(
-        None::<xilem_ui::components::button::UiButton<GalleryState, ()>>,
+        None::<brocado::components::button::UiButton<GalleryState, ()>>,
         &dests,
         state.active_tab.index(),
         |s: &mut GalleryState, i| {

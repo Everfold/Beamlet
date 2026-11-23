@@ -1,11 +1,11 @@
-//! Headless visual, layout, and contrast regression tests for Beamlet multi-theme UI.
+//! Headless visual, layout, and contrast regression tests for Brocado multi-theme UI.
 
 use std::collections::HashSet;
 use std::path::Path;
 
-use xilem_preview::harness::{PreviewConfig, PreviewStep};
-use xilem_preview::inspect::{IssueSeverity, dump_layout_tree};
-use xilem_ui::prelude::{Brightness, DesignLanguage, UiTheme};
+use brocado::prelude::{Brightness, DesignLanguage, UiTheme};
+use brocado_preview::harness::{PreviewConfig, PreviewStep};
+use brocado_preview::inspect::{IssueSeverity, dump_layout_tree};
 
 #[allow(dead_code)]
 mod preview_support;

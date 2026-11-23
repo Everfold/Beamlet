@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 
-use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use xilem_preview::inspect::{IssueSeverity, LayoutNode, dump_layout_tree};
-use xilem_ui::prelude::{Brightness, DesignLanguage, ToggleableState, UiTheme};
+use brocado::prelude::{Brightness, DesignLanguage, ToggleableState, UiTheme};
+use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+use brocado_preview::inspect::{IssueSeverity, LayoutNode, dump_layout_tree};
 
 #[allow(dead_code)]
 mod preview_support;
@@ -849,12 +849,12 @@ fn audit_desktop_all_scenes_themes_brightness() {
 
 #[test]
 fn audit_toast_host_without_outer_max_dims_stays_compact() {
+    use brocado::prelude::{ToastDuration, ToastHostState, primary_button, toast_host};
     use masonry::layout::{AsUnit, UnitPoint};
     use masonry::properties::Padding;
     use xilem_masonry::WidgetView;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{ZStackExt, sized_box, zstack};
-    use xilem_ui::prelude::{ToastDuration, ToastHostState, primary_button, toast_host};
 
     #[derive(Clone)]
     struct ToastMountState {
@@ -923,11 +923,11 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
     fn find_first_focus_frame_and_text_area(
         node: &LayoutNode,
     ) -> Option<(
-        xilem_preview::inspect::LayoutRect,
-        xilem_preview::inspect::LayoutRect,
+        brocado_preview::inspect::LayoutRect,
+        brocado_preview::inspect::LayoutRect,
     )> {
         if node.type_name == "FocusFrame" {
-            fn find_text_area(n: &LayoutNode) -> Option<xilem_preview::inspect::LayoutRect> {
+            fn find_text_area(n: &LayoutNode) -> Option<brocado_preview::inspect::LayoutRect> {
                 if n.type_name == "TextArea" {
                     return Some(n.rect);
                 }
@@ -979,11 +979,11 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
 
 #[test]
 fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
+    use brocado::prelude::{checkbox, radio, radio_group, range_slider, slider, switch};
     use masonry::layout::AsUnit;
     use xilem_masonry::WidgetView;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{CrossAxisAlignment, flex_col};
-    use xilem_ui::prelude::{checkbox, radio, radio_group, range_slider, slider, switch};
 
     #[derive(Clone)]
     struct ControlStressState {
@@ -1110,14 +1110,14 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
 
 #[test]
 fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
+    use brocado::prelude::{
+        alert_dialog, breakpoint_bin, clickable_action_row, header_bar_with_title, icons,
+        preferences_group, primary_button, switch_row, view_switcher, view_switcher_bar,
+    };
     use masonry::layout::{AsUnit, UnitPoint};
     use xilem_masonry::WidgetView;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, zstack};
-    use xilem_ui::prelude::{
-        alert_dialog, breakpoint_bin, clickable_action_row, header_bar_with_title, icons,
-        preferences_group, primary_button, switch_row, view_switcher, view_switcher_bar,
-    };
 
     #[derive(Clone)]
     struct AdwResponsiveState {
@@ -1165,7 +1165,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
                                 "Run Row",
                                 None::<&str>,
                                 Some(icons::CHECK_CIRCLE),
-                                None::<xilem_ui::prelude::UiButton<AdwResponsiveState, ()>>,
+                                None::<brocado::prelude::UiButton<AdwResponsiveState, ()>>,
                                 |st: &mut AdwResponsiveState| st.row_clicks += 1,
                             )
                             .boxed(),
@@ -1292,12 +1292,12 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
 
 #[test]
 fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
+    use brocado::prelude::{filled_text_field, primary_button, ripple_layer, text_field};
     use masonry::layout::AsUnit;
     use masonry::properties::Padding;
     use xilem_masonry::WidgetView as _;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{CrossAxisAlignment, flex_col};
-    use xilem_ui::prelude::{filled_text_field, primary_button, ripple_layer, text_field};
 
     struct Phase4State {
         theme: UiTheme,
@@ -1394,6 +1394,10 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
 
 #[test]
 fn audit_phase5_fluent_and_hig_desktop_controls() {
+    use brocado::prelude::{
+        NavDestination, command_bar_with_overflow, icons, macos_alert_dialog, menu_item,
+        navigation_view_collapsible, number_box, popup_button, primary_button, switch, text_field,
+    };
     use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
     use masonry::core::{KeyboardEvent, TextEvent};
     use masonry::layout::{AsUnit, UnitPoint};
@@ -1402,10 +1406,6 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{
         CrossAxisAlignment, FlexExt as _, ZStackExt, flex_col, flex_row, zstack,
-    };
-    use xilem_ui::prelude::{
-        NavDestination, command_bar_with_overflow, icons, macos_alert_dialog, menu_item,
-        navigation_view_collapsible, number_box, popup_button, primary_button, switch, text_field,
     };
 
     fn find_button_center(node: &LayoutNode, needle: &str) -> Option<(f64, f64)> {
@@ -1706,6 +1706,10 @@ fn audit_phase5_fluent_and_hig_desktop_controls() {
 
 #[test]
 fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
+    use brocado::prelude::{
+        basic_dialog, determinate_circular_progress, dropdown_menu, linear_progress, menu_item,
+        primary_button, range_slider, ripple_layer, slider, switch, ui_transition,
+    };
     use masonry::accesskit::Role;
     use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
     use masonry::core::{KeyboardEvent, TextEvent};
@@ -1714,10 +1718,6 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
     use xilem_masonry::WidgetView as _;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, zstack};
-    use xilem_ui::prelude::{
-        basic_dialog, determinate_circular_progress, dropdown_menu, linear_progress, menu_item,
-        primary_button, range_slider, ripple_layer, slider, switch, ui_transition,
-    };
 
     // 1. Modal Focus Trap, Instant Escape (without manual FocusType), & Double-Escape safety
     struct ModalTrapState {
@@ -1873,7 +1873,7 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
     let bg_btn_raw_id = find_btn_id_by_text(&tree_before, "BgBtn").unwrap_or_else(|| {
         panic!(
             "BgBtn present in tree:\n{}",
-            xilem_preview::inspect::format_tree_text(&tree_before)
+            brocado_preview::inspect::format_tree_text(&tree_before)
         )
     });
 
@@ -2025,11 +2025,10 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
 
 #[test]
 fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_change() {
+    use brocado::prelude::*;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use xilem_masonry::WidgetView as _;
     use xilem_masonry::view::{flex_col, label};
-    use xilem_ui::prelude::*;
 
     struct MemoState {
         theme: UiTheme,
@@ -2104,11 +2103,10 @@ fn format_tree_text_contains(node: &LayoutNode, needle: &str) -> bool {
 
 #[test]
 fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
+    use brocado::prelude::*;
     use masonry::properties::Dimensions;
-    use xilem_masonry::WidgetView as _;
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{label, sized_box};
-    use xilem_ui::prelude::*;
 
     struct ListState {
         theme: UiTheme,
@@ -2158,9 +2156,8 @@ fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
 
 #[test]
 fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
-    use xilem_masonry::WidgetView as _;
+    use brocado::prelude::*;
     use xilem_masonry::view::flex_col;
-    use xilem_ui::prelude::*;
 
     struct QaState {
         theme: UiTheme,

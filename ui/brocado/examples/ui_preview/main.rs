@@ -5,11 +5,11 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{Context as _, bail};
+use brocado::prelude::*;
+use brocado_preview::harness::{PreviewConfig, PreviewStep};
+use brocado_preview::inspect::{IssueSeverity, format_tree_text};
 use clap::Parser;
 use image::ImageFormat;
-use xilem_preview::harness::{PreviewConfig, PreviewStep};
-use xilem_preview::inspect::{IssueSeverity, format_tree_text};
-use xilem_ui::prelude::*;
 
 #[allow(dead_code)]
 #[path = "../../tests/preview_support/mod.rs"]
@@ -21,7 +21,7 @@ use preview_support::{lint_spec_contrast, lint_ui_layout};
 #[derive(Debug, Parser)]
 #[command(
     name = "ui_preview",
-    about = "Render Beamlet UI scenes offline to PNG + Layout JSON/Tree + Lint diagnostics"
+    about = "Render Brocado scenes offline to PNG + Layout JSON/Tree + Lint diagnostics"
 )]
 struct Cli {
     /// List available preview scene IDs and exit.
@@ -202,7 +202,7 @@ fn main() -> anyhow::Result<()> {
                     let mut h = build_scene_harness(scene_id, theme, config)?;
                     h.run_steps(&steps)?;
                     let image = h.render_image();
-                    let tree = xilem_preview::inspect::dump_layout_tree(&mut h);
+                    let tree = brocado_preview::inspect::dump_layout_tree(&mut h);
                     let layout_issues = lint_ui_layout(&tree, h.viewport());
                     let contrast_issues = lint_spec_contrast(&h.state().theme.to_spec());
                     SceneOutput {

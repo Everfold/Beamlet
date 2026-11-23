@@ -1,21 +1,21 @@
-//! Shared `xilem-ui` preview harness wrapper, widget lint configuration, and WCAG contrast audit.
+//! Shared `brocado` preview harness wrapper, widget lint configuration, and WCAG contrast audit.
 
 use std::cell::RefCell;
 
+use brocado::prelude::*;
+use brocado_preview::harness::{PreviewConfig, PreviewHarness};
+use brocado_preview::inspect::{
+    A11yIssue, A11yLintConfig, ContrastCheck, ContrastIssue, LayoutIssue, LayoutNode, LintConfig,
+    lint_accessibility_with, lint_contrast, lint_layout_with,
+};
 use masonry::properties::Dimensions;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::sized_box;
-use xilem_preview::harness::{PreviewConfig, PreviewHarness};
-use xilem_preview::inspect::{
-    A11yIssue, A11yLintConfig, ContrastCheck, ContrastIssue, LayoutIssue, LayoutNode, LintConfig,
-    lint_accessibility_with, lint_contrast, lint_layout_with,
-};
-use xilem_ui::prelude::*;
 
 pub mod scenes;
 
-/// Returns a [`LintConfig`] extended with `xilem-ui` / `xilem-ui-core` custom widgets and
+/// Returns a [`LintConfig`] extended with `brocado` / `brocado-core` custom widgets and
 /// overlay/decorator containers.
 #[must_use]
 pub fn ui_lint_config() -> LintConfig {
@@ -38,7 +38,7 @@ pub fn lint_ui_layout(root: &LayoutNode, viewport: (f64, f64)) -> Vec<LayoutIssu
     lint_layout_with(root, viewport, &ui_lint_config())
 }
 
-/// Returns an [`A11yLintConfig`] extended with `xilem-ui` / `xilem-ui-core` custom widgets and
+/// Returns an [`A11yLintConfig`] extended with `brocado` / `brocado-core` custom widgets and
 /// modal dialog wrappers.
 #[must_use]
 pub fn ui_a11y_lint_config() -> A11yLintConfig {
@@ -84,7 +84,7 @@ pub fn lint_spec_contrast(spec: &DesignSpec) -> Vec<ContrastIssue> {
     lint_contrast(&checks)
 }
 
-/// Builds a [`PreviewHarness`] wired to `xilem-ui`'s `ui_scope`, dynamic `DefaultProperties`
+/// Builds a [`PreviewHarness`] wired to `brocado`'s `ui_scope`, dynamic `DefaultProperties`
 /// switching, and window background color.
 pub fn build_ui_harness<State: 'static>(
     state: State,

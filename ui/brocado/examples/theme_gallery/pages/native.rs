@@ -1,5 +1,6 @@
 //! Active platform-native signature widgets + open custom slot card.
 
+use brocado::prelude::*;
 use masonry::layout::AsUnit;
 use masonry::peniko::Color;
 use masonry::properties::Padding;
@@ -7,7 +8,6 @@ use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
-use xilem_ui::prelude::*;
 
 use crate::state::{GalleryState, GalleryTab};
 
@@ -389,20 +389,15 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                                 s.native.adw_expander_open = !s.native.adw_expander_open;
                             },
                             vec![
-                                    clickable_action_row(
-                                        "同步",
-                                        None::<&str>,
-                                        Some(icons::SETTINGS),
-                                        None::<
-                                            xilem_ui::components::button::UiButton<
-                                                GalleryState,
-                                                (),
-                                            >,
-                                        >,
-                                        |s: &mut GalleryState| s.components.click_count += 1,
-                                    )
-                                    .boxed(),
-                                ],
+                                clickable_action_row(
+                                    "同步",
+                                    None::<&str>,
+                                    Some(icons::SETTINGS),
+                                    None::<brocado::components::button::UiButton<GalleryState, ()>>,
+                                    |s: &mut GalleryState| s.components.click_count += 1,
+                                )
+                                .boxed(),
+                            ],
                         )
                         .boxed(),
                     ],

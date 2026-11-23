@@ -4,6 +4,8 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use brocado::HoverTooltipHost;
+use brocado::prelude::*;
 use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
 use masonry::core::{KeyboardEvent, PointerButton, TextEvent, WidgetId};
 use masonry::dpi::PhysicalSize;
@@ -21,8 +23,6 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{CrossAxisAlignment, flex_col, flex_row, label, sized_box};
-use xilem_ui::HoverTooltipHost;
-use xilem_ui::prelude::*;
 
 #[derive(Debug)]
 struct NoopRawProxy;
@@ -39,7 +39,7 @@ impl RawProxy for NoopRawProxy {
 
 type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCtx>>::ViewState;
 
-struct XilemHarness<State: 'static> {
+struct BrocadoHarness<State: 'static> {
     state: State,
     theme_fn: fn(&State) -> UiTheme,
     logic: fn(&mut State) -> Box<AnyWidgetView<State>>,
@@ -50,7 +50,7 @@ struct XilemHarness<State: 'static> {
     harness: TestHarness<Passthrough>,
 }
 
-impl<State: 'static> XilemHarness<State> {
+impl<State: 'static> BrocadoHarness<State> {
     fn new(
         mut state: State,
         theme_fn: fn(&State) -> UiTheme,
@@ -243,7 +243,7 @@ fn all_eight_theme_polarities_render_distinct_non_blank_frames() {
                 ..Default::default()
             };
             let mut app =
-                XilemHarness::new(st, |s| s.theme.clone(), shared_matrix_view, (480, 420));
+                BrocadoHarness::new(st, |s| s.theme.clone(), shared_matrix_view, (480, 420));
             let bytes = app.render_bytes();
             let (chunks, _) = bytes.as_chunks::<4>();
             let first = chunks[0];
@@ -270,7 +270,7 @@ fn all_eight_theme_polarities_render_distinct_non_blank_frames() {
 
 #[test]
 fn live_runtime_theme_hot_switch_updates_single_tree_cleanly() {
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         MatrixState::default(),
         |s| s.theme.clone(),
         shared_matrix_view,
@@ -301,7 +301,7 @@ fn live_runtime_theme_hot_switch_updates_single_tree_cleanly() {
 
 #[test]
 fn range_slider_pointer_drag_emits_clamped_pair() {
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         MatrixState::default(),
         |s| s.theme.clone(),
         |s| {
@@ -378,7 +378,7 @@ fn find_button_with_label(
 
 #[test]
 fn date_and_time_pickers_update_state_on_click() {
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         MatrixState::default(),
         |s| s.theme.clone(),
         |s| {
@@ -414,7 +414,7 @@ fn modal_dialog_dismisses_on_escape_key() {
         dialog_open: true,
         ..Default::default()
     };
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         initial,
         |s| s.theme.clone(),
         |s| {
@@ -462,7 +462,7 @@ fn hover_tooltip_and_anchored_popup_lifecycle() {
         menu_open: true,
         ..Default::default()
     };
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         initial,
         |s| s.theme.clone(),
         |s| {
@@ -527,7 +527,7 @@ fn hover_tooltip_and_anchored_popup_lifecycle() {
 
 #[test]
 fn all_four_platform_signature_suites_build_and_render() {
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         MatrixState::default(),
         |s| s.theme.clone(),
         |s| {
@@ -536,17 +536,17 @@ fn all_four_platform_signature_suites_build_and_render() {
                 NavDestination::new("Settings", icons::SETTINGS),
             ];
             flex_col((
-                xilem_ui::md3::top_app_bar_slots(
+                brocado::md3::top_app_bar_slots(
                     TopAppBarVariant::CenterAligned,
                     "MD3 Signature",
                     None,
                     vec![],
                 ),
                 flex_row((
-                    xilem_ui::md3::fab(icons::ADD, FabColor::Primary, |st: &mut MatrixState| {
+                    brocado::md3::fab(icons::ADD, FabColor::Primary, |st: &mut MatrixState| {
                         st.clicks += 1;
                     }),
-                    xilem_ui::md3::extended_fab(
+                    brocado::md3::extended_fab(
                         icons::EDIT,
                         "Compose",
                         FabColor::Secondary,
@@ -554,59 +554,59 @@ fn all_four_platform_signature_suites_build_and_render() {
                     ),
                 ))
                 .gap(8.px()),
-                xilem_ui::fluent::navigation_view(
+                brocado::fluent::navigation_view(
                     Some("WinUI"),
                     &nav_dests[..1],
                     &nav_dests[1..],
                     0,
                     |st: &mut MatrixState, _| st.clicks += 1,
                 ),
-                xilem_ui::fluent::info_bar(
+                brocado::fluent::info_bar(
                     InfoBarSeverity::Informational,
                     "Fluent InfoBar",
                     "Ready",
                     None,
                 ),
-                xilem_ui::fluent::settings_card(
+                brocado::fluent::settings_card(
                     Some(icons::SETTINGS),
                     "Fluent Settings",
                     Some("Subtext"),
                     switch(s.switch_on, |st: &mut MatrixState, v| st.switch_on = v),
                 ),
-                xilem_ui::hig::macos_toolbar_with_center(
+                brocado::hig::macos_toolbar_with_center(
                     vec![],
                     search_bar(s.text.clone(), |st: &mut MatrixState, v| st.text = v),
                     vec![],
                 ),
-                xilem_ui::hig::form_group(
+                brocado::hig::form_group(
                     Some("HIG FORM"),
                     vec![
-                        xilem_ui::hig::form_row(
+                        brocado::hig::form_row(
                             "Help",
-                            xilem_ui::hig::help_button(|st: &mut MatrixState| st.clicks += 1),
+                            brocado::hig::help_button(|st: &mut MatrixState| st.clicks += 1),
                         )
                         .boxed(),
                     ],
                     None,
                 ),
-                xilem_ui::adwaita::header_bar_with_title(label("Adwaita Header"), vec![], vec![]),
-                xilem_ui::adwaita::banner("Adwaita Banner", Some("OK"), None, None),
-                xilem_ui::adwaita::preferences_group(
+                brocado::adwaita::header_bar_with_title(label("Adwaita Header"), vec![], vec![]),
+                brocado::adwaita::banner("Adwaita Banner", Some("OK"), None, None),
+                brocado::adwaita::preferences_group(
                     Some("GNOME Prefs"),
                     None,
                     vec![
-                        xilem_ui::adwaita::switch_row(
+                        brocado::adwaita::switch_row(
                             "Option",
                             None::<&str>,
                             s.switch_on,
                             |st: &mut MatrixState, v| st.switch_on = v,
                         )
                         .boxed(),
-                        xilem_ui::adwaita::clickable_action_row(
+                        brocado::adwaita::clickable_action_row(
                             "Sync",
                             None::<&str>,
                             Some(icons::SETTINGS),
-                            None::<xilem_ui::components::button::UiButton<MatrixState, ()>>,
+                            None::<brocado::components::button::UiButton<MatrixState, ()>>,
                             |st: &mut MatrixState| st.clicks += 1,
                         )
                         .boxed(),
@@ -637,7 +637,7 @@ fn focus_frame_reacts_to_real_focus_changes() {
             theme: UiTheme::new(lang, Brightness::Light),
             ..Default::default()
         };
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             st,
             |s| s.theme.clone(),
             |s| {
@@ -673,7 +673,7 @@ fn dialog_action_order_follows_platform_convention() {
             theme: UiTheme::new(lang, Brightness::Light),
             ..Default::default()
         };
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             initial,
             |s| s.theme.clone(),
             |_| {
@@ -727,7 +727,7 @@ fn dialog_action_order_follows_platform_convention() {
 
 #[test]
 fn style_overrides_apply_directly_to_concrete_components() {
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         MatrixState::default(),
         |s| s.theme.clone(),
         |_| {
@@ -823,7 +823,7 @@ fn collect_all_widget_ids_by_type_name(
 fn aligned_platform_signature_components_build_interact_and_render() {
     // 1) Material Design 3: Small/Large FAB, NavigationRailWithFab, FloatingToolbar
     {
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             MatrixState {
                 theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
                 ..Default::default()
@@ -875,7 +875,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
             num: f64,
             expanded: bool,
         }
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             FluentState {
                 theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
                 crumb_clicks: 0,
@@ -942,7 +942,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
             step_val: i32,
             path_clicks: usize,
         }
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             HigState {
                 theme: UiTheme::new(DesignLanguage::Hig, Brightness::Light),
                 expanded: false,
@@ -1006,7 +1006,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
             combo_idx: usize,
             entry: String,
         }
-        let mut app = XilemHarness::new(
+        let mut app = BrocadoHarness::new(
             AdwState {
                 theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
                 tab: 0,
@@ -1112,7 +1112,7 @@ fn destructive_button_and_dialog_apply_error_semantics_and_fire_actions() {
         dialog_open: bool,
         confirmed: bool,
     }
-    let mut app = XilemHarness::new(
+    let mut app = BrocadoHarness::new(
         DestructState {
             theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
             dialog_open: false,

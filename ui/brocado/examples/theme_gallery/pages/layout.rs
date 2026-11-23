@@ -1,5 +1,7 @@
 //! Layout system showcase: spacing rhythm, Flex weights, AdwClamp, BreakpointBin, and Elevation/ZStack.
 
+use brocado::prelude::*;
+use brocado::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
 use masonry::layout::{AsUnit, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use xilem_masonry::WidgetView;
@@ -7,8 +9,6 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack,
 };
-use xilem_ui::core_ui::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
-use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;
 

@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use anyhow::bail;
+use brocado::prelude::*;
 use image::RgbaImage;
 use masonry::layout::{AsUnit, UnitPoint};
 use masonry::peniko::Color;
@@ -13,10 +14,9 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, label, portal, sized_box, zstack,
 };
-use xilem_ui::prelude::*;
 
-use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use xilem_preview::inspect::{ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree};
+use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+use brocado_preview::inspect::{ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree};
 
 use super::{build_ui_harness, lint_spec_contrast, lint_ui_layout};
 
@@ -166,7 +166,7 @@ impl SceneState {
             active_tab: 0,
             click_count: 3,
             accent_menu_open: false,
-            text_value: "Beamlet UI System".into(),
+            text_value: "Brocado UI System".into(),
             email_value: "invalid-email".into(),
             search_query: String::new(),
             agree_terms: true,

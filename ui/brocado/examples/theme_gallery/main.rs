@@ -7,8 +7,8 @@ mod pages;
 mod shells;
 mod state;
 
-use xilem_ui::dpi::LogicalSize;
-use xilem_ui::prelude::*;
+use brocado::dpi::LogicalSize;
+use brocado::prelude::*;
 
 use state::GalleryState;
 
@@ -33,7 +33,7 @@ fn main() {
     AppRunner::new(initial, |state: &mut GalleryState| {
         let wid = state.window_id;
         let theme = state.theme.clone();
-        let title = format!("Beamlet UI ({})", theme.language.label());
+        let title = format!("Brocado ({})", theme.language.label());
         let view = app_view(state);
         std::iter::once(themed_window(wid, title, &theme, view).with_config(|cfg| {
             cfg.on_close(|s: &mut GalleryState| s.running = false)
@@ -50,14 +50,14 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::HashSet;
 
-    use masonry::properties::Dimensions;
-    use xilem_masonry::style::Style as _;
-    use xilem_masonry::view::sized_box;
-    use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-    use xilem_preview::inspect::{
+    use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
+    use brocado_preview::inspect::{
         A11yLintConfig, IssueSeverity, LayoutIssue, LayoutNode, LintConfig, dump_layout_tree,
         format_tree_text, lint_accessibility_with, lint_layout_with,
     };
+    use masonry::properties::Dimensions;
+    use xilem_masonry::style::Style as _;
+    use xilem_masonry::view::sized_box;
 
     use super::*;
     use state::GalleryTab;
