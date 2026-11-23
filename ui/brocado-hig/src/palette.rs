@@ -1,7 +1,7 @@
 //! macOS Apple System Colors & Aqua Light/Dark palette presets.
 
+use brocado_core::tokens::{Brightness, SemanticPalette};
 use masonry::peniko::Color;
-use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// Apple System Settings accent color presets.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

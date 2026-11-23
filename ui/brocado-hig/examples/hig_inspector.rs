@@ -1,22 +1,22 @@
-//! Standalone macOS Aqua Inspector example using `xilem-hig` directly without `xilem-ui`.
+//! Standalone macOS Aqua Inspector example using `brocado-hig` directly without `brocado`.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
-use masonry::dpi::LogicalSize;
-use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::Padding;
-use xilem_hig::{
+use brocado_hig::{
     Brightness, HigAccent, HigTheme, body_medium, body_small, disclosure_group, form_group,
     form_row, headline_small, help_button, icon_button, icons, inspector_panel, label_medium,
     macos_alert_dialog, macos_toolbar_with_center, path_control, popup_button, primary_button,
     search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
 };
+use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
 };
-use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct InspectorApp {
     window_id: WindowId,
@@ -290,7 +290,7 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
 
 fn main() {
     let initial = InspectorApp::default();
-    let props = xilem_hig::build_default_properties(&initial.current_theme().to_spec());
+    let props = brocado_hig::build_default_properties(&initial.current_theme().to_spec());
     AppRunner::new(initial, |state: &mut InspectorApp| {
         let spec = state.current_theme().to_spec();
         let wid = state.window_id;

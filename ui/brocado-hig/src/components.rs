@@ -3,6 +3,16 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use brocado_core::components::divider::{horizontal_divider, vertical_divider};
+use brocado_core::components::{
+    MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,
+};
+use brocado_core::foundation::{
+    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, icons,
+    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+};
+use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
+use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::{AsUnit, Dim, UnitPoint};
@@ -18,16 +28,6 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
 };
-use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
-use xilem_ui_core::components::{
-    MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,
-};
-use xilem_ui_core::foundation::{
-    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, icons,
-    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
-};
-use xilem_ui_core::style_engine::{classes, current_spec_arc, with_spec};
-use xilem_ui_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 
 /// Unified macOS compact `38px` window toolbar hosting an arbitrary custom center view (e.g. search bar or segmented switcher).
 pub fn macos_toolbar_with_center<State: 'static, Action: 'static, C>(
@@ -456,7 +456,7 @@ where
 }
 
 /// macOS `NSPopUpButton` compact pill with trailing accent-tinted double-chevron badge
-/// backed by an anchored [`PopupLayer`](xilem_ui_core::foundation::PopupLayer).
+/// backed by an anchored [`PopupLayer`](brocado_core::foundation::PopupLayer).
 pub fn popup_button<State: 'static, Action: 'static, OnToggle, OnSelect, OnDismiss>(
     options: &[&str],
     selected: usize,
@@ -529,7 +529,7 @@ pub type MacosAlertCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + 
 
 /// macOS 11+ (Big Sur / Sonoma) centered alert dialog with icon, centered copy,
 /// and stacked full-width primary/secondary action buttons.
-#[must_use = "View values do nothing unless provided to Xilem."]
+#[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct MacosAlertDialog<State, Action> {
     title: ArcStr,
