@@ -15,16 +15,20 @@ hig = ["dep:xilem-hig"]
 md3 = ["dep:xilem-md3"]
 winit = ["dep:xilem-ui-winit"]
 
+[[example]]
+name = "theme_gallery"
+required-features = ["winit"]
+
 [dependencies]
 masonry.workspace = true
 xilem-adwaita = { workspace = true, optional = true }
+xilem_core.workspace = true
 xilem-fluent = { workspace = true, optional = true }
 xilem-hig = { workspace = true, optional = true }
+xilem_masonry.workspace = true
 xilem-md3 = { workspace = true, optional = true }
 xilem-ui-core.workspace = true
 xilem-ui-winit = { workspace = true, optional = true }
-xilem_core.workspace = true
-xilem_masonry.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
@@ -34,7 +38,3 @@ masonry_testing.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 xilem-preview.workspace = true
-
-[[example]]
-name = "theme_gallery"
-required-features = ["winit"]

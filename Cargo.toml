@@ -97,11 +97,11 @@ masonry_testing = { git = "https://github.com/linebender/xilem.git" }
 masonry_winit = { git = "https://github.com/linebender/xilem.git" }
 usvg = "0.47"
 xilem = { git = "https://github.com/linebender/xilem.git" }
-xilem_core = { git = "https://github.com/linebender/xilem.git" }
-xilem_masonry = { git = "https://github.com/linebender/xilem.git" }
 xilem-adwaita = { path = "ui/xilem-adwaita" }
+xilem_core = { git = "https://github.com/linebender/xilem.git" }
 xilem-fluent = { path = "ui/xilem-fluent" }
 xilem-hig = { path = "ui/xilem-hig" }
+xilem_masonry = { git = "https://github.com/linebender/xilem.git" }
 xilem-md3 = { path = "ui/xilem-md3" }
 xilem-preview = { path = "ui/xilem-preview" }
 xilem-ui = { path = "ui/xilem-ui" }

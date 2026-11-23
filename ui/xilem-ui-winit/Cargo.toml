@@ -12,6 +12,6 @@ masonry.workspace = true
 masonry_winit.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-xilem-ui-core.workspace = true
 xilem_core.workspace = true
 xilem_masonry.workspace = true
+xilem-ui-core.workspace = true

@@ -9,9 +9,9 @@ license.workspace = true
 
 [dependencies]
 masonry.workspace = true
-xilem-ui-core.workspace = true
 xilem_core.workspace = true
 xilem_masonry.workspace = true
+xilem-ui-core.workspace = true
 
 [dev-dependencies]
 xilem-ui-winit.workspace = true
