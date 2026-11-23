@@ -13,7 +13,7 @@ pub use components::{
     source_list_sidebar, stepper,
 };
 pub use palette::{HigAccent, hig_palette};
-pub use theme::{HigTheme, hig_scope, hig_window};
+pub use theme::{HigTheme, hig_scope};
 pub use xilem_ui_core::components::*;
 pub use xilem_ui_core::foundation::{
     AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,

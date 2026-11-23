@@ -1,6 +1,6 @@
 //! macOS Apple System Colors & Aqua Light/Dark palette presets.
 
-use xilem::Color;
+use masonry::peniko::Color;
 use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// Apple System Settings accent color presets.

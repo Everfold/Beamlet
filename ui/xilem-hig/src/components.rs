@@ -3,17 +3,21 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-use xilem::kurbo::Vec2;
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::{AsUnit, Dim, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::core::ArcStr;
+use masonry::kurbo::Vec2;
+use masonry::layout::{AsUnit, Dim, UnitPoint};
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::Pod;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
 };
-use xilem::{AnyWidgetView, Color, Pod, ViewCtx, WidgetView};
 use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
 use xilem_ui_core::components::{
     MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,

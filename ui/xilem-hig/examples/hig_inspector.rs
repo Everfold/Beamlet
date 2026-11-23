@@ -2,23 +2,24 @@
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
-use xilem::dpi::LogicalSize;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
-use xilem::style::Style as _;
-use xilem::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
-};
-use xilem::{AppState, EventLoop, WidgetView, Xilem};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_hig::{
     Brightness, HigAccent, HigTheme, body_medium, body_small, disclosure_group, form_group,
-    form_row, headline_small, help_button, hig_window, icon_button, icons, inspector_panel,
-    label_medium, macos_alert_dialog, macos_toolbar_with_center, path_control, popup_button,
-    primary_button, search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
+    form_row, headline_small, help_button, icon_button, icons, inspector_panel, label_medium,
+    macos_alert_dialog, macos_toolbar_with_center, path_control, popup_button, primary_button,
+    search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
 };
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
+};
+use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct InspectorApp {
-    window_id: xilem::WindowId,
+    window_id: WindowId,
     running: bool,
     brightness: Brightness,
     accent: HigAccent,
@@ -45,7 +46,7 @@ impl AppState for InspectorApp {
 impl Default for InspectorApp {
     fn default() -> Self {
         Self {
-            window_id: xilem::WindowId::next(),
+            window_id: WindowId::next(),
             running: true,
             brightness: Brightness::Light,
             accent: HigAccent::Blue,
@@ -290,19 +291,19 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
 fn main() {
     let initial = InspectorApp::default();
     let props = xilem_hig::build_default_properties(&initial.current_theme().to_spec());
-    let app = Xilem::new(initial, |state: &mut InspectorApp| {
-        let theme = state.current_theme();
+    AppRunner::new(initial, |state: &mut InspectorApp| {
+        let spec = state.current_theme().to_spec();
         let wid = state.window_id;
         std::iter::once(
-            hig_window(wid, "macOS Apple HIG 检查器", &theme, app_view(state)).with_options(
-                |opts| {
-                    opts.on_close(|s: &mut InspectorApp| s.running = false)
+            desktop_window(wid, "macOS Apple HIG 检查器", &spec, app_view(state)).with_config(
+                |cfg| {
+                    cfg.on_close(|s: &mut InspectorApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(1120.0, 740.0))
                 },
             ),
         )
     })
-    .with_default_properties(props);
-    app.run_in(EventLoop::with_user_event())
-        .expect("hig_inspector event loop exited cleanly");
+    .with_default_properties(props)
+    .run()
+    .expect("hig_inspector event loop exited cleanly");
 }
