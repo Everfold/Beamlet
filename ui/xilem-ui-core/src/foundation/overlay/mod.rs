@@ -33,7 +33,8 @@ pub use modal::{
     modal_shell_teardown,
 };
 pub use popup_layer::{
-    AnchoredPopupHost, AnchoredPopupView, PopupAction, PopupEntrySpec, PopupLayer, PopupLayerSpec,
+    AnchoredPopupHost, AnchoredPopupView, ContextMenuHost, ContextMenuView, PopupAction,
+    PopupEntrySpec, PopupLayer, PopupLayerSpec,
 };
 pub use tooltip_host::{HoverTooltipHost, HoverTooltipView, TooltipContentSpec};
 

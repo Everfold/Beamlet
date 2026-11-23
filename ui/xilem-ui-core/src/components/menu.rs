@@ -11,7 +11,7 @@ use xilem::view::{CrossAxisAlignment, FlexExt, button, flex_row, label};
 use xilem::{Pod, WidgetView};
 
 use crate::foundation::overlay::{
-    AnchoredPopupHost, AnchoredPopupView, PopupEntrySpec, PopupLayerSpec,
+    AnchoredPopupHost, AnchoredPopupView, ContextMenuView, PopupEntrySpec, PopupLayerSpec,
 };
 use crate::foundation::{UiClassExt, icons, ui_icon};
 use crate::style_engine::classes;
@@ -233,4 +233,25 @@ where
 
     let _ = PhantomData::<Pod<AnchoredPopupHost>>;
     dropdown_menu(trigger, open, entries, on_select, on_dismiss)
+}
+
+/// Attaches a floating context menu (`Right-Click` / `Shift+F10` / `ContextMenu` key) to `target`.
+pub fn context_menu<State, Action, TargetV, OnSelect>(
+    target: TargetV,
+    entries: Vec<MenuEntry>,
+    on_select: OnSelect,
+) -> ContextMenuView<TargetV, State, Action>
+where
+    State: 'static,
+    Action: 'static,
+    TargetV: WidgetView<State, Action>,
+    OnSelect: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    ContextMenuView {
+        target,
+        spec_builder: Arc::new(move |spec| build_popup_spec(spec, &entries, 180.0)),
+        on_select: Arc::new(on_select),
+        on_dismiss: None,
+        phantom: PhantomData,
+    }
 }

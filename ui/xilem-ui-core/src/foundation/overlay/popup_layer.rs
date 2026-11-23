@@ -11,9 +11,9 @@ use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::keyboard::{Key, NamedKey};
 use xilem::masonry::core::{
     AccessCtx, AccessEvent, ActionCtx, ArcStr, ChildrenIds, ErasedAction, EventCtx, Layer,
-    LayerType, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButtonEvent,
-    PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty, TextEvent, Update,
-    UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
+    LayerType, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton,
+    PointerButtonEvent, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
+    TextEvent, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
@@ -252,15 +252,8 @@ impl PopupLayer {
         self.dismissed = true;
         let self_id = ctx.widget_id();
         ctx.remove_layer(self_id);
-        let creator = self.creator;
-        ctx.mutate_later(creator, move |mut host| {
-            let mut host = host.downcast::<AnchoredPopupHost>();
-            if host.widget.layer_id == Some(self_id) {
-                host.widget.layer_id = None;
-                host.widget.layer_buttons.clear();
-            }
-            host.ctx
-                .submit_action::<PopupAction>(PopupAction::Selected(idx));
+        ctx.mutate_later(self.creator, move |host| {
+            clear_creator_layer(host, self_id, Some(PopupAction::Selected(idx)));
         });
     }
 
@@ -271,17 +264,8 @@ impl PopupLayer {
         self.dismissed = true;
         let self_id = ctx.widget_id();
         ctx.remove_layer(self_id);
-        let creator = self.creator;
-        ctx.mutate_later(creator, move |mut host| {
-            let mut host = host.downcast::<AnchoredPopupHost>();
-            if host.widget.layer_id == Some(self_id) {
-                host.widget.layer_id = None;
-                host.widget.layer_buttons.clear();
-            }
-            if host.widget.open {
-                host.ctx
-                    .submit_action::<PopupAction>(PopupAction::Dismissed);
-            }
+        ctx.mutate_later(self.creator, move |host| {
+            clear_creator_layer(host, self_id, Some(PopupAction::Dismissed));
         });
     }
 }
@@ -393,14 +377,8 @@ impl Widget for PopupLayer {
             ctx.set_handled();
             let self_id = ctx.widget_id();
             ctx.remove_layer(self_id);
-            ctx.mutate_later(self.creator, move |mut host| {
-                let mut host = host.downcast::<AnchoredPopupHost>();
-                if host.widget.layer_id == Some(self_id) {
-                    host.widget.layer_id = None;
-                    host.widget.layer_buttons.clear();
-                }
-                host.ctx
-                    .submit_action::<PopupAction>(PopupAction::Selected(idx));
+            ctx.mutate_later(self.creator, move |host| {
+                clear_creator_layer(host, self_id, Some(PopupAction::Selected(idx)));
             });
         }
     }
@@ -935,6 +913,364 @@ where
                         MessageResult::Action((self.on_select)(app_state, idx))
                     }
                     PopupAction::Dismissed => MessageResult::Action((self.on_dismiss)(app_state)),
+                },
+                None => MessageResult::Stale,
+            },
+            Some(_) => MessageResult::Stale,
+        }
+    }
+}
+
+fn clear_creator_layer(
+    mut host: WidgetMut<'_, dyn Widget>,
+    self_id: WidgetId,
+    action: Option<PopupAction>,
+) {
+    if let Some(mut anchored) = host.try_downcast::<AnchoredPopupHost>() {
+        if anchored.widget.layer_id == Some(self_id) {
+            anchored.widget.layer_id = None;
+            anchored.widget.layer_buttons.clear();
+        }
+        match action {
+            Some(PopupAction::Selected(idx)) => {
+                anchored
+                    .ctx
+                    .submit_action::<PopupAction>(PopupAction::Selected(idx));
+            }
+            Some(PopupAction::Dismissed) if anchored.widget.open => {
+                anchored
+                    .ctx
+                    .submit_action::<PopupAction>(PopupAction::Dismissed);
+            }
+            Some(PopupAction::Dismissed) | None => {}
+        }
+    } else if let Some(mut ctx_menu) = host.try_downcast::<ContextMenuHost>() {
+        if ctx_menu.widget.layer_id == Some(self_id) {
+            ctx_menu.widget.layer_id = None;
+            ctx_menu.widget.layer_buttons.clear();
+        }
+        if let Some(act) = action {
+            ctx_menu.ctx.submit_action::<PopupAction>(act);
+        }
+    }
+}
+
+/// Masonry host widget spawning a floating context menu [`PopupLayer`] on secondary click or keyboard shortcut.
+#[expect(
+    missing_debug_implementations,
+    reason = "Holds an erased Masonry WidgetPod and PopupLayerSpec"
+)]
+pub struct ContextMenuHost {
+    target: WidgetPod<dyn Widget>,
+    spec: PopupLayerSpec,
+    layer_id: Option<WidgetId>,
+    layer_buttons: Vec<(WidgetId, usize, bool)>,
+}
+
+impl ContextMenuHost {
+    fn new(target: NewWidget<impl Widget + ?Sized>, spec: PopupLayerSpec) -> Self {
+        Self {
+            target: target.erased().to_pod(),
+            spec,
+            layer_id: None,
+            layer_buttons: Vec::new(),
+        }
+    }
+
+    fn target_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> WidgetMut<'t, dyn Widget> {
+        this.ctx.get_mut(&mut this.widget.target)
+    }
+
+    /// Returns the active Masonry `Layer` root ID when the context menu is currently open.
+    #[must_use]
+    pub fn layer_id(&self) -> Option<WidgetId> {
+        self.layer_id
+    }
+
+    fn spawn_at_event(&mut self, ctx: &mut EventCtx<'_>, window_pos: Point) {
+        if ctx.is_stashed() {
+            return;
+        }
+        if let Some(old_id) = self.layer_id.take() {
+            ctx.mutate_later(old_id, |mut layer| {
+                layer.downcast::<PopupLayer>().widget.dismissed = true;
+            });
+            ctx.remove_layer(old_id);
+        }
+        let anchor_rect = Rect::from_origin_size(window_pos, Size::ZERO);
+        let (layer, buttons) = PopupLayer::from_spec(
+            ctx.widget_id(),
+            &self.spec,
+            anchor_rect,
+            Vec2::ZERO,
+            window_pos,
+        );
+        self.layer_id = Some(layer.id());
+        self.layer_buttons = buttons;
+        ctx.create_layer(LayerType::Other, layer, window_pos);
+    }
+
+    fn close_layer_with_update(this: &mut WidgetMut<'_, Self>) {
+        this.widget.layer_buttons.clear();
+        if let Some(id) = this.widget.layer_id.take() {
+            this.ctx.mutate_later(id, |mut layer| {
+                layer.downcast::<PopupLayer>().widget.dismissed = true;
+            });
+            this.ctx.remove_layer(id);
+        }
+    }
+}
+
+impl Widget for ContextMenuHost {
+    type Action = PopupAction;
+
+    fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
+        ctx.register_child(&mut self.target);
+    }
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        if let PointerEvent::Down(btn_ev) = event
+            && btn_ev.button == Some(PointerButton::Secondary)
+        {
+            let window_pos = ctx.to_window(ctx.local_position(btn_ev.state.position));
+            self.spawn_at_event(ctx, window_pos);
+            ctx.set_handled();
+        }
+    }
+
+    fn on_text_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &TextEvent,
+    ) {
+        if let TextEvent::Keyboard(kev) = event
+            && kev.state.is_down()
+        {
+            if kev.key == Key::Named(NamedKey::ContextMenu)
+                || (kev.modifiers.shift() && kev.key == Key::Named(NamedKey::F10))
+            {
+                let center = ctx.to_window(ctx.border_box().center());
+                self.spawn_at_event(ctx, center);
+                ctx.set_handled();
+                return;
+            }
+            if let Some(layer_id) = self.layer_id {
+                match &kev.key {
+                    Key::Named(NamedKey::Escape) => {
+                        ctx.mutate_later(layer_id, |mut layer| {
+                            layer.downcast::<PopupLayer>().widget.dismissed = true;
+                        });
+                        ctx.remove_layer(layer_id);
+                        self.layer_id = None;
+                        self.layer_buttons.clear();
+                        ctx.submit_action::<PopupAction>(PopupAction::Dismissed);
+                        ctx.set_handled();
+                    }
+                    Key::Named(NamedKey::ArrowDown | NamedKey::Home) => {
+                        if let Some(&(btn_id, _, false)) =
+                            self.layer_buttons.iter().find(|(_, _, d)| !*d)
+                        {
+                            ctx.set_focus(btn_id);
+                            ctx.set_handled();
+                        }
+                    }
+                    Key::Named(NamedKey::ArrowUp | NamedKey::End) => {
+                        if let Some(&(btn_id, _, false)) =
+                            self.layer_buttons.iter().rev().find(|(_, _, d)| !*d)
+                        {
+                            ctx.set_focus(btn_id);
+                            ctx.set_handled();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
+        if matches!(event, Update::StashedChanged(true)) {
+            self.layer_buttons.clear();
+            if let Some(id) = self.layer_id.take() {
+                ctx.mutate_later(id, |mut layer| {
+                    layer.downcast::<PopupLayer>().widget.dismissed = true;
+                });
+                ctx.remove_layer(id);
+            }
+        }
+    }
+
+    fn measure(
+        &mut self,
+        ctx: &mut MeasureCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        axis: Axis,
+        _len_req: LenReq,
+        cross_length: Option<Length>,
+    ) -> Length {
+        ctx.redirect_measurement(&mut self.target, axis, cross_length)
+    }
+
+    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+        ctx.run_layout(&mut self.target, size);
+        ctx.place_child(&mut self.target, Point::ORIGIN);
+        ctx.derive_baselines(&self.target);
+    }
+
+    fn paint(
+        &mut self,
+        _ctx: &mut PaintCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        _painter: &mut Painter<'_>,
+    ) {
+    }
+
+    fn accessibility_role(&self) -> Role {
+        Role::GenericContainer
+    }
+
+    fn accessibility(
+        &mut self,
+        _ctx: &mut AccessCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        _node: &mut Node,
+    ) {
+    }
+
+    fn children_ids(&self) -> ChildrenIds {
+        ChildrenIds::from_slice(&[self.target.id()])
+    }
+
+    fn make_trace_span(&self, id: WidgetId) -> Span {
+        trace_span!("ContextMenuHost", id = id.trace())
+    }
+}
+
+const CONTEXT_TARGET_ID: ViewId = ViewId::new(0x5549_3430);
+
+/// Callback type invoked when a popup or context menu dismisses without selection.
+pub type PopupDismissCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
+
+/// Xilem [`View`] wrapper opening an anchored floating [`PopupLayer`] on secondary mouse click (`Right-Click`) or `ContextMenu`/`Shift+F10`.
+#[must_use = "View values do nothing unless provided to Xilem."]
+#[expect(
+    missing_debug_implementations,
+    reason = "Contains generic target View and closure trait objects"
+)]
+pub struct ContextMenuView<TargetV, State, Action> {
+    /// Wrapped target subtree that opens the context menu on secondary click.
+    pub target: TargetV,
+    /// Theme-aware popup spec constructor.
+    pub spec_builder: Arc<dyn Fn(&DesignSpec) -> PopupLayerSpec + Send + Sync>,
+    /// Selection callback invoked with clicked item's `action_idx`.
+    pub on_select: PopupSelectCallback<State, Action>,
+    /// Optional dismiss callback invoked when dismissed without selecting an item.
+    pub on_dismiss: Option<PopupDismissCallback<State, Action>>,
+    /// State/Action marker.
+    pub phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<TargetV, State, Action> ContextMenuView<TargetV, State, Action> {
+    /// Attaches an optional callback invoked when the context menu closes without item selection.
+    pub fn on_dismiss<F>(mut self, on_dismiss: F) -> Self
+    where
+        F: Fn(&mut State) -> Action + Send + Sync + 'static,
+    {
+        self.on_dismiss = Some(Arc::new(on_dismiss));
+        self
+    }
+}
+
+impl<TargetV, State, Action> ViewMarker for ContextMenuView<TargetV, State, Action> {}
+
+impl<TargetV, State, Action> View<State, Action, ViewCtx>
+    for ContextMenuView<TargetV, State, Action>
+where
+    TargetV: WidgetView<State, Action>,
+    State: 'static,
+    Action: 'static,
+{
+    type Element = Pod<ContextMenuHost>;
+    type ViewState = TargetV::ViewState;
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec_theme = current_spec_arc(ctx);
+        let popup_spec = (self.spec_builder)(&spec_theme);
+        let (target_pod, target_state) =
+            ctx.with_id(CONTEXT_TARGET_ID, |ctx| self.target.build(ctx, app_state));
+        let pod = ctx.with_action_widget(|ctx| {
+            ctx.create_pod(ContextMenuHost::new(target_pod.new_widget, popup_spec))
+        });
+        (pod, target_state)
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        {
+            let mut target = ContextMenuHost::target_mut(&mut element);
+            ctx.with_id(CONTEXT_TARGET_ID, |ctx| {
+                self.target
+                    .rebuild(&prev.target, view_state, ctx, target.downcast(), app_state);
+            });
+        }
+        let spec_theme = current_spec_arc(ctx);
+        let popup_spec = (self.spec_builder)(&spec_theme);
+        element.widget.spec = popup_spec;
+    }
+
+    fn teardown(
+        &self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+    ) {
+        ContextMenuHost::close_layer_with_update(&mut element);
+        {
+            let mut target = ContextMenuHost::target_mut(&mut element);
+            ctx.with_id(CONTEXT_TARGET_ID, |ctx| {
+                self.target.teardown(view_state, ctx, target.downcast());
+            });
+        }
+        ctx.teardown_action_source(element);
+    }
+
+    fn message(
+        &self,
+        view_state: &mut Self::ViewState,
+        message: &mut MessageCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        match message.take_first() {
+            Some(CONTEXT_TARGET_ID) => {
+                let mut target = ContextMenuHost::target_mut(&mut element);
+                self.target
+                    .message(view_state, message, target.downcast(), app_state)
+            }
+            None => match message.take_message::<PopupAction>() {
+                Some(action) => match *action {
+                    PopupAction::Selected(idx) => {
+                        MessageResult::Action((self.on_select)(app_state, idx))
+                    }
+                    PopupAction::Dismissed => {
+                        if let Some(cb) = &self.on_dismiss {
+                            MessageResult::Action(cb(app_state))
+                        } else {
+                            MessageResult::Nop
+                        }
+                    }
                 },
                 None => MessageResult::Stale,
             },

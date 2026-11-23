@@ -10,9 +10,10 @@ pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope, ui_window, ui_windo
 pub use xilem_ui_core as core;
 pub use xilem_ui_core::components;
 pub use xilem_ui_core::foundation::{
-    BeveledBorder, BeveledBorderView, EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost,
-    RippleLayer, RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, beveled_surface,
-    focus_frame, icons, ripple_layer, ui_icon, ui_transition, wrap,
+    BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
+    FocusFrameView, HoverTooltipHost, RippleLayer, RippleLayerView, UiClassExt, WrapState,
+    WrapView, WrapWidget, beveled_surface, focus_frame, icons, ripple_layer, ui_icon,
+    ui_transition, wrap,
 };
 pub use xilem_ui_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
