@@ -6,49 +6,50 @@
 pub mod prelude;
 pub mod theme;
 
-pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
-#[cfg(feature = "winit")]
-pub use theme::{themed_window, themed_window_with_backdrop};
-pub use xilem_ui_core as core_ui;
-pub use xilem_ui_core::components;
-pub use xilem_ui_core::foundation::{
+pub use brocado_core as core_ui;
+pub use brocado_core::components;
+pub use brocado_core::foundation::{
     BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
     FocusFrameView, HoverTooltipHost, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget,
     RippleLayer, RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, beveled_surface,
     focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition, wrap,
 };
-pub use xilem_ui_core::style_engine::{
+pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
     memoize_with_spec, with_spec,
 };
-pub use xilem_ui_core::tokens::{
+pub use brocado_core::tokens;
+pub use brocado_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowBackdrop,
     WindowSizeClass,
 };
-pub use xilem_ui_core::{
+pub use brocado_core::{
     AnyWidgetView, Color, FontWeight, InitialRootWidget, InsertNewline, MasonryRoot, Pod,
     TextAlign, ViewCtx, WidgetView, WidgetViewSequence, core, dpi, kurbo, masonry, reactive, style,
     view,
 };
+pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
+#[cfg(feature = "winit")]
+pub use theme::{themed_window, themed_window_with_backdrop};
 
 #[cfg(feature = "winit")]
-pub use xilem_ui_winit as host;
+pub use brocado_winit as host;
 #[cfg(feature = "winit")]
-pub use xilem_ui_winit::{
+pub use brocado_winit::{
     AppRunner, AppState, DesktopWindow, EventLoop, EventLoopBuilder, ExitOnClose, WindowChrome,
     WindowConfig, WindowId, desktop_window, desktop_window_arc,
 };
 
 #[cfg(feature = "md3")]
-pub use xilem_md3 as md3;
+pub use brocado_md3 as md3;
 
 #[cfg(feature = "fluent")]
-pub use xilem_fluent as fluent;
+pub use brocado_fluent as fluent;
 
 #[cfg(feature = "hig")]
-pub use xilem_hig as hig;
+pub use brocado_hig as hig;
 
 #[cfg(feature = "adwaita")]
-pub use xilem_adwaita as adwaita;
+pub use brocado_adwaita as adwaita;

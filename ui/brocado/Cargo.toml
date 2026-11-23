@@ -1,5 +1,5 @@
 [package]
-name = "xilem-ui"
+name = "brocado"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,32 +9,32 @@ license.workspace = true
 
 [features]
 default = ["adwaita", "fluent", "hig", "md3", "winit"]
-adwaita = ["dep:xilem-adwaita"]
-fluent = ["dep:xilem-fluent"]
-hig = ["dep:xilem-hig"]
-md3 = ["dep:xilem-md3"]
-winit = ["dep:xilem-ui-winit"]
+adwaita = ["dep:brocado-adwaita"]
+fluent = ["dep:brocado-fluent"]
+hig = ["dep:brocado-hig"]
+md3 = ["dep:brocado-md3"]
+winit = ["dep:brocado-winit"]
 
 [[example]]
 name = "theme_gallery"
 required-features = ["winit"]
 
 [dependencies]
+brocado-adwaita = { workspace = true, optional = true }
+brocado-core.workspace = true
+brocado-fluent = { workspace = true, optional = true }
+brocado-hig = { workspace = true, optional = true }
+brocado-md3 = { workspace = true, optional = true }
+brocado-winit = { workspace = true, optional = true }
 masonry.workspace = true
-xilem-adwaita = { workspace = true, optional = true }
 xilem_core.workspace = true
-xilem-fluent = { workspace = true, optional = true }
-xilem-hig = { workspace = true, optional = true }
 xilem_masonry.workspace = true
-xilem-md3 = { workspace = true, optional = true }
-xilem-ui-core.workspace = true
-xilem-ui-winit = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow.workspace = true
+brocado-preview.workspace = true
 clap.workspace = true
 image.workspace = true
 masonry_testing.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-xilem-preview.workspace = true

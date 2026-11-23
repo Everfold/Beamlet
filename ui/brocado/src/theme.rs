@@ -2,16 +2,16 @@
 
 use std::sync::{Arc, LazyLock, Mutex};
 
+use brocado_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
+use brocado_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
+#[cfg(feature = "winit")]
+use brocado_winit::{
+    DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop,
+};
 use masonry::core::DefaultProperties;
 use masonry::core::FromDynWidget;
 use masonry::peniko::Color;
 use xilem_masonry::WidgetView;
-use xilem_ui_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
-use xilem_ui_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
-#[cfg(feature = "winit")]
-use xilem_ui_winit::{
-    DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop,
-};
 
 type ThemeSpecCache = Vec<(UiTheme, Arc<DesignSpec>)>;
 
@@ -130,7 +130,7 @@ impl UiAccent {
     }
 }
 
-/// Top-level runtime theme handle driving multi-theme Xilem applications.
+/// Top-level runtime theme handle driving multi-theme Brocado applications.
 #[derive(Clone, Debug, PartialEq)]
 pub struct UiTheme {
     /// Active platform design language.
@@ -208,11 +208,11 @@ impl UiTheme {
                 {
                     let seed = self.accent.md3_seed();
                     let contrast = if self.high_contrast {
-                        xilem_md3::ContrastLevel::High
+                        brocado_md3::ContrastLevel::High
                     } else {
-                        xilem_md3::ContrastLevel::Standard
+                        brocado_md3::ContrastLevel::Standard
                     };
-                    xilem_md3::Md3Theme::from_seed(seed, self.brightness)
+                    brocado_md3::Md3Theme::from_seed(seed, self.brightness)
                         .with_contrast(seed, contrast)
                         .with_reduced_motion(self.reduced_motion)
                         .to_spec()
@@ -227,20 +227,20 @@ impl UiTheme {
                 {
                     let accent = match self.accent {
                         UiAccent::Default | UiAccent::Blue => {
-                            xilem_fluent::FluentAccent::WindowsBlue
+                            brocado_fluent::FluentAccent::WindowsBlue
                         }
-                        UiAccent::Teal => xilem_fluent::FluentAccent::Teal,
-                        UiAccent::Green => xilem_fluent::FluentAccent::Green,
-                        UiAccent::Purple => xilem_fluent::FluentAccent::Purple,
-                        UiAccent::Pink | UiAccent::Red => xilem_fluent::FluentAccent::Rose,
-                        UiAccent::Orange => xilem_fluent::FluentAccent::Amber,
-                        UiAccent::Custom(c) => xilem_fluent::FluentAccent::Custom(c),
+                        UiAccent::Teal => brocado_fluent::FluentAccent::Teal,
+                        UiAccent::Green => brocado_fluent::FluentAccent::Green,
+                        UiAccent::Purple => brocado_fluent::FluentAccent::Purple,
+                        UiAccent::Pink | UiAccent::Red => brocado_fluent::FluentAccent::Rose,
+                        UiAccent::Orange => brocado_fluent::FluentAccent::Amber,
+                        UiAccent::Custom(c) => brocado_fluent::FluentAccent::Custom(c),
                     };
-                    xilem_fluent::FluentTheme {
+                    brocado_fluent::FluentTheme {
                         brightness: self.brightness,
                         accent,
                         reduced_motion: self.reduced_motion,
-                        ..xilem_fluent::FluentTheme::light()
+                        ..brocado_fluent::FluentTheme::light()
                     }
                     .to_spec()
                 }
@@ -254,19 +254,19 @@ impl UiTheme {
                 {
                     let accent = match self.accent {
                         UiAccent::Default | UiAccent::Blue | UiAccent::Custom(_) => {
-                            xilem_hig::HigAccent::Blue
+                            brocado_hig::HigAccent::Blue
                         }
-                        UiAccent::Teal | UiAccent::Green => xilem_hig::HigAccent::Green,
-                        UiAccent::Purple => xilem_hig::HigAccent::Purple,
-                        UiAccent::Pink => xilem_hig::HigAccent::Pink,
-                        UiAccent::Orange => xilem_hig::HigAccent::Orange,
-                        UiAccent::Red => xilem_hig::HigAccent::Red,
+                        UiAccent::Teal | UiAccent::Green => brocado_hig::HigAccent::Green,
+                        UiAccent::Purple => brocado_hig::HigAccent::Purple,
+                        UiAccent::Pink => brocado_hig::HigAccent::Pink,
+                        UiAccent::Orange => brocado_hig::HigAccent::Orange,
+                        UiAccent::Red => brocado_hig::HigAccent::Red,
                     };
-                    xilem_hig::HigTheme {
+                    brocado_hig::HigTheme {
                         brightness: self.brightness,
                         accent,
                         reduced_motion: self.reduced_motion,
-                        ..xilem_hig::HigTheme::light()
+                        ..brocado_hig::HigTheme::light()
                     }
                     .to_spec()
                 }
@@ -280,20 +280,20 @@ impl UiTheme {
                 {
                     let accent = match self.accent {
                         UiAccent::Default | UiAccent::Blue | UiAccent::Custom(_) => {
-                            xilem_adwaita::AdwaitaAccent::Blue
+                            brocado_adwaita::AdwaitaAccent::Blue
                         }
-                        UiAccent::Teal => xilem_adwaita::AdwaitaAccent::Teal,
-                        UiAccent::Green => xilem_adwaita::AdwaitaAccent::Green,
-                        UiAccent::Purple => xilem_adwaita::AdwaitaAccent::Purple,
-                        UiAccent::Pink => xilem_adwaita::AdwaitaAccent::Pink,
-                        UiAccent::Orange => xilem_adwaita::AdwaitaAccent::Orange,
-                        UiAccent::Red => xilem_adwaita::AdwaitaAccent::Red,
+                        UiAccent::Teal => brocado_adwaita::AdwaitaAccent::Teal,
+                        UiAccent::Green => brocado_adwaita::AdwaitaAccent::Green,
+                        UiAccent::Purple => brocado_adwaita::AdwaitaAccent::Purple,
+                        UiAccent::Pink => brocado_adwaita::AdwaitaAccent::Pink,
+                        UiAccent::Orange => brocado_adwaita::AdwaitaAccent::Orange,
+                        UiAccent::Red => brocado_adwaita::AdwaitaAccent::Red,
                     };
-                    xilem_adwaita::AdwaitaTheme {
+                    brocado_adwaita::AdwaitaTheme {
                         brightness: self.brightness,
                         accent,
                         reduced_motion: self.reduced_motion,
-                        ..xilem_adwaita::AdwaitaTheme::light()
+                        ..brocado_adwaita::AdwaitaTheme::light()
                     }
                     .to_spec()
                 }
@@ -326,7 +326,7 @@ impl UiTheme {
     /// Builds Masonry [`DefaultProperties`] corresponding to [`to_spec`](Self::to_spec).
     #[must_use]
     pub fn default_properties(&self) -> DefaultProperties {
-        xilem_ui_core::style_engine::build_default_properties(&self.cached_spec())
+        brocado_core::style_engine::build_default_properties(&self.cached_spec())
     }
 }
 

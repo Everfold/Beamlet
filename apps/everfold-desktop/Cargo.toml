@@ -8,4 +8,4 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-xilem.workspace = true
+brocado.workspace = true

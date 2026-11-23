@@ -21,14 +21,14 @@ members = [
   "crates/app-support/beamlet-app-config",
   "crates/app-support/beamlet-host",
 
-  "ui/xilem-adwaita",
-  "ui/xilem-fluent",
-  "ui/xilem-hig",
-  "ui/xilem-md3",
-  "ui/xilem-preview",
-  "ui/xilem-ui",
-  "ui/xilem-ui-core",
-  "ui/xilem-ui-winit",
+  "ui/brocado",
+  "ui/brocado-adwaita",
+  "ui/brocado-core",
+  "ui/brocado-fluent",
+  "ui/brocado-hig",
+  "ui/brocado-md3",
+  "ui/brocado-preview",
+  "ui/brocado-winit",
 ]
 
 [workspace.package]
@@ -91,22 +91,21 @@ clap = { version = "4.6", features = ["derive", "string", "unicode"] }
 reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboard"] }
 tachyonfx = "0.25"
 
+brocado = { path = "ui/brocado" }
+brocado-adwaita = { path = "ui/brocado-adwaita" }
+brocado-core = { path = "ui/brocado-core" }
+brocado-fluent = { path = "ui/brocado-fluent" }
+brocado-hig = { path = "ui/brocado-hig" }
+brocado-md3 = { path = "ui/brocado-md3" }
+brocado-preview = { path = "ui/brocado-preview" }
+brocado-winit = { path = "ui/brocado-winit" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 masonry = { git = "https://github.com/linebender/xilem.git" }
 masonry_testing = { git = "https://github.com/linebender/xilem.git" }
 masonry_winit = { git = "https://github.com/linebender/xilem.git" }
 usvg = "0.47"
-xilem = { git = "https://github.com/linebender/xilem.git" }
-xilem-adwaita = { path = "ui/xilem-adwaita" }
 xilem_core = { git = "https://github.com/linebender/xilem.git" }
-xilem-fluent = { path = "ui/xilem-fluent" }
-xilem-hig = { path = "ui/xilem-hig" }
 xilem_masonry = { git = "https://github.com/linebender/xilem.git" }
-xilem-md3 = { path = "ui/xilem-md3" }
-xilem-preview = { path = "ui/xilem-preview" }
-xilem-ui = { path = "ui/xilem-ui" }
-xilem-ui-core = { path = "ui/xilem-ui-core" }
-xilem-ui-winit = { path = "ui/xilem-ui-winit" }
 
 foundations = "5.11"
 opentelemetry = "0.33"

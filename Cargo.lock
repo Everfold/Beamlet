@@ -778,6 +778,111 @@ dependencies = [
 ]
 
 [[package]]
+name = "brocado"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "brocado-adwaita",
+ "brocado-core",
+ "brocado-fluent",
+ "brocado-hig",
+ "brocado-md3",
+ "brocado-preview",
+ "brocado-winit",
+ "clap",
+ "image",
+ "masonry",
+ "masonry_testing",
+ "serde_json",
+ "tokio",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-adwaita"
+version = "0.1.0"
+dependencies = [
+ "brocado-core",
+ "brocado-winit",
+ "masonry",
+ "tracing",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-core"
+version = "0.1.0"
+dependencies = [
+ "masonry",
+ "tokio",
+ "tracing",
+ "usvg",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-fluent"
+version = "0.1.0"
+dependencies = [
+ "brocado-core",
+ "brocado-winit",
+ "masonry",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-hig"
+version = "0.1.0"
+dependencies = [
+ "brocado-core",
+ "brocado-winit",
+ "masonry",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-md3"
+version = "0.1.0"
+dependencies = [
+ "brocado-core",
+ "brocado-winit",
+ "masonry",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-preview"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image",
+ "masonry",
+ "masonry_testing",
+ "serde",
+ "tokio",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
+name = "brocado-winit"
+version = "0.1.0"
+dependencies = [
+ "brocado-core",
+ "masonry",
+ "masonry_winit",
+ "tokio",
+ "tracing",
+ "xilem_core",
+ "xilem_masonry",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1402,7 +1507,7 @@ dependencies = [
 name = "everfold-desktop"
 version = "0.1.0"
 dependencies = [
- "xilem",
+ "brocado",
 ]
 
 [[package]]
@@ -5680,125 +5785,6 @@ name = "xcursor"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
-
-[[package]]
-name = "xilem"
-version = "0.4.0"
-source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
-dependencies = [
- "masonry",
- "masonry_winit",
- "tokio",
- "tracing",
- "winit",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-adwaita"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "tracing",
- "xilem-ui-core",
- "xilem-ui-winit",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-fluent"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "xilem-ui-core",
- "xilem-ui-winit",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-hig"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "xilem-ui-core",
- "xilem-ui-winit",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-md3"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "xilem-ui-core",
- "xilem-ui-winit",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-preview"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image",
- "masonry",
- "masonry_testing",
- "serde",
- "tokio",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-ui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "image",
- "masonry",
- "masonry_testing",
- "serde_json",
- "tokio",
- "xilem-adwaita",
- "xilem-fluent",
- "xilem-hig",
- "xilem-md3",
- "xilem-preview",
- "xilem-ui-core",
- "xilem-ui-winit",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-ui-core"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "tokio",
- "tracing",
- "usvg",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "xilem-ui-winit"
-version = "0.1.0"
-dependencies = [
- "masonry",
- "masonry_winit",
- "tokio",
- "tracing",
- "xilem-ui-core",
- "xilem_core",
- "xilem_masonry",
-]
 
 [[package]]
 name = "xilem_core"
