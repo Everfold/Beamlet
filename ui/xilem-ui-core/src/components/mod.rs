@@ -18,6 +18,7 @@ pub mod search_bar;
 pub mod segmented_button;
 pub mod selection;
 pub mod sheet;
+pub mod split;
 pub mod tabs;
 pub mod text_field;
 pub mod toast;
@@ -63,6 +64,7 @@ pub use selection::{
     ToggleableState, checkbox, radio, radio_group, slider, switch, tri_state_checkbox,
 };
 pub use sheet::{bottom_sheet, side_sheet};
+pub use split::{UiSplit, split_view};
 pub use tabs::{scrollable_tabs, secondary_tabs, tabs};
 pub use text_field::{TextFieldVariant, UiTextField, filled_text_field, text_field};
 pub use toast::{ToastData, ToastDuration, ToastHostState, toast, toast_host};
