@@ -91,9 +91,9 @@ reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboa
 tachyonfx = "0.25"
 
 image = { version = "0.25", default-features = false, features = ["png"] }
-masonry_testing = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
+masonry_testing = { git = "https://github.com/linebender/xilem.git" }
 usvg = "0.47"
-xilem = { git = "https://github.com/Hobr/xilem.git", branch = "fix/zstack-splice-insert" }
+xilem = { git = "https://github.com/linebender/xilem.git" }
 xilem-adwaita = { path = "ui/xilem-adwaita" }
 xilem-fluent = { path = "ui/xilem-fluent" }
 xilem-hig = { path = "ui/xilem-hig" }

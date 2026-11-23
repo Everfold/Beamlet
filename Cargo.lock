@@ -2333,7 +2333,7 @@ dependencies = [
 [[package]]
 name = "linebender_include_doc_path"
 version = "0.1.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2387,7 +2387,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 [[package]]
 name = "masonry"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "accesskit",
  "linebender_include_doc_path",
@@ -2401,7 +2401,7 @@ dependencies = [
 [[package]]
 name = "masonry_core"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "accesskit",
  "anymap3",
@@ -2428,7 +2428,7 @@ dependencies = [
 [[package]]
 name = "masonry_imaging"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "imaging",
  "imaging_vello",
@@ -2441,7 +2441,7 @@ dependencies = [
 [[package]]
 name = "masonry_testing"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "accesskit_consumer 0.35.0",
  "image",
@@ -2454,7 +2454,7 @@ dependencies = [
 [[package]]
 name = "masonry_winit"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "accesskit_winit",
  "copypasta",
@@ -4627,7 +4627,7 @@ dependencies = [
 [[package]]
 name = "tree_arena"
 version = "0.2.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "hashbrown 0.17.2",
 ]
@@ -5684,7 +5684,7 @@ checksum = "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
 [[package]]
 name = "xilem"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "masonry",
  "masonry_winit",
@@ -5772,7 +5772,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "anymore",
  "hashbrown 0.17.2",
@@ -5782,7 +5782,7 @@ dependencies = [
 [[package]]
 name = "xilem_masonry"
 version = "0.4.0"
-source = "git+https://github.com/Hobr/xilem.git?branch=fix%2Fzstack-splice-insert#7ab1107b8e5641959f925cd2cdf0d555dc348558"
+source = "git+https://github.com/linebender/xilem.git#9a78df878a9269a88325ebd71f3f68c757f0a396"
 dependencies = [
  "masonry",
  "smallvec",
