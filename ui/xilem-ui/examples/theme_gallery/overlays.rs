@@ -4,7 +4,7 @@ use xilem::masonry::layout::{AsUnit, UnitPoint};
 use xilem::masonry::properties::Padding;
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, ZStackExt, flex_col, sized_box, zstack};
+use xilem::view::{CrossAxisAlignment, ZStackExt, flex_col, flex_row, sized_box, zstack};
 use xilem::{AnyWidgetView, WidgetView};
 use xilem_ui::prelude::*;
 
@@ -147,9 +147,45 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     .padding(Padding::all(16.px()))
     .alignment(UnitPoint::BOTTOM);
 
+    let popover_overlay = (state.overlays.popover_open)
+        .then_some(state.overlays.popover_anchor)
+        .flatten()
+        .map(|rect| {
+            popover_surface(
+                rect,
+                flex_col((
+                    title_small("视图过滤设置"),
+                    checkbox(
+                        "紧凑密度",
+                        state.overlays.popover_compact,
+                        |s: &mut GalleryState, v| {
+                            s.overlays.popover_compact = v;
+                        },
+                    ),
+                    flex_row((
+                        primary_button("应用", |s: &mut GalleryState| {
+                            s.components.click_count += 1;
+                            s.overlays.popover_open = false;
+                        }),
+                        outlined_button("关闭", |s: &mut GalleryState| {
+                            s.overlays.popover_open = false;
+                        }),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px()),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(10.px()),
+                |s: &mut GalleryState| {
+                    s.overlays.popover_open = false;
+                },
+            )
+        });
+
     zstack((
         workspace.alignment(UnitPoint::TOP_LEFT),
         toast_layer,
+        popover_overlay.map(|p| p.alignment(UnitPoint::TOP_LEFT)),
         sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
         side_sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
         date_overlay.map(|d| d.alignment(UnitPoint::CENTER)),

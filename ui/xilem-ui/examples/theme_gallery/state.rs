@@ -97,6 +97,8 @@ pub struct ComponentsState {
     pub click_count: u32,
     pub text_value: String,
     pub email_value: String,
+    pub notes_value: String,
+    pub last_link_clicked: Option<String>,
     pub search_query: String,
     pub agree_terms: bool,
     pub tri_state: ToggleableState,
@@ -119,6 +121,8 @@ impl Default for ComponentsState {
             click_count: 0,
             text_value: "Beamlet UI".to_owned(),
             email_value: "invalid-email".to_owned(),
+            notes_value: "支持多行输入、Shift+Enter / Enter 策略以及垂直滚动。".to_owned(),
+            last_link_clicked: None,
             search_query: String::new(),
             agree_terms: true,
             tri_state: ToggleableState::Indeterminate,
@@ -154,6 +158,10 @@ pub struct OverlaysState {
     pub selected_date: CalendarDate,
     pub selected_time: TimeOfDay,
     pub toasts: ToastHostState,
+    pub context_action: Option<String>,
+    pub popover_open: bool,
+    pub popover_anchor: Option<PopoverAnchorRect>,
+    pub popover_compact: bool,
 }
 
 impl Default for OverlaysState {
@@ -169,6 +177,10 @@ impl Default for OverlaysState {
             selected_date: CalendarDate::new(2026, 11, 23),
             selected_time: TimeOfDay::new(16, 0),
             toasts: ToastHostState::new(),
+            context_action: None,
+            popover_open: false,
+            popover_anchor: None,
+            popover_compact: false,
         }
     }
 }

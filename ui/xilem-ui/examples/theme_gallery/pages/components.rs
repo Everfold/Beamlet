@@ -259,9 +259,17 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
         .gap(12.px()),
     );
 
+    let link_status =
+        c.last_link_clicked
+            .as_deref()
+            .map_or("点击链接测试跳转事件", |id| match id {
+                "spec-docs" => "已点击：设计规范文档",
+                _ => id,
+            });
+
     let text_card = outlined_card(
         flex_col((
-            title_medium("输入"),
+            title_medium("输入与富文本"),
             search_bar(c.search_query.clone(), |s: &mut GalleryState, val| {
                 s.components.search_query = val;
             })
@@ -277,6 +285,30 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
             })
             .label("邮箱")
             .error_text("格式无效"),
+            text_area(c.notes_value.clone(), |s: &mut GalleryState, val| {
+                s.components.notes_value = val;
+            })
+            .label("多行备注")
+            .placeholder("输入多行内容，超出高度自动滚动...")
+            .min_height(84.px())
+            .max_height(160.px())
+            .max_chars(240),
+            rich_prose(vec![
+                TextSpan::new("支持 "),
+                TextSpan::bold("粗体"),
+                TextSpan::new("、"),
+                TextSpan::italic("斜体"),
+                TextSpan::new("、行内代码 "),
+                TextSpan::code("rich_prose()"),
+                TextSpan::new("、文本划选复制，以及可点击 "),
+                TextSpan::link("spec-docs", "设计规范链接"),
+                TextSpan::new("。"),
+            ])
+            .on_link_click(|s: &mut GalleryState, id| {
+                s.components.last_link_clicked = Some(id.to_string());
+                s.components.click_count += 1;
+            }),
+            body_small(link_status),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),

@@ -76,6 +76,29 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         )
     };
 
+    let popover_btn = || {
+        popover_anchor(
+            outlined_button(
+                if state.overlays.popover_open {
+                    "关闭气泡"
+                } else {
+                    "交互气泡"
+                },
+                |s: &mut GalleryState| {
+                    s.overlays.popover_open = !s.overlays.popover_open;
+                },
+            ),
+            |s: &mut GalleryState, rect| {
+                if let Some(r) = rect {
+                    s.overlays.popover_anchor = Some(r);
+                } else {
+                    s.overlays.popover_open = false;
+                    s.overlays.popover_anchor = None;
+                }
+            },
+        )
+    };
+
     let wide_triggers = flex_col((
         flex_row((
             basic_btn("基础弹窗"),
@@ -90,6 +113,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
             date_btn("日期弹窗"),
             time_btn("时间弹窗"),
             toast_btn("轻提示"),
+            popover_btn(),
             plain_tip_btn(),
             rich_tip_btn(),
         ))
@@ -114,7 +138,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(8.px()),
-        flex_row((date_btn("日期弹窗"), time_btn("时间弹窗")))
+        flex_row((date_btn("日期弹窗"), time_btn("时间弹窗"), popover_btn()))
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px()),
         flex_row((plain_tip_btn(), rich_tip_btn()))
@@ -123,6 +147,34 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     ))
     .cross_axis_alignment(CrossAxisAlignment::Start)
     .gap(8.px());
+
+    let ctx_status = state
+        .overlays
+        .context_action
+        .as_deref()
+        .unwrap_or("右键点击此区域（或按 Shift+F10）打开上下文菜单");
+    let ctx_card = context_menu(
+        filled_card(
+            flex_col((title_medium("ContextMenu 右键菜单"), body_small(ctx_status)))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(6.px()),
+        ),
+        vec![
+            menu_item("标记书签").leading_icon(icons::BOOKMARK),
+            menu_item("重命名").leading_icon(icons::EDIT),
+            menu_divider(),
+            menu_item("移除").leading_icon(icons::DELETE),
+        ],
+        |s: &mut GalleryState, idx| {
+            let label = match idx {
+                0 => "上次操作：标记书签",
+                1 => "上次操作：重命名",
+                _ => "上次操作：移除",
+            };
+            s.overlays.context_action = Some(label.to_owned());
+            s.components.click_count += 1;
+        },
+    );
 
     let trigger_row = elevated_card(
         flex_col((
@@ -172,7 +224,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         .gap(12.px()),
     );
 
-    flex_col((trigger_row, pickers_row))
+    flex_col((trigger_row, ctx_card, pickers_row))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(16.px())
 }

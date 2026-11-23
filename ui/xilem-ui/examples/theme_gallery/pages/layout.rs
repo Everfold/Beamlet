@@ -195,7 +195,67 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
         .gap(12.px()),
     );
 
-    flex_col((flex_lab, clamp_lab, breakpoint_lab, elevation_and_zstack))
+    let wrap_tags = [
+        "MD3",
+        "Fluent 2",
+        "Apple HIG",
+        "Adwaita",
+        "Parley",
+        "Vello",
+        "AccessKit",
+        "Masonry",
+    ];
+    let wrap_chips: Vec<_> = wrap_tags
+        .into_iter()
+        .enumerate()
+        .map(|(i, tag)| {
+            filter_chip(tag, i == 0 || i == 2, move |s: &mut GalleryState| {
+                s.components.click_count += 1;
+            })
+        })
+        .collect();
+    let wrap_lab = outlined_card(
+        flex_col((
+            title_medium("Wrap 流式换行"),
+            wrap(wrap_chips).gap(8.px()).run_gap(8.px()),
+        ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .gap(16.px())
+        .gap(10.px()),
+    );
+
+    let split_lab = elevated_card(
+        flex_col((
+            title_medium("SplitView 可拖拽分栏"),
+            sized_box(
+                split_view(
+                    filled_card(
+                        flex_col((title_small("主视图"), body_small("可拖拽分割线调节占比")))
+                            .cross_axis_alignment(CrossAxisAlignment::Start)
+                            .gap(4.px()),
+                    ),
+                    outlined_card(
+                        flex_col((title_small("辅助面板"), body_small("最小宽度 60px")))
+                            .cross_axis_alignment(CrossAxisAlignment::Start)
+                            .gap(4.px()),
+                    ),
+                )
+                .split_point(0.45)
+                .min_lengths(60.px(), 60.px()),
+            )
+            .dims(Dimensions::height(120.px())),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(10.px()),
+    );
+
+    flex_col((
+        flex_lab,
+        wrap_lab,
+        split_lab,
+        clamp_lab,
+        breakpoint_lab,
+        elevation_and_zstack,
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    .gap(16.px())
 }

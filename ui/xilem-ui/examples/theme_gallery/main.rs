@@ -939,6 +939,28 @@ mod tests {
             h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
             save(&mut h, "25_md3_accent_select_open.png", &mut issues);
         }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Overlays);
+            h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
+                .unwrap();
+            save(&mut h, "26_fluent_popover_open.png", &mut issues);
+        }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            h.settle_animations();
+            let host_id = *h
+                .find_widget_ids("ContextMenuHost")
+                .first()
+                .expect("ContextMenuHost should exist on Overlays page");
+            if let Some((hx, hy, hw, hh)) = h.widget_rect(host_id) {
+                let inner = h.inner_harness_mut();
+                inner.mouse_move(xilem::kurbo::Point::new(hx + hw * 0.5, hy + hh * 0.5));
+                inner.mouse_button_press(Some(xilem::masonry::core::PointerButton::Secondary));
+                inner.mouse_button_release(Some(xilem::masonry::core::PointerButton::Secondary));
+                h.pump_actions();
+            }
+            save(&mut h, "27_md3_context_menu_open.png", &mut issues);
+        }
 
         assert!(
             issues.is_empty(),
