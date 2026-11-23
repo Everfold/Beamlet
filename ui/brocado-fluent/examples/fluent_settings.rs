@@ -1,24 +1,24 @@
-//! Standalone Windows 11 / WinUI 3 Settings example using `xilem-fluent` directly without `xilem-ui`.
+//! Standalone Windows 11 / WinUI 3 Settings example using `brocado-fluent` directly without `brocado`.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 use std::sync::Arc;
 
-use masonry::dpi::LogicalSize;
-use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::Padding;
-use xilem_fluent::{
+use brocado_fluent::{
     Brightness, FluentAccent, FluentTheme, InfoBarSeverity, NavDestination, basic_dialog,
     body_small, breadcrumb_bar, command_bar_with_overflow, expander, headline_small,
     horizontal_divider, icons, info_badge, info_bar, menu_item, navigation_view_collapsible,
     number_box, primary_button, settings_card, settings_expander, subtle_button, switch,
 };
+use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
 };
-use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct SettingsApp {
     window_id: WindowId,
@@ -247,7 +247,7 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
 
 fn main() {
     let initial = SettingsApp::default();
-    let props = xilem_fluent::build_default_properties(&initial.current_theme().to_spec());
+    let props = brocado_fluent::build_default_properties(&initial.current_theme().to_spec());
     AppRunner::new(initial, |state: &mut SettingsApp| {
         let spec = state.current_theme().to_spec();
         let wid = state.window_id;
