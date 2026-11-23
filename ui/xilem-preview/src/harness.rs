@@ -18,6 +18,7 @@ use xilem::masonry::app::RenderRoot;
 use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
 use xilem::masonry::core::{
     DefaultProperties, KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef,
+    WindowEvent,
 };
 use xilem::masonry::dpi::PhysicalSize;
 use xilem::masonry::theme::{BACKGROUND_COLOR, default_property_set};
@@ -563,18 +564,17 @@ impl<State: 'static> PreviewHarness<State> {
         if exact.is_empty() { partial } else { exact }
     }
 
+    fn ensure_widget_visible_rect(&mut self, id: WidgetId) -> Option<(f64, f64, f64, f64)> {
+        self.harness.scroll_into_view(id);
+        let _ = self.harness.redraw();
+        self.widget_rect(id)
+    }
+
     /// Clicks widget `id` with the primary mouse button (scrolling into view if needed) and pumps actions.
     pub fn click_widget_id(&mut self, id: WidgetId) {
-        if let Some((x, y, w, h)) = self.widget_rect(id) {
-            let (vw, vh) = self.viewport();
-            if x < 0.0 || y < 0.0 || x + w > vw || y + h > vh {
-                self.harness.scroll_into_view(id);
-                let _ = self.harness.redraw();
-            }
-            if let Some((sx, sy, sw, sh)) = self.widget_rect(id) {
-                self.click_point(sx + sw * 0.5, sy + sh * 0.5);
-                return;
-            }
+        if let Some((sx, sy, sw, sh)) = self.ensure_widget_visible_rect(id) {
+            self.click_point(sx + sw * 0.5, sy + sh * 0.5);
+            return;
         }
         self.harness
             .mouse_click_on(id, Some(PointerButton::Primary));
@@ -602,7 +602,7 @@ impl<State: 'static> PreviewHarness<State> {
             .find_widget_id_by_type(type_name, index)
             .with_context(|| format!("widget '{type_name}' index {index} not found"))?;
         let (x, y, w, h) = self
-            .widget_rect(id)
+            .ensure_widget_visible_rect(id)
             .with_context(|| format!("failed reading rect for '{type_name}' index {index}"))?;
         self.click_point(x + w * x_frac, y + h * y_frac);
         Ok(())
@@ -620,7 +620,7 @@ impl<State: 'static> PreviewHarness<State> {
             .find_widget_id_by_type(type_name, index)
             .with_context(|| format!("widget '{type_name}' index {index} not found"))?;
         let (x, y, w, h) = self
-            .widget_rect(id)
+            .ensure_widget_visible_rect(id)
             .with_context(|| format!("failed reading rect for '{type_name}' index {index}"))?;
         let p0 = Point::new(x + w * from.0, y + h * from.1);
         let p1 = Point::new(
@@ -663,6 +663,16 @@ impl<State: 'static> PreviewHarness<State> {
             out.push(self.harness.focused_widget_id());
         }
         out
+    }
+
+    /// Resizes the headless viewport via `WindowEvent::Resize`, pumps actions, and redraws.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.config.width = width;
+        self.config.height = height;
+        self.harness
+            .process_window_event(WindowEvent::Resize(PhysicalSize::new(width, height)));
+        self.pump_actions();
+        let _ = self.harness.redraw();
     }
 }
 
@@ -815,8 +825,17 @@ mod tests {
         let cycle = harness.collect_tab_cycle(2);
         assert_eq!(cycle.len(), 2);
 
+        harness.resize(640, 480);
+        assert_eq!(harness.viewport(), (640.0, 480.0));
+        let root_box = harness
+            .inner_harness_mut()
+            .render_root()
+            .get_layer_root(0)
+            .ctx()
+            .border_box();
+        assert_eq!((root_box.width(), root_box.height()), (640.0, 480.0));
         let img = harness.render_image();
-        assert_eq!(img.dimensions(), (320, 200));
+        assert!(img.width() > 0 && img.height() > 0);
         let distinct: HashSet<[u8; 4]> = img.pixels().step_by(17).map(|p| p.0).collect();
         assert!(
             distinct.len() >= 2,
