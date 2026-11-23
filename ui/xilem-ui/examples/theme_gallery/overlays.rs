@@ -1,4 +1,4 @@
-//! Root overlay compositor stack (`ZStack`) for dialogs, platform alerts, sheets, pickers, and toasts.
+//! Root overlay compositor (`ZStack`) for dialogs, sheets, pickers, and toasts.
 
 use xilem::masonry::layout::{AsUnit, UnitPoint};
 use xilem::masonry::properties::Padding;
@@ -13,13 +13,12 @@ use crate::state::GalleryState;
 pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     state: &mut GalleryState,
     workspace: V,
-    floating_action: Option<Box<AnyWidgetView<GalleryState>>>,
 ) -> impl WidgetView<GalleryState, Widget = widgets::ZStack> + use<V> {
     let dialog_overlay = state.overlays.show_basic_dialog.then(|| {
         basic_dialog(
-            "重置主题偏好设置？",
-            "将恢复宿主系统默认的设计语言与强调色预设。",
-            "恢复默认",
+            "重置主题设置？",
+            "恢复默认设计语言与强调色。",
+            "恢复",
             |s: &mut GalleryState| {
                 s.theme = UiTheme::native_light();
                 s.overlays.show_basic_dialog = false;
@@ -32,18 +31,11 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
 
     let destructive_overlay = state.overlays.show_destructive_dialog.then(|| {
         basic_dialog(
-            "移除选中的工作区目标？",
-            "将从展示列表中移除当前选中的工作区目标条目。",
-            "确认移除",
+            "确认删除？",
+            "此操作不可撤销。",
+            "删除",
             |s: &mut GalleryState| {
-                if !s.workbench.items.is_empty() {
-                    let idx = s
-                        .workbench
-                        .selected_idx
-                        .min(s.workbench.items.len().saturating_sub(1));
-                    s.workbench.items.remove(idx);
-                    s.workbench.selected_idx = 0;
-                }
+                s.components.click_count += 1;
                 s.overlays.show_destructive_dialog = false;
             },
             |s: &mut GalleryState| s.overlays.show_destructive_dialog = false,
@@ -58,21 +50,20 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         .show_platform_alert
         .then(|| match state.theme.language {
             DesignLanguage::Adwaita => alert_dialog(
-                "AdwAlertDialog 原生警告框",
-                "遵循 GNOME Libadwaita Pill 按钮与模态焦点陷阱规范。",
+                "AdwAlertDialog",
+                "GNOME Pill 警告框。",
                 "取消",
-                "继续执行",
+                "确定",
                 |s: &mut GalleryState| {
                     s.components.click_count += 1;
                     s.overlays.show_platform_alert = false;
                 },
                 |s: &mut GalleryState| s.overlays.show_platform_alert = false,
             )
-            .destructive(false)
             .boxed(),
             DesignLanguage::Hig => macos_alert_dialog(
-                "NSAlert 原生警告框",
-                "遵循 macOS Apple HIG 垂直居中图标、加粗标题与 Trailing 确认按钮排布。",
+                "NSAlert",
+                "macOS 原生警告框。",
                 "确定",
                 "取消",
                 |s: &mut GalleryState| {
@@ -83,9 +74,9 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             )
             .boxed(),
             DesignLanguage::Fluent | DesignLanguage::Md3 => basic_dialog(
-                "平台自适应确认对话框",
-                "Fluent 下自动采用 PrimaryLeading 主按钮居左，MD3 下遵循 PrimaryTrailing 规范。",
-                "确认",
+                "平台对话框",
+                "遵循平台主次按钮顺序。",
+                "确定",
                 |s: &mut GalleryState| {
                     s.components.click_count += 1;
                     s.overlays.show_platform_alert = false;
@@ -118,9 +109,8 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     let sheet_overlay = state.overlays.show_bottom_sheet.then(|| {
         bottom_sheet(
             flex_col((
-                headline_small("底部抽屉面板"),
-                body_medium("通过 SlideTransition + EscapeCatcher 实现的共享模态底部抽屉。"),
-                primary_button("关闭抽屉", |s: &mut GalleryState| {
+                title_medium("底部抽屉"),
+                primary_button("关闭", |s: &mut GalleryState| {
                     s.overlays.show_bottom_sheet = false;
                 }),
             ))
@@ -131,17 +121,11 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     });
 
     let side_sheet_overlay = state.overlays.show_side_sheet.then(|| {
-        let selected_title = state
-            .workbench
-            .items
-            .get(state.workbench.selected_idx)
-            .map_or("未选中任何项目", |(t, _, _)| *t);
         side_sheet(
             flex_col((
-                headline_small("目标详情侧边抽屉"),
-                title_medium(selected_title),
-                body_medium("由 modal_shell + EscapeCatcher 驱动的右侧检查器抽屉。"),
-                primary_button("关闭侧边抽屉", |s: &mut GalleryState| {
+                title_medium("侧边抽屉"),
+                body_medium(format!("点击计数：{}", state.components.click_count)),
+                primary_button("关闭", |s: &mut GalleryState| {
                     s.overlays.show_side_sheet = false;
                 }),
             ))
@@ -149,14 +133,9 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             .gap(12.px()),
             |s: &mut GalleryState| s.overlays.show_side_sheet = false,
         )
-        .extent(360.0)
+        .extent(320.0)
     });
 
-    let fab_layer = floating_action.map(|f| {
-        sized_box(f)
-            .padding(Padding::all(20.px()))
-            .alignment(UnitPoint::BOTTOM_RIGHT)
-    });
     let toast_layer = sized_box(
         toast_host(&state.overlays.toasts, |s: &mut GalleryState| {
             let _ = s.overlays.toasts.dismiss_current();
@@ -170,7 +149,6 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
 
     zstack((
         workspace.alignment(UnitPoint::TOP_LEFT),
-        fab_layer,
         toast_layer,
         sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),
         side_sheet_overlay.map(|s| s.alignment(UnitPoint::CENTER)),

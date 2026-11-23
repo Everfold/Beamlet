@@ -1,4 +1,4 @@
-//! Domain-split application state for `theme_gallery`.
+//! Lean showcase application state for `theme_gallery`.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -6,84 +6,72 @@ use std::sync::atomic::AtomicUsize;
 use xilem::WindowId;
 use xilem_ui::prelude::*;
 
-/// Top-level showcase navigation destinations.
+/// Showcase navigation tabs (5 focused views).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GalleryTab {
     #[default]
-    Home,
-    Layout,
     Components,
+    Layout,
     Overlays,
-    PlatformNative,
-    PerfAndSpec,
-    Workbench,
+    Native,
+    Lab,
 }
 
 impl GalleryTab {
-    pub const ALL: [Self; 7] = [
-        Self::Home,
-        Self::Layout,
+    pub const ALL: [Self; 5] = [
         Self::Components,
+        Self::Layout,
         Self::Overlays,
-        Self::PlatformNative,
-        Self::PerfAndSpec,
-        Self::Workbench,
+        Self::Native,
+        Self::Lab,
     ];
 
     #[must_use]
     pub const fn index(self) -> usize {
         match self {
-            Self::Home => 0,
+            Self::Components => 0,
             Self::Layout => 1,
-            Self::Components => 2,
-            Self::Overlays => 3,
-            Self::PlatformNative => 4,
-            Self::PerfAndSpec => 5,
-            Self::Workbench => 6,
+            Self::Overlays => 2,
+            Self::Native => 3,
+            Self::Lab => 4,
         }
     }
 
     #[must_use]
     pub const fn from_index(idx: usize) -> Self {
         match idx {
-            0 => Self::Home,
+            0 => Self::Components,
             1 => Self::Layout,
-            2 => Self::Components,
-            3 => Self::Overlays,
-            4 => Self::PlatformNative,
-            5 => Self::PerfAndSpec,
-            _ => Self::Workbench,
+            2 => Self::Overlays,
+            3 => Self::Native,
+            _ => Self::Lab,
         }
     }
 
     #[must_use]
     pub const fn title(self) -> &'static str {
         match self {
-            Self::Home => "首页",
-            Self::Layout => "布局系统",
-            Self::Components => "组件与输入",
-            Self::Overlays => "浮层与反馈",
-            Self::PlatformNative => "平台原生",
-            Self::PerfAndSpec => "性能与令牌",
-            Self::Workbench => "工作台",
+            Self::Components => "组件",
+            Self::Layout => "布局",
+            Self::Overlays => "浮层",
+            Self::Native => "平台",
+            Self::Lab => "性能",
         }
     }
 
     #[must_use]
     pub const fn icon(self) -> &'static str {
         match self {
-            Self::Home => icons::HOME,
-            Self::Layout => icons::DOCK_LEFT,
             Self::Components => icons::EDIT,
+            Self::Layout => icons::DOCK_LEFT,
             Self::Overlays => icons::MORE_HORIZ,
-            Self::PlatformNative => icons::PALETTE,
-            Self::PerfAndSpec => icons::TUNE,
-            Self::Workbench => icons::FOLDER,
+            Self::Native => icons::PALETTE,
+            Self::Lab => icons::TUNE,
         }
     }
 }
 
-/// Interactive controls for the Layout System showcase page.
+/// Interactive controls for the Layout page.
 #[derive(Clone, Debug)]
 pub struct LayoutLabState {
     pub spacing_idx: usize,
@@ -103,7 +91,7 @@ impl Default for LayoutLabState {
     }
 }
 
-/// Interactive controls for cross-theme inputs, buttons, tabs, and selections.
+/// Cross-theme components and inputs state.
 #[derive(Clone, Debug)]
 pub struct ComponentsState {
     pub click_count: u32,
@@ -116,7 +104,7 @@ pub struct ComponentsState {
     pub radio_choice: usize,
     pub slider_val: f64,
     pub range_val: (f64, f64),
-    pub chip_flags: [bool; 3],
+    pub chip_flags: [bool; 2],
     pub multi_seg_mask: Vec<bool>,
     pub input_tags: Vec<String>,
     pub selected_tab: usize,
@@ -129,7 +117,7 @@ impl Default for ComponentsState {
     fn default() -> Self {
         Self {
             click_count: 0,
-            text_value: "Beamlet 多主题界面".to_owned(),
+            text_value: "Beamlet UI".to_owned(),
             email_value: "invalid-email".to_owned(),
             search_query: String::new(),
             agree_terms: true,
@@ -138,13 +126,13 @@ impl Default for ComponentsState {
             radio_choice: 0,
             slider_val: 0.42,
             range_val: (25.0, 75.0),
-            chip_flags: [true, false, true],
+            chip_flags: [true, false],
             multi_seg_mask: vec![true, false, true],
             input_tags: vec![
-                "MD3".to_owned(),
-                "WinUI3".to_owned(),
-                "Aqua".to_owned(),
-                "Adwaita".to_owned(),
+                "MD3".into(),
+                "Fluent".into(),
+                "HIG".into(),
+                "Adwaita".into(),
             ],
             selected_tab: 0,
             secondary_tab: 0,
@@ -154,7 +142,7 @@ impl Default for ComponentsState {
     }
 }
 
-/// Modal dialogs, drawers, pickers, and toast queue state.
+/// Overlays and picker state.
 pub struct OverlaysState {
     pub show_basic_dialog: bool,
     pub show_destructive_dialog: bool,
@@ -185,25 +173,22 @@ impl Default for OverlaysState {
     }
 }
 
-/// Per-platform native widget state (Fluent 2, macOS HIG, GNOME Adwaita).
+/// Active platform-native controls state.
 #[derive(Clone, Debug)]
 pub struct PlatformNativeState {
     pub nav_collapsed: bool,
     pub info_bar_visible: bool,
-    pub expander_open: bool,
     pub fluent_expander_open: bool,
     pub fluent_breadcrumb_depth: usize,
     pub fluent_number_val: f64,
     pub cmd_overflow_open: bool,
-    pub show_hig_inspector: bool,
     pub hig_disclosure_open: bool,
     pub hig_stepper_val: i32,
     pub hig_path_depth: usize,
     pub hig_popup_open: bool,
     pub hig_popup_idx: usize,
     pub banner_visible: bool,
-    pub native_switch_a: bool,
-    pub native_switch_b: bool,
+    pub native_switch: bool,
     pub adw_expander_open: bool,
     pub adw_combo_open: bool,
     pub adw_combo_idx: usize,
@@ -216,20 +201,17 @@ impl Default for PlatformNativeState {
         Self {
             nav_collapsed: false,
             info_bar_visible: true,
-            expander_open: true,
             fluent_expander_open: true,
             fluent_breadcrumb_depth: 2,
             fluent_number_val: 24.0,
             cmd_overflow_open: false,
-            show_hig_inspector: true,
             hig_disclosure_open: true,
             hig_stepper_val: 8,
             hig_path_depth: 2,
             hig_popup_open: false,
             hig_popup_idx: 0,
             banner_visible: true,
-            native_switch_a: true,
-            native_switch_b: false,
+            native_switch: true,
             adw_expander_open: true,
             adw_combo_open: false,
             adw_combo_idx: 0,
@@ -239,7 +221,7 @@ impl Default for PlatformNativeState {
     }
 }
 
-/// Incremental memoization and 10,000-row virtual scrolling lab state.
+/// Incremental memoization and 10,000-row virtual list lab state.
 #[derive(Clone, Debug)]
 pub struct PerfLabState {
     pub unrelated_ticks: u32,
@@ -263,53 +245,7 @@ impl Default for PerfLabState {
     }
 }
 
-/// Multi-pane desktop workbench sample state.
-#[derive(Clone, Debug)]
-pub struct WorkbenchState {
-    pub selected_idx: usize,
-    pub items: Vec<(&'static str, &'static str, &'static str)>,
-    pub search_query: String,
-    pub show_detail_pane: bool,
-}
-
-impl Default for WorkbenchState {
-    fn default() -> Self {
-        Self {
-            selected_idx: 0,
-            items: vec![
-                (
-                    "核心设计引擎",
-                    "FocusFrame 与浅层 PropertyStack 默认样式表",
-                    "运行中",
-                ),
-                (
-                    "增量与虚拟化管道",
-                    "memoize_with_spec 边界与万级 virtual_list",
-                    "已就绪",
-                ),
-                (
-                    "Windows Mica 外壳",
-                    "可折叠 NavigationView + BreadcrumbBar + BeveledBorder",
-                    "已同步",
-                ),
-                (
-                    "macOS Aqua 检查器",
-                    "Source List 侧栏 + 38px 工具栏 + PopUpButton",
-                    "就绪",
-                ),
-                (
-                    "GNOME Adwaita 分栏",
-                    "AdwBreakpointBin + AdwClamp + ViewSwitcherBar",
-                    "已更新",
-                ),
-            ],
-            search_query: String::new(),
-            show_detail_pane: true,
-        }
-    }
-}
-
-/// Root mutable showcase state composed of domain sub-structs.
+/// Root application state for `theme_gallery`.
 pub struct GalleryState {
     pub window_id: WindowId,
     pub running: bool,
@@ -321,7 +257,6 @@ pub struct GalleryState {
     pub overlays: OverlaysState,
     pub native: PlatformNativeState,
     pub perf: PerfLabState,
-    pub workbench: WorkbenchState,
 }
 
 impl Default for GalleryState {
@@ -330,14 +265,13 @@ impl Default for GalleryState {
             window_id: WindowId::next(),
             running: true,
             theme: UiTheme::native_light(),
-            active_tab: GalleryTab::Home,
+            active_tab: GalleryTab::Components,
             accent_menu_open: false,
             layout: LayoutLabState::default(),
             components: ComponentsState::default(),
             overlays: OverlaysState::default(),
             native: PlatformNativeState::default(),
             perf: PerfLabState::default(),
-            workbench: WorkbenchState::default(),
         }
     }
 }

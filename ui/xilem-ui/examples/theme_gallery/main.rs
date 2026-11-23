@@ -1,5 +1,4 @@
-//! Multi-theme showcase gallery demonstrating Beamlet UI's layout system, components,
-//! platform-native suites, and incremental/virtualization architecture.
+//! Multi-theme showcase gallery entrypoint and automated headless audit.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
@@ -35,11 +34,11 @@ fn main() {
     let app = Xilem::new(initial, |state: &mut GalleryState| {
         let wid = state.window_id;
         let theme = state.theme.clone();
-        let title = format!("Beamlet 多主题 UI 展示台 ({})", theme.language.label());
+        let title = format!("Beamlet UI ({})", theme.language.label());
         let view = app_view(state);
         std::iter::once(ui_window(wid, title, &theme, view).with_options(|opts| {
             opts.on_close(|s: &mut GalleryState| s.running = false)
-                .with_initial_inner_size(LogicalSize::new(1240.0, 820.0))
+                .with_initial_inner_size(LogicalSize::new(1200.0, 800.0))
         }))
     })
     .with_default_properties(initial_props);
@@ -105,8 +104,8 @@ mod tests {
                 let last_spec = RefCell::new(initial_spec.clone());
 
                 let mut cfg = PreviewConfig {
-                    width: 1240,
-                    height: 820,
+                    width: 1200,
+                    height: 800,
                     ..PreviewConfig::default()
                 };
                 cfg.background = initial_spec.palette.window_bg;
@@ -139,9 +138,8 @@ mod tests {
 
                 h.settle_animations();
                 let tree = dump_layout_tree(&mut h);
-                // `masonry_testing::TestHarness` sets `use_system_fonts: false` and loads only
-                // Latin `ROBOTO`, so labels containing CJK characters cannot be shaped by Roboto in
-                // headless unit tests (unlike the live desktop `EventLoop` which uses system fonts).
+
+                // `masonry_testing::TestHarness` sets `use_system_fonts: false` with Latin-only `ROBOTO`.
                 let cjk_label_ids: HashSet<u64> = {
                     fn collect(node: &xilem_preview::inspect::LayoutNode, out: &mut HashSet<u64>) {
                         if node.type_name == "Label"
