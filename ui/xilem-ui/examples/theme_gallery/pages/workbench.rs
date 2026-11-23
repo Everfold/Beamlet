@@ -1,4 +1,5 @@
-//! Realistic filterable project workbench page combining custom slots, drawers, destructive confirmation, and platform settings.
+//! Multi-pane desktop workbench combining filterable list, toggleable inspector detail pane,
+//! destructive confirmation dialog, and per-platform native settings containers.
 
 use xilem::WidgetView;
 use xilem::masonry::layout::AsUnit;
@@ -8,14 +9,15 @@ use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;
 
-pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let query = state.search_query.trim().to_lowercase();
+pub fn workbench_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
+    let query = state.workbench.search_query.trim().to_lowercase();
     let accent_color = state.theme.to_spec().palette.accent;
-    let total = state.workspace_items.len();
-    let selected = state.selected_workspace_idx.min(total.saturating_sub(1));
+    let total = state.workbench.items.len();
+    let selected = state.workbench.selected_idx.min(total.saturating_sub(1));
 
     let rows: Vec<_> = state
-        .workspace_items
+        .workbench
+        .items
         .iter()
         .enumerate()
         .filter(|(_, (title, desc, _))| {
@@ -52,27 +54,37 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
             .gap(12.px());
 
             clickable_list_item_view(row_content, active, move |s: &mut GalleryState| {
-                s.selected_workspace_idx = idx;
+                s.workbench.selected_idx = idx;
             })
             .boxed()
         })
         .collect();
 
     let filter_bar = flex_row((
-        search_bar(state.search_query.clone(), |s: &mut GalleryState, val| {
-            s.search_query = val;
-        })
-        .on_clear(|s: &mut GalleryState| s.search_query.clear())
+        search_bar(
+            state.workbench.search_query.clone(),
+            |s: &mut GalleryState, val| {
+                s.workbench.search_query = val;
+            },
+        )
+        .on_clear(|s: &mut GalleryState| s.workbench.search_query.clear())
         .flex(1.0),
+        filter_chip(
+            "内嵌详情栏",
+            state.workbench.show_detail_pane,
+            |s: &mut GalleryState| {
+                s.workbench.show_detail_pane = !s.workbench.show_detail_pane;
+            },
+        ),
         secondary_button("检查器抽屉", |s: &mut GalleryState| {
-            s.show_side_sheet = true;
+            s.overlays.show_side_sheet = true;
         })
         .leading_icon(icons::DOCK_LEFT),
         destructive_button("移除选中项", |s: &mut GalleryState| {
-            s.show_destructive_dialog = true;
+            s.overlays.show_destructive_dialog = true;
         })
         .leading_icon(icons::DELETE)
-        .disabled(state.workspace_items.is_empty()),
+        .disabled(state.workbench.items.is_empty()),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Center)
     .gap(10.px());
@@ -84,7 +96,7 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
             "请清空搜索条件，或添加新的工作区条目。",
             Some((
                 "清空搜索",
-                std::sync::Arc::new(|s: &mut GalleryState| s.search_query.clear()),
+                std::sync::Arc::new(|s: &mut GalleryState| s.workbench.search_query.clear()),
             )),
         )
         .boxed()
@@ -97,19 +109,51 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         .boxed()
     };
 
-    // Developer explicitly chooses native settings container per design language.
+    let detail_pane = state.workbench.show_detail_pane.then(|| {
+        let item = state.workbench.items.get(selected).copied();
+        let (title, desc, status) = item.unwrap_or(("未选中目标", "列表为空", "空闲"));
+        elevated_card(
+            flex_col((
+                title_medium("详情检视器"),
+                title_small(title),
+                body_medium(desc),
+                info_badge(InfoBarSeverity::Informational, Some(status)),
+                primary_button("触发平台原生弹窗", |s: &mut GalleryState| {
+                    s.overlays.show_platform_alert = true;
+                }),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .gap(10.px()),
+        )
+    });
+
+    let master_detail = flex_row((list_section.flex(2.0), detail_pane.map(|d| d.flex(1.0))))
+        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .gap(12.px());
+
     let platform_settings = match state.theme.language {
         DesignLanguage::Md3 => filled_card(
             flex_col((
                 title_medium("Material 3 工作区操作"),
                 body_small("结合 M3 悬浮工具栏与 Small / Large FAB 人机工学。"),
                 floating_toolbar(vec![
-                    icon_button(icons::REFRESH, |s: &mut GalleryState| s.click_count += 1).boxed(),
-                    icon_button(icons::COPY, |s: &mut GalleryState| s.click_count += 1).boxed(),
-                    icon_button(icons::SHARE, |s: &mut GalleryState| s.click_count += 1).boxed(),
-                    primary_button("部署构建", |s: &mut GalleryState| s.click_count += 1)
-                        .leading_icon(icons::SEND)
-                        .boxed(),
+                    icon_button(icons::REFRESH, |s: &mut GalleryState| {
+                        s.components.click_count += 1;
+                    })
+                    .boxed(),
+                    icon_button(icons::COPY, |s: &mut GalleryState| {
+                        s.components.click_count += 1;
+                    })
+                    .boxed(),
+                    icon_button(icons::SHARE, |s: &mut GalleryState| {
+                        s.components.click_count += 1;
+                    })
+                    .boxed(),
+                    primary_button("部署构建", |s: &mut GalleryState| {
+                        s.components.click_count += 1;
+                    })
+                    .leading_icon(icons::SEND)
+                    .boxed(),
                 ]),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -121,11 +165,11 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
             "并发构建线程数",
             Some("通过 SettingsCard 内嵌 WinUI 3 NumberBox 进行微调"),
             number_box(
-                state.fluent_number_val,
+                state.native.fluent_number_val,
                 1.0,
                 64.0,
                 2.0,
-                |s: &mut GalleryState, next| s.fluent_number_val = next,
+                |s: &mut GalleryState, next| s.native.fluent_number_val = next,
             ),
         )
         .boxed(),
@@ -136,19 +180,22 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
                     "构建工作线程",
                     stepper(
                         "线程",
-                        state.hig_stepper_val,
+                        state.native.hig_stepper_val,
                         1,
                         32,
                         1,
-                        |s: &mut GalleryState, next| s.hig_stepper_val = next,
+                        |s: &mut GalleryState, next| s.native.hig_stepper_val = next,
                     ),
                 )
                 .boxed(),
                 form_row(
-                    "显示检查器面板",
-                    switch(state.show_hig_inspector, |s: &mut GalleryState, v| {
-                        s.show_hig_inspector = v;
-                    }),
+                    "显示右侧检查器栏",
+                    switch(
+                        state.native.show_hig_inspector,
+                        |s: &mut GalleryState, v| {
+                            s.native.show_hig_inspector = v;
+                        },
+                    ),
                 )
                 .boxed(),
             ],
@@ -157,26 +204,26 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
         .boxed(),
         DesignLanguage::Adwaita => preferences_group(
             Some("Libadwaita 项目设置"),
-            Some("使用 AdwComboRow、AdwEntryRow 与 AdwExpanderRow"),
+            Some("使用 AdwComboRow 与 AdwEntryRow"),
             vec![
                 entry_row(
                     "工作区标识 (Slug)",
-                    state.adw_entry_val.clone(),
-                    |s: &mut GalleryState, txt| s.adw_entry_val = txt,
+                    state.native.adw_entry_val.clone(),
+                    |s: &mut GalleryState, txt| s.native.adw_entry_val = txt,
                 )
                 .boxed(),
                 combo_row(
                     "发布配置档案",
                     Some("选择编译优化目标"),
                     &["调试模式 (Debug)", "发布模式 (Release)", "带调试信息发布"],
-                    state.adw_combo_idx,
-                    state.adw_combo_open,
-                    |s: &mut GalleryState| s.adw_combo_open = !s.adw_combo_open,
+                    state.native.adw_combo_idx,
+                    state.native.adw_combo_open,
+                    |s: &mut GalleryState| s.native.adw_combo_open = !s.native.adw_combo_open,
                     |s: &mut GalleryState, idx| {
-                        s.adw_combo_idx = idx;
-                        s.adw_combo_open = false;
+                        s.native.adw_combo_idx = idx;
+                        s.native.adw_combo_open = false;
                     },
-                    |s: &mut GalleryState| s.adw_combo_open = false,
+                    |s: &mut GalleryState| s.native.adw_combo_open = false,
                 )
                 .boxed(),
             ],
@@ -185,12 +232,10 @@ pub fn workspace_demo_page(state: &mut GalleryState) -> impl WidgetView<GalleryS
     };
 
     flex_col((
-        headline_small("项目与发布工作台"),
-        body_small(
-            "演示跨主题共享可搜索状态，并与各平台原生抽屉、危险确认弹窗及设置容器协同工作。",
-        ),
+        headline_small("多栏桌面工作台样板"),
+        body_small("演示主从列表 + 内嵌详情检视器 + 平台原生设置区与浮层抽屉的真实组合。"),
         filter_bar,
-        list_section,
+        master_detail,
         platform_settings,
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
