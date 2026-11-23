@@ -9,6 +9,7 @@ pub mod overlay;
 pub mod ripple;
 pub mod state_layer;
 pub mod transition;
+pub mod wrap;
 
 pub use bevel::{BeveledBorder, BeveledBorderView, beveled_surface};
 pub use class_view::{UiClassExt, WithClass};
@@ -23,3 +24,4 @@ pub use overlay::{
 pub use ripple::{RippleLayer, RippleLayerView, ripple_layer};
 pub use state_layer::{InteractiveColors, blend_over, resolve_interactive_colors, with_opacity};
 pub use transition::{SlideTransition, UiTransition, ui_transition};
+pub use wrap::{WrapState, WrapView, WrapWidget, wrap};
