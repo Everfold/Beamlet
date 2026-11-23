@@ -305,6 +305,24 @@ impl<State: 'static> PreviewHarness<State> {
         self.current_view = next_view;
     }
 
+    fn rebuild_current_view(&mut self) {
+        self.view_ctx.reset_changed_props();
+        self.view_ctx.reset_changed_transforms();
+        let current_view = &self.current_view;
+        let view_state = &mut self.view_state;
+        let view_ctx = &mut self.view_ctx;
+        let app_state = &mut self.state;
+        self.harness.edit_root_widget(|mut root| {
+            current_view.rebuild(
+                current_view,
+                view_state,
+                view_ctx,
+                root.reborrow_mut(),
+                app_state,
+            );
+        });
+    }
+
     /// Pumps all queued Masonry actions through Xilem message handling and triggers `rebuild()` if handled.
     pub fn pump_actions(&mut self) {
         while let Some((action, widget_id)) = self.harness.pop_action_erased() {
@@ -320,8 +338,14 @@ impl<State: 'static> PreviewHarness<State> {
                 view.message(view_state, &mut msg_ctx, root.reborrow_mut(), app_state)
             });
             *self.view_ctx.environment() = msg_ctx.finish().0;
-            if matches!(result, xilem::core::MessageResult::Action(())) {
-                self.rebuild();
+            match result {
+                xilem::core::MessageResult::Action(()) => {
+                    self.rebuild();
+                }
+                xilem::core::MessageResult::RequestRebuild => {
+                    self.rebuild_current_view();
+                }
+                xilem::core::MessageResult::Nop | xilem::core::MessageResult::Stale => {}
             }
         }
     }

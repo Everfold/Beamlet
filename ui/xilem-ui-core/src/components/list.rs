@@ -281,3 +281,32 @@ where
     };
     button(content, on_click).ui_class(cls)
 }
+
+/// Virtualized lazy-mounted vertical list backed by Xilem's
+/// [`virtual_scroll`](xilem::view::virtual_scroll).
+///
+/// Only rows intersecting the visible viewport (plus a small scroll buffer) are built and mounted,
+/// keeping view build, layout, and paint proportional to the visible window (`O(viewport)`)
+/// even for `10_000+` items.
+#[expect(
+    clippy::type_complexity,
+    reason = "Preserves VirtualScroll builder methods while keeping Xilem's opaque default scroll handler"
+)]
+pub fn virtual_list<State, Action, V, F>(
+    item_count: usize,
+    row_builder: F,
+) -> xilem::view::VirtualScroll<
+    State,
+    Action,
+    V,
+    F,
+    impl Fn(&mut State, std::ops::Range<usize>) -> MessageResult<Action> + Send + Sync + 'static,
+>
+where
+    V: WidgetView<State, Action>,
+    F: Fn(&mut State, usize) -> V + 'static,
+    State: 'static,
+    Action: 'static,
+{
+    xilem::view::virtual_scroll(item_count, row_builder)
+}

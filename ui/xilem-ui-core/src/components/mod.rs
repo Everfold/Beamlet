@@ -44,6 +44,7 @@ pub use icon_button::{
 };
 pub use list::{
     UiListItem, clickable_list_item, clickable_list_item_view, list_item, list_item_view,
+    virtual_list,
 };
 pub use menu::{MenuEntry, dropdown_menu, menu_divider, menu_item, select};
 pub use navigation::{

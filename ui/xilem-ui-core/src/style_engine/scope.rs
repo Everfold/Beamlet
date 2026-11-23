@@ -217,7 +217,141 @@ where
     }
 }
 
+/// Memoizes a theme-aware subtree by both `data` (`PartialEq`) and the ambient [`DesignSpec`].
+///
+/// Rebuilds of enclosing views are skipped completely (neither `builder` nor child `rebuild`
+/// runs) unless `data` changes, the enclosing `DesignSpec` changes, or a descendant explicitly
+/// requested a rebuild via `MessageResult::RequestRebuild`.
+pub fn memoize_with_spec<State, Action, Data, F, V>(
+    data: Data,
+    builder: F,
+) -> MemoizeWithSpec<State, Action, Data, F, V>
+where
+    State: 'static,
+    Action: 'static,
+    Data: PartialEq + Send + Sync + 'static,
+    F: Fn(&DesignSpec, &Data) -> V + Send + Sync + 'static,
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    MemoizeWithSpec {
+        data,
+        builder,
+        phantom: PhantomData,
+    }
+}
+
 type StatePhantom<State, Action, V> = PhantomData<fn(&mut State) -> (Action, V)>;
+
+/// View created by [`memoize_with_spec`].
+#[must_use = "View values do nothing unless provided to Xilem."]
+#[expect(
+    missing_debug_implementations,
+    reason = "Contains closure trait generic"
+)]
+pub struct MemoizeWithSpec<State, Action, Data, F, V> {
+    data: Data,
+    builder: F,
+    phantom: StatePhantom<State, Action, V>,
+}
+
+impl<State, Action, Data, F, V> ViewMarker for MemoizeWithSpec<State, Action, Data, F, V> {}
+
+#[doc(hidden)]
+#[expect(
+    missing_debug_implementations,
+    reason = "Internal ViewState for MemoizeWithSpec"
+)]
+pub struct MemoizeWithSpecState<V, VState> {
+    spec: Arc<DesignSpec>,
+    view: V,
+    view_state: VState,
+    dirty: bool,
+}
+
+impl<State, Action, Data, F, V> View<State, Action, ViewCtx>
+    for MemoizeWithSpec<State, Action, Data, F, V>
+where
+    State: 'static,
+    Action: 'static,
+    Data: PartialEq + Send + Sync + 'static,
+    F: Fn(&DesignSpec, &Data) -> V + Send + Sync + 'static,
+    V: WidgetView<State, Action>,
+    V::Widget: FromDynWidget,
+{
+    type Element = Pod<V::Widget>;
+    type ViewState = MemoizeWithSpecState<V, V::ViewState>;
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let spec = current_spec_arc(ctx);
+        let view = (self.builder)(&spec, &self.data);
+        let (el, view_state) = view.build(ctx, app_state);
+        (
+            el,
+            MemoizeWithSpecState {
+                spec,
+                view,
+                view_state,
+                dirty: false,
+            },
+        )
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        let next_spec = current_spec_arc(ctx);
+        let spec_unchanged =
+            Arc::ptr_eq(&view_state.spec, &next_spec) || *view_state.spec == *next_spec;
+        let dirty = std::mem::take(&mut view_state.dirty);
+        if !dirty && spec_unchanged && prev.data == self.data {
+            return;
+        }
+        let next_view = (self.builder)(&next_spec, &self.data);
+        next_view.rebuild(
+            &view_state.view,
+            &mut view_state.view_state,
+            ctx,
+            element,
+            app_state,
+        );
+        view_state.spec = next_spec;
+        view_state.view = next_view;
+    }
+
+    fn teardown(
+        &self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        view_state
+            .view
+            .teardown(&mut view_state.view_state, ctx, element);
+    }
+
+    fn message(
+        &self,
+        view_state: &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        let result =
+            view_state
+                .view
+                .message(&mut view_state.view_state, message, element, app_state);
+        if matches!(result, MessageResult::RequestRebuild) {
+            view_state.dirty = true;
+        }
+        result
+    }
+}
 
 /// View created by [`with_spec`].
 #[must_use = "View values do nothing unless provided to Xilem."]

@@ -13,7 +13,10 @@ pub use foundation::{
     RippleLayer, RippleLayerView, UiClassExt, beveled_surface, focus_frame, icons, ripple_layer,
     ui_icon, ui_transition,
 };
-pub use style_engine::{build_default_properties, current_spec, ui_scope, ui_window, with_spec};
+pub use style_engine::{
+    MemoizeWithSpec, build_default_properties, current_spec, memoize_with_spec, ui_scope,
+    ui_window, with_spec,
+};
 pub use tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,

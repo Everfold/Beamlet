@@ -15,7 +15,8 @@ pub use xilem_ui_core::foundation::{
     ui_icon, ui_transition,
 };
 pub use xilem_ui_core::style_engine::{
-    build_default_properties, cached_default_properties, classes, current_spec, with_spec,
+    MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
+    memoize_with_spec, with_spec,
 };
 pub use xilem_ui_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,

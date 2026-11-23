@@ -2009,3 +2009,136 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
         "Modal SlideTransition must not animate under reduced_motion"
     );
 }
+
+#[test]
+fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_change() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use xilem::WidgetView as _;
+    use xilem::view::{flex_col, label};
+    use xilem_ui::prelude::*;
+
+    struct MemoState {
+        theme: UiTheme,
+        unrelated: u32,
+        memo_key: String,
+        rebuilds: Arc<AtomicUsize>,
+    }
+
+    let rebuilds = Arc::new(AtomicUsize::new(0));
+    let mut h = build_ui_harness(
+        MemoState {
+            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            unrelated: 0,
+            memo_key: "Alpha".to_owned(),
+            rebuilds: rebuilds.clone(),
+        },
+        |s| s.theme.clone(),
+        |s| {
+            let key = s.memo_key.clone();
+            let counter = s.rebuilds.clone();
+            flex_col((
+                label(format!("unrelated={}", s.unrelated)),
+                memoize_with_spec(key, move |spec, data| {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    label(format!("{}:{data}", spec.name))
+                }),
+            ))
+            .boxed()
+        },
+        PreviewConfig {
+            width: 400,
+            height: 240,
+            ..PreviewConfig::default()
+        },
+    );
+
+    assert_eq!(rebuilds.load(Ordering::SeqCst), 1);
+
+    // Mutate unrelated state and trigger rebuilds: memoized subtree builder must NOT rerun.
+    h.state_mut().unrelated += 1;
+    h.rebuild();
+    h.state_mut().unrelated += 1;
+    h.rebuild();
+    assert_eq!(rebuilds.load(Ordering::SeqCst), 1);
+
+    // Mutate memoized key: subtree MUST rebuild.
+    h.state_mut().memo_key = "Beta".to_owned();
+    h.rebuild();
+    assert_eq!(rebuilds.load(Ordering::SeqCst), 2);
+    let tree = dump_layout_tree(&mut h);
+    assert!(format_tree_text_contains(&tree, "Beta"));
+
+    // Unrelated mutation again: still cached at 2.
+    h.state_mut().unrelated += 1;
+    h.rebuild();
+    assert_eq!(rebuilds.load(Ordering::SeqCst), 2);
+
+    // Switch DesignSpec theme/brightness: subtree MUST rebuild even though memo_key is unchanged.
+    h.state_mut().theme = UiTheme::new(DesignLanguage::Fluent, Brightness::Dark);
+    h.rebuild();
+    assert_eq!(rebuilds.load(Ordering::SeqCst), 3);
+}
+
+fn format_tree_text_contains(node: &LayoutNode, needle: &str) -> bool {
+    if node.text.as_deref().is_some_and(|t| t.contains(needle)) {
+        return true;
+    }
+    node.children
+        .iter()
+        .any(|child| format_tree_text_contains(child, needle))
+}
+
+#[test]
+fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
+    use xilem::WidgetView as _;
+    use xilem::masonry::properties::Dimensions;
+    use xilem::style::Style as _;
+    use xilem::view::{label, sized_box};
+    use xilem_ui::prelude::*;
+
+    struct ListState {
+        theme: UiTheme,
+    }
+
+    let mut h = build_ui_harness(
+        ListState {
+            theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+        },
+        |s| s.theme.clone(),
+        |_| {
+            sized_box(virtual_list(10_000, |_, idx| {
+                sized_box(label(format!("Virtual row #{idx}")))
+                    .dims(Dimensions::height(xilem::masonry::layout::Length::px(36.0)))
+            }))
+            .dims(Dimensions::STRETCH)
+            .boxed()
+        },
+        PreviewConfig {
+            width: 480,
+            height: 360,
+            ..PreviewConfig::default()
+        },
+    );
+
+    // Redraw so VirtualScroll measures the viewport and emits Fetch, then pump_actions + settle.
+    h.settle_animations();
+    let tree = dump_layout_tree(&mut h);
+
+    fn count_labels(node: &LayoutNode) -> usize {
+        let self_hit = usize::from(node.type_name == "Label");
+        self_hit + node.children.iter().map(count_labels).sum::<usize>()
+    }
+
+    let mounted_labels = count_labels(&tree);
+    assert!(
+        mounted_labels > 0 && mounted_labels < 100,
+        "expected O(viewport) mounted labels (between 1 and 99) for 10,000 virtual items, got {mounted_labels}"
+    );
+    let issues = lint_ui_layout(&tree, h.viewport());
+    let errors: Vec<_> = issues
+        .iter()
+        .filter(|i| i.severity == IssueSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "virtual_list layout errors: {errors:#?}");
+}

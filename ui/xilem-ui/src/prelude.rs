@@ -8,7 +8,8 @@ pub use crate::{
     MotionEasing, NavIndicatorStyle, RippleLayer, RippleLayerView, SemanticPalette,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, UiClassExt,
     WindowSizeClass, beveled_surface, build_default_properties, cached_default_properties, classes,
-    current_spec, focus_frame, icons, ripple_layer, ui_icon, ui_transition, with_spec,
+    current_spec, focus_frame, icons, memoize_with_spec, ripple_layer, ui_icon, ui_transition,
+    with_spec,
 };
 
 #[cfg(feature = "md3")]

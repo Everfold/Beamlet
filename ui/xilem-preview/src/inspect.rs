@@ -228,10 +228,16 @@ impl Default for LintConfig {
             .into_iter()
             .map(str::to_string)
             .collect(),
-            overflow_containers: ["Portal", "ZStack", "Passthrough", "ScrollBar"]
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
+            overflow_containers: [
+                "Portal",
+                "VirtualScroll",
+                "ZStack",
+                "Passthrough",
+                "ScrollBar",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
         }
     }
 }
@@ -296,7 +302,8 @@ fn lint_walk(
     config: &LintConfig,
     issues: &mut Vec<LayoutIssue>,
 ) {
-    let in_portal = inside_portal || node.type_name == "Portal";
+    let in_portal =
+        inside_portal || node.type_name == "Portal" || node.type_name == "VirtualScroll";
 
     let is_nonempty_label = node.type_name == "Label" && node.text.is_some();
     if (config.is_visible_leaf_type(&node.type_name) || is_nonempty_label)
