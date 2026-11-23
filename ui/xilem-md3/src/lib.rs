@@ -13,7 +13,7 @@ pub use components::{
     fab, floating_toolbar, large_fab, large_top_app_bar, medium_top_app_bar,
     navigation_rail_with_fab, sized_fab, small_fab, top_app_bar, top_app_bar_slots,
 };
-pub use theme::{Md3Theme, md3_scope, md3_window};
+pub use theme::{Md3Theme, md3_scope};
 pub use xilem_ui_core::components::*;
 pub use xilem_ui_core::foundation::{
     AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,

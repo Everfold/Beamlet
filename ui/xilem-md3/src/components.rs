@@ -2,16 +2,17 @@
 
 use std::sync::Arc;
 
-use xilem::masonry::core::ArcStr;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::core::ArcStr;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::{Dimensions, Padding};
+use masonry::widgets;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label,
     sized_box, zstack,
 };
-use xilem::{AnyWidgetView, WidgetView};
 use xilem_ui_core::components::{
     NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
 };
@@ -43,7 +44,7 @@ impl FabColor {
         }
     }
 
-    const fn foreground(self, spec: &DesignSpec) -> xilem::Color {
+    const fn foreground(self, spec: &DesignSpec) -> masonry::peniko::Color {
         let p = &spec.palette;
         match self {
             Self::Primary => p.on_accent_container,
@@ -341,7 +342,7 @@ where
                 let pill_bg = if active {
                     p.secondary_container
                 } else {
-                    xilem::Color::TRANSPARENT
+                    masonry::peniko::Color::TRANSPARENT
                 };
                 let pill = sized_box(ui_icon(d.icon, 18.0, fg))
                     .padding(Padding::from_vh(5.px(), 14.px()))

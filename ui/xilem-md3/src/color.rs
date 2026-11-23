@@ -1,6 +1,6 @@
 //! Perceptual OKLCH dynamic Material Design 3 `ColorScheme` generator and contrast helpers.
 
-use xilem::Color;
+use masonry::peniko::Color;
 use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// Accessibility contrast tier for dynamic Material 3 palettes.
