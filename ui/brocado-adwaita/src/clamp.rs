@@ -141,7 +141,7 @@ impl Widget for AdwClamp {
 }
 
 /// View wrapper constructed by [`clamp`].
-#[must_use = "View values do nothing unless provided to Xilem."]
+#[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
 pub struct ClampView<V, State, Action> {
     max_width: f64,

@@ -1,24 +1,24 @@
-//! Standalone GNOME Libadwaita Preferences & Status example using `xilem-adwaita` directly without `xilem-ui`.
+//! Standalone GNOME Libadwaita Preferences & Status example using `brocado-adwaita` directly without `brocado`.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 use std::sync::Arc;
 
-use masonry::dpi::LogicalSize;
-use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::Padding;
-use xilem_adwaita::{
+use brocado_adwaita::{
     AdwaitaAccent, AdwaitaTheme, Brightness, action_row, alert_dialog, banner, breakpoint_bin,
     clamp, clickable_action_row, combo_row, destructive_button, entry_row, expander_row,
     header_bar, header_bar_with_title, icon_button, icons, preferences_group, status_page,
     switch_row, view_switcher, view_switcher_bar,
 };
+use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
+use masonry::dpi::LogicalSize;
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, portal, sized_box, zstack,
 };
-use xilem_ui_winit::{AppRunner, AppState, WindowId, desktop_window};
 
 struct PrefsApp {
     window_id: WindowId,
@@ -198,7 +198,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
                                     "导出支持诊断包",
                                     Some("直接返回 Pod<widgets::Button> 的可点击操作行"),
                                     Some(icons::DOWNLOAD),
-                                    None::<xilem_adwaita::UiButton<PrefsApp, ()>>,
+                                    None::<brocado_adwaita::UiButton<PrefsApp, ()>>,
                                     |s: &mut PrefsApp| s.banner_open = true,
                                 )
                                 .boxed(),
@@ -228,7 +228,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
             status_page(
                 icons::CHECK_CIRCLE,
                 "所有系统运行正常",
-                "由 xilem-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
+                "由 brocado-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
                 Some(("返回首选项", Arc::new(|s: &mut PrefsApp| s.active_view = 0))),
             ),
         )
@@ -285,7 +285,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
             status_page(
                 icons::CHECK_CIRCLE,
                 "所有系统运行正常",
-                "由 xilem-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
+                "由 brocado-adwaita 独立驱动的原生风格 GNOME Libadwaita 外壳。",
                 Some(("返回首选项", Arc::new(|s: &mut PrefsApp| s.active_view = 0))),
             ),
         )
@@ -342,7 +342,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
 
 fn main() {
     let initial = PrefsApp::default();
-    let props = xilem_adwaita::build_default_properties(&initial.current_theme().to_spec());
+    let props = brocado_adwaita::build_default_properties(&initial.current_theme().to_spec());
     AppRunner::new(initial, |state: &mut PrefsApp| {
         let spec = state.current_theme().to_spec();
         let wid = state.window_id;

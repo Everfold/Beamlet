@@ -1,7 +1,7 @@
 //! GNOME Libadwaita surface tokens and 9 named system accent colors.
 
+use brocado_core::tokens::{Brightness, SemanticPalette};
 use masonry::peniko::Color;
-use xilem_ui_core::tokens::{Brightness, SemanticPalette};
 
 /// GNOME Libadwaita system accent color presets (`org.gnome.desktop.interface accent-color`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

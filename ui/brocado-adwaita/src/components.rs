@@ -3,6 +3,18 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use brocado_core::components::button::{
+    destructive_button, primary_button, secondary_button, subtle_button,
+};
+use brocado_core::components::divider::horizontal_divider;
+use brocado_core::components::menu::select;
+use brocado_core::components::selection::switch;
+use brocado_core::foundation::{
+    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, focus_frame, icons,
+    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+};
+use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
+use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::{AsUnit, Dim, UnitPoint};
@@ -18,18 +30,6 @@ use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
     text_input,
 };
-use xilem_ui_core::components::button::{
-    destructive_button, primary_button, secondary_button, subtle_button,
-};
-use xilem_ui_core::components::divider::horizontal_divider;
-use xilem_ui_core::components::menu::select;
-use xilem_ui_core::components::selection::switch;
-use xilem_ui_core::foundation::{
-    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, focus_frame, icons,
-    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
-};
-use xilem_ui_core::style_engine::{classes, current_spec_arc, with_spec};
-use xilem_ui_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 
 /// GNOME `AdwHeaderBar` (`46px` bar) hosting a custom center `title_view` alongside start and end action clusters.
 pub fn header_bar_with_title<State: 'static, Action: 'static, T>(
@@ -554,7 +554,7 @@ where
 pub type AlertDialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
 
 /// GNOME `AdwAlertDialog` modal featuring centered copy and full-width split footer responses.
-#[must_use = "View values do nothing unless provided to Xilem."]
+#[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct AdwAlertDialog<State, Action> {
     heading: ArcStr,

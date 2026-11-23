@@ -162,7 +162,7 @@ impl Widget for AdwBreakpointBin {
 }
 
 /// View wrapper constructed by [`breakpoint_bin`].
-#[must_use = "View values do nothing unless provided to Xilem."]
+#[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
 pub struct BreakpointBin<W, N, State, Action> {
     breakpoint_px: f64,
