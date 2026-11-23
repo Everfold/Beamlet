@@ -2,10 +2,10 @@
 
 use std::cell::RefCell;
 
-use xilem::AnyWidgetView;
-use xilem::masonry::properties::Dimensions;
-use xilem::style::Style as _;
-use xilem::view::sized_box;
+use masonry::properties::Dimensions;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::sized_box;
 use xilem_preview::harness::{PreviewConfig, PreviewHarness};
 use xilem_preview::inspect::{
     A11yIssue, A11yLintConfig, ContrastCheck, ContrastIssue, LayoutIssue, LayoutNode, LintConfig,

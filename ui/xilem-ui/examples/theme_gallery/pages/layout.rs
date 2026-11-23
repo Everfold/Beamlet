@@ -1,18 +1,19 @@
 //! Layout system showcase: spacing rhythm, Flex weights, AdwClamp, BreakpointBin, and Elevation/ZStack.
 
-use xilem::WidgetView;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack};
-use xilem_ui::core::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::{Dimensions, Padding};
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack,
+};
+use xilem_ui::core_ui::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
 use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;
 
 pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    const SPACINGS: [xilem::masonry::layout::Length; 5] =
-        [SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24];
+    const SPACINGS: [masonry::layout::Length; 5] = [SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24];
     const CLAMP_WIDTHS: [f64; 3] = [480.0, 680.0, 880.0];
 
     let gap_len = SPACINGS[state.layout.spacing_idx.min(SPACINGS.len() - 1)];
@@ -52,7 +53,7 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             ),
             with_spec(move |spec: &DesignSpec, _| {
                 let p = &spec.palette;
-                let cell = |title: &'static str, bg: xilem::Color| {
+                let cell = |title: &'static str, bg: masonry::peniko::Color| {
                     sized_box(title_small(title))
                         .padding(Padding::all(12.px()))
                         .background_color(bg)
@@ -103,7 +104,7 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
     .cross_axis_alignment(CrossAxisAlignment::Stretch)
     .gap(8.px());
 
-    let adaptive_container: Box<xilem::AnyWidgetView<GalleryState>> =
+    let adaptive_container: Box<xilem_masonry::AnyWidgetView<GalleryState>> =
         if state.layout.simulate_compact {
             clamp(
                 420.0,

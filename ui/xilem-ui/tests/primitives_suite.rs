@@ -1,15 +1,15 @@
 //! Headless integration tests for the 6 standard UI library primitives:
 //! `wrap`, `split_view`, `text_area`, `rich_prose`, `context_menu`, and `popover`.
 
-use xilem::WidgetView;
-use xilem::kurbo::{Axis, Point};
-use xilem::masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
-use xilem::masonry::core::pointer::{PointerId, PointerInfo, PointerType};
-use xilem::masonry::core::{KeyboardEvent, PointerButton, PointerEvent, TextEvent};
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, ZStackExt, flex_col, label, sized_box, zstack};
+use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
+use masonry::core::pointer::{PointerId, PointerInfo, PointerType};
+use masonry::core::{KeyboardEvent, PointerButton, PointerEvent, TextEvent};
+use masonry::kurbo::{Axis, Point};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::{Dimensions, Padding};
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, label, sized_box, zstack};
 use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
 use xilem_preview::inspect::{LayoutNode, dump_layout_tree};
 use xilem_ui::prelude::*;
@@ -49,7 +49,7 @@ fn send_key(harness: &mut PreviewHarness<impl Sized>, key: Key, code: Code, modi
         state: KeyState::Down,
         key: key.clone(),
         code,
-        location: xilem::masonry::core::keyboard::Location::Standard,
+        location: masonry::core::keyboard::Location::Standard,
         modifiers,
         repeat: false,
         is_composing: false,
@@ -58,7 +58,7 @@ fn send_key(harness: &mut PreviewHarness<impl Sized>, key: Key, code: Code, modi
         state: KeyState::Up,
         key,
         code,
-        location: xilem::masonry::core::keyboard::Location::Standard,
+        location: masonry::core::keyboard::Location::Standard,
         modifiers,
         repeat: false,
         is_composing: false,

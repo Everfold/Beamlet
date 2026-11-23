@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
-use xilem::WindowId;
 use xilem_ui::prelude::*;
 
 /// Showcase navigation tabs (5 focused views).

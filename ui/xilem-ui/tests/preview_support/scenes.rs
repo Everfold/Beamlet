@@ -4,13 +4,15 @@ use std::sync::Arc;
 
 use anyhow::bail;
 use image::RgbaImage;
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, label, portal, sized_box, zstack,
 };
-use xilem::{AnyWidgetView, Color, WidgetView};
 use xilem_ui::prelude::*;
 
 use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};

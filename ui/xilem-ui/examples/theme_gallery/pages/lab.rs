@@ -2,11 +2,12 @@
 
 use std::sync::atomic::Ordering;
 
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::{Dimensions, Padding};
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
-use xilem::{Color, WidgetView};
+use masonry::layout::AsUnit;
+use masonry::peniko::Color;
+use masonry::properties::{Dimensions, Padding};
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
 use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;

@@ -4,21 +4,24 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
+use masonry::core::{KeyboardEvent, PointerButton, TextEvent, WidgetId};
+use masonry::dpi::PhysicalSize;
+use masonry::kurbo::{Point, Vec2};
+use masonry::layout::AsUnit;
+use masonry::peniko::Color;
+use masonry::properties::Dimensions;
+use masonry::widgets::Passthrough;
 use masonry_testing::{TestHarness, TestHarnessParams};
-use xilem::core::{
+use xilem_core::{
     DynMessage, MessageCtx, ProxyError, RawProxy, SendMessage, View, ViewId, ViewPathTracker as _,
 };
-use xilem::kurbo::{Point, Vec2};
-use xilem::masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
-use xilem::masonry::core::{KeyboardEvent, PointerButton, TextEvent, WidgetId};
-use xilem::masonry::dpi::PhysicalSize;
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Dimensions;
-use xilem::masonry::widgets::Passthrough;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, flex_col, flex_row, label, sized_box};
-use xilem::{AnyWidgetView, Color, ViewCtx, WidgetView};
-use xilem_ui::core::foundation::overlay::HoverTooltipHost;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::ViewCtx;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, flex_col, flex_row, label, sized_box};
+use xilem_ui::HoverTooltipHost;
 use xilem_ui::prelude::*;
 
 #[derive(Debug)]
@@ -216,7 +219,7 @@ fn shared_matrix_view(s: &mut MatrixState) -> Box<AnyWidgetView<MatrixState>> {
 }
 
 fn find_first_widget_id_by_type_name(
-    root: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    root: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
     needle: &str,
 ) -> Option<WidgetId> {
     if root.inner().short_type_name().contains(needle) {
@@ -345,7 +348,7 @@ fn range_slider_pointer_drag_emits_clamped_pair() {
 }
 
 fn subtree_has_debug_text(
-    node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    node: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
     target_text: &str,
 ) -> bool {
     if node.inner().get_debug_text().as_deref() == Some(target_text) {
@@ -357,7 +360,7 @@ fn subtree_has_debug_text(
 }
 
 fn find_button_with_label(
-    node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    node: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
     target_label: &str,
 ) -> Option<WidgetId> {
     if node.inner().short_type_name().contains("Button")
@@ -751,7 +754,7 @@ fn style_overrides_apply_directly_to_concrete_components() {
 
     // Verify Flex children are concrete Button, Button, SizedBox with zero Passthrough walls.
     fn collect_flex_child_types(
-        node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+        node: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
     ) -> Option<Vec<&'static str>> {
         if node.inner().short_type_name() == "Flex" {
             let names: Vec<&'static str> = node
@@ -804,7 +807,7 @@ fn style_overrides_apply_directly_to_concrete_components() {
 }
 
 fn collect_all_widget_ids_by_type_name(
-    root: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+    root: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
     needle: &str,
     out: &mut Vec<WidgetId>,
 ) {
@@ -1073,7 +1076,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
         let clamp_child_id = {
             let root = app.harness.render_root().get_layer_root(0);
             fn find_clamp_child(
-                node: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+                node: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
             ) -> Option<WidgetId> {
                 if node.inner().short_type_name() == "AdwClamp" {
                     return node.children().into_iter().next().map(|c| c.id());

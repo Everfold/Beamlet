@@ -7,8 +7,7 @@ mod pages;
 mod shells;
 mod state;
 
-use xilem::dpi::LogicalSize;
-use xilem::{AnyWidgetView, AppState, EventLoop, WidgetView, Xilem};
+use xilem_ui::dpi::LogicalSize;
 use xilem_ui::prelude::*;
 
 use state::GalleryState;
@@ -31,19 +30,19 @@ fn app_view(state: &mut GalleryState) -> Box<AnyWidgetView<GalleryState>> {
 fn main() {
     let initial = GalleryState::default();
     let initial_props = initial.theme.default_properties();
-    let app = Xilem::new(initial, |state: &mut GalleryState| {
+    AppRunner::new(initial, |state: &mut GalleryState| {
         let wid = state.window_id;
         let theme = state.theme.clone();
         let title = format!("Beamlet UI ({})", theme.language.label());
         let view = app_view(state);
-        std::iter::once(ui_window(wid, title, &theme, view).with_options(|opts| {
-            opts.on_close(|s: &mut GalleryState| s.running = false)
+        std::iter::once(themed_window(wid, title, &theme, view).with_config(|cfg| {
+            cfg.on_close(|s: &mut GalleryState| s.running = false)
                 .with_initial_inner_size(LogicalSize::new(1200.0, 800.0))
         }))
     })
-    .with_default_properties(initial_props);
-    app.run_in(EventLoop::with_user_event())
-        .expect("theme_gallery event loop exited cleanly");
+    .with_default_properties(initial_props)
+    .run()
+    .expect("theme_gallery event loop exited cleanly");
 }
 
 #[cfg(test)]
@@ -51,9 +50,9 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::HashSet;
 
-    use xilem::masonry::properties::Dimensions;
-    use xilem::style::Style as _;
-    use xilem::view::sized_box;
+    use masonry::properties::Dimensions;
+    use xilem_masonry::style::Style as _;
+    use xilem_masonry::view::sized_box;
     use xilem_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
     use xilem_preview::inspect::{
         A11yLintConfig, IssueSeverity, LayoutIssue, LayoutNode, LintConfig, dump_layout_tree,
@@ -507,8 +506,8 @@ mod tests {
             let rr = h.inner_harness_mut().render_root();
             let overflow_btn = rr.get_widget(overflow_host).and_then(|host_ref| {
                 fn find_btn(
-                    n: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
-                ) -> Option<xilem::masonry::core::WidgetId> {
+                    n: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
+                ) -> Option<masonry::core::WidgetId> {
                     if n.inner().short_type_name() == "Button" {
                         return Some(n.id());
                     }
@@ -850,8 +849,8 @@ mod tests {
                 let rr = h.inner_harness_mut().render_root();
                 if let Some(host_ref) = rr.get_widget(host_id) {
                     fn first_button(
-                        n: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
-                    ) -> Option<xilem::masonry::core::WidgetId> {
+                        n: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
+                    ) -> Option<masonry::core::WidgetId> {
                         if n.inner().short_type_name() == "Button" {
                             return Some(n.id());
                         }
@@ -954,9 +953,9 @@ mod tests {
                 .expect("ContextMenuHost should exist on Overlays page");
             if let Some((hx, hy, hw, hh)) = h.widget_rect(host_id) {
                 let inner = h.inner_harness_mut();
-                inner.mouse_move(xilem::kurbo::Point::new(hx + hw * 0.5, hy + hh * 0.5));
-                inner.mouse_button_press(Some(xilem::masonry::core::PointerButton::Secondary));
-                inner.mouse_button_release(Some(xilem::masonry::core::PointerButton::Secondary));
+                inner.mouse_move(masonry::kurbo::Point::new(hx + hw * 0.5, hy + hh * 0.5));
+                inner.mouse_button_press(Some(masonry::core::PointerButton::Secondary));
+                inner.mouse_button_release(Some(masonry::core::PointerButton::Secondary));
                 h.pump_actions();
             }
             save(&mut h, "27_md3_context_menu_open.png", &mut issues);

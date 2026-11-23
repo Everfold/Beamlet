@@ -1,11 +1,12 @@
 //! Root overlay compositor (`ZStack`) for dialogs, sheets, pickers, and toasts.
 
-use xilem::masonry::layout::{AsUnit, UnitPoint};
-use xilem::masonry::properties::Padding;
-use xilem::masonry::widgets;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, ZStackExt, flex_col, flex_row, sized_box, zstack};
-use xilem::{AnyWidgetView, WidgetView};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
+use masonry::widgets;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, flex_row, sized_box, zstack};
 use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;

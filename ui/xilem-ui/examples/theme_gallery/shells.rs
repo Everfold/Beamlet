@@ -1,10 +1,11 @@
 //! Responsive platform-native shells switching cleanly between wide sidebars/rails and compact bottom navigation.
 
-use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Padding;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, portal, sized_box};
-use xilem::{AnyWidgetView, WidgetView};
+use masonry::layout::AsUnit;
+use masonry::properties::Padding;
+use xilem_masonry::AnyWidgetView;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, portal, sized_box};
 use xilem_ui::prelude::*;
 
 use crate::overlays::wrap_with_overlays;

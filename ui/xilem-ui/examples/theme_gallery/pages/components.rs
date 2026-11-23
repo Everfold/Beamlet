@@ -1,9 +1,9 @@
 //! Cross-theme buttons, tabs, chips, text inputs, and selection controls.
 
-use xilem::WidgetView;
-use xilem::masonry::layout::AsUnit;
-use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, flex_col, flex_row};
+use masonry::layout::AsUnit;
+use xilem_masonry::WidgetView;
+use xilem_masonry::style::Style as _;
+use xilem_masonry::view::{CrossAxisAlignment, flex_col, flex_row};
 use xilem_ui::prelude::*;
 
 use crate::state::GalleryState;
