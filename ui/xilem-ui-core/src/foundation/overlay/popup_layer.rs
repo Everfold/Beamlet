@@ -608,15 +608,8 @@ impl AnchoredPopupHost {
         this.widget.offset = offset;
         this.widget.spec = spec;
 
-        if !open {
-            this.widget.pending_spawn = false;
-            this.widget.layer_buttons.clear();
-            Self::remove_active_layer_with(this.widget.layer_id.take(), |id| {
-                this.ctx.mutate_later(id, |mut layer| {
-                    layer.downcast::<PopupLayer>().widget.dismissed = true;
-                });
-                this.ctx.remove_layer(id);
-            });
+        if !open || this.ctx.is_stashed() {
+            Self::close_layer(this);
             return;
         }
 
@@ -665,8 +658,25 @@ impl Widget for AnchoredPopupHost {
     type Action = PopupAction;
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
-        if matches!(event, Update::WidgetAdded) && self.open && self.pending_spawn {
-            ctx.request_anim_frame();
+        match event {
+            Update::WidgetAdded if self.open && self.pending_spawn && !ctx.is_stashed() => {
+                ctx.request_anim_frame();
+            }
+            Update::StashedChanged(true) => {
+                self.pending_spawn = false;
+                self.layer_buttons.clear();
+                if let Some(old_id) = self.layer_id.take() {
+                    ctx.mutate_later(old_id, |mut layer| {
+                        layer.downcast::<PopupLayer>().widget.dismissed = true;
+                    });
+                    ctx.remove_layer(old_id);
+                }
+            }
+            Update::StashedChanged(false) if self.open && self.layer_id.is_none() => {
+                self.pending_spawn = true;
+                ctx.request_anim_frame();
+            }
+            _ => {}
         }
     }
 
@@ -724,7 +734,7 @@ impl Widget for AnchoredPopupHost {
         _props: &mut PropertiesMut<'_>,
         _interval: u64,
     ) {
-        if self.pending_spawn && self.open {
+        if ctx.is_stashed() {
             self.pending_spawn = false;
             self.layer_buttons.clear();
             if let Some(old_id) = self.layer_id.take() {
@@ -733,7 +743,21 @@ impl Widget for AnchoredPopupHost {
                 });
                 ctx.remove_layer(old_id);
             }
+            return;
+        }
+        if self.pending_spawn && self.open {
             let border_box = ctx.border_box();
+            if border_box.size() == Size::ZERO {
+                return;
+            }
+            self.pending_spawn = false;
+            self.layer_buttons.clear();
+            if let Some(old_id) = self.layer_id.take() {
+                ctx.mutate_later(old_id, |mut layer| {
+                    layer.downcast::<PopupLayer>().widget.dismissed = true;
+                });
+                ctx.remove_layer(old_id);
+            }
             let anchor_origin = ctx.to_window(border_box.origin());
             let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
             let pos = anchor_origin + Vec2::new(0.0, border_box.height()) + self.offset;

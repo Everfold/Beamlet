@@ -315,7 +315,13 @@ impl HoverTooltipHost {
     /// Shows the attached tooltip layer immediately (useful for deterministic testing).
     pub fn show_now(this: &mut WidgetMut<'_, Self>) {
         Self::close_layer(this);
+        if this.ctx.is_stashed() {
+            return;
+        }
         let border_box = this.ctx.border_box();
+        if border_box.size() == Size::ZERO {
+            return;
+        }
         let anchor_origin = this.ctx.to_window(border_box.origin());
         let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
         let pos = anchor_origin + Vec2::new(0.0, border_box.height() + 6.0);
@@ -350,7 +356,10 @@ impl Widget for HoverTooltipHost {
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
-        if let Update::HoveredChanged(false) = event {
+        if matches!(
+            event,
+            Update::HoveredChanged(false) | Update::StashedChanged(true)
+        ) {
             self.hover_pending = false;
             self.hover_elapsed_ns = 0;
             if let Some(old_id) = self.layer_id.take() {
@@ -368,6 +377,17 @@ impl Widget for HoverTooltipHost {
         _props: &mut PropertiesMut<'_>,
         interval: u64,
     ) {
+        if ctx.is_stashed() {
+            self.hover_pending = false;
+            self.hover_elapsed_ns = 0;
+            if let Some(old_id) = self.layer_id.take() {
+                ctx.mutate_later(old_id, |mut layer| {
+                    layer.downcast::<TooltipLayer>().widget.dismissed = true;
+                });
+                ctx.remove_layer(old_id);
+            }
+            return;
+        }
         if self.hover_pending {
             self.hover_elapsed_ns = self.hover_elapsed_ns.saturating_add(interval);
             if self.hover_elapsed_ns >= TOOLTIP_HOVER_DELAY_NS {
@@ -380,6 +400,9 @@ impl Widget for HoverTooltipHost {
                     ctx.remove_layer(old_id);
                 }
                 let border_box = ctx.border_box();
+                if border_box.size() == Size::ZERO {
+                    return;
+                }
                 let anchor_origin = ctx.to_window(border_box.origin());
                 let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
                 let pos = anchor_origin + Vec2::new(0.0, border_box.height() + 6.0);

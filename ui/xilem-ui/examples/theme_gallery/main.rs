@@ -316,8 +316,15 @@ mod tests {
         let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
         h.settle_animations();
 
-        // 1. Switcher bar: dark mode, reduced motion, theme switching
+        // 1. Switcher bar: dark mode, reduced motion, accent select, theme switching
         assert_eq!(h.state().theme.brightness, Brightness::Light);
+        h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
+        assert_visual_invariants(&mut h, "Top accent select open");
+        h.run_step(&PreviewStep::ClickLabel("蓝".into())).unwrap();
+        assert_eq!(h.state().theme.accent, UiAccent::PRESETS[1]);
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
+
         h.run_step(&PreviewStep::ClickLabel("深色".into())).unwrap();
         assert_eq!(h.state().theme.brightness, Brightness::Dark);
         h.run_step(&PreviewStep::ClickLabel("减动效".into()))
@@ -400,9 +407,20 @@ mod tests {
             .unwrap();
         assert!(h.state().components.chip_flags[1]);
         h.run_step(&PreviewStep::ClickLabel("浅色".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
         assert_visual_invariants(&mut h, "MD3 Components + open Select");
-        h.run_step(&PreviewStep::ClickLabel("深色".into())).unwrap();
-        assert_eq!(h.state().components.select_index, 1);
+        h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
+        assert_eq!(h.state().components.select_index, 0);
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
+
+        // Resizing across the 680px shell breakpoint with an open popup must keep at most 1 live layer
+        h.run_step(&PreviewStep::ClickLabel("蓝".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
+        h.resize(400, 600);
+        assert_visual_invariants(&mut h, "Narrow shell after resize with open popup");
+        h.run_step(&PreviewStep::ClickLabel("绿".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
+        h.resize(1200, 800);
 
         // 3. Layout page: spacing, clamp, compact BreakpointBin simulation
         h.run_step(&PreviewStep::ClickLabel("布局".into())).unwrap();
@@ -451,6 +469,14 @@ mod tests {
             .unwrap();
         assert!(h.state().overlays.toasts.current().is_some());
 
+        // Tooltips (plain + rich) must each spawn exactly one TooltipLayer
+        for tip_lbl in ["悬停提示", "富提示"] {
+            h.run_step(&PreviewStep::HoverLabel(tip_lbl.into()))
+                .unwrap();
+            assert_eq!(count_layer_type(&mut h, "TooltipLayer"), 1);
+            assert_visual_invariants(&mut h, &format!("Tooltip on {tip_lbl}"));
+        }
+
         // Native alert across Adwaita & HIG
         for lang_btn in ["Adwaita", "HIG"] {
             h.run_step(&PreviewStep::ClickLabel(lang_btn.into()))
@@ -476,16 +502,40 @@ mod tests {
 
         h.run_step(&PreviewStep::ClickLabel("Fluent".into()))
             .unwrap();
+        let fluent_hosts = h.find_widget_ids("AnchoredPopupHost");
+        if let Some(&overflow_host) = fluent_hosts.get(1) {
+            let rr = h.inner_harness_mut().render_root();
+            let overflow_btn = rr.get_widget(overflow_host).and_then(|host_ref| {
+                fn find_btn(
+                    n: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+                ) -> Option<xilem::masonry::core::WidgetId> {
+                    if n.inner().short_type_name() == "Button" {
+                        return Some(n.id());
+                    }
+                    n.children().iter().find_map(find_btn)
+                }
+                find_btn(&host_ref)
+            });
+            if let Some(btn_id) = overflow_btn {
+                h.click_widget_id(btn_id);
+                assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
+                assert_visual_invariants(&mut h, "Fluent CommandBar overflow open");
+                h.run_step(&PreviewStep::ClickLabel("导出".into())).unwrap();
+                assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
+            }
+        }
         let fluent_before = h.state().components.click_count;
         h.run_step(&PreviewStep::ClickLabel("保存".into())).unwrap();
         assert!(h.state().components.click_count >= fluent_before + 1);
 
         h.run_step(&PreviewStep::ClickLabel("HIG".into())).unwrap();
         h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
         assert_visual_invariants(&mut h, "HIG Native + open popup_button");
         h.run_step(&PreviewStep::ClickLabel("Metal".into()))
             .unwrap();
         assert_eq!(h.state().native.hig_popup_idx, 1);
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
         let sw_before = h.state().native.native_switch;
         h.run_step(&PreviewStep::ClickType {
             type_name: "UiSwitch".into(),
@@ -497,9 +547,11 @@ mod tests {
         h.run_step(&PreviewStep::ClickLabel("Adwaita".into()))
             .unwrap();
         h.run_step(&PreviewStep::ClickLabel("WGPU".into())).unwrap();
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
         assert_visual_invariants(&mut h, "Adwaita Native + open combo_row");
         h.run_step(&PreviewStep::ClickLabel("CPU".into())).unwrap();
         assert_eq!(h.state().native.adw_combo_idx, 1);
+        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
         let adw_before = h.state().components.click_count;
         h.run_step(&PreviewStep::ClickLabel("同步".into())).unwrap();
         assert_eq!(h.state().components.click_count, adw_before + 1);
@@ -667,11 +719,39 @@ mod tests {
         }
     }
 
+    fn count_widgets(node: &LayoutNode, target: &str) -> usize {
+        let self_hit = usize::from(node.type_name == target);
+        self_hit
+            + node
+                .children
+                .iter()
+                .map(|c| count_widgets(c, target))
+                .sum::<usize>()
+    }
+
+    fn count_layer_type(h: &mut PreviewHarness<GalleryState>, target: &str) -> usize {
+        h.settle_animations();
+        let tree = dump_layout_tree(h);
+        count_widgets(&tree, target)
+    }
+
     fn assert_visual_invariants(h: &mut PreviewHarness<GalleryState>, ctx: &str) {
         h.settle_animations();
         let (vw, vh) = h.viewport();
         let tree = dump_layout_tree(h);
         let mut issues = Vec::new();
+        let popup_count = count_widgets(&tree, "PopupLayer");
+        if popup_count > 1 {
+            issues.push(format!(
+                "expected at most 1 PopupLayer, found {popup_count}"
+            ));
+        }
+        let tooltip_count = count_widgets(&tree, "TooltipLayer");
+        if tooltip_count > 1 {
+            issues.push(format!(
+                "expected at most 1 TooltipLayer, found {tooltip_count}"
+            ));
+        }
         collect_icon_misalignments(&tree, &mut issues);
         collect_clipped_layers(&tree, vw, vh, &mut issues);
         collect_portal_horizontal_overflows(&tree, &mut issues);
@@ -697,6 +777,18 @@ mod tests {
             let (vw, vh) = h.viewport();
             let tree = dump_layout_tree(h);
             let mut local = Vec::new();
+            let popup_count = count_widgets(&tree, "PopupLayer");
+            if popup_count > 1 {
+                local.push(format!(
+                    "expected at most 1 PopupLayer, found {popup_count}"
+                ));
+            }
+            let tooltip_count = count_widgets(&tree, "TooltipLayer");
+            if tooltip_count > 1 {
+                local.push(format!(
+                    "expected at most 1 TooltipLayer, found {tooltip_count}"
+                ));
+            }
             collect_icon_misalignments(&tree, &mut local);
             collect_clipped_layers(&tree, vw, vh, &mut local);
             collect_portal_horizontal_overflows(&tree, &mut local);
@@ -841,6 +933,11 @@ mod tests {
             h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
                 .unwrap();
             save(&mut h, "23_narrow_320x480_adwaita_alert.png", &mut issues);
+        }
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+            h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
+            save(&mut h, "25_md3_accent_select_open.png", &mut issues);
         }
 
         assert!(
