@@ -840,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    fn dump_and_lint_clean_pure_xilem_tree_reports_zero_issues() {
+    fn dump_and_lint_clean_pure_brocado_tree_reports_zero_issues() {
         struct S;
         let mut h = PreviewHarness::new(
             S,

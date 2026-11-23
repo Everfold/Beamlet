@@ -1,4 +1,8 @@
-//! Headless CPU preview runner wrapping `masonry_testing::TestHarness` for Xilem views.
+//! Headless CPU preview runner wrapping `masonry_testing::TestHarness` for Brocado views.
+//!
+//! Upstream provenance: `PreviewHarness` wraps upstream `masonry_testing::TestHarness` and
+//! `xilem_masonry::{MasonryRoot, ViewCtx}`, and `DummyProxy` follows upstream `xilem_masonry`'s
+//! headless test proxy pattern (`linebender/xilem`, `xilem_masonry/src/view/zstack.rs`).
 
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -171,7 +175,7 @@ impl PreviewStep {
 /// Measured microsecond timings for a single rebuild + layout/paint pass in [`PreviewHarness`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameTimings {
-    /// Time elapsed running `logic` + Xilem `View::rebuild`, in microseconds.
+    /// Time elapsed running `logic` + reactive `View::rebuild`, in microseconds.
     pub rebuild_us: u64,
     /// Time elapsed running Masonry `redraw()` (measure, layout, accessibility, scene paint), in microseconds.
     pub layout_and_paint_us: u64,
@@ -181,7 +185,7 @@ type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCt
 type RootLogic<State> = Box<dyn FnMut(&mut State) -> Box<AnyWidgetView<State>>>;
 type PropertiesHook<State> = Box<dyn FnMut(&State) -> Option<Arc<DefaultProperties>>>;
 
-/// Reusable headless Xilem/Masonry harness capable of CPU rasterization, DOM inspection, and interaction replay.
+/// Reusable headless Brocado/Masonry harness capable of CPU rasterization, DOM inspection, and interaction replay.
 #[expect(
     missing_debug_implementations,
     reason = "Holds Masonry TestHarness, tokio runtime, and opaque view state"
@@ -337,7 +341,7 @@ impl<State: 'static> PreviewHarness<State> {
         });
     }
 
-    /// Pumps all queued Masonry actions through Xilem message handling and triggers `rebuild()` if handled.
+    /// Pumps all queued Masonry actions through Brocado message handling and triggers `rebuild()` if handled.
     pub fn pump_actions(&mut self) {
         while let Some((action, widget_id)) = self.harness.pop_action_erased() {
             let Some(path) = self.view_ctx.get_id_path(widget_id).cloned() else {
@@ -797,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    fn pure_xilem_counter_click_and_render() {
+    fn pure_brocado_counter_click_and_render() {
         struct CounterState {
             count: u32,
         }

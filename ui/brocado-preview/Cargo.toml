@@ -1,5 +1,5 @@
 [package]
-name = "xilem-preview"
+name = "brocado-preview"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
