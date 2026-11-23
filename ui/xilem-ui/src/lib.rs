@@ -11,9 +11,9 @@ pub use xilem_ui_core as core;
 pub use xilem_ui_core::components;
 pub use xilem_ui_core::foundation::{
     BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
-    FocusFrameView, HoverTooltipHost, RippleLayer, RippleLayerView, UiClassExt, WrapState,
-    WrapView, WrapWidget, beveled_surface, focus_frame, icons, ripple_layer, ui_icon,
-    ui_transition, wrap,
+    FocusFrameView, HoverTooltipHost, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget,
+    RippleLayer, RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, beveled_surface,
+    focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition, wrap,
 };
 pub use xilem_ui_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,

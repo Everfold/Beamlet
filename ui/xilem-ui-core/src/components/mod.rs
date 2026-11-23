@@ -11,6 +11,7 @@ pub mod icon_button;
 pub mod list;
 pub mod menu;
 pub mod navigation;
+pub mod popover;
 pub mod progress;
 pub mod range_slider;
 pub mod rich_text;
@@ -53,6 +54,7 @@ pub use navigation::{
     NavDestination, modal_navigation_drawer, navigation_bar, navigation_drawer, navigation_rail,
     top_bar,
 };
+pub use popover::popover_surface;
 pub use progress::{
     DeterminateCircularWidget, LinearProgressWidget, circular_progress,
     determinate_circular_progress, linear_progress, small_circular_progress,

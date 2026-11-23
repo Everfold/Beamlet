@@ -10,9 +10,9 @@ pub mod tokens;
 
 pub use foundation::{
     BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
-    FocusFrameView, HoverTooltipHost, RippleLayer, RippleLayerView, UiClassExt, WrapState,
-    WrapView, WrapWidget, beveled_surface, focus_frame, icons, ripple_layer, ui_icon,
-    ui_transition, wrap,
+    FocusFrameView, HoverTooltipHost, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget,
+    RippleLayer, RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, beveled_surface,
+    focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition, wrap,
 };
 pub use style_engine::{
     MemoizeWithSpec, build_default_properties, current_spec, memoize_with_spec, ui_scope,

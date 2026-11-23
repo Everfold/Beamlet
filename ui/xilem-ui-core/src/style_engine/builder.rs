@@ -487,6 +487,22 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         Selector::classes(&[classes::SCRIM]).with_active(true),
         PropertySet::new().with(Background::Color(scrim_bg)),
     );
+    stack.push_layer(
+        Selector::classes(&[classes::SCRIM_TRANSPARENT]),
+        PropertySet::new()
+            .with(Background::Color(Color::TRANSPARENT))
+            .with(BorderWidth { width: 0.px() })
+            .with(CornerRadius { radius: 0.px() })
+            .with(Padding::ZERO),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::SCRIM_TRANSPARENT]).with_hovered(true),
+        PropertySet::new().with(Background::Color(Color::TRANSPARENT)),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::SCRIM_TRANSPARENT]).with_active(true),
+        PropertySet::new().with(Background::Color(Color::TRANSPARENT)),
+    );
 
     props.insert_stack::<Button>(stack);
 }
@@ -562,6 +578,17 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(Background::Color(p.surface_low))
             .with(CornerRadius {
                 radius: m.sheet_radius.px(),
+            })
+            .with(BorderWidth { width: 1.px() })
+            .with(BorderColor::new(p.border))
+            .with(spec.box_shadow(ElevationLevel::Level2)),
+    );
+    sized_stack.push_layer(
+        Selector::classes(&[classes::POPOVER_SURFACE]),
+        PropertySet::new()
+            .with(Background::Color(p.surface_high))
+            .with(CornerRadius {
+                radius: m.menu_radius.px(),
             })
             .with(BorderWidth { width: 1.px() })
             .with(BorderColor::new(p.border))

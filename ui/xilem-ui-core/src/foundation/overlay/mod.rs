@@ -3,6 +3,7 @@
 
 pub(crate) mod focus_bridge;
 pub mod modal;
+pub mod popover;
 pub mod popup_layer;
 pub mod tooltip_host;
 
@@ -31,6 +32,10 @@ use crate::style_engine::classes;
 pub use modal::{
     ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message, modal_shell_rebuild,
     modal_shell_teardown,
+};
+pub use popover::{
+    PopoverAnchorAction, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget,
+    PopoverPlacementView, PopoverPlacementWidget, popover_anchor, popover_place,
 };
 pub use popup_layer::{
     AnchoredPopupHost, AnchoredPopupView, ContextMenuHost, ContextMenuView, PopupAction,

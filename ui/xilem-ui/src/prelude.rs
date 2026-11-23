@@ -7,12 +7,13 @@ pub use crate::theme::{
 pub use crate::{
     BeveledBorder, BeveledBorderView, Brightness, ContextMenuHost, ContextMenuView,
     ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel, FocusFrame,
-    FocusFrameView, InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, RippleLayer,
+    FocusFrameView, HoverTooltipHost, InputFocusStyle, MotionDuration, MotionEasing,
+    NavIndicatorStyle, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer,
     RippleLayerView, SemanticPalette, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle,
     TypeRole, TypeScale, UiClassExt, WindowBackdrop, WindowSizeClass, WrapState, WrapView,
     WrapWidget, beveled_surface, build_default_properties, cached_default_properties, classes,
-    current_spec, focus_frame, icons, memoize_with_spec, ripple_layer, ui_icon, ui_transition,
-    with_spec, wrap,
+    current_spec, focus_frame, icons, memoize_with_spec, popover_anchor, popover_place,
+    ripple_layer, ui_icon, ui_transition, with_spec, wrap,
 };
 
 #[cfg(feature = "md3")]

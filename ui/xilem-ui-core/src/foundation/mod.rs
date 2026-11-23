@@ -18,9 +18,11 @@ pub use icon::{icons, ui_icon};
 pub use overlay::{
     AnchoredPopupHost, AnchoredPopupView, ContextMenuHost, ContextMenuView, EscapeCatcher,
     EscapeCatcherView, EscapePressed, HoverTooltipHost, HoverTooltipView, ModalShellConfig,
-    ModalShellState, PopupAction, PopupEntrySpec, PopupLayer, PopupLayerSpec, TooltipContentSpec,
-    escape_catcher, modal_shell_build, modal_shell_message, modal_shell_rebuild,
-    modal_shell_teardown, ui_scrim,
+    ModalShellState, PopoverAnchorAction, PopoverAnchorRect, PopoverAnchorView,
+    PopoverAnchorWidget, PopoverPlacementView, PopoverPlacementWidget, PopupAction, PopupEntrySpec,
+    PopupLayer, PopupLayerSpec, TooltipContentSpec, escape_catcher, modal_shell_build,
+    modal_shell_message, modal_shell_rebuild, modal_shell_teardown, popover_anchor, popover_place,
+    ui_scrim,
 };
 pub use ripple::{RippleLayer, RippleLayerView, ripple_layer};
 pub use state_layer::{InteractiveColors, blend_over, resolve_interactive_colors, with_opacity};

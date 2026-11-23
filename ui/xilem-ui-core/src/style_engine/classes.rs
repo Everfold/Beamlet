@@ -51,6 +51,8 @@ pub const GROUPED_CARD: &str = "ui.card.grouped";
 pub const DIALOG_SURFACE: &str = "ui.dialog.surface";
 /// Bottom or side sheet surface.
 pub const SHEET_SURFACE: &str = "ui.sheet.surface";
+/// Anchored floating popover container surface.
+pub const POPOVER_SURFACE: &str = "ui.popover.surface";
 
 /// Assist chip.
 pub const CHIP_ASSIST: &str = "ui.chip.assist";
@@ -108,3 +110,5 @@ pub const HEADER_BAR: &str = "ui.header_bar";
 pub const BOTTOM_BAR: &str = "ui.bottom_bar";
 /// Modal scrim overlay button.
 pub const SCRIM: &str = "ui.scrim";
+/// Transparent click-away scrim button used for light-dismiss popovers.
+pub const SCRIM_TRANSPARENT: &str = "ui.scrim.transparent";
