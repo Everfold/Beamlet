@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use tracing::{Span, trace_span};
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Size, Vec2};
+use xilem::kurbo::{Axis, Point, Rect, Size, Vec2};
 use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::keyboard::{Key, NamedKey};
 use xilem::masonry::core::{
@@ -103,6 +103,12 @@ pub struct PopupLayer {
     highlighted: Option<usize>,
     min_width: f64,
     max_width: f64,
+    anchor_rect: Rect,
+    offset: Vec2,
+    placed_pos: Point,
+    window_size: Size,
+    layer_size: Size,
+    needs_reposition: bool,
     dismissed: bool,
 }
 
@@ -110,6 +116,9 @@ impl PopupLayer {
     fn from_spec(
         creator: WidgetId,
         spec: &PopupLayerSpec,
+        anchor_rect: Rect,
+        offset: Vec2,
+        placed_pos: Point,
     ) -> (NewWidget<Self>, Vec<(WidgetId, usize, bool)>) {
         let mut col = Flex::column().cross_axis_alignment(CrossAxisAlignment::Stretch);
         let mut button_map = Vec::new();
@@ -208,6 +217,12 @@ impl PopupLayer {
             highlighted: None,
             min_width: spec.min_width,
             max_width: spec.max_width.max(spec.min_width),
+            anchor_rect,
+            offset,
+            placed_pos,
+            window_size: Size::ZERO,
+            layer_size: Size::ZERO,
+            needs_reposition: true,
             dismissed: false,
         });
         (widget, button_map)
@@ -398,6 +413,42 @@ impl Widget for PopupLayer {
     ) {
     }
 
+    fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
+        if matches!(event, Update::WidgetAdded) {
+            self.needs_reposition = true;
+            ctx.request_anim_frame();
+        }
+    }
+
+    fn on_anim_frame(
+        &mut self,
+        ctx: &mut UpdateCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        _interval: u64,
+    ) {
+        if self.needs_reposition
+            && !self.dismissed
+            && self.window_size.width > 0.0
+            && self.window_size.height > 0.0
+            && self.layer_size.width > 0.0
+            && self.layer_size.height > 0.0
+        {
+            self.needs_reposition = false;
+            let adjusted = super::clamp_anchored_layer_origin(
+                self.anchor_rect,
+                self.layer_size,
+                self.window_size,
+                self.offset,
+            );
+            if (adjusted.x - self.placed_pos.x).abs() > 0.5
+                || (adjusted.y - self.placed_pos.y).abs() > 0.5
+            {
+                self.placed_pos = adjusted;
+                ctx.reposition_layer(ctx.widget_id(), adjusted);
+            }
+        }
+    }
+
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);
     }
@@ -410,6 +461,10 @@ impl Widget for PopupLayer {
         len_req: LenReq,
         cross_length: Option<Length>,
     ) -> Length {
+        let cs = ctx.context_size();
+        if let (Some(w), Some(h)) = (cs.length(Axis::Horizontal), cs.length(Axis::Vertical)) {
+            self.window_size = Size::new(w.get(), h.get());
+        }
         let len = ctx.compute_length(
             &mut self.child,
             len_req.into(),
@@ -425,10 +480,17 @@ impl Widget for PopupLayer {
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        let child_size = ctx.compute_size(&mut self.child, SizeDef::fit(size), size.into());
+        let fit = ctx.compute_size(&mut self.child, SizeDef::fit(size), size.into());
+        let child_size = Size::new(
+            fit.width
+                .max(self.min_width.min(size.width))
+                .min(size.width),
+            fit.height.min(size.height),
+        );
         ctx.run_layout(&mut self.child, child_size);
         ctx.place_child(&mut self.child, Point::ORIGIN);
         ctx.derive_baselines(&self.child);
+        self.layer_size = child_size;
     }
 
     fn paint(
@@ -567,12 +629,18 @@ impl AnchoredPopupHost {
         });
         let border_box = this.ctx.border_box();
         if border_box.size() != Size::ZERO {
-            let (layer, buttons) = PopupLayer::from_spec(this.ctx.widget_id(), &this.widget.spec);
+            let anchor_origin = this.ctx.to_window(border_box.origin());
+            let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
+            let pos = anchor_origin + Vec2::new(0.0, border_box.height()) + offset;
+            let (layer, buttons) = PopupLayer::from_spec(
+                this.ctx.widget_id(),
+                &this.widget.spec,
+                anchor_rect,
+                offset,
+                pos,
+            );
             this.widget.layer_id = Some(layer.id());
             this.widget.layer_buttons = buttons;
-            let pos = this.ctx.to_window(border_box.origin())
-                + Vec2::new(0.0, border_box.height())
-                + offset;
             this.ctx.create_layer(LayerType::Other, layer, pos);
             this.widget.pending_spawn = false;
         } else {
@@ -665,13 +733,14 @@ impl Widget for AnchoredPopupHost {
                 });
                 ctx.remove_layer(old_id);
             }
-            let (layer, buttons) = PopupLayer::from_spec(ctx.widget_id(), &self.spec);
+            let border_box = ctx.border_box();
+            let anchor_origin = ctx.to_window(border_box.origin());
+            let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
+            let pos = anchor_origin + Vec2::new(0.0, border_box.height()) + self.offset;
+            let (layer, buttons) =
+                PopupLayer::from_spec(ctx.widget_id(), &self.spec, anchor_rect, self.offset, pos);
             self.layer_id = Some(layer.id());
             self.layer_buttons = buttons;
-            let border_box = ctx.border_box();
-            let pos = ctx.to_window(border_box.origin())
-                + Vec2::new(0.0, border_box.height())
-                + self.offset;
             ctx.create_layer(LayerType::Other, layer, pos);
         }
     }

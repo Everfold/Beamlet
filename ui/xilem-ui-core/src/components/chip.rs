@@ -6,10 +6,10 @@ use std::sync::Arc;
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem::masonry::core::ArcStr;
 use xilem::masonry::layout::AsUnit;
-use xilem::masonry::properties::Dimensions;
+use xilem::masonry::properties::{Dimensions, Padding};
 use xilem::masonry::widgets;
 use xilem::style::Style as _;
-use xilem::view::{CrossAxisAlignment, button, flex_row, label};
+use xilem::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
 use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 
 use crate::foundation::{UiClassExt, icons, ui_icon};
@@ -95,30 +95,68 @@ impl<State, Action> UiChip<State, Action> {
             .color(fg);
         let on_click = self.on_click.clone();
 
-        let main_chip = button(
-            flex_row((lead, lbl))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(6.px()),
-            move |state: &mut State| on_click(state),
-        )
-        .disabled(self.disabled)
-        .ui_class(cls);
-
         if let Some(on_rem) = &self.on_remove {
             let on_rem = on_rem.clone();
-            let btn_sz = (spec.metrics.chip_height - 4.0).clamp(18.0, 26.0);
+            let inner_h = (spec.metrics.chip_height - 4.0).max(20.0);
+            let main_chip = button(
+                flex_row((lead, lbl))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px()),
+                move |state: &mut State| on_click(state),
+            )
+            .disabled(self.disabled)
+            .ui_class(classes::BTN_SUBTLE)
+            .padding(Padding::from_vh(2.px(), 6.px()))
+            .dims(Dimensions::height(inner_h.px()));
+
+            let btn_sz = (spec.metrics.chip_height - 6.0).clamp(18.0, 24.0);
             let close_btn = button(ui_icon(icons::CLOSE, 13.0, fg), move |state: &mut State| {
                 on_rem(state)
             })
             .disabled(self.disabled)
             .ui_class(classes::ICON_BTN_STD)
             .dims(Dimensions::fixed(btn_sz.px(), btn_sz.px()));
-            flex_row((main_chip, close_btn))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(4.px())
-                .boxed()
+
+            let (chip_bg, chip_border) = match self.kind {
+                ChipKind::Filter if self.selected => (p.secondary_container, None),
+                ChipKind::Filter => (
+                    xilem::Color::TRANSPARENT,
+                    Some(spec.content_color(p.border_strong, self.disabled)),
+                ),
+                ChipKind::Input => (
+                    p.surface_container,
+                    Some(spec.content_color(p.border, self.disabled)),
+                ),
+                ChipKind::Assist | ChipKind::Suggestion => (
+                    xilem::Color::TRANSPARENT,
+                    Some(spec.content_color(p.border, self.disabled)),
+                ),
+            };
+            let (border_color, border_w) = match chip_border {
+                Some(c) => (c, 1.px()),
+                None => (xilem::Color::TRANSPARENT, 0.px()),
+            };
+            sized_box(
+                flex_row((main_chip, close_btn))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(2.px()),
+            )
+            .background_color(chip_bg)
+            .border(border_color, border_w)
+            .corner_radius(spec.metrics.chip_radius.px())
+            .padding(Padding::from_vh(0.px(), 4.px()))
+            .dims(Dimensions::height(spec.metrics.chip_height.px()))
+            .boxed()
         } else {
-            main_chip.boxed()
+            button(
+                flex_row((lead, lbl))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px()),
+                move |state: &mut State| on_click(state),
+            )
+            .disabled(self.disabled)
+            .ui_class(cls)
+            .boxed()
         }
     }
 }

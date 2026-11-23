@@ -351,6 +351,10 @@ mod tests {
         h.run_step(&PreviewStep::ClickLabel("筛选 B".into()))
             .unwrap();
         assert!(h.state().components.chip_flags[1]);
+        h.run_step(&PreviewStep::ClickLabel("浅色".into())).unwrap();
+        assert_visual_invariants(&mut h, "MD3 Components + open Select");
+        h.run_step(&PreviewStep::ClickLabel("深色".into())).unwrap();
+        assert_eq!(h.state().components.select_index, 1);
 
         // 3. Layout page: spacing, clamp, compact BreakpointBin simulation
         h.run_step(&PreviewStep::ClickLabel("布局".into())).unwrap();
@@ -406,6 +410,7 @@ mod tests {
             h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
                 .unwrap();
             assert!(h.state().overlays.show_platform_alert);
+            assert_visual_invariants(&mut h, &format!("{lang_btn} Native Alert"));
             let before_confirm = h.state().components.click_count;
             h.run_step(&PreviewStep::ClickLabel("确定".into())).unwrap();
             assert!(!h.state().overlays.show_platform_alert);
@@ -428,6 +433,11 @@ mod tests {
         assert!(h.state().components.click_count >= fluent_before + 1);
 
         h.run_step(&PreviewStep::ClickLabel("HIG".into())).unwrap();
+        h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
+        assert_visual_invariants(&mut h, "HIG Native + open popup_button");
+        h.run_step(&PreviewStep::ClickLabel("Metal".into()))
+            .unwrap();
+        assert_eq!(h.state().native.hig_popup_idx, 1);
         let sw_before = h.state().native.native_switch;
         h.run_step(&PreviewStep::ClickType {
             type_name: "UiSwitch".into(),
@@ -438,6 +448,10 @@ mod tests {
 
         h.run_step(&PreviewStep::ClickLabel("Adwaita".into()))
             .unwrap();
+        h.run_step(&PreviewStep::ClickLabel("WGPU".into())).unwrap();
+        assert_visual_invariants(&mut h, "Adwaita Native + open combo_row");
+        h.run_step(&PreviewStep::ClickLabel("CPU".into())).unwrap();
+        assert_eq!(h.state().native.adw_combo_idx, 1);
         let adw_before = h.state().components.click_count;
         h.run_step(&PreviewStep::ClickLabel("同步".into())).unwrap();
         assert_eq!(h.state().components.click_count, adw_before + 1);
@@ -500,6 +514,239 @@ mod tests {
         assert!(
             tree_has_text(&lab_tree, "Row #50"),
             "virtual_list should render jumped neighborhood around #5000"
+        );
+        let mut align_issues = Vec::new();
+        collect_icon_misalignments(&lab_tree, &mut align_issues);
+        assert!(
+            align_issues.is_empty(),
+            "icon misalignments on Lab page:\n{}",
+            align_issues.join("\n")
+        );
+    }
+
+    fn is_direct_icon_leaf(n: &LayoutNode) -> bool {
+        if n.type_name == "Svg" {
+            return true;
+        }
+        if n.type_name == "SizedBox" && n.children.len() == 1 {
+            return is_direct_icon_leaf(&n.children[0]);
+        }
+        false
+    }
+
+    fn collect_icon_misalignments(node: &LayoutNode, out: &mut Vec<String>) {
+        if node.type_name == "Flex" && node.children.len() >= 2 {
+            for pair in node.children.windows(2) {
+                let (a, b) = (&pair[0], &pair[1]);
+                let side_by_side = (a.rect.x + a.rect.width <= b.rect.x + 1.5
+                    || b.rect.x + b.rect.width <= a.rect.x + 1.5)
+                    && a.rect.height > 1.0
+                    && b.rect.height > 1.0;
+                if side_by_side {
+                    let svg_vs_lbl = if is_direct_icon_leaf(a)
+                        && b.type_name == "Label"
+                        && b.rect.height > 1.0
+                    {
+                        Some((
+                            a.rect.y + a.rect.height * 0.5,
+                            b.rect.y + b.rect.height * 0.5,
+                            a.id,
+                            b.id,
+                        ))
+                    } else if is_direct_icon_leaf(b)
+                        && a.type_name == "Label"
+                        && a.rect.height > 1.0
+                    {
+                        Some((
+                            b.rect.y + b.rect.height * 0.5,
+                            a.rect.y + a.rect.height * 0.5,
+                            b.id,
+                            a.id,
+                        ))
+                    } else {
+                        None
+                    };
+                    if let Some((svg_cy, lbl_cy, sid, lid)) = svg_vs_lbl
+                        && (svg_cy - lbl_cy).abs() > 4.0
+                    {
+                        out.push(format!(
+                            "Flex #{}: Svg-container #{sid} cy={svg_cy:.1} vs Label #{lid} cy={lbl_cy:.1} (diff={:.1}px)",
+                            node.id,
+                            (svg_cy - lbl_cy).abs()
+                        ));
+                    }
+                }
+            }
+        }
+        for c in &node.children {
+            collect_icon_misalignments(c, out);
+        }
+    }
+
+    fn collect_clipped_layers(node: &LayoutNode, vw: f64, vh: f64, out: &mut Vec<String>) {
+        if (node.type_name == "PopupLayer" || node.type_name == "TooltipLayer")
+            && node.rect.width > 1.0
+            && node.rect.height > 1.0
+        {
+            if node.rect.x < 0.0
+                || node.rect.y < 0.0
+                || node.rect.x + node.rect.width > vw + 1.0
+                || node.rect.y + node.rect.height > vh + 1.0
+            {
+                let child_info = node
+                    .children
+                    .first()
+                    .map(|c| {
+                        format!(
+                            " child=({:.1}, {:.1}, {:.1}x{:.1})",
+                            c.rect.x, c.rect.y, c.rect.width, c.rect.height
+                        )
+                    })
+                    .unwrap_or_default();
+                out.push(format!(
+                    "{} #{} out of bounds: ({:.1}, {:.1}, {:.1}x{:.1}) in ({vw:.0}x{vh:.0}){child_info}",
+                    node.type_name,
+                    node.id,
+                    node.rect.x,
+                    node.rect.y,
+                    node.rect.width,
+                    node.rect.height
+                ));
+            }
+        }
+        for c in &node.children {
+            collect_clipped_layers(c, vw, vh, out);
+        }
+    }
+
+    fn assert_visual_invariants(h: &mut PreviewHarness<GalleryState>, ctx: &str) {
+        h.settle_animations();
+        let (vw, vh) = h.viewport();
+        let tree = dump_layout_tree(h);
+        let mut issues = Vec::new();
+        collect_icon_misalignments(&tree, &mut issues);
+        collect_clipped_layers(&tree, vw, vh, &mut issues);
+        assert!(
+            issues.is_empty(),
+            "visual invariant failures ({ctx}):\n{}",
+            issues.join("\n")
+        );
+    }
+
+    #[test]
+    #[ignore = "Manual visual audit helper dumping PNGs to THEME_GALLERY_AUDIT_DIR or temp dir"]
+    fn audit_dump_all_triggered_pngs() {
+        let out_dir_buf = std::env::var_os("THEME_GALLERY_AUDIT_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("beamlet_theme_gallery_audit"));
+        let out_dir = out_dir_buf.as_path();
+        std::fs::create_dir_all(out_dir).expect("create audit_pngs dir");
+
+        let mut issues = Vec::new();
+        let save = |h: &mut PreviewHarness<GalleryState>, name: &str, issues: &mut Vec<String>| {
+            h.settle_animations();
+            let (vw, vh) = h.viewport();
+            let tree = dump_layout_tree(h);
+            let mut local = Vec::new();
+            collect_icon_misalignments(&tree, &mut local);
+            collect_clipped_layers(&tree, vw, vh, &mut local);
+            for m in local {
+                issues.push(format!("[{name}] {m}"));
+            }
+            h.render_png(out_dir.join(name)).expect("write audit png");
+        };
+
+        // 1-3: Overlays -> Native Alert across Adwaita, HIG, Fluent
+        for (lang, file) in [
+            (DesignLanguage::Adwaita, "01_adwaita_native_alert.png"),
+            (DesignLanguage::Hig, "02_hig_native_alert.png"),
+            (DesignLanguage::Fluent, "03_fluent_native_alert.png"),
+        ] {
+            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+            h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
+                .unwrap();
+            save(&mut h, file, &mut issues);
+        }
+
+        // 4-12: MD3 Overlays (dialogs, sheets, pickers, toast, tooltips)
+        for (lbl, file) in [
+            ("基础弹窗", "04_md3_basic_dialog.png"),
+            ("危险确认", "05_md3_destructive_dialog.png"),
+            ("底抽屉", "06_md3_bottom_sheet.png"),
+            ("侧抽屉", "07_md3_side_sheet.png"),
+            ("日期弹窗", "08_md3_date_dialog.png"),
+            ("时间弹窗", "09_md3_time_dialog.png"),
+            ("轻提示", "10_md3_toast.png"),
+        ] {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            h.run_step(&PreviewStep::ClickLabel(lbl.into())).unwrap();
+            save(&mut h, file, &mut issues);
+        }
+
+        for (lbl, file) in [
+            ("悬停提示", "11_md3_plain_tooltip.png"),
+            ("富提示", "12_md3_rich_tooltip.png"),
+        ] {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            h.run_step(&PreviewStep::HoverLabel(lbl.into())).unwrap();
+            save(&mut h, file, &mut issues);
+        }
+
+        // 13 & 17: MD3 Components + open select
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+            save(&mut h, "17_md3_components.png", &mut issues);
+            h.run_step(&PreviewStep::ClickLabel("浅色".into())).unwrap();
+            save(&mut h, "13_md3_select_open.png", &mut issues);
+        }
+
+        // 14: Fluent Native overflow menu open
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Native);
+            let popup_hosts = h.find_widget_ids("AnchoredPopupHost");
+            if let Some(&host_id) = popup_hosts.get(1) {
+                let rr = h.inner_harness_mut().render_root();
+                if let Some(host_ref) = rr.get_widget(host_id) {
+                    fn first_button(
+                        n: &xilem::masonry::core::WidgetRef<'_, dyn xilem::masonry::core::Widget>,
+                    ) -> Option<xilem::masonry::core::WidgetId> {
+                        if n.inner().short_type_name() == "Button" {
+                            return Some(n.id());
+                        }
+                        n.children().iter().find_map(first_button)
+                    }
+                    if let Some(btn_id) = first_button(&host_ref) {
+                        h.click_widget_id(btn_id);
+                    }
+                }
+            }
+            save(&mut h, "14_fluent_native_overflow.png", &mut issues);
+        }
+
+        // 15: HIG Native popup_button open
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Hig, GalleryTab::Native);
+            h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
+            save(&mut h, "15_hig_native_popup.png", &mut issues);
+        }
+
+        // 16: Adwaita Native combo_row open
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Native);
+            h.run_step(&PreviewStep::ClickLabel("WGPU".into())).unwrap();
+            save(&mut h, "16_adwaita_native_combo.png", &mut issues);
+        }
+
+        // 18: Adwaita Layout page
+        {
+            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Layout);
+            save(&mut h, "18_adwaita_layout.png", &mut issues);
+        }
+
+        assert!(
+            issues.is_empty(),
+            "visual alignment or viewport clipping detected:\n{}",
+            issues.join("\n")
         );
     }
 }

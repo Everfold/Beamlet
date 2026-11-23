@@ -177,7 +177,12 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     |s: &mut GalleryState| {
                         s.native.fluent_expander_open = !s.native.fluent_expander_open;
                     },
-                    info_badge(InfoBarSeverity::Warning, Some("展开内容")),
+                    flex_row((
+                        info_badge(InfoBarSeverity::Warning, Some("展开内容")),
+                        body_small("Fluent Expander 详情"),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px()),
                 ),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)

@@ -18,7 +18,7 @@ use xilem::{AnyWidgetView, Pod, ViewCtx, WidgetView};
 use xilem_ui_core::components::button::{
     destructive_button, primary_button, secondary_button, subtle_button,
 };
-use xilem_ui_core::components::divider::{horizontal_divider, vertical_divider};
+use xilem_ui_core::components::divider::horizontal_divider;
 use xilem_ui_core::components::menu::select;
 use xilem_ui_core::components::selection::switch;
 use xilem_ui_core::foundation::{
@@ -523,7 +523,7 @@ where
                     .style_label(TypeRole::LabelSmall, label(name.clone()))
                     .color(fg);
                 button(
-                    flex_col((ui_icon(icon_path, 16.0, fg), lbl))
+                    flex_col((ui_icon(icon_path, 18.0, fg), lbl))
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(2.px()),
                     move |s: &mut State| cb(s, idx),
@@ -594,12 +594,16 @@ impl<State, Action> AdwAlertDialog<State, Action> {
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(8.px())
-        .padding(Padding::all(22.px()));
+        .padding(Padding {
+            top: 22.px(),
+            right: 22.px(),
+            bottom: 18.px(),
+            left: 22.px(),
+        });
 
         let on_dismiss = self.on_dismiss.clone();
         let cancel_btn =
             secondary_button(self.cancel_text.clone(), move |s: &mut State| on_dismiss(s))
-                .corner_radius(0.px())
                 .flex(1.0);
 
         let on_confirm = self.on_confirm.clone();
@@ -607,20 +611,25 @@ impl<State, Action> AdwAlertDialog<State, Action> {
             destructive_button(self.confirm_text.clone(), move |s: &mut State| {
                 on_confirm(s)
             })
-            .corner_radius(0.px())
             .boxed()
         } else {
             primary_button(self.confirm_text.clone(), move |s: &mut State| {
                 on_confirm(s)
             })
-            .corner_radius(0.px())
             .boxed()
         };
 
-        let responses = flex_row((cancel_btn, vertical_divider(), confirm_btn.flex(1.0)))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch);
+        let responses = flex_row((cancel_btn, confirm_btn.flex(1.0)))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(10.px())
+            .padding(Padding {
+                top: 0.px(),
+                right: 18.px(),
+                bottom: 18.px(),
+                left: 18.px(),
+            });
 
-        flex_col((header, horizontal_divider(), responses))
+        flex_col((header, responses))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .boxed()
     }

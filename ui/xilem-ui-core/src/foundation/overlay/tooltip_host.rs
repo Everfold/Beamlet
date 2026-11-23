@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tracing::{Span, trace_span};
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Size, Vec2};
+use xilem::kurbo::{Axis, Point, Rect, Size, Vec2};
 use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::{
     AccessCtx, ArcStr, ChildrenIds, EventCtx, Layer, LayerType, LayoutCtx, MeasureCtx, NewWidget,
@@ -50,7 +50,12 @@ pub struct TooltipContentSpec {
 }
 
 impl TooltipContentSpec {
-    fn build_tooltip_widget(&self, creator: WidgetId) -> NewWidget<TooltipLayer> {
+    fn build_tooltip_widget(
+        &self,
+        creator: WidgetId,
+        anchor_rect: Rect,
+        placed_pos: Point,
+    ) -> NewWidget<TooltipLayer> {
         let content: NewWidget<dyn Widget> = if self.is_rich {
             let mut col = Flex::column().cross_axis_alignment(CrossAxisAlignment::Start);
             if let Some(sub) = &self.subhead {
@@ -100,6 +105,11 @@ impl TooltipContentSpec {
         NewWidget::new(TooltipLayer {
             creator,
             child: content.to_pod(),
+            anchor_rect,
+            placed_pos,
+            window_size: Size::ZERO,
+            layer_size: Size::ZERO,
+            needs_reposition: true,
             dismissed: false,
         })
     }
@@ -108,11 +118,52 @@ impl TooltipContentSpec {
 struct TooltipLayer {
     creator: WidgetId,
     child: WidgetPod<dyn Widget>,
+    anchor_rect: Rect,
+    placed_pos: Point,
+    window_size: Size,
+    layer_size: Size,
+    needs_reposition: bool,
     dismissed: bool,
 }
 
 impl Widget for TooltipLayer {
     type Action = NoAction;
+
+    fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
+        if matches!(event, Update::WidgetAdded) {
+            self.needs_reposition = true;
+            ctx.request_anim_frame();
+        }
+    }
+
+    fn on_anim_frame(
+        &mut self,
+        ctx: &mut UpdateCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        _interval: u64,
+    ) {
+        if self.needs_reposition
+            && !self.dismissed
+            && self.window_size.width > 0.0
+            && self.window_size.height > 0.0
+            && self.layer_size.width > 0.0
+            && self.layer_size.height > 0.0
+        {
+            self.needs_reposition = false;
+            let adjusted = super::clamp_anchored_layer_origin(
+                self.anchor_rect,
+                self.layer_size,
+                self.window_size,
+                Vec2::new(0.0, 6.0),
+            );
+            if (adjusted.x - self.placed_pos.x).abs() > 0.5
+                || (adjusted.y - self.placed_pos.y).abs() > 0.5
+            {
+                self.placed_pos = adjusted;
+                ctx.reposition_layer(ctx.widget_id(), adjusted);
+            }
+        }
+    }
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);
@@ -126,6 +177,10 @@ impl Widget for TooltipLayer {
         len_req: LenReq,
         cross_length: Option<Length>,
     ) -> Length {
+        let cs = ctx.context_size();
+        if let (Some(w), Some(h)) = (cs.length(Axis::Horizontal), cs.length(Axis::Vertical)) {
+            self.window_size = Size::new(w.get(), h.get());
+        }
         let auto_length = len_req.into();
         let context_size = LayoutSize::maybe(axis.cross(), cross_length);
         ctx.compute_length(
@@ -142,6 +197,7 @@ impl Widget for TooltipLayer {
         ctx.run_layout(&mut self.child, child_size);
         ctx.place_child(&mut self.child, Point::ORIGIN);
         ctx.derive_baselines(&self.child);
+        self.layer_size = child_size;
     }
 
     fn paint(
@@ -259,11 +315,15 @@ impl HoverTooltipHost {
     /// Shows the attached tooltip layer immediately (useful for deterministic testing).
     pub fn show_now(this: &mut WidgetMut<'_, Self>) {
         Self::close_layer(this);
-        let layer = this.widget.spec.build_tooltip_widget(this.ctx.widget_id());
-        let layer_id = layer.id();
         let border_box = this.ctx.border_box();
-        let pos =
-            this.ctx.to_window(border_box.origin()) + Vec2::new(0.0, border_box.height() + 6.0);
+        let anchor_origin = this.ctx.to_window(border_box.origin());
+        let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
+        let pos = anchor_origin + Vec2::new(0.0, border_box.height() + 6.0);
+        let layer = this
+            .widget
+            .spec
+            .build_tooltip_widget(this.ctx.widget_id(), anchor_rect, pos);
+        let layer_id = layer.id();
         this.widget.layer_id = Some(layer_id);
         this.ctx.create_layer(
             LayerType::Tooltip(this.widget.spec.body.to_string()),
@@ -319,11 +379,14 @@ impl Widget for HoverTooltipHost {
                     });
                     ctx.remove_layer(old_id);
                 }
-                let layer = self.spec.build_tooltip_widget(ctx.widget_id());
-                self.layer_id = Some(layer.id());
                 let border_box = ctx.border_box();
-                let pos =
-                    ctx.to_window(border_box.origin()) + Vec2::new(0.0, border_box.height() + 6.0);
+                let anchor_origin = ctx.to_window(border_box.origin());
+                let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
+                let pos = anchor_origin + Vec2::new(0.0, border_box.height() + 6.0);
+                let layer = self
+                    .spec
+                    .build_tooltip_widget(ctx.widget_id(), anchor_rect, pos);
+                self.layer_id = Some(layer.id());
                 ctx.create_layer(LayerType::Tooltip(self.spec.body.to_string()), layer, pos);
             } else {
                 ctx.request_anim_frame();

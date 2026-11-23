@@ -590,7 +590,10 @@ pub fn info_badge<State: 'static, Action: 'static>(
                         .weight(FontWeight::BOLD)
                         .color(ink)
                         .boxed(),
-                    Dimensions::default(),
+                    Dimensions::new(
+                        xilem::masonry::layout::Dim::MaxContent,
+                        xilem::masonry::layout::Dim::MaxContent,
+                    ),
                     Padding::from_vh(2.px(), 7.px()),
                 ),
                 None => (

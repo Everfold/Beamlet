@@ -604,9 +604,13 @@ impl<State, Action> MacosAlertDialog<State, Action> {
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(8.px());
 
-        flex_col((glyph, title_lbl, msg_lbl, actions))
+        let header = flex_col((glyph, title_lbl, msg_lbl))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px())
+            .gap(10.px());
+
+        flex_col((header, actions))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(14.px())
             .boxed()
     }
 }

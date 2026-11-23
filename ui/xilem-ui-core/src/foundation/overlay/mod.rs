@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use tracing::{Span, trace_span};
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
-use xilem::kurbo::{Axis, Point, Size};
+use xilem::kurbo::{Axis, Point, Rect, Size, Vec2};
 use xilem::masonry::accesskit::{Node, Role};
 use xilem::masonry::core::keyboard::{Key, NamedKey};
 use xilem::masonry::core::{
@@ -38,6 +38,37 @@ pub use popup_layer::{
 pub use tooltip_host::{HoverTooltipHost, HoverTooltipView, TooltipContentSpec};
 
 type ActionCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
+
+/// Computes a viewport-safe window origin for an anchored floating layer, flipping above or
+/// aligning to the trigger's right edge when needed to stay inside `[margin, window_size - margin]`.
+pub(crate) fn clamp_anchored_layer_origin(
+    anchor: Rect,
+    layer_size: Size,
+    window_size: Size,
+    offset: Vec2,
+) -> Point {
+    const MARGIN: f64 = 8.0;
+    let max_x = (window_size.width - layer_size.width - MARGIN).max(MARGIN);
+    let left_x = anchor.x0 + offset.x;
+    let x = if left_x + layer_size.width <= window_size.width - MARGIN {
+        left_x.max(MARGIN)
+    } else {
+        (anchor.x1 - layer_size.width).clamp(MARGIN, max_x)
+    };
+
+    let max_y = (window_size.height - layer_size.height - MARGIN).max(MARGIN);
+    let below_y = anchor.y1 + offset.y;
+    let above_y = anchor.y0 - layer_size.height - offset.y;
+    let y = if below_y + layer_size.height <= window_size.height - MARGIN {
+        below_y.max(MARGIN)
+    } else if above_y >= MARGIN || anchor.y0 > (window_size.height - anchor.y1) {
+        above_y.clamp(MARGIN, max_y)
+    } else {
+        below_y.clamp(MARGIN, max_y)
+    };
+
+    Point::new(x, y)
+}
 
 /// Full-viewport modal scrim backdrop blocking pointer pass-through and optionally dismissing.
 pub fn ui_scrim<State: 'static, Action: 'static>(
