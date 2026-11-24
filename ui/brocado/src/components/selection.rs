@@ -225,7 +225,7 @@ pub type BoolCallback<State, Action> = Arc<dyn Fn(&mut State, bool) -> Action + 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CheckboxToggled(pub bool);
 
-/// Custom theme-painted checkbox honoring MD3, Fluent 2, macOS HIG, and GNOME Adwaita geometry.
+/// Custom Material Design 3 checkbox supporting checked, unchecked, and indeterminate states.
 #[expect(
     missing_debug_implementations,
     reason = "Holds an erased Masonry WidgetPod"
@@ -675,7 +675,7 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SwitchToggled(pub bool);
 
-/// Custom theme-painted animated toggle switch honoring MD3, Fluent 2, macOS HIG, and Adwaita.
+/// Custom Material Design 3 animated toggle switch with optional embedded icon indicators.
 #[derive(Debug)]
 pub struct UiSwitch {
     on: bool,
@@ -1063,7 +1063,7 @@ where
     }
 }
 
-/// Custom theme-painted radio button honoring MD3, Fluent 2 inverted ring, macOS HIG, and Adwaita.
+/// Custom Material Design 3 radio button.
 #[expect(
     missing_debug_implementations,
     reason = "Holds an erased Masonry WidgetPod"
@@ -1466,7 +1466,7 @@ fn snap_slider(min: f64, max: f64, val: f64, step: Option<f64>) -> f64 {
     }
 }
 
-/// Custom theme-painted horizontal slider honoring MD3 Expressive, Fluent 2 concentric, HIG, and Adwaita.
+/// Custom Material Design 3 Expressive horizontal slider with active track fill and thumb indicator.
 #[derive(Debug)]
 pub struct UiSlider {
     min: f64,

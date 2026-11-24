@@ -45,7 +45,7 @@ pub const CARD_ELEVATED: &str = "ui.card.elevated";
 pub const CARD_FILLED: &str = "ui.card.filled";
 /// Outlined container card.
 pub const CARD_OUTLINED: &str = "ui.card.outlined";
-/// Desktop grouped list container (macOS `Form` / Libadwaita `boxed-list` / WinUI `SettingsCard`).
+/// Grouped surface card container with nested row dividers.
 pub const GROUPED_CARD: &str = "ui.card.grouped";
 /// Modal dialog surface.
 pub const DIALOG_SURFACE: &str = "ui.dialog.surface";

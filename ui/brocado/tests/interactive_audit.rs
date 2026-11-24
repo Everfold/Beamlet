@@ -220,7 +220,7 @@ fn audit_overview_all_controls_across_all_themes() {
             "[Md3] Filter A chip should toggle"
         );
 
-        // Last icon-only button in overview belongs to the last removable input chip ("Adwaita").
+        // Last icon-only button in overview belongs to the last removable input chip ("Spring").
         let tags_before = h.state().tags.len();
         let rem_raw = *find_buttons_without_label(&mut h)
             .last()
@@ -601,7 +601,7 @@ fn audit_workspaces_md3() {
     h.run_step(&PreviewStep::ClickLabel("New Action".to_owned()))
         .unwrap();
     assert_eq!(h.state().click_count, clicks + 1);
-    h.run_step(&PreviewStep::ClickLabel("Windows Mica Shell".to_owned()))
+    h.run_step(&PreviewStep::ClickLabel("OKLCH Color Scheme".to_owned()))
         .unwrap();
     assert_eq!(h.state().selected_row, 1);
     assert_healthy(&mut h, "workspace/md3");

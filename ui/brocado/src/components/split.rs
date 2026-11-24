@@ -677,7 +677,7 @@ impl<ChildA: Widget + ?Sized, ChildB: Widget + ?Sized> Widget for UiSplitWidget<
     }
 }
 
-/// Cross-theme draggable split view styling bar thickness, hit area, colors, and pane clipping from [`DesignSpec`].
+/// Draggable split view styling bar thickness, hit area, colors, and pane clipping from [`Theme`](crate::theme::Theme).
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
 pub struct UiSplit<A, B, State, Action> {

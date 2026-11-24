@@ -727,18 +727,18 @@ fn workspace_body(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
             "Active",
         ),
         (
-            "Windows Mica Shell",
-            "NavigationView + BreadcrumbBar",
+            "OKLCH Color Scheme",
+            "Dynamic tonal seed roles & surfaces",
             "Synced",
         ),
         (
-            "macOS Aqua Inspector",
-            "Source List + 38px Toolbar",
+            "Expressive Shapes",
+            "Button radius morph & spring specs",
             "Ready",
         ),
         (
-            "GNOME Adwaita Boxed",
-            "AdwClamp + EntryRow + ComboRow",
+            "Adaptive Layout",
+            "Breakpoint bin & responsive rails",
             "Updated",
         ),
     ];

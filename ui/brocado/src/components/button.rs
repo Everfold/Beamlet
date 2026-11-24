@@ -23,10 +23,10 @@ use crate::tokens::TypeRole;
 
 const BUTTON_CONTENT_VIEW_ID: ViewId = ViewId::new(0x5549_3701);
 
-/// Cross-theme semantic button emphasis variants.
+/// Semantic button emphasis variants following Material Design 3 Expressive roles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ButtonVariant {
-    /// Highest-emphasis accent button (MD3 Filled / WinUI Accent / HIG Default / Adwaita Suggested).
+    /// Highest-emphasis filled primary accent button.
     #[default]
     Primary,
     /// Medium-emphasis filled secondary container button.

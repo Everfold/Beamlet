@@ -726,7 +726,7 @@ pub struct UiRichProse<State, Action> {
     phantom: PhantomData<fn(State) -> Action>,
 }
 
-/// Creates a rich inline paragraph from styled [`TextSpan`]s consuming [`DesignSpec`] typography.
+/// Creates a rich inline paragraph from styled [`TextSpan`]s consuming [`Theme`](crate::theme::Theme) typography.
 pub fn rich_prose<State, Action>(spans: Vec<TextSpan>) -> UiRichProse<State, Action> {
     UiRichProse {
         spans,

@@ -783,76 +783,17 @@ name = "brocado"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "brocado-adwaita",
- "brocado-core",
- "brocado-fluent",
- "brocado-hig",
- "brocado-md3",
  "brocado-preview",
- "brocado-winit",
  "clap",
  "image",
  "masonry",
  "masonry_testing",
+ "masonry_winit",
  "serde_json",
- "tokio",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-adwaita"
-version = "0.1.0"
-dependencies = [
- "brocado-core",
- "brocado-winit",
- "masonry",
- "tracing",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-core"
-version = "0.1.0"
-dependencies = [
- "masonry",
  "tokio",
  "tracing",
  "usvg",
  "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-fluent"
-version = "0.1.0"
-dependencies = [
- "brocado-core",
- "brocado-winit",
- "masonry",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-hig"
-version = "0.1.0"
-dependencies = [
- "brocado-core",
- "brocado-winit",
- "masonry",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-md3"
-version = "0.1.0"
-dependencies = [
- "brocado-core",
- "brocado-winit",
- "masonry",
  "xilem_masonry",
 ]
 
@@ -866,19 +807,6 @@ dependencies = [
  "masonry_testing",
  "serde",
  "tokio",
- "xilem_core",
- "xilem_masonry",
-]
-
-[[package]]
-name = "brocado-winit"
-version = "0.1.0"
-dependencies = [
- "brocado-core",
- "masonry",
- "masonry_winit",
- "tokio",
- "tracing",
  "xilem_core",
  "xilem_masonry",
 ]

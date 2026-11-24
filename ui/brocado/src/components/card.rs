@@ -73,7 +73,7 @@ pub fn outlined_card<State: 'static, Action: 'static, V: WidgetView<State, Actio
     card(CardVariant::Outlined, child)
 }
 
-/// Returns a grouped card surface suitable for Fluent SettingsCards / HIG FormGroups / Adwaita PreferencesGroups.
+/// Returns a grouped card surface for structured settings lists and form sections.
 pub fn grouped_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
 ) -> WithClass<ContainerView<V, State, Action>, State, Action> {

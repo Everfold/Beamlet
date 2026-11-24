@@ -193,7 +193,7 @@ where
         self
     }
 
-    /// Assigns initial widget tree default properties (`UiTheme::default_properties()`).
+    /// Assigns initial widget tree default properties (`Theme::default_properties()`).
     pub fn with_default_properties(mut self, props: DefaultProperties) -> Self {
         self.default_properties = Some(props);
         self
