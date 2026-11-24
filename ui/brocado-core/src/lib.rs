@@ -33,8 +33,9 @@ pub use foundation::{
     ClipBoxWidget, ConstrainedBox, ConstrainedBoxView, ContextMenuHost, ContextMenuView,
     EscapeCatcher, FocusFrame, FocusFrameView, HoverTooltipHost, ModalAxisSizing,
     PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer, RippleLayerView,
-    UiClassExt, WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface, clip_box,
-    constrained_box, focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon,
+    ScrollBarStyle, ScrollBarVisibility, ScrollView, ScrollViewWidget, UiClassExt, UiScrollBar,
+    WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface, clip_box, constrained_box,
+    focus_frame, icons, popover_anchor, popover_place, ripple_layer, scroll_view, ui_icon,
     ui_transition, wrap,
 };
 pub use style_engine::{

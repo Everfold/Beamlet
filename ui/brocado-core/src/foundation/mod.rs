@@ -10,6 +10,7 @@ pub mod focus_frame;
 pub mod icon;
 pub mod overlay;
 pub mod ripple;
+pub mod scroll_view;
 pub mod state_layer;
 pub mod transition;
 pub mod wrap;
@@ -31,6 +32,9 @@ pub use overlay::{
     ui_scrim,
 };
 pub use ripple::{RippleLayer, RippleLayerView, ripple_layer};
+pub use scroll_view::{
+    ScrollBarStyle, ScrollBarVisibility, ScrollView, ScrollViewWidget, UiScrollBar, scroll_view,
+};
 pub use state_layer::{InteractiveColors, blend_over, resolve_interactive_colors, with_opacity};
 pub use transition::{ModalAxisSizing, SlideTransition, UiTransition, ui_transition};
 pub use wrap::{WrapState, WrapView, WrapWidget, wrap};
