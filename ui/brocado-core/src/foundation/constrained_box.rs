@@ -16,6 +16,7 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
+use crate::foundation::bounded::{HasMinAxis, UnminAxis};
 use crate::style_engine::current_spec_arc;
 use crate::tokens::TypeRole;
 
@@ -276,10 +277,17 @@ impl Widget for ConstrainedBox {
     }
 }
 
+type ConstrainedPhantom<State, Action, MinX, MinY> = PhantomData<fn(State) -> (Action, MinX, MinY)>;
+
 /// View wrapper applying optional min/max width and height constraints onto a child view.
+///
+/// The type-state parameters `MinX` and `MinY` record whether positive `min_width` or `min_height`
+/// floors have been attached ([`HasMinAxis`] vs [`UnminAxis`]). Setting only `max_width` /
+/// `max_height` / `fill_max_width` preserves [`BoundedX`](crate::foundation::BoundedX) and
+/// [`BoundedY`](crate::foundation::BoundedY) from `V`.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains generic child View")]
-pub struct ConstrainedBoxView<V, State, Action> {
+pub struct ConstrainedBoxView<V, State, Action, MinX = UnminAxis, MinY = UnminAxis> {
     child: V,
     min_width: f64,
     max_width: f64,
@@ -287,11 +295,13 @@ pub struct ConstrainedBoxView<V, State, Action> {
     max_height: f64,
     min_height_role: Option<(TypeRole, f64, f64)>,
     fill_max_width: bool,
-    phantom: PhantomData<fn(State) -> Action>,
+    phantom: ConstrainedPhantom<State, Action, MinX, MinY>,
 }
 
 /// Wraps `child` in a [`ConstrainedBox`] enforcing minimum and maximum extents.
-pub fn constrained_box<State, Action, V>(child: V) -> ConstrainedBoxView<V, State, Action> {
+pub fn constrained_box<State, Action, V>(
+    child: V,
+) -> ConstrainedBoxView<V, State, Action, UnminAxis, UnminAxis> {
     ConstrainedBoxView {
         child,
         min_width: 0.0,
@@ -304,11 +314,19 @@ pub fn constrained_box<State, Action, V>(child: V) -> ConstrainedBoxView<V, Stat
     }
 }
 
-impl<V, State, Action> ConstrainedBoxView<V, State, Action> {
-    /// Sets the minimum logical width in pixels.
-    pub fn min_width(mut self, width: f64) -> Self {
-        self.min_width = width.max(0.0);
-        self
+impl<V, State, Action, MinX, MinY> ConstrainedBoxView<V, State, Action, MinX, MinY> {
+    /// Sets the minimum logical width in pixels (transitions `MinX` to [`HasMinAxis`]).
+    pub fn min_width(self, width: f64) -> ConstrainedBoxView<V, State, Action, HasMinAxis, MinY> {
+        ConstrainedBoxView {
+            child: self.child,
+            min_width: width.max(0.0),
+            max_width: self.max_width,
+            min_height: self.min_height,
+            max_height: self.max_height,
+            min_height_role: self.min_height_role,
+            fill_max_width: self.fill_max_width,
+            phantom: PhantomData,
+        }
     }
 
     /// Sets the maximum logical width in pixels.
@@ -317,16 +335,38 @@ impl<V, State, Action> ConstrainedBoxView<V, State, Action> {
         self
     }
 
-    /// Sets the minimum logical height in pixels.
-    pub fn min_height(mut self, height: f64) -> Self {
-        self.min_height = height.max(0.0);
-        self
+    /// Sets the minimum logical height in pixels (transitions `MinY` to [`HasMinAxis`]).
+    pub fn min_height(self, height: f64) -> ConstrainedBoxView<V, State, Action, MinX, HasMinAxis> {
+        ConstrainedBoxView {
+            child: self.child,
+            min_width: self.min_width,
+            max_width: self.max_width,
+            min_height: height.max(0.0),
+            max_height: self.max_height,
+            min_height_role: self.min_height_role,
+            fill_max_width: self.fill_max_width,
+            phantom: PhantomData,
+        }
     }
 
-    /// Derives minimum height from `max(floor, spec.typography.get(role).line_height + extra_pad)`.
-    pub fn min_height_from_role(mut self, role: TypeRole, extra_pad: f64, floor: f64) -> Self {
-        self.min_height_role = Some((role, extra_pad, floor));
-        self
+    /// Derives minimum height from `max(floor, spec.typography.get(role).line_height + extra_pad)`
+    /// (transitions `MinY` to [`HasMinAxis`]).
+    pub fn min_height_from_role(
+        self,
+        role: TypeRole,
+        extra_pad: f64,
+        floor: f64,
+    ) -> ConstrainedBoxView<V, State, Action, MinX, HasMinAxis> {
+        ConstrainedBoxView {
+            child: self.child,
+            min_width: self.min_width,
+            max_width: self.max_width,
+            min_height: self.min_height,
+            max_height: self.max_height,
+            min_height_role: Some((role, extra_pad, floor)),
+            fill_max_width: self.fill_max_width,
+            phantom: PhantomData,
+        }
     }
 
     /// Sets the maximum logical height in pixels.
@@ -352,12 +392,15 @@ impl<V, State, Action> ConstrainedBoxView<V, State, Action> {
     }
 }
 
-impl<V, State, Action> ViewMarker for ConstrainedBoxView<V, State, Action> {}
+impl<V, State, Action, MinX, MinY> ViewMarker for ConstrainedBoxView<V, State, Action, MinX, MinY> {}
 
-impl<V, State, Action> View<State, Action, ViewCtx> for ConstrainedBoxView<V, State, Action>
+impl<V, State, Action, MinX, MinY> View<State, Action, ViewCtx>
+    for ConstrainedBoxView<V, State, Action, MinX, MinY>
 where
     State: 'static,
     Action: 'static,
+    MinX: 'static,
+    MinY: 'static,
     V: WidgetView<State, Action>,
 {
     type Element = Pod<ConstrainedBox>;

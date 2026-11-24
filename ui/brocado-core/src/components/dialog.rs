@@ -22,7 +22,7 @@ use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
-use crate::foundation::{ui_icon, wrap};
+use crate::foundation::{BoundedX, ui_icon, wrap};
 use crate::style_engine::classes;
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{DialogActionOrder, MotionDuration, TypeRole};
@@ -188,6 +188,21 @@ where
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
     }
+}
+
+/// Wraps `content` in a centered modal dialog requiring `content: BoundedX` at compile time.
+///
+/// The dialog's `modal_shell` provides vertical scrolling automatically (`UiDialog: BoundedY`),
+/// while requiring `BoundedX` on `content` guarantees zero horizontal overflow inside narrow viewports.
+pub fn bounded_dialog<State: 'static, Action: 'static, V, F>(
+    content: V,
+    on_dismiss: F,
+) -> UiDialog<V, State, Action>
+where
+    V: WidgetView<State, Action> + BoundedX,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    dialog(content, on_dismiss)
 }
 
 /// Opinionated confirmation dialog builder supporting icon, title, body, and confirm/cancel buttons.

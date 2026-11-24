@@ -40,7 +40,8 @@ pub use overlay::{
 };
 pub use ripple::{RippleLayer, RippleLayerView, ripple_layer};
 pub use scroll_view::{
-    ScrollBarStyle, ScrollBarVisibility, ScrollView, ScrollViewWidget, UiScrollBar, scroll_view,
+    ScrollBarStyle, ScrollBarVisibility, ScrollView, ScrollViewWidget, UiScrollBar,
+    scroll_horizontal, scroll_vertical, scroll_view,
 };
 pub use state_layer::{InteractiveColors, blend_over, resolve_interactive_colors, with_opacity};
 pub use transition::{ModalAxisSizing, SlideTransition, UiTransition, ui_transition};

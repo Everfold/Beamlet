@@ -26,6 +26,7 @@ use tracing::{Span, trace_span};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::{Pod, ViewCtx, WidgetView};
 
+use crate::foundation::bounded::{FitAxis, ScrollAxis};
 use crate::foundation::state_layer::with_opacity;
 use crate::tokens::{ControlVisualGrammar, DesignSpec};
 
@@ -1576,24 +1577,35 @@ impl Widget for ScrollViewWidget {
     }
 }
 
+type ScrollPhantom<State, Action, CX, CY> = PhantomData<fn(State) -> (Action, CX, CY)>;
+
 /// Reactive view wrapping a child in [`ScrollViewWidget`] with themeable scrollbars.
+///
+/// The type-state parameters `CX` and `CY` track whether each axis scrolls freely
+/// ([`ScrollAxis`]) or constrains the child to the viewport ([`FitAxis`]), allowing
+/// compile-time overflow checks (`BoundedX` / `BoundedY`) to reject constrained axes wrapping
+/// unbounded children.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(
     missing_debug_implementations,
     reason = "Wraps arbitrary child WidgetView"
 )]
-pub struct ScrollView<V, State, Action> {
+pub struct ScrollView<V, State, Action, CX = ScrollAxis, CY = ScrollAxis> {
     child: V,
     constrain_horizontal: bool,
     constrain_vertical: bool,
     must_fill: bool,
     style: Option<ScrollBarStyle>,
     visibility: Option<ScrollBarVisibility>,
-    phantom: PhantomData<fn(State) -> Action>,
+    phantom: ScrollPhantom<State, Action, CX, CY>,
 }
 
-/// Wraps `child` in a themeable scrollable viewport ([`ScrollView`]).
-pub fn scroll_view<V, State, Action>(child: V) -> ScrollView<V, State, Action>
+/// Wraps `child` in a themeable scrollable viewport ([`ScrollView`]) scrolling on both axes.
+///
+/// Always satisfies [`BoundedX`](crate::foundation::BoundedX) and [`BoundedY`](crate::foundation::BoundedY).
+pub fn scroll_view<V, State, Action>(
+    child: V,
+) -> ScrollView<V, State, Action, ScrollAxis, ScrollAxis>
 where
     State: 'static,
     Action: 'static,
@@ -1610,17 +1622,127 @@ where
     }
 }
 
-impl<V, State, Action> ScrollView<V, State, Action> {
+/// Creates a vertically scrollable viewport constraining child width to viewport width.
+///
+/// Always satisfies [`BoundedY`](crate::foundation::BoundedY), and satisfies
+/// [`BoundedX`](crate::foundation::BoundedX) whenever `V: BoundedX`.
+pub fn scroll_vertical<V, State, Action>(
+    child: V,
+) -> ScrollView<V, State, Action, FitAxis, ScrollAxis>
+where
+    State: 'static,
+    Action: 'static,
+    V: WidgetView<State, Action>,
+{
+    ScrollView {
+        child,
+        constrain_horizontal: true,
+        constrain_vertical: false,
+        must_fill: false,
+        style: None,
+        visibility: None,
+        phantom: PhantomData,
+    }
+}
+
+/// Creates a horizontally scrollable viewport constraining child height to viewport height.
+///
+/// Always satisfies [`BoundedX`](crate::foundation::BoundedX), and satisfies
+/// [`BoundedY`](crate::foundation::BoundedY) whenever `V: BoundedY`.
+pub fn scroll_horizontal<V, State, Action>(
+    child: V,
+) -> ScrollView<V, State, Action, ScrollAxis, FitAxis>
+where
+    State: 'static,
+    Action: 'static,
+    V: WidgetView<State, Action>,
+{
+    ScrollView {
+        child,
+        constrain_horizontal: false,
+        constrain_vertical: true,
+        must_fill: false,
+        style: None,
+        visibility: None,
+        phantom: PhantomData,
+    }
+}
+
+impl<V, State, Action, CX, CY> ScrollView<V, State, Action, CX, CY> {
+    /// Transitions this scroll view to vertical-only scrolling (`CX = FitAxis, CY = ScrollAxis`).
+    pub fn vertical_only(self) -> ScrollView<V, State, Action, FitAxis, ScrollAxis> {
+        ScrollView {
+            child: self.child,
+            constrain_horizontal: true,
+            constrain_vertical: false,
+            must_fill: self.must_fill,
+            style: self.style,
+            visibility: self.visibility,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Transitions this scroll view to horizontal-only scrolling (`CX = ScrollAxis, CY = FitAxis`).
+    pub fn horizontal_only(self) -> ScrollView<V, State, Action, ScrollAxis, FitAxis> {
+        ScrollView {
+            child: self.child,
+            constrain_horizontal: false,
+            constrain_vertical: true,
+            must_fill: self.must_fill,
+            style: self.style,
+            visibility: self.visibility,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Transitions this scroll view to free two-axis scrolling (`CX = ScrollAxis, CY = ScrollAxis`).
+    pub fn scroll_both(self) -> ScrollView<V, State, Action, ScrollAxis, ScrollAxis> {
+        ScrollView {
+            child: self.child,
+            constrain_horizontal: false,
+            constrain_vertical: false,
+            must_fill: self.must_fill,
+            style: self.style,
+            visibility: self.visibility,
+            phantom: PhantomData,
+        }
+    }
+
     /// Constrains child width to viewport width (disables horizontal scrolling).
-    pub fn constrain_horizontal(mut self, constrain: bool) -> Self {
-        self.constrain_horizontal = constrain;
-        self
+    ///
+    /// Sets horizontal axis state to [`FitAxis`] so the compiler requires `V: BoundedX` for this
+    /// scroll view to remain [`BoundedX`](crate::foundation::BoundedX). Prefer
+    /// [`scroll_vertical`] / [`Self::vertical_only`] when statically selecting single-axis scrolling.
+    pub fn constrain_horizontal(
+        self,
+        constrain: bool,
+    ) -> ScrollView<V, State, Action, FitAxis, CY> {
+        ScrollView {
+            child: self.child,
+            constrain_horizontal: constrain,
+            constrain_vertical: self.constrain_vertical,
+            must_fill: self.must_fill,
+            style: self.style,
+            visibility: self.visibility,
+            phantom: PhantomData,
+        }
     }
 
     /// Constrains child height to viewport height (disables vertical scrolling).
-    pub fn constrain_vertical(mut self, constrain: bool) -> Self {
-        self.constrain_vertical = constrain;
-        self
+    ///
+    /// Sets vertical axis state to [`FitAxis`] so the compiler requires `V: BoundedY` for this
+    /// scroll view to remain [`BoundedY`](crate::foundation::BoundedY). Prefer
+    /// [`scroll_horizontal`] / [`Self::horizontal_only`] when statically selecting single-axis scrolling.
+    pub fn constrain_vertical(self, constrain: bool) -> ScrollView<V, State, Action, CX, FitAxis> {
+        ScrollView {
+            child: self.child,
+            constrain_horizontal: self.constrain_horizontal,
+            constrain_vertical: constrain,
+            must_fill: self.must_fill,
+            style: self.style,
+            visibility: self.visibility,
+            phantom: PhantomData,
+        }
     }
 
     /// Ensures child fills at least the full viewport dimensions when smaller.
@@ -1642,13 +1764,15 @@ impl<V, State, Action> ScrollView<V, State, Action> {
     }
 }
 
-impl<V, State, Action> ViewMarker for ScrollView<V, State, Action> {}
+impl<V, State, Action, CX, CY> ViewMarker for ScrollView<V, State, Action, CX, CY> {}
 
-impl<V, State, Action> View<State, Action, ViewCtx> for ScrollView<V, State, Action>
+impl<V, State, Action, CX, CY> View<State, Action, ViewCtx> for ScrollView<V, State, Action, CX, CY>
 where
     V: WidgetView<State, Action>,
     State: 'static,
     Action: 'static,
+    CX: 'static,
+    CY: 'static,
 {
     type Element = Pod<ScrollViewWidget>;
     type ViewState = V::ViewState;

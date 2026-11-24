@@ -53,13 +53,14 @@ use crate::foundation::adaptive_pair::AdaptivePairView;
 use crate::foundation::bevel::BeveledBorderView;
 use crate::foundation::class_view::WithClass;
 use crate::foundation::clip_box::ClipBoxView;
+use crate::foundation::constrained_box::ConstrainedBoxView;
 use crate::foundation::focus_frame::FocusFrameView;
 use crate::foundation::overlay::{
     AnchoredPopupView, ContextMenuView, EscapeCatcherView, HoverTooltipView, PopoverAnchorView,
     PopoverPlacementView,
 };
 use crate::foundation::ripple::RippleLayerView;
-use crate::foundation::scroll_view::ScrollBarStyle;
+use crate::foundation::scroll_view::{ScrollBarStyle, ScrollView};
 use crate::foundation::transition::UiTransition;
 use crate::foundation::wrap::WrapView;
 use crate::style_engine::scope::{MemoizeWithSpec, UiScope, WithSpec};
@@ -911,6 +912,28 @@ impl<V: BoundedY, State, Action> BoundedY for Prop<LineBreaking, V, State, Actio
 // Brocado foundation wrappers
 impl<V, State, Action> BoundedX for ClipBoxView<V, State, Action> {}
 impl<V: BoundedY, State, Action> BoundedY for ClipBoxView<V, State, Action> {}
+
+// ScrollView dual-axis type-state bounds:
+// * A scrolling axis (`ScrollAxis`) absorbs child overflow unconditionally.
+// * A fitted axis (`FitAxis`) delegates sizing to the child and therefore preserves bounds
+//   only when the child itself is bounded on that axis.
+impl<V, State, Action, CY> BoundedX for ScrollView<V, State, Action, ScrollAxis, CY> {}
+impl<V: BoundedX, State, Action, CY> BoundedX for ScrollView<V, State, Action, FitAxis, CY> {}
+impl<V, State, Action, CX> BoundedY for ScrollView<V, State, Action, CX, ScrollAxis> {}
+impl<V: BoundedY, State, Action, CX> BoundedY for ScrollView<V, State, Action, CX, FitAxis> {}
+
+// ConstrainedBoxView dual-axis type-state bounds:
+// * Only unfloored axes (`UnminAxis`) preserve child bounds; adding `.min_width` / `.min_height`
+//   transitions the axis to `HasMinAxis`, which can push out narrow/short parents unless
+//   wrapped in `scroll_view(...)` or `clip_box(...)`.
+impl<V: BoundedX, State, Action, MinY> BoundedX
+    for ConstrainedBoxView<V, State, Action, UnminAxis, MinY>
+{
+}
+impl<V: BoundedY, State, Action, MinX> BoundedY
+    for ConstrainedBoxView<V, State, Action, MinX, UnminAxis>
+{
+}
 
 impl<Seq: BoundedXSeq, State, Action> BoundedX for WrapView<Seq, State, Action> {}
 

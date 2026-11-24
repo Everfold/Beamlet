@@ -8,6 +8,8 @@ use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, sized_box, zstack};
 
+use crate::foundation::{Bounded, BoundedX, assume_bounded};
+
 /// Screen layout scaffold holding body content plus optional chrome and modal overlay slots.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(
@@ -118,5 +120,74 @@ pub fn scaffold<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
         sheet: None,
         dialog: None,
         toast: None,
+    }
+}
+
+/// Compile-time overflow-safe [`UiScaffold`] enforcing [`Bounded`] on `body`/overlays and
+/// [`BoundedX`] on edge bars/FAB/toasts.
+#[must_use = "View values do nothing unless provided to Brocado."]
+#[expect(
+    missing_debug_implementations,
+    reason = "Wraps UiScaffold with type-erased bounded child views"
+)]
+pub struct UiBoundedScaffold<State: 'static, Action: 'static> {
+    inner: UiScaffold<State, Action>,
+}
+
+impl<State: 'static, Action: 'static> UiBoundedScaffold<State, Action> {
+    /// Places a horizontally bounded top app bar or header bar at the top edge.
+    pub fn top_bar<V: WidgetView<State, Action> + BoundedX>(mut self, view: V) -> Self {
+        self.inner = self.inner.top_bar(view);
+        self
+    }
+
+    /// Places a horizontally bounded bottom navigation bar or bottom bar along the bottom edge.
+    pub fn bottom_bar<V: WidgetView<State, Action> + BoundedX>(mut self, view: V) -> Self {
+        self.inner = self.inner.bottom_bar(view);
+        self
+    }
+
+    /// Anchors a horizontally bounded floating action view at the bottom-right corner.
+    pub fn floating_action<V: WidgetView<State, Action> + BoundedX>(mut self, view: V) -> Self {
+        self.inner = self.inner.floating_action(view);
+        self
+    }
+
+    /// Anchors an optional dual-axis [`Bounded`] modal drawer overlay above the main content.
+    pub fn modal_drawer<V: WidgetView<State, Action> + Bounded>(mut self, view: Option<V>) -> Self {
+        self.inner = self.inner.modal_drawer(view);
+        self
+    }
+
+    /// Anchors an optional dual-axis [`Bounded`] modal bottom/side sheet overlay.
+    pub fn sheet<V: WidgetView<State, Action> + Bounded>(mut self, view: Option<V>) -> Self {
+        self.inner = self.inner.sheet(view);
+        self
+    }
+
+    /// Anchors an optional dual-axis [`Bounded`] modal dialog overlay.
+    pub fn dialog<V: WidgetView<State, Action> + Bounded>(mut self, view: Option<V>) -> Self {
+        self.inner = self.inner.dialog(view);
+        self
+    }
+
+    /// Anchors a horizontally bounded toast/snackbar host banner along the bottom center.
+    pub fn toast<V: WidgetView<State, Action> + BoundedX>(mut self, view: V) -> Self {
+        self.inner = self.inner.toast(view);
+        self
+    }
+
+    /// Finalizes the bounded scaffold into a [`Bounded`] composable [`WidgetView`].
+    pub fn build(self) -> impl WidgetView<State, Action, Widget = widgets::ZStack> + Bounded {
+        assume_bounded(self.inner.build())
+    }
+}
+
+/// Starts building a compile-time overflow-safe [`UiBoundedScaffold`] requiring `body: Bounded`.
+pub fn bounded_scaffold<State: 'static, Action: 'static, V: WidgetView<State, Action> + Bounded>(
+    body: V,
+) -> UiBoundedScaffold<State, Action> {
+    UiBoundedScaffold {
+        inner: scaffold(body),
     }
 }

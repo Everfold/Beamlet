@@ -33,13 +33,14 @@ pub use button::{
     outlined_button, primary_button, secondary_button, subtle_button,
 };
 pub use card::{
-    CardVariant, card, elevated_card, filled_card, grouped_card, outlined_card, surface_box,
+    CardVariant, bounded_card, card, elevated_card, filled_card, grouped_card, outlined_card,
+    surface_box,
 };
 pub use chip::{assist_chip, filter_chip, input_chip, suggestion_chip};
 pub use date_time::{
     CalendarDate, TimeOfDay, date_picker, date_picker_dialog, time_picker, time_picker_dialog,
 };
-pub use dialog::{basic_dialog, dialog};
+pub use dialog::{basic_dialog, bounded_dialog, dialog};
 pub use divider::{horizontal_divider, inset_divider, vertical_divider};
 pub use icon_button::{
     IconButtonVariant, UiCustomIconButton, UiIconButton, filled_icon_button, icon_button,
@@ -62,13 +63,13 @@ pub use progress::{
 };
 pub use range_slider::{RangeSlider, RangeSliderWidget, range_slider};
 pub use rich_text::{RichTextAction, RichTextWidget, SpanStyle, TextSpan, UiRichProse, rich_prose};
-pub use scaffold::scaffold;
+pub use scaffold::{UiBoundedScaffold, bounded_scaffold, scaffold};
 pub use search_bar::{UiSearchBar, search_bar};
 pub use segmented_button::{multi_choice_segmented_button, segmented_button};
 pub use selection::{
     ToggleableState, checkbox, radio, radio_group, slider, switch, tri_state_checkbox,
 };
-pub use sheet::{bottom_sheet, side_sheet};
+pub use sheet::{bottom_sheet, bounded_bottom_sheet, bounded_side_sheet, side_sheet};
 pub use split::{UiSplit, UiSplitWidget, split_view};
 pub use tabs::{scrollable_tabs, secondary_tabs, tabs};
 pub use text_field::{

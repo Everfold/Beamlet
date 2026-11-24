@@ -21,8 +21,8 @@ pub use crate::{
     WrapWidget, adaptive_pair, assume_bounded, assume_bounded_x, assume_bounded_y, beveled_surface,
     bounded, bounded_x, bounded_y, build_default_properties, cached_default_properties, classes,
     clip_box, column, constrained_box, container, current_spec, focus_frame, icons,
-    memoize_with_spec, popover_anchor, popover_place, ripple_layer, row, scroll_view, ui_icon,
-    ui_transition, with_spec, wrap,
+    memoize_with_spec, popover_anchor, popover_place, ripple_layer, row, scroll_horizontal,
+    scroll_vertical, scroll_view, ui_icon, ui_transition, with_spec, wrap,
 };
 
 #[cfg(feature = "winit")]
@@ -56,7 +56,8 @@ pub use brocado_hig::{
 #[cfg(feature = "adwaita")]
 pub use brocado_adwaita::{
     AdwAlertDialog, AdwBreakpointBin, AdwClamp, AdwaitaAccent, AdwaitaTheme, BreakpointBin,
-    ClampView, action_row, adwaita_scope, alert_dialog, banner, breakpoint_bin, clamp,
-    clickable_action_row, combo_row, entry_row, expander_row, header_bar, header_bar_with_title,
-    preferences_group, status_page, switch_row, view_switcher, view_switcher_bar,
+    ClampView, action_row, adwaita_scope, alert_dialog, banner, bounded_clamp, breakpoint_bin,
+    clamp, clickable_action_row, combo_row, entry_row, expander_row, header_bar,
+    header_bar_with_title, preferences_group, status_page, switch_row, view_switcher,
+    view_switcher_bar,
 };

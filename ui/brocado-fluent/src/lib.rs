@@ -18,7 +18,8 @@ pub use brocado_core::foundation::{
     UiClassExt, UiScrollBar, UiTransition, UncheckedBounded, UncheckedBoundedX, UncheckedBoundedY,
     UnminAxis, WithClass, assume_bounded, assume_bounded_x, assume_bounded_y, beveled_surface,
     blend_over, bounded, bounded_x, bounded_y, column, container, escape_catcher, focus_frame,
-    icons, resolve_interactive_colors, row, scroll_view, ui_icon, ui_transition, with_opacity,
+    icons, resolve_interactive_colors, row, scroll_horizontal, scroll_vertical, scroll_view,
+    ui_icon, ui_transition, with_opacity,
 };
 pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,

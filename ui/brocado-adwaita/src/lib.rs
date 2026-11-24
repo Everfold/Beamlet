@@ -20,8 +20,8 @@ pub use brocado_core::foundation::{
     ScrollViewWidget, SlideTransition, TooltipContentSpec, UiClassExt, UiScrollBar, UiTransition,
     UncheckedBounded, UncheckedBoundedX, UncheckedBoundedY, UnminAxis, WithClass, assume_bounded,
     assume_bounded_x, assume_bounded_y, blend_over, bounded, bounded_x, bounded_y, column,
-    container, escape_catcher, focus_frame, icons, resolve_interactive_colors, row, scroll_view,
-    ui_icon, ui_transition, with_opacity,
+    container, escape_catcher, focus_frame, icons, resolve_interactive_colors, row,
+    scroll_horizontal, scroll_vertical, scroll_view, ui_icon, ui_transition, with_opacity,
 };
 pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
@@ -33,7 +33,7 @@ pub use brocado_core::tokens::{
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextStyleSpec, TypeRole, TypeScale,
     WindowBackdrop, WindowSizeClass,
 };
-pub use clamp::{AdwClamp, ClampView, clamp};
+pub use clamp::{AdwClamp, ClampView, bounded_clamp, clamp};
 pub use components::{
     AdwAlertDialog, action_row, alert_dialog, banner, clickable_action_row, combo_row, entry_row,
     expander_row, header_bar, header_bar_with_title, preferences_group, status_page, switch_row,

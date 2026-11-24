@@ -6,7 +6,7 @@ use masonry::layout::AsUnit;
 use masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
 use xilem_masonry::WidgetView;
 
-use crate::foundation::{ContainerView, UiClassExt, WithClass, container};
+use crate::foundation::{BoundedX, ContainerView, UiClassExt, WithClass, container};
 use crate::style_engine::classes;
 use crate::tokens::{DesignSpec, ElevationLevel};
 
@@ -41,6 +41,14 @@ pub fn card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
 ) -> WithClass<ContainerView<V, State, Action>, State, Action> {
     container(child).ui_class(variant.class_name())
+}
+
+/// Compile-time horizontally bounded card wrapper requiring `child: BoundedX`.
+pub fn bounded_card<State: 'static, Action: 'static, V: WidgetView<State, Action> + BoundedX>(
+    variant: CardVariant,
+    child: V,
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
+    card(variant, child)
 }
 
 /// Returns an elevated card container wrapping `child`.

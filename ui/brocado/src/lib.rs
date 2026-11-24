@@ -19,7 +19,8 @@ pub use brocado_core::foundation::{
     UncheckedBoundedX, UncheckedBoundedY, UnminAxis, WrapState, WrapView, WrapWidget,
     adaptive_pair, assume_bounded, assume_bounded_x, assume_bounded_y, beveled_surface, bounded,
     bounded_x, bounded_y, clip_box, column, constrained_box, container, focus_frame, icons,
-    popover_anchor, popover_place, ripple_layer, row, scroll_view, ui_icon, ui_transition, wrap,
+    popover_anchor, popover_place, ripple_layer, row, scroll_horizontal, scroll_vertical,
+    scroll_view, ui_icon, ui_transition, wrap,
 };
 pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,

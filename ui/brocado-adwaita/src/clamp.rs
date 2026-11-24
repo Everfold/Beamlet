@@ -164,6 +164,14 @@ pub fn clamp<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     }
 }
 
+/// Compile-time horizontally bounded GNOME `AdwClamp` requiring `child: BoundedX`.
+pub fn bounded_clamp<State: 'static, Action: 'static, V: WidgetView<State, Action> + BoundedX>(
+    max_width: f64,
+    child: V,
+) -> ClampView<V, State, Action> {
+    clamp(max_width, child)
+}
+
 impl<V, State, Action> ViewMarker for ClampView<V, State, Action> {}
 
 impl<V, State, Action> View<State, Action, ViewCtx> for ClampView<V, State, Action>

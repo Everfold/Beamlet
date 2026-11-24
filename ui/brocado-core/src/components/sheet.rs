@@ -11,11 +11,11 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
-use crate::foundation::ModalAxisSizing;
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
+use crate::foundation::{BoundedX, ModalAxisSizing};
 use crate::style_engine::classes;
 use crate::tokens::MotionDuration;
 
@@ -218,4 +218,28 @@ where
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
     }
+}
+
+/// Compile-time horizontally bounded [`bottom_sheet`] requiring `content: BoundedX`.
+pub fn bounded_bottom_sheet<State: 'static, Action: 'static, V, F>(
+    content: V,
+    on_dismiss: F,
+) -> UiSheet<V, State, Action>
+where
+    V: WidgetView<State, Action> + BoundedX,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    bottom_sheet(content, on_dismiss)
+}
+
+/// Compile-time horizontally bounded [`side_sheet`] requiring `content: BoundedX`.
+pub fn bounded_side_sheet<State: 'static, Action: 'static, V, F>(
+    content: V,
+    on_dismiss: F,
+) -> UiSheet<V, State, Action>
+where
+    V: WidgetView<State, Action> + BoundedX,
+    F: Fn(&mut State) -> Action + Send + Sync + 'static,
+{
+    side_sheet(content, on_dismiss)
 }
