@@ -1,56 +1,62 @@
 //! Active platform-native signature widgets + open custom slot card.
 
+use brocado::components::typography::ui_label;
 use brocado::prelude::*;
 use masonry::layout::AsUnit;
+use masonry::parley::LineHeight;
 use masonry::peniko::Color;
-use masonry::properties::Padding;
+use masonry::properties::{LineBreaking, Padding};
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, sized_box};
 
 use crate::state::{GalleryState, GalleryTab};
 
 pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let clicks = state.components.click_count;
 
-    let make_custom_items = || {
+    let make_custom_items = |wide: bool| {
         let save_btn = button_view(
             ButtonVariant::Primary,
             with_spec(|spec, _| {
                 let shortcut = spec.shortcut_convention.format_primary("S");
+                let text = clip_box(
+                    ui_label(TypeRole::LabelLarge, "保存")
+                        .color(spec.palette.on_accent)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 clip_box(
                     flex_row((
                         ui_icon(icons::CHECK, 16.0, spec.palette.on_accent),
-                        clip_box(label("保存").color(spec.palette.on_accent)).flex(1.0),
+                        text.flex(1.0),
                         sized_box(
-                            label(shortcut)
-                                .text_size(11.0)
-                                .color(spec.palette.on_accent),
+                            ui_label(TypeRole::LabelSmall, shortcut)
+                                .line_height(LineHeight::MetricsRelative(1.0))
+                                .color(spec.palette.on_accent)
+                                .line_breaking(LineBreaking::Clip),
                         )
-                        .padding(Padding::from_vh(2.px(), 6.px()))
+                        .padding(Padding::from_vh(3.px(), 6.px()))
                         .border(spec.palette.on_accent, 1.px())
                         .corner_radius(4.px()),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(4.px()),
+                    .gap(6.px()),
                 )
             }),
             |s: &mut GalleryState| s.components.click_count += 1,
         )
         .padding(Padding::from_vh(8.px(), 12.px()));
-        let wide_btn = breakpoint_bin(
-            220.0,
+        let wide_btn_base =
             primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
                 s.components.click_count += 1;
             })
-            .width(150.px())
-            .corner_radius(3.px()),
-            primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
-                s.components.click_count += 1;
-            })
-            .corner_radius(3.px()),
-        );
+            .corner_radius(3.px());
+        let wide_btn: Box<AnyWidgetView<GalleryState>> = if wide {
+            wide_btn_base.width(150.px()).boxed()
+        } else {
+            wide_btn_base.boxed()
+        };
         let list_row = list_item_view(
             flex_row((
                 ui_icon(icons::INFO, 16.0, Color::from_rgb8(0x4E, 0x8C, 0xE8)),
@@ -61,8 +67,8 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
         );
         (save_btn, wide_btn, list_row)
     };
-    let (sb_w, wb_w, lr_w) = make_custom_items();
-    let (sb_n, wb_n, lr_n) = make_custom_items();
+    let (sb_w, wb_w, lr_w) = make_custom_items(true);
+    let (sb_n, wb_n, lr_n) = make_custom_items(false);
 
     let custom_card = outlined_card(
         flex_col((

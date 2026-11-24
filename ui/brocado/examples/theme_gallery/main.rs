@@ -1175,6 +1175,275 @@ mod tests {
         assert_eq!(count_layer_type(&mut h_comp, "PopupLayer"), 0);
     }
 
+    fn find_first_with_type<'a>(node: &'a LayoutNode, type_name: &str) -> Option<&'a LayoutNode> {
+        if node.type_name == type_name {
+            return Some(node);
+        }
+        node.children
+            .iter()
+            .find_map(|c| find_first_with_type(c, type_name))
+    }
+
+    fn find_ancestor_button_and_label<'a>(
+        node: &'a LayoutNode,
+        label_text: &str,
+    ) -> Option<(&'a LayoutNode, &'a LayoutNode)> {
+        if node.type_name == "Button" {
+            fn find_lbl<'b>(n: &'b LayoutNode, needle: &str) -> Option<&'b LayoutNode> {
+                if n.type_name == "Label" && n.text.as_deref() == Some(needle) {
+                    return Some(n);
+                }
+                n.children.iter().find_map(|c| find_lbl(c, needle))
+            }
+            if let Some(lbl) = find_lbl(node, label_text) {
+                return Some((node, lbl));
+            }
+        }
+        node.children
+            .iter()
+            .find_map(|c| find_ancestor_button_and_label(c, label_text))
+    }
+
+    fn find_sized_box_and_label<'a>(
+        node: &'a LayoutNode,
+        label_text: &str,
+    ) -> Option<(&'a LayoutNode, &'a LayoutNode)> {
+        if node.type_name == "SizedBox"
+            && let Some(lbl) = node
+                .children
+                .iter()
+                .find(|c| c.type_name == "Label" && c.text.as_deref() == Some(label_text))
+        {
+            return Some((node, lbl));
+        }
+        for child in &node.children {
+            if node.type_name == "SizedBox" && node.rect.width < 120.0 && node.rect.height < 48.0 {
+                fn find_lbl<'b>(n: &'b LayoutNode, needle: &str) -> Option<&'b LayoutNode> {
+                    if n.type_name == "Label" && n.text.as_deref() == Some(needle) {
+                        return Some(n);
+                    }
+                    n.children.iter().find_map(|c| find_lbl(c, needle))
+                }
+                if let Some(lbl) = find_lbl(child, label_text) {
+                    return Some((node, lbl));
+                }
+            }
+            if let Some(hit) = find_sized_box_and_label(child, label_text) {
+                return Some(hit);
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn gallery_normal_size_alignment_centering_and_events() {
+        // 1. Components tab @ 1200x800: rich_prose link click, prefix/badge vertical centering, select trigger alignment
+        let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+        h.settle_animations();
+        let tree = dump_layout_tree(&mut h);
+
+        // Select trigger ("默认") should keep label left and chevron Svg right (not centered together)
+        if let Some((btn_node, lbl_node)) = find_ancestor_button_and_label(&tree, "默认")
+            && let Some(svg_node) = find_first_with_type(btn_node, "Svg")
+        {
+            assert!(
+                lbl_node.rect.x < btn_node.rect.x + btn_node.rect.width * 0.45,
+                "select label should stay near leading edge: btn={:?}, lbl={:?}",
+                btn_node.rect,
+                lbl_node.rect
+            );
+            assert!(
+                svg_node.rect.x > btn_node.rect.x + btn_node.rect.width * 0.55,
+                "select chevron should stay near trailing edge: btn={:?}, svg={:?}",
+                btn_node.rect,
+                svg_node.rect
+            );
+        } else {
+            panic!("expected wide select trigger button and chevron");
+        }
+
+        // Badge "0" vertical centering inside its SizedBox pill
+        let (badge_box, badge_lbl) =
+            find_sized_box_and_label(&tree, "0").expect("large_badge '0' present");
+        let badge_box_cy = badge_box.rect.y + badge_box.rect.height * 0.5;
+        let badge_lbl_cy = badge_lbl.rect.y + badge_lbl.rect.height * 0.5;
+        assert!(
+            (badge_box_cy - badge_lbl_cy).abs() <= 2.5,
+            "large_badge '0' should be vertically centered: box={:?}, lbl={:?}",
+            badge_box.rect,
+            badge_lbl.rect
+        );
+
+        // Prefix "https://" vs adjacent TextArea vertical center
+        let (_, py, _, ph) =
+            find_first_label_rect(&tree, "https://").expect("prefix 'https://' present");
+        let areas: Vec<_> = {
+            fn collect_areas(n: &LayoutNode, out: &mut Vec<brocado_preview::inspect::LayoutRect>) {
+                if n.type_name == "TextArea" {
+                    out.push(n.rect);
+                }
+                for c in &n.children {
+                    collect_areas(c, out);
+                }
+            }
+            let mut v = Vec::new();
+            collect_areas(&tree, &mut v);
+            v
+        };
+        let matching_area = areas
+            .into_iter()
+            .find(|r| (r.y - py).abs() < 24.0)
+            .expect("TextArea on prefix row");
+        let prefix_cy = py + ph * 0.5;
+        let area_cy = matching_area.y + matching_area.height * 0.5;
+        assert!(
+            (prefix_cy - area_cy).abs() <= 3.0,
+            "TextField prefix should vertically align with TextArea: prefix={prefix_cy:.2}, area={area_cy:.2}"
+        );
+
+        // RichTextWidget link click event ("设计规范链接")
+        let rich_id = *h
+            .find_widget_ids("RichTextWidget")
+            .first()
+            .expect("RichTextWidget mounted");
+        h.inner_harness_mut().scroll_into_view(rich_id);
+        h.pump_actions();
+        let (rx, ry, rw, rh) = h.widget_rect(rich_id).expect("RichTextWidget rect");
+        let mut x = rx + 20.0;
+        while x < rx + rw.min(720.0) {
+            h.click_point(x, ry + rh * 0.5);
+            if h.state().components.last_link_clicked.is_some() {
+                break;
+            }
+            x += 24.0;
+        }
+        assert_eq!(
+            h.state().components.last_link_clicked.as_deref(),
+            Some("spec-docs"),
+            "rich_prose link should trigger on_link_click at 1200x800"
+        );
+
+        // 2. Tooltips @ 1200x800: compact bounds, inside viewport, survive internal move, dismiss on leave
+        let mut h_ov = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+        for (btn_lbl, expect_rich) in [("悬停提示", false), ("富提示", true)] {
+            h_ov.run_step(&PreviewStep::HoverLabel(btn_lbl.into()))
+                .unwrap();
+            h_ov.settle_animations();
+            let tip_tree = dump_layout_tree(&mut h_ov);
+            let tip_node =
+                find_first_with_type(&tip_tree, "TooltipLayer").expect("TooltipLayer spawned");
+            assert!(
+                tip_node.rect.width >= 32.0 && tip_node.rect.width <= 340.0,
+                "[{btn_lbl}] expected readable compact tooltip width, got {:?}",
+                tip_node.rect
+            );
+            assert!(
+                tip_node.rect.height >= 16.0
+                    && tip_node.rect.x + tip_node.rect.width <= 1200.0
+                    && tip_node.rect.y + tip_node.rect.height <= 800.0,
+                "[{btn_lbl}] tooltip must stay inside viewport: {:?}",
+                tip_node.rect
+            );
+            if expect_rich {
+                assert!(
+                    tree_has_text(tip_node, "移出自动关闭"),
+                    "rich tooltip should render body text"
+                );
+            }
+            // Internal pointer move inside the trigger anchor must keep the tooltip alive
+            let (bx, by, bw, bh) = find_first_label_rect(&tip_tree, btn_lbl).unwrap();
+            h_ov.inner_harness_mut()
+                .mouse_move(masonry::kurbo::Point::new(bx + bw * 0.25, by + bh * 0.5));
+            h_ov.pump_actions();
+            assert_eq!(
+                count_layer_type(&mut h_ov, "TooltipLayer"),
+                1,
+                "[{btn_lbl}] moving pointer inside anchor must not dismiss tooltip"
+            );
+            // Moving outside anchor dismisses tooltip
+            h_ov.inner_harness_mut()
+                .mouse_move(masonry::kurbo::Point::new(5.0, 5.0));
+            h_ov.pump_actions();
+            assert_eq!(
+                count_layer_type(&mut h_ov, "TooltipLayer"),
+                0,
+                "[{btn_lbl}] moving outside anchor should dismiss tooltip"
+            );
+        }
+
+        // DatePicker weekday centering ("M")
+        let ov_tree = dump_layout_tree(&mut h_ov);
+        let (wd_box, wd_lbl) =
+            find_sized_box_and_label(&ov_tree, "M").expect("weekday 'M' box present");
+        let wd_box_cy = wd_box.rect.y + wd_box.rect.height * 0.5;
+        let wd_lbl_cy = wd_lbl.rect.y + wd_lbl.rect.height * 0.5;
+        let wd_box_cx = wd_box.rect.x + wd_box.rect.width * 0.5;
+        let wd_lbl_cx = wd_lbl.rect.x + wd_lbl.rect.width * 0.5;
+        assert!(
+            (wd_box_cy - wd_lbl_cy).abs() <= 2.5 && (wd_box_cx - wd_lbl_cx).abs() <= 2.5,
+            "DatePicker weekday should be centered in cell: box={:?}, lbl={:?}",
+            wd_box.rect,
+            wd_lbl.rect
+        );
+
+        // BasicDialog action buttons right-aligned & scrim click dismisses dialog
+        h_ov.run_step(&PreviewStep::ClickLabel("基础弹窗".into()))
+            .unwrap();
+        assert!(h_ov.state().overlays.show_basic_dialog);
+        let dlg_tree = dump_layout_tree(&mut h_ov);
+        let (cancel_btn, _) =
+            find_ancestor_button_and_label(&dlg_tree, "取消").expect("'取消' button");
+        let (ok_btn, _) = find_ancestor_button_and_label(&dlg_tree, "恢复").expect("'恢复' button");
+        assert!(
+            cancel_btn.rect.x > 600.0 && ok_btn.rect.x > cancel_btn.rect.x,
+            "BasicDialog actions should align to trailing side at 1200x800: cancel={:?}, ok={:?}",
+            cancel_btn.rect,
+            ok_btn.rect
+        );
+        h_ov.click_point(20.0, 780.0);
+        assert!(
+            !h_ov.state().overlays.show_basic_dialog,
+            "clicking dialog scrim should dismiss BasicDialog"
+        );
+
+        // 3. Adwaita sidebar left-alignment & HIG disclosure left-alignment + Fluent info_badge centering
+        let mut h_adw = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Native);
+        let adw_tree = dump_layout_tree(&mut h_adw);
+        let (nav_btn, nav_lbl) =
+            find_ancestor_button_and_label(&adw_tree, "组件").expect("Adwaita sidebar '组件'");
+        assert!(
+            nav_lbl.rect.x < nav_btn.rect.x + nav_btn.rect.width * 0.4,
+            "sidebar nav label should be left-aligned: btn={:?}, lbl={:?}",
+            nav_btn.rect,
+            nav_lbl.rect
+        );
+
+        let mut h_hig = make_gallery_harness(DesignLanguage::Hig, GalleryTab::Native);
+        let hig_tree = dump_layout_tree(&mut h_hig);
+        let (disc_btn, disc_lbl) =
+            find_ancestor_button_and_label(&hig_tree, "详情").expect("HIG disclosure '详情'");
+        assert!(
+            disc_lbl.rect.x < disc_btn.rect.x + 60.0,
+            "disclosure_group label should be left-aligned: btn={:?}, lbl={:?}",
+            disc_btn.rect,
+            disc_lbl.rect
+        );
+
+        let mut h_flu = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Native);
+        let flu_tree = dump_layout_tree(&mut h_flu);
+        let (ib_box, ib_lbl) =
+            find_sized_box_and_label(&flu_tree, "展开内容").expect("Fluent info_badge '展开内容'");
+        assert!(
+            ((ib_box.rect.y + ib_box.rect.height * 0.5)
+                - (ib_lbl.rect.y + ib_lbl.rect.height * 0.5))
+                .abs()
+                <= 2.5,
+            "Fluent info_badge text should be vertically centered: box={:?}, lbl={:?}",
+            ib_box.rect,
+            ib_lbl.rect
+        );
+    }
+
     #[test]
     #[ignore = "Manual visual audit helper dumping 160x480 PNGs to THEME_GALLERY_AUDIT_DIR"]
     fn audit_dump_extreme_narrow_160_pngs() {
