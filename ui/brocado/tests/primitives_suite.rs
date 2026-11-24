@@ -12,7 +12,9 @@ use masonry::layout::{AsUnit, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, label, sized_box, zstack};
+use xilem_masonry::view::{
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, label, sized_box, zstack,
+};
 
 #[allow(dead_code)]
 mod preview_support;
@@ -1052,4 +1054,372 @@ fn wrap_handles_extreme_narrow_120px_and_60px_without_overflow() {
             );
         }
     }
+}
+
+fn find_node_by_text<'a>(node: &'a LayoutNode, text: &str) -> Option<&'a LayoutNode> {
+    if node.text.as_deref() == Some(text) {
+        return Some(node);
+    }
+    for ch in &node.children {
+        if let Some(found) = find_node_by_text(ch, text) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn assert_all_descendants_within(node: &LayoutNode, max_right: f64, label_ctx: &str) {
+    assert!(
+        node.rect.x + node.rect.width <= max_right + 0.5,
+        "{label_ctx} descendant {} overflowed x + w > {max_right}: {:?}",
+        node.type_name,
+        node.rect
+    );
+    for ch in &node.children {
+        assert_all_descendants_within(ch, max_right, label_ctx);
+    }
+}
+
+#[test]
+fn scaffold_fab_and_toast_avoid_bottom_bar() {
+    #[derive(Default)]
+    struct State;
+
+    let mut harness = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            scaffold(label("Body"))
+                .top_bar(top_app_bar(TopAppBarVariant::Small, "App"))
+                .bottom_bar(bottom_app_bar(
+                    vec![icon_button(icons::HOME, |_| {}).boxed()],
+                    None,
+                ))
+                .floating_action(fab(icons::ADD, FabColor::Primary, |_| {}))
+                .toast(toast(
+                    &ToastData {
+                        id: 1,
+                        message: "Saved".into(),
+                        action_label: None,
+                        duration: ToastDuration::Short,
+                        with_close: false,
+                    },
+                    None,
+                    None,
+                ))
+                .build()
+                .boxed()
+        },
+        PreviewConfig {
+            width: 480,
+            height: 640,
+            ..PreviewConfig::default()
+        },
+    );
+    harness.settle_animations();
+    let tree = dump_layout_tree(&mut harness);
+    // Root scaffold ZStack -> child 0 is `base_col` (`Flex`) containing [top_bar, body_area, bottom_bar].
+    let root_flex = find_first_node(&tree, "Flex").expect("scaffold Flex root missing");
+    assert_eq!(
+        root_flex.children.len(),
+        3,
+        "expected top_bar, body_area, bottom_bar in scaffold Flex"
+    );
+    let body_area = &root_flex.children[1];
+    let bottom_bar = &root_flex.children[2];
+    let bottom_bar_top = bottom_bar.rect.y;
+
+    let fab_node = find_first_node(body_area, "Button").expect("FAB button missing from body_area");
+    let toast_label = find_node_by_text(body_area, "Saved").expect("Toast label missing");
+    assert!(fab_node.rect.width > 1.0 && fab_node.rect.height > 1.0);
+    assert!(toast_label.rect.width > 1.0 && toast_label.rect.height > 1.0);
+
+    assert!(
+        fab_node.rect.y + fab_node.rect.height <= bottom_bar_top + 0.5,
+        "FAB overlaps bottom_bar: fab={:?}, bottom_bar={:?}",
+        fab_node.rect,
+        bottom_bar.rect
+    );
+    assert!(
+        toast_label.rect.y + toast_label.rect.height <= bottom_bar_top + 0.5,
+        "Toast overlaps bottom_bar: toast={:?}, bottom_bar={:?}",
+        toast_label.rect,
+        bottom_bar.rect
+    );
+    assert!(
+        fab_node.rect.x >= 0.0
+            && fab_node.rect.y >= 0.0
+            && fab_node.rect.x + fab_node.rect.width <= 480.5,
+        "FAB outside viewport: {:?}",
+        fab_node.rect
+    );
+}
+
+#[test]
+fn adaptive_dialogs_locale_and_font_scale() {
+    struct State {
+        scale: f32,
+        date: CalendarDate,
+        time: TimeOfDay,
+    }
+
+    let make_date_harness = |scale: f32| {
+        build_ui_harness(
+            State {
+                scale,
+                date: CalendarDate::new(2024, 1, 15),
+                time: TimeOfDay::new(9, 30),
+            },
+            |s| {
+                UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                    .with_locale(UiLocale::zh_cn())
+                    .with_font_scale(s.scale)
+            },
+            |s| {
+                let d = s.date;
+                date_picker_dialog(d, |st: &mut State, new_d| st.date = new_d, |_| {}, |_| {})
+                    .boxed()
+            },
+            PreviewConfig {
+                width: 640,
+                height: 640,
+                ..PreviewConfig::default()
+            },
+        )
+    };
+
+    let mut h_100 = make_date_harness(1.0);
+    h_100.settle_animations();
+    let tree_100 = dump_layout_tree(&mut h_100);
+    let modal_box_100 = &find_first_node(&tree_100, "SlideTransition")
+        .expect("dialog SlideTransition missing at 1.0")
+        .children[0];
+
+    let mut h_150 = make_date_harness(1.5);
+    h_150.settle_animations();
+    let tree_150 = dump_layout_tree(&mut h_150);
+    let modal_box_150 = &find_first_node(&tree_150, "SlideTransition")
+        .expect("dialog SlideTransition missing at 1.5")
+        .children[0];
+
+    assert!(
+        modal_box_100.rect.x + modal_box_100.rect.width <= 640.5
+            && modal_box_100.rect.y + modal_box_100.rect.height <= 640.5,
+        "1.0x date_picker_dialog overflowed 640x640: {:?}",
+        modal_box_100.rect
+    );
+    assert!(
+        modal_box_150.rect.x + modal_box_150.rect.width <= 640.5
+            && modal_box_150.rect.y + modal_box_150.rect.height <= 640.5,
+        "1.5x date_picker_dialog overflowed 640x640: {:?}",
+        modal_box_150.rect
+    );
+    assert!(
+        modal_box_150.rect.height > modal_box_100.rect.height + 8.0,
+        "expected font_scale(1.5) to enlarge date dialog height: 1.0x={:?}, 1.5x={:?}",
+        modal_box_100.rect,
+        modal_box_150.rect
+    );
+
+    assert!(
+        find_node_by_text(&tree_100, "确定").is_some(),
+        "expected zh_cn ok_label '确定' in date_picker_dialog"
+    );
+    assert!(
+        find_node_by_text(&tree_100, "取消").is_some(),
+        "expected zh_cn cancel_label '取消' in date_picker_dialog"
+    );
+    assert!(
+        find_node_by_text(&tree_100, "一").is_some(),
+        "expected zh_cn weekday header '一' in date_picker_dialog"
+    );
+    assert!(
+        find_node_by_text(&tree_100, "1月 2024").is_some(),
+        "expected zh_cn month header '1月 2024' in date_picker_dialog"
+    );
+
+    let mut h_time = build_ui_harness(
+        State {
+            scale: 1.5,
+            date: CalendarDate::new(2024, 1, 15),
+            time: TimeOfDay::new(9, 30),
+        },
+        |s| {
+            UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                .with_locale(UiLocale::zh_cn())
+                .with_font_scale(s.scale)
+        },
+        |s| {
+            let t = s.time;
+            time_picker_dialog(t, |st: &mut State, new_t| st.time = new_t, |_| {}, |_| {}).boxed()
+        },
+        PreviewConfig {
+            width: 640,
+            height: 640,
+            ..PreviewConfig::default()
+        },
+    );
+    h_time.settle_animations();
+    let tree_time = dump_layout_tree(&mut h_time);
+    let modal_time = &find_first_node(&tree_time, "SlideTransition")
+        .expect("time dialog SlideTransition missing")
+        .children[0];
+    assert!(
+        modal_time.rect.x + modal_time.rect.width <= 640.5
+            && modal_time.rect.y + modal_time.rect.height <= 640.5,
+        "1.5x time_picker_dialog overflowed 640x640: {:?}",
+        modal_time.rect
+    );
+    assert!(
+        find_node_by_text(&tree_time, "确定").is_some(),
+        "expected zh_cn ok_label '确定' in time_picker_dialog"
+    );
+}
+
+#[test]
+fn adw_alert_dialog_switches_by_content_width() {
+    struct State {
+        cancel_label: &'static str,
+        confirm_label: &'static str,
+    }
+
+    let run_alert = |cancel_label: &'static str, confirm_label: &'static str| {
+        let mut h = build_ui_harness(
+            State {
+                cancel_label,
+                confirm_label,
+            },
+            |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+            |s| {
+                alert_dialog(
+                    "Delete?",
+                    "Confirm action.",
+                    s.cancel_label,
+                    s.confirm_label,
+                    |_| {},
+                    |_| {},
+                )
+                .boxed()
+            },
+            PreviewConfig {
+                width: 340,
+                height: 480,
+                ..PreviewConfig::default()
+            },
+        );
+        h.settle_animations();
+        dump_layout_tree(&mut h)
+    };
+
+    let short_tree = run_alert("No", "Yes");
+    let short_row = find_first_node(&short_tree, "AdwResponseRowWidget")
+        .expect("short AdwResponseRowWidget missing");
+    assert_eq!(short_row.children.len(), 2);
+    let sb0 = short_row.children[0].rect;
+    let sb1 = short_row.children[1].rect;
+    assert!(
+        (sb0.y - sb1.y).abs() <= 1.0 && sb1.x >= sb0.x + sb0.width - 0.5,
+        "expected horizontal responses for short labels at 340px: b0={sb0:?}, b1={sb1:?}"
+    );
+
+    let long_tree = run_alert("Keep Existing Document", "Permanently Delete Everything");
+    let long_row = find_first_node(&long_tree, "AdwResponseRowWidget")
+        .expect("long AdwResponseRowWidget missing");
+    assert_eq!(long_row.children.len(), 2);
+    let lb0 = long_row.children[0].rect;
+    let lb1 = long_row.children[1].rect;
+    assert!(
+        lb1.y >= lb0.y + lb0.height - 0.5 || lb0.y >= lb1.y + lb1.height - 0.5,
+        "expected stacked vertical responses for long labels at 340px: b0={lb0:?}, b1={lb1:?}"
+    );
+    assert!(
+        lb0.x + lb0.width <= 340.5 && lb1.x + lb1.width <= 340.5 && lb1.y + lb1.height <= 480.5,
+        "stacked alert buttons overflowed 340x480: b0={lb0:?}, b1={lb1:?}"
+    );
+}
+
+#[test]
+fn sidebars_and_inspector_clamp_in_narrow_containers() {
+    #[derive(Default)]
+    struct State;
+
+    let mut inspector_h = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+        |_| inspector_panel("Inspector", vec![label("Item").boxed()]).boxed(),
+        PreviewConfig {
+            width: 160,
+            height: 480,
+            ..PreviewConfig::default()
+        },
+    );
+    inspector_h.settle_animations();
+    let inspector_tree = dump_layout_tree(&mut inspector_h);
+    let inspector_box = find_first_node(&inspector_tree, "ConstrainedBox")
+        .expect("inspector ConstrainedBox missing");
+    assert!(
+        inspector_box.rect.width <= 160.5,
+        "inspector_panel overflowed 160px container: {:?}",
+        inspector_box.rect
+    );
+    assert_all_descendants_within(inspector_box, 160.0, "inspector_panel@160");
+
+    let mut drawer_narrow = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            navigation_drawer(
+                Some("Nav"),
+                &[NavDestination::new("Home", icons::HOME)],
+                0,
+                |_, _| {},
+            )
+            .boxed()
+        },
+        PreviewConfig {
+            width: 160,
+            height: 480,
+            ..PreviewConfig::default()
+        },
+    );
+    drawer_narrow.settle_animations();
+    let drawer_narrow_tree = dump_layout_tree(&mut drawer_narrow);
+    let drawer_narrow_box = find_first_node(&drawer_narrow_tree, "ConstrainedBox")
+        .expect("drawer ConstrainedBox missing at 160px");
+    assert!(
+        drawer_narrow_box.rect.width <= 160.5,
+        "navigation_drawer overflowed 160px container: {:?}",
+        drawer_narrow_box.rect
+    );
+    assert_all_descendants_within(drawer_narrow_box, 160.0, "navigation_drawer@160");
+
+    let mut drawer_desktop = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            let drawer = navigation_drawer(
+                Some("Nav"),
+                &[NavDestination::new("Home", icons::HOME)],
+                0,
+                |_, _| {},
+            );
+            flex_row((drawer, label("Main").flex(1.0)))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .boxed()
+        },
+        PreviewConfig {
+            width: 800,
+            height: 480,
+            ..PreviewConfig::default()
+        },
+    );
+    drawer_desktop.settle_animations();
+    let drawer_desktop_tree = dump_layout_tree(&mut drawer_desktop);
+    let drawer_desktop_box = find_first_node(&drawer_desktop_tree, "ConstrainedBox")
+        .expect("drawer ConstrainedBox missing at 800px");
+    assert!(
+        drawer_desktop_box.rect.width >= 240.0,
+        "navigation_drawer failed to expand to desktop width at 800px: {:?}",
+        drawer_desktop_box.rect
+    );
 }

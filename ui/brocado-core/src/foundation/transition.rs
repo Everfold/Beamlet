@@ -157,7 +157,7 @@ impl SlideTransition {
         }
         avail.map_or(pref, |a| {
             let av = a.get().max(0.0);
-            let margin = viewport_margin.unwrap_or_else(|| if av <= 200.0 { 12.0 } else { 24.0 });
+            let margin = viewport_margin.unwrap_or(if av <= 200.0 { 12.0 } else { 24.0 });
             let cap = (av - margin).max(0.0);
             Some(pref.map_or(cap, |p| p.min(cap)))
         })

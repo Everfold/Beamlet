@@ -153,7 +153,7 @@ const fn calendar_leading_blank_days(year: i32, month: u8, first_day_of_week: u8
     (sun_wd + 7 - start) % 7
 }
 
-fn localized_month_label<'a>(months: &'a [ArcStr; 12], month: u8) -> &'a str {
+fn localized_month_label(months: &[ArcStr; 12], month: u8) -> &str {
     months
         .get(month.saturating_sub(1) as usize)
         .map_or("", ArcStr::as_ref)
@@ -547,5 +547,16 @@ mod tests {
         assert_eq!(t.add_hours(2), TimeOfDay::new(1, 55));
         assert_eq!(t.add_hours(-25), TimeOfDay::new(22, 55));
         assert_eq!(t.add_minutes(10), TimeOfDay::new(23, 5));
+    }
+
+    #[test]
+    fn calendar_leading_blank_days_respects_first_day_of_week() {
+        // 2024-01-01 was Monday (weekday_sunday_zero == 1)
+        assert_eq!(calendar_leading_blank_days(2024, 1, 0), 1);
+        assert_eq!(calendar_leading_blank_days(2024, 1, 1), 0);
+
+        // 2024-09-01 was Sunday (weekday_sunday_zero == 0)
+        assert_eq!(calendar_leading_blank_days(2024, 9, 0), 0);
+        assert_eq!(calendar_leading_blank_days(2024, 9, 1), 6);
     }
 }
