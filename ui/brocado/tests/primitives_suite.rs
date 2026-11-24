@@ -2017,3 +2017,176 @@ fn fluent_collapsed_navigation_view_aligns_toggle_and_items() {
         );
     }
 }
+
+#[test]
+fn toast_action_and_close_buttons_render_focus_and_hover_feedback() {
+    #[derive(Clone)]
+    struct ToastFxState {
+        toasts: ToastHostState,
+    }
+
+    let mut initial_toasts = ToastHostState::new();
+    initial_toasts.show("Saved draft", Some("Undo"), ToastDuration::Indefinite, true);
+
+    let mut h = build_ui_harness(
+        ToastFxState {
+            toasts: initial_toasts,
+        },
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |s| {
+            let tst = toast_host(&s.toasts, |st: &mut ToastFxState| {
+                let _ = st.toasts.dismiss_current();
+            })
+            .on_action(|st: &mut ToastFxState| {
+                let _ = st.toasts.dismiss_current();
+            });
+            zstack((tst.alignment(UnitPoint::BOTTOM),)).boxed()
+        },
+        PreviewConfig {
+            width: 420,
+            height: 160,
+            ..PreviewConfig::default()
+        },
+    );
+    h.settle_animations();
+
+    let focus_frames = h.find_widget_ids("FocusFrame");
+    assert_eq!(
+        focus_frames.len(),
+        2,
+        "toast action and close buttons must each be wrapped in FocusFrame"
+    );
+    let btn_ids = h.find_widget_ids("Button");
+    assert_eq!(btn_ids.len(), 2);
+
+    let rest_img = h.render_image();
+
+    h.inner_harness_mut().focus_on(Some(btn_ids[0]));
+    let focus_action_img = h.render_image();
+    assert_ne!(
+        rest_img.as_raw(),
+        focus_action_img.as_raw(),
+        "focusing toast action button must render visible focus ring"
+    );
+
+    h.inner_harness_mut().focus_on(Some(btn_ids[1]));
+    let focus_close_img = h.render_image();
+    assert_ne!(
+        rest_img.as_raw(),
+        focus_close_img.as_raw(),
+        "focusing toast close button must render visible focus ring"
+    );
+    assert_ne!(
+        focus_action_img.as_raw(),
+        focus_close_img.as_raw(),
+        "focus ring should move from action button to close button"
+    );
+
+    h.inner_harness_mut().focus_on(None);
+    let tree = dump_layout_tree(&mut h);
+    fn collect_buttons<'a>(node: &'a LayoutNode, out: &mut Vec<&'a LayoutNode>) {
+        if node.type_name == "Button" {
+            out.push(node);
+        }
+        for c in &node.children {
+            collect_buttons(c, out);
+        }
+    }
+    let mut tree_buttons = Vec::new();
+    collect_buttons(&tree, &mut tree_buttons);
+    let close_rect = tree_buttons[1].rect;
+    h.inner_harness_mut().mouse_move(Point::new(
+        close_rect.x + close_rect.width * 0.5,
+        close_rect.y + close_rect.height * 0.5,
+    ));
+    let hover_close_img = h.render_image();
+    assert_ne!(
+        rest_img.as_raw(),
+        hover_close_img.as_raw(),
+        "hovering toast close button on inverse_surface must produce visible hover tint"
+    );
+}
+
+#[test]
+fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
+    #[derive(Clone)]
+    struct ToastMotionState {
+        theme: UiTheme,
+        toasts: ToastHostState,
+    }
+
+    fn run_dismiss_sequence(reduced_motion: bool) {
+        let mut toasts = ToastHostState::new();
+        toasts.show(
+            "ToastMotion",
+            Option::<&str>::None,
+            ToastDuration::Indefinite,
+            false,
+        );
+        let state = ToastMotionState {
+            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light)
+                .with_reduced_motion(reduced_motion),
+            toasts,
+        };
+        let mut h = build_ui_harness(
+            state,
+            |s| s.theme.clone(),
+            |s| {
+                let dismiss_btn = primary_button("DismissNow", |st: &mut ToastMotionState| {
+                    let _ = st.toasts.dismiss_current();
+                });
+                let tst = toast_host(&s.toasts, |st: &mut ToastMotionState| {
+                    let _ = st.toasts.dismiss_current();
+                });
+                zstack((
+                    dismiss_btn.alignment(UnitPoint::TOP),
+                    tst.alignment(UnitPoint::BOTTOM),
+                ))
+                .boxed()
+            },
+            PreviewConfig {
+                width: 360,
+                height: 200,
+                ..PreviewConfig::default()
+            },
+        );
+        h.settle_animations();
+        let before_tree = dump_layout_tree(&mut h);
+        let settled_rect = find_node_by_text(&before_tree, "ToastMotion")
+            .expect("toast must be visible before dismissal")
+            .rect;
+
+        h.run_step(&PreviewStep::ClickLabel("DismissNow".to_owned()))
+            .unwrap();
+
+        if reduced_motion {
+            let immediate_tree = dump_layout_tree(&mut h);
+            assert!(
+                find_node_by_text(&immediate_tree, "ToastMotion").is_none(),
+                "reduced_motion toast must unmount immediately on dismissal"
+            );
+        } else {
+            h.run_step(&PreviewStep::AnimateMs(40)).unwrap();
+            let mid_tree = dump_layout_tree(&mut h);
+            let exiting_rect = find_node_by_text(&mid_tree, "ToastMotion")
+                .expect("toast should still be fading out 40ms into exit animation")
+                .rect;
+            assert!(
+                exiting_rect.y > settled_rect.y + 0.5,
+                "toast exit transition should slide downward slightly while fading: settled={}, mid={}",
+                settled_rect.y,
+                exiting_rect.y
+            );
+
+            h.settle_animations();
+            let done_tree = dump_layout_tree(&mut h);
+            assert!(
+                find_node_by_text(&done_tree, "ToastMotion").is_none(),
+                "toast should unmount after exit fade completes"
+            );
+        }
+    }
+
+    run_dismiss_sequence(false);
+    run_dismiss_sequence(true);
+}

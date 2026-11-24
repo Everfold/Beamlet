@@ -166,6 +166,25 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         btn_dims,
         None,
     );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_ACTION_BTN]),
+        PropertySet::new()
+            .with(Background::Color(Color::TRANSPARENT))
+            .with(CornerRadius {
+                radius: m.button_radius.px(),
+            })
+            .with(Padding::from_vh(0.px(), 10.px()))
+            .with(Dimensions::height(eff_btn_h.px()))
+            .with(BorderWidth { width: 0.px() }),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_ACTION_BTN]).with_hovered(true),
+        PropertySet::new().with(Background::Color(with_opacity(p.accent_container, 0.14))),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_ACTION_BTN]).with_active(true),
+        PropertySet::new().with(Background::Color(with_opacity(p.accent_container, 0.24))),
+    );
     insert_button_variant(
         &mut stack,
         classes::BTN_DESTRUCTIVE,
@@ -192,6 +211,25 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         icon_pad,
         icon_dims,
         None,
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_CLOSE_BTN]),
+        PropertySet::new()
+            .with(Background::Color(Color::TRANSPARENT))
+            .with(CornerRadius {
+                radius: m.icon_btn_radius.px(),
+            })
+            .with(icon_pad)
+            .with(Dimensions::fixed(eff_icon_sz.px(), eff_icon_sz.px()))
+            .with(BorderWidth { width: 0.px() }),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_CLOSE_BTN]).with_hovered(true),
+        PropertySet::new().with(Background::Color(with_opacity(p.inverse_on_surface, 0.12))),
+    );
+    stack.push_layer(
+        Selector::classes(&[classes::TOAST_CLOSE_BTN]).with_active(true),
+        PropertySet::new().with(Background::Color(with_opacity(p.inverse_on_surface, 0.22))),
     );
     insert_button_variant(
         &mut stack,

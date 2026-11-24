@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
-    AccessCtx, ArcStr, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, PaintCtx,
-    PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetPod,
+    AccessCtx, ArcStr, ChildrenIds, ComposeCtx, EventCtx, LayoutCtx, MeasureCtx, NewWidget,
+    PaintCtx, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget,
+    WidgetPod,
 };
-use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
+use masonry::imaging::{Composite, GroupRef, Painter};
+use masonry::kurbo::{Axis, Point, Size, Vec2};
 use masonry::layout::{AsUnit, Dim, LenReq, Length};
-use masonry::peniko::Color;
+use masonry::peniko::{self, Color};
 use masonry::properties::{CornerRadius, Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
@@ -25,9 +26,11 @@ use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, sized_box};
 
 use crate::components::typography::ui_label;
 use crate::foundation::overlay::empty_slot;
-use crate::foundation::{UiClassExt, adaptive_pair, clip_box, icons, ui_icon};
-use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, ElevationLevel, TypeRole};
+use crate::foundation::{UiClassExt, adaptive_pair, clip_box, focus_frame, icons, ui_icon};
+use crate::style_engine::{classes, current_spec_arc, with_spec};
+use crate::tokens::{
+    DesignSpec, ElevationLevel, InputFocusStyle, MotionDuration, MotionEasing, TypeRole,
+};
 
 /// Auto-dismiss duration presets for [`ToastData`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -151,18 +154,29 @@ pub fn toast<State: 'static, Action: 'static>(
                         .color(p.accent_container)
                         .line_breaking(LineBreaking::Clip),
                 );
-                button(action_lbl, move |s: &mut State| cb(s)).ui_class(classes::BTN_SUBTLE)
+                focus_frame(
+                    button(action_lbl, move |s: &mut State| cb(s))
+                        .ui_class(classes::TOAST_ACTION_BTN),
+                )
+                .style(InputFocusStyle::Outline2px)
+                .accent(p.accent_container)
+                .radius(spec.metrics.button_radius)
             });
         let close_btn = if data.with_close
             && let Some(cb) = &on_dismiss
         {
             let cb = cb.clone();
             Some(
-                button(
-                    ui_icon(icons::CLOSE, 16.0, p.inverse_on_surface),
-                    move |s| cb(s),
+                focus_frame(
+                    button(
+                        ui_icon(icons::CLOSE, 16.0, p.inverse_on_surface),
+                        move |s| cb(s),
+                    )
+                    .ui_class(classes::TOAST_CLOSE_BTN),
                 )
-                .ui_class(classes::ICON_BTN_STD),
+                .style(InputFocusStyle::Outline2px)
+                .accent(p.inverse_on_surface)
+                .radius(spec.metrics.icon_btn_radius),
             )
         } else {
             None
@@ -197,16 +211,46 @@ pub fn toast<State: 'static, Action: 'static>(
 #[derive(Debug)]
 pub struct ToastExpired;
 
-const TOAST_CHILD_ID: ViewId = ViewId::new(0x5549_3450);
+#[derive(Debug)]
+pub enum ToastHostAction {
+    Expired,
+    ExitFinished,
+}
 
-/// Internal Masonry widget timing auto-dismissal for [`toast_host`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ToastPhase {
+    Idle,
+    Entering,
+    Visible,
+    Exiting { auto_dismiss: bool },
+}
+
+const TOAST_CHILD_ID: ViewId = ViewId::new(0x5549_3450);
+const TOAST_ENTER_OFFSET_Y: f64 = 12.0;
+const TOAST_EXIT_OFFSET_Y: f64 = 8.0;
+
+fn toast_motion_durations_ns(spec: &DesignSpec) -> (u64, u64) {
+    if spec.reduced_motion {
+        (0, 0)
+    } else {
+        (
+            MotionDuration::Short3.as_millis().saturating_mul(1_000_000),
+            MotionDuration::Short2.as_millis().saturating_mul(1_000_000),
+        )
+    }
+}
+
+/// Internal Masonry widget managing toast fade-in, auto-dismiss timing, and fade-out for [`toast_host`].
 #[expect(missing_debug_implementations, reason = "Holds erased child WidgetPod")]
 pub struct ToastTimerHost {
     child: WidgetPod<dyn Widget>,
     active_id: Option<u64>,
     duration_ns: Option<u64>,
-    elapsed_ns: u64,
-    fired: bool,
+    enter_duration_ns: u64,
+    exit_duration_ns: u64,
+    phase: ToastPhase,
+    phase_elapsed_ns: u64,
+    stay_elapsed_ns: u64,
 }
 
 impl ToastTimerHost {
@@ -214,29 +258,91 @@ impl ToastTimerHost {
         child: NewWidget<impl Widget + ?Sized>,
         active_id: Option<u64>,
         duration_ns: Option<u64>,
+        enter_duration_ns: u64,
+        exit_duration_ns: u64,
     ) -> Self {
+        let phase = match active_id {
+            Some(_) if enter_duration_ns > 0 => ToastPhase::Entering,
+            Some(_) => ToastPhase::Visible,
+            None => ToastPhase::Idle,
+        };
         Self {
             child: child.erased().to_pod(),
             active_id,
             duration_ns,
-            elapsed_ns: 0,
-            fired: false,
+            enter_duration_ns,
+            exit_duration_ns,
+            phase,
+            phase_elapsed_ns: 0,
+            stay_elapsed_ns: 0,
         }
+    }
+
+    fn current_alpha(&self) -> f32 {
+        match self.phase {
+            ToastPhase::Idle | ToastPhase::Visible => 1.0,
+            ToastPhase::Entering => {
+                if self.enter_duration_ns == 0 {
+                    1.0
+                } else {
+                    let raw = (self.phase_elapsed_ns as f64 / self.enter_duration_ns as f64)
+                        .clamp(0.0, 1.0);
+                    (MotionEasing::EmphasizedDecelerate.sample(raw) as f32).clamp(0.0, 1.0)
+                }
+            }
+            ToastPhase::Exiting { .. } => {
+                if self.exit_duration_ns == 0 {
+                    0.0
+                } else {
+                    let raw = (self.phase_elapsed_ns as f64 / self.exit_duration_ns as f64)
+                        .clamp(0.0, 1.0);
+                    (1.0 - MotionEasing::EmphasizedAccelerate.sample(raw) as f32).clamp(0.0, 1.0)
+                }
+            }
+        }
+    }
+
+    fn current_offset_y(&self) -> f64 {
+        match self.phase {
+            ToastPhase::Idle | ToastPhase::Visible => 0.0,
+            ToastPhase::Entering => {
+                if self.enter_duration_ns == 0 {
+                    0.0
+                } else {
+                    let raw = (self.phase_elapsed_ns as f64 / self.enter_duration_ns as f64)
+                        .clamp(0.0, 1.0);
+                    TOAST_ENTER_OFFSET_Y * (1.0 - MotionEasing::EmphasizedDecelerate.sample(raw))
+                }
+            }
+            ToastPhase::Exiting { .. } => {
+                if self.exit_duration_ns == 0 {
+                    TOAST_EXIT_OFFSET_Y
+                } else {
+                    let raw = (self.phase_elapsed_ns as f64 / self.exit_duration_ns as f64)
+                        .clamp(0.0, 1.0);
+                    TOAST_EXIT_OFFSET_Y * MotionEasing::EmphasizedAccelerate.sample(raw)
+                }
+            }
+        }
+    }
+
+    fn needs_anim(&self) -> bool {
+        matches!(
+            self.phase,
+            ToastPhase::Entering | ToastPhase::Exiting { .. }
+        ) || (self.phase == ToastPhase::Visible && self.duration_ns.is_some())
     }
 }
 
 impl Widget for ToastTimerHost {
-    type Action = ToastExpired;
+    type Action = ToastHostAction;
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
-        if matches!(event, Update::WidgetAdded)
-            && self.active_id.is_some()
-            && self.duration_ns.is_some()
-        {
+        if matches!(event, Update::WidgetAdded) && self.needs_anim() {
             ctx.request_anim_frame();
         }
     }
@@ -247,16 +353,59 @@ impl Widget for ToastTimerHost {
         _props: &mut PropertiesMut<'_>,
         interval: u64,
     ) {
-        if self.active_id.is_some()
-            && let Some(limit) = self.duration_ns
-            && !self.fired
-        {
-            self.elapsed_ns += interval;
-            if self.elapsed_ns >= limit {
-                self.fired = true;
-                ctx.submit_action::<ToastExpired>(ToastExpired);
-            } else {
-                ctx.request_anim_frame();
+        match self.phase {
+            ToastPhase::Idle => {}
+            ToastPhase::Entering => {
+                self.phase_elapsed_ns = self.phase_elapsed_ns.saturating_add(interval);
+                ctx.request_compose();
+                ctx.request_paint_only();
+                ctx.request_post_paint();
+                if self.phase_elapsed_ns >= self.enter_duration_ns {
+                    self.phase = ToastPhase::Visible;
+                    self.phase_elapsed_ns = 0;
+                    if self.duration_ns.is_some() {
+                        ctx.request_anim_frame();
+                    }
+                } else {
+                    ctx.request_anim_frame();
+                }
+            }
+            ToastPhase::Visible => {
+                if let Some(limit) = self.duration_ns {
+                    self.stay_elapsed_ns = self.stay_elapsed_ns.saturating_add(interval);
+                    if self.stay_elapsed_ns >= limit {
+                        if self.exit_duration_ns > 0 {
+                            self.phase = ToastPhase::Exiting { auto_dismiss: true };
+                            self.phase_elapsed_ns = 0;
+                            ctx.request_compose();
+                            ctx.request_paint_only();
+                            ctx.request_post_paint();
+                            ctx.request_anim_frame();
+                        } else {
+                            self.phase = ToastPhase::Idle;
+                            ctx.submit_action::<ToastHostAction>(ToastHostAction::Expired);
+                        }
+                    } else {
+                        ctx.request_anim_frame();
+                    }
+                }
+            }
+            ToastPhase::Exiting { auto_dismiss } => {
+                self.phase_elapsed_ns = self.phase_elapsed_ns.saturating_add(interval);
+                ctx.request_compose();
+                ctx.request_paint_only();
+                ctx.request_post_paint();
+                if self.phase_elapsed_ns >= self.exit_duration_ns {
+                    self.phase = ToastPhase::Idle;
+                    self.phase_elapsed_ns = 0;
+                    ctx.submit_action::<ToastHostAction>(if auto_dismiss {
+                        ToastHostAction::Expired
+                    } else {
+                        ToastHostAction::ExitFinished
+                    });
+                } else {
+                    ctx.request_anim_frame();
+                }
             }
         }
     }
@@ -285,12 +434,34 @@ impl Widget for ToastTimerHost {
         ctx.place_child(&mut self.child, Point::ORIGIN);
     }
 
+    fn compose(&mut self, ctx: &mut ComposeCtx<'_>) {
+        let dy = self.current_offset_y();
+        ctx.set_animated_child_scroll_translation(&mut self.child, Vec2::new(0.0, dy));
+    }
+
     fn paint(
         &mut self,
         _ctx: &mut PaintCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _painter: &mut Painter<'_>,
+        painter: &mut Painter<'_>,
     ) {
+        let alpha = self.current_alpha();
+        if alpha < 0.999 {
+            painter.push_group(
+                GroupRef::new().with_composite(Composite::new(peniko::BlendMode::default(), alpha)),
+            );
+        }
+    }
+
+    fn post_paint(
+        &mut self,
+        _ctx: &mut PaintCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        painter: &mut Painter<'_>,
+    ) {
+        if self.current_alpha() < 0.999 {
+            painter.pop_group();
+        }
     }
 
     fn accessibility_role(&self) -> Role {
@@ -310,6 +481,17 @@ impl Widget for ToastTimerHost {
     }
 }
 
+#[doc(hidden)]
+#[expect(
+    missing_debug_implementations,
+    reason = "Holds boxed child View and ViewState"
+)]
+pub struct UiToastHostViewState<State: 'static, Action: 'static> {
+    exiting_toast: Option<ToastData>,
+    child_view: Box<AnyWidgetView<State, Action>>,
+    child_state: <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
+}
+
 /// View created by [`toast_host`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
@@ -321,9 +503,11 @@ pub struct UiToastHost<State: 'static, Action: 'static> {
 }
 
 impl<State: 'static, Action: 'static> UiToastHost<State, Action> {
-    fn child_view(&self) -> Box<AnyWidgetView<State, Action>> {
+    fn child_view(&self, exiting_toast: Option<&ToastData>) -> Box<AnyWidgetView<State, Action>> {
         if let Some(data) = &self.current {
             toast(data, self.on_action.clone(), Some(self.on_dismiss.clone())).boxed()
+        } else if let Some(exiting) = exiting_toast {
+            toast(exiting, None, None).boxed()
         } else {
             empty_slot().boxed()
         }
@@ -334,13 +518,12 @@ impl<State: 'static, Action: 'static> ViewMarker for UiToastHost<State, Action> 
 
 impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHost<State, Action> {
     type Element = Pod<ToastTimerHost>;
-    type ViewState = (
-        Box<AnyWidgetView<State, Action>>,
-        <Box<AnyWidgetView<State, Action>> as View<State, Action, ViewCtx>>::ViewState,
-    );
+    type ViewState = UiToastHostViewState<State, Action>;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let view = self.child_view();
+        let spec = current_spec_arc(ctx);
+        let (enter_ns, exit_ns) = toast_motion_durations_ns(&spec);
+        let view = self.child_view(None);
         let (child_pod, child_state) =
             ctx.with_id(TOAST_CHILD_ID, |ctx| view.build(ctx, app_state));
         let active_id = self.current.as_ref().map(|d| d.id);
@@ -350,48 +533,121 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHo
                 child_pod.new_widget,
                 active_id,
                 duration_ns,
+                enter_ns,
+                exit_ns,
             ))
         });
-        (pod, (view, child_state))
+        (
+            pod,
+            UiToastHostViewState {
+                exiting_toast: None,
+                child_view: view,
+                child_state,
+            },
+        )
     }
 
     fn rebuild(
         &self,
-        _prev: &Self,
-        (prev_view, child_state): &mut Self::ViewState,
+        prev: &Self,
+        view_state: &mut Self::ViewState,
         ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
+        let spec = current_spec_arc(ctx);
+        let (enter_ns, exit_ns) = toast_motion_durations_ns(&spec);
+        element.widget.enter_duration_ns = enter_ns;
+        element.widget.exit_duration_ns = exit_ns;
+
         let next_id = self.current.as_ref().map(|d| d.id);
         let next_dur = self.current.as_ref().and_then(|d| d.duration.as_nanos());
-        if element.widget.active_id != next_id || element.widget.duration_ns != next_dur {
-            element.widget.active_id = next_id;
-            element.widget.duration_ns = next_dur;
-            element.widget.elapsed_ns = 0;
-            element.widget.fired = false;
-            if next_id.is_some() && next_dur.is_some() {
-                element.ctx.request_anim_frame();
+        let mut needs_anim = false;
+        let mut needs_visual_refresh = false;
+
+        if let Some(id) = next_id {
+            view_state.exiting_toast = None;
+            if element.widget.active_id != Some(id) || element.widget.duration_ns != next_dur {
+                let id_changed = element.widget.active_id != Some(id);
+                element.widget.active_id = Some(id);
+                element.widget.duration_ns = next_dur;
+                element.widget.stay_elapsed_ns = 0;
+                if id_changed {
+                    element.widget.phase_elapsed_ns = 0;
+                    element.widget.phase = if enter_ns > 0 {
+                        ToastPhase::Entering
+                    } else {
+                        ToastPhase::Visible
+                    };
+                    needs_visual_refresh = true;
+                }
+                needs_anim = element.widget.needs_anim();
+            }
+        } else if let Some(prev_data) = &prev.current
+            && exit_ns > 0
+            && !matches!(
+                element.widget.phase,
+                ToastPhase::Idle | ToastPhase::Exiting { .. }
+            )
+        {
+            view_state.exiting_toast = Some(prev_data.clone());
+            element.widget.active_id = None;
+            element.widget.duration_ns = None;
+            element.widget.phase = ToastPhase::Exiting {
+                auto_dismiss: false,
+            };
+            element.widget.phase_elapsed_ns = 0;
+            element.widget.stay_elapsed_ns = 0;
+            needs_visual_refresh = true;
+            needs_anim = true;
+        } else if view_state.exiting_toast.is_none() {
+            element.widget.active_id = None;
+            element.widget.duration_ns = None;
+            if element.widget.phase != ToastPhase::Idle {
+                element.widget.phase = ToastPhase::Idle;
+                element.widget.phase_elapsed_ns = 0;
+                element.widget.stay_elapsed_ns = 0;
+                needs_visual_refresh = true;
             }
         }
-        let next_view = self.child_view();
+
+        if needs_visual_refresh {
+            element.ctx.request_compose();
+            element.ctx.request_paint_only();
+            element.ctx.request_post_paint();
+        }
+        if needs_anim {
+            element.ctx.request_anim_frame();
+        }
+
+        let next_view = self.child_view(view_state.exiting_toast.as_ref());
         let mut child_dyn = element.ctx.get_mut(&mut element.widget.child);
         ctx.with_id(TOAST_CHILD_ID, |ctx| {
-            next_view.rebuild(prev_view, child_state, ctx, child_dyn.downcast(), app_state);
+            next_view.rebuild(
+                &view_state.child_view,
+                &mut view_state.child_state,
+                ctx,
+                child_dyn.downcast(),
+                app_state,
+            );
         });
-        *prev_view = next_view;
+        view_state.child_view = next_view;
     }
 
     fn teardown(
         &self,
-        (view, child_state): &mut Self::ViewState,
+        view_state: &mut Self::ViewState,
         ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
     ) {
         {
             let mut child_dyn = element.ctx.get_mut(&mut element.widget.child);
             ctx.with_id(TOAST_CHILD_ID, |ctx| {
-                view.teardown(child_state, ctx, child_dyn.downcast());
+                view_state.child_view.teardown(
+                    &mut view_state.child_state,
+                    ctx,
+                    child_dyn.downcast(),
+                );
             });
         }
         ctx.teardown_action_source(element);
@@ -399,7 +655,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHo
 
     fn message(
         &self,
-        (view, child_state): &mut Self::ViewState,
+        view_state: &mut Self::ViewState,
         message: &mut MessageCtx,
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
@@ -407,10 +663,24 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHo
         match message.take_first() {
             Some(TOAST_CHILD_ID) => {
                 let mut child_dyn = element.ctx.get_mut(&mut element.widget.child);
-                view.message(child_state, message, child_dyn.downcast(), app_state)
+                view_state.child_view.message(
+                    &mut view_state.child_state,
+                    message,
+                    child_dyn.downcast(),
+                    app_state,
+                )
             }
-            None => match message.take_message::<ToastExpired>() {
-                Some(_) => MessageResult::Action((self.on_dismiss)(app_state)),
+            None => match message.take_message::<ToastHostAction>() {
+                Some(action) => match *action {
+                    ToastHostAction::Expired => {
+                        view_state.exiting_toast = None;
+                        MessageResult::Action((self.on_dismiss)(app_state))
+                    }
+                    ToastHostAction::ExitFinished => {
+                        view_state.exiting_toast = None;
+                        MessageResult::RequestRebuild
+                    }
+                },
                 None => MessageResult::Stale,
             },
             Some(_) => MessageResult::Stale,
@@ -469,5 +739,54 @@ mod tests {
         q.dismiss_current();
         assert!(q.is_empty());
         assert!(q.current().is_none());
+    }
+
+    #[test]
+    fn toast_timer_host_progresses_fade_and_respects_reduced_motion() {
+        use crate::foundation::overlay::empty_slot;
+        use masonry::widgets::SizedBox;
+
+        let mut host = ToastTimerHost::new(
+            NewWidget::new(SizedBox::empty()),
+            Some(1),
+            Some(4_000_000_000),
+            150_000_000,
+            100_000_000,
+        );
+        assert_eq!(host.phase, ToastPhase::Entering);
+        assert_eq!(host.current_alpha(), 0.0);
+        assert!((host.current_offset_y() - TOAST_ENTER_OFFSET_Y).abs() < 1e-6);
+
+        host.phase_elapsed_ns = 75_000_000;
+        let mid_alpha = host.current_alpha();
+        assert!(mid_alpha > 0.1 && mid_alpha < 0.99);
+        assert!(host.current_offset_y() > 0.0 && host.current_offset_y() < TOAST_ENTER_OFFSET_Y);
+
+        host.phase = ToastPhase::Visible;
+        host.phase_elapsed_ns = 0;
+        assert_eq!(host.current_alpha(), 1.0);
+        assert_eq!(host.current_offset_y(), 0.0);
+
+        host.phase = ToastPhase::Exiting { auto_dismiss: true };
+        host.phase_elapsed_ns = 50_000_000;
+        let exit_alpha = host.current_alpha();
+        assert!(exit_alpha > 0.01 && exit_alpha < 0.99);
+        assert!(host.current_offset_y() > 0.0 && host.current_offset_y() < TOAST_EXIT_OFFSET_Y);
+
+        host.phase_elapsed_ns = 100_000_000;
+        assert_eq!(host.current_alpha(), 0.0);
+        assert!((host.current_offset_y() - TOAST_EXIT_OFFSET_Y).abs() < 1e-6);
+
+        let _ = empty_slot::<(), ()>;
+        let reduced = ToastTimerHost::new(
+            NewWidget::new(SizedBox::empty()),
+            Some(2),
+            Some(4_000_000_000),
+            0,
+            0,
+        );
+        assert_eq!(reduced.phase, ToastPhase::Visible);
+        assert_eq!(reduced.current_alpha(), 1.0);
+        assert_eq!(reduced.current_offset_y(), 0.0);
     }
 }

@@ -104,6 +104,10 @@ pub const MENU_ITEM: &str = "ui.menu_item";
 pub const MENU_ITEM_SELECTED: &str = "ui.menu_item.selected";
 /// Tab strip button item.
 pub const TAB_ITEM: &str = "ui.tab.item";
+/// Inverse-surface toast/snackbar trailing text action button.
+pub const TOAST_ACTION_BTN: &str = "ui.toast.action_btn";
+/// Inverse-surface toast/snackbar icon close button.
+pub const TOAST_CLOSE_BTN: &str = "ui.toast.close_btn";
 /// Top window header bar / toolbar surface.
 pub const HEADER_BAR: &str = "ui.header_bar";
 /// Bottom app bar / footer bar surface.
