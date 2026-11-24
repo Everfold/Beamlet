@@ -216,7 +216,9 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
             64.0,
             flex_row((
                 leading,
-                clip_box(title_large(title).line_breaking(LineBreaking::Clip)).flex(1.0),
+                clip_box(title_large(title).line_breaking(LineBreaking::Clip))
+                    .fill_available(true)
+                    .flex(1.0),
                 trail_row,
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -233,6 +235,7 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
                         .text_alignment(TextAlign::Center)
                         .line_breaking(LineBreaking::Clip),
                 )
+                .fill_available(true)
                 .flex(1.0),
                 trail_row,
             ))

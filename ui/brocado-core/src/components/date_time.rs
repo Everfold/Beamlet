@@ -10,7 +10,8 @@ use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, ZStackExt, button, flex_col, flex_row, label, portal, sized_box, zstack,
+    CrossAxisAlignment, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label, portal,
+    sized_box, zstack,
 };
 
 use crate::components::button::{primary_button, subtle_button};
@@ -212,11 +213,11 @@ where
             ["S", "M", "T", "W", "T", "F", "S"]
                 .into_iter()
                 .map(|w| {
-                    sized_box(
-                        ui_label(TypeRole::LabelSmall, w)
-                            .color(p.text_secondary)
-                            .line_breaking(LineBreaking::Clip),
-                    )
+                    sized_box(zstack((ui_label(TypeRole::LabelSmall, w)
+                        .line_height(masonry::parley::LineHeight::MetricsRelative(1.0))
+                        .color(p.text_secondary)
+                        .line_breaking(LineBreaking::Clip)
+                        .alignment(masonry::layout::UnitPoint::CENTER),)))
                     .dims(Dimensions::fixed(30.px(), 24.px()))
                 })
                 .collect::<Vec<_>>(),
@@ -309,6 +310,7 @@ where
             DialogActionOrder::PrimaryTrailing => vec![cancel_btn, ok_btn],
         };
         wrap(btns)
+            .main_axis_alignment(MainAxisAlignment::End)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px())
             .run_gap(8.px())

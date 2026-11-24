@@ -48,7 +48,7 @@ where
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(4.px())
                 }),
-                clip_box(center).flex(1.0),
+                clip_box(center).fill_available(true).flex(1.0),
                 (!trailing_actions.is_empty()).then(|| {
                     flex_row(trailing_actions)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -280,7 +280,8 @@ where
                 flex_row((ui_icon(chevron, 16.0, p.text_secondary), lbl.flex(1.0)))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(6.px()),
-            ),
+            )
+            .fill_available(true),
             move |s: &mut State| cb(s),
         )
         .ui_class(classes::BTN_SUBTLE)

@@ -87,14 +87,9 @@ impl<State, Action> UiSearchBar<State, Action> {
             None
         };
 
-        let reserve = f64::from(style.line_height).max(f64::from(style.font_size) * 1.6);
-        let pad_v = ((m.search_height - 2.0 - reserve) / 2.0).max(0.0);
-
         let inner = flex_row((
             ui_icon(icons::SEARCH, 18.0, p.text_secondary),
-            ti.ui_class(classes::TEXT_FIELD_FLUSH)
-                .padding(Padding::from_vh(pad_v.px(), 0.px()))
-                .flex(1.0),
+            ti.ui_class(classes::TEXT_FIELD_FLUSH).flex(1.0),
             clear_btn,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)

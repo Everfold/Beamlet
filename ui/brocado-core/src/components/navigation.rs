@@ -384,7 +384,8 @@ where
                         ))
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(10.px()),
-                    ),
+                    )
+                    .fill_available(true),
                     move |s: &mut State| cb(s, i),
                 )
                 .ui_class(cls)

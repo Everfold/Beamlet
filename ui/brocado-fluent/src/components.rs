@@ -23,6 +23,7 @@ use masonry::dpi::PhysicalPosition;
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{AsUnit, LenReq, Length};
+use masonry::parley::LineHeight;
 use masonry::parley::style::FontWeight;
 use masonry::peniko::Color;
 use masonry::properties::{Dimensions, LineBreaking, Padding};
@@ -606,6 +607,7 @@ pub fn info_badge<State: 'static, Action: 'static>(
                     clip_box(
                         ui_label(TypeRole::LabelSmall, txt.clone())
                             .weight(FontWeight::BOLD)
+                            .line_height(LineHeight::MetricsRelative(1.0))
                             .color(ink)
                             .line_breaking(LineBreaking::Clip),
                     )
@@ -614,7 +616,7 @@ pub fn info_badge<State: 'static, Action: 'static>(
                         masonry::layout::Dim::FitContent,
                         masonry::layout::Dim::FitContent,
                     ),
-                    Padding::from_vh(2.px(), 7.px()),
+                    Padding::from_vh(3.px(), 7.px()),
                 ),
                 None => (
                     label("").boxed(),

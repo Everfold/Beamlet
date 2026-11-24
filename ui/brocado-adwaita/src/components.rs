@@ -50,7 +50,7 @@ where
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(4.px())
                 }),
-                clip_box(title_view).flex(1.0),
+                clip_box(title_view).fill_available(true).flex(1.0),
                 (!end_actions.is_empty()).then(|| {
                     flex_row(end_actions)
                         .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -92,6 +92,7 @@ pub fn header_bar<State: 'static, Action: 'static>(
             )
         });
         clip_box(flex_col((t, sub)).cross_axis_alignment(CrossAxisAlignment::Center))
+            .fill_available(true)
     });
 
     header_bar_with_title(center_title, start_actions, end_actions)
@@ -375,6 +376,7 @@ where
             .collect();
 
         wrap(views)
+            .main_axis_alignment(MainAxisAlignment::Center)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
             .run_gap(4.px())

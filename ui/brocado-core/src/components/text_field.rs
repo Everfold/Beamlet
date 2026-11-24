@@ -11,6 +11,7 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef, UnitPoint};
+use masonry::parley::LineHeight;
 use masonry::properties::{Gap, LineBreaking, Padding};
 use masonry::widgets;
 use masonry::widgets::InsertNewline;
@@ -188,11 +189,13 @@ impl<State, Action> UiTextField<State, Action> {
             let sub_ink = spec.content_color(p.text_secondary, self.disabled);
             let prefix = self.prefix_text.as_ref().map(|t| {
                 ui_label(TypeRole::BodyMedium, t.clone())
+                    .line_height(LineHeight::MetricsRelative(1.0))
                     .color(sub_ink)
                     .line_breaking(LineBreaking::Clip)
             });
             let suffix = self.suffix_text.as_ref().map(|t| {
                 ui_label(TypeRole::BodyMedium, t.clone())
+                    .line_height(LineHeight::MetricsRelative(1.0))
                     .color(sub_ink)
                     .line_breaking(LineBreaking::Clip)
             });

@@ -25,6 +25,7 @@ pub struct UiLabel<State, Action> {
     weight: Option<FontWeight>,
     text_alignment: TextAlign,
     line_breaking: Option<LineBreaking>,
+    line_height: Option<LineHeight>,
     phantom: PhantomData<fn(State) -> Action>,
 }
 
@@ -53,13 +54,22 @@ impl<State, Action> UiLabel<State, Action> {
         self
     }
 
-    fn resolved_style(&self, ctx: &ViewCtx) -> (TextStyleSpec, FontFamily<'static>) {
+    /// Overrides the line height derived from `role` (e.g., `LineHeight::MetricsRelative(1.0)` for compact badges/inputs).
+    pub fn line_height(mut self, line_height: LineHeight) -> Self {
+        self.line_height = Some(line_height);
+        self
+    }
+
+    fn resolved_style(&self, ctx: &ViewCtx) -> (TextStyleSpec, FontFamily<'static>, LineHeight) {
         let spec = current_spec_arc(ctx);
         let mut style = spec.typography.get(self.role);
         if let Some(w) = self.weight {
             style.weight = w;
         }
-        (style, spec.typography.resolved_font_family())
+        let lh = self
+            .line_height
+            .unwrap_or(LineHeight::Absolute(style.line_height));
+        (style, spec.typography.resolved_font_family(), lh)
     }
 }
 
@@ -70,19 +80,18 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<S
     type ViewState = (
         TextStyleSpec,
         FontFamily<'static>,
+        LineHeight,
         Option<Color>,
         Option<LineBreaking>,
     );
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let (style, font) = self.resolved_style(ctx);
+        let (style, font, lh) = self.resolved_style(ctx);
         let mut widget = widgets::Label::new(self.text.clone())
             .with_text_alignment(self.text_alignment)
             .with_style(StyleProperty::FontSize(style.font_size))
             .with_style(StyleProperty::FontWeight(style.weight))
-            .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
-                style.line_height,
-            )))
+            .with_style(StyleProperty::LineHeight(lh))
             .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
             .with_style(StyleProperty::FontFamily(font.clone()))
             .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
@@ -94,18 +103,18 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<S
         if let Some(lb) = self.line_breaking {
             pod.new_widget.properties.insert(lb);
         }
-        (pod, (style, font, self.color, self.line_breaking))
+        (pod, (style, font, lh, self.color, self.line_breaking))
     }
 
     fn rebuild(
         &self,
         prev: &Self,
-        (prev_style, prev_font, prev_color, prev_lb): &mut Self::ViewState,
+        (prev_style, prev_font, prev_lh, prev_color, prev_lb): &mut Self::ViewState,
         ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let (next_style, next_font) = self.resolved_style(ctx);
+        let (next_style, next_font, next_lh) = self.resolved_style(ctx);
         if prev.text != self.text {
             widgets::Label::set_text(&mut element, self.text.clone());
         }
@@ -124,11 +133,9 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<S
                 StyleProperty::FontWeight(next_style.weight),
             );
         }
-        if prev_style.line_height != next_style.line_height {
-            widgets::Label::insert_style(
-                &mut element,
-                StyleProperty::LineHeight(LineHeight::Absolute(next_style.line_height)),
-            );
+        if *prev_lh != next_lh {
+            widgets::Label::insert_style(&mut element, StyleProperty::LineHeight(next_lh));
+            *prev_lh = next_lh;
         }
         if prev_style.letter_spacing != next_style.letter_spacing {
             widgets::Label::insert_style(
@@ -195,6 +202,7 @@ pub fn ui_label<State: 'static, Action: 'static>(
         weight: None,
         text_alignment: TextAlign::Start,
         line_breaking: None,
+        line_height: None,
         phantom: PhantomData,
     }
 }

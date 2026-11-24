@@ -13,7 +13,7 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, flex_col};
+use xilem_masonry::view::{CrossAxisAlignment, MainAxisAlignment, flex_col};
 
 use crate::components::button::{destructive_button, primary_button, subtle_button};
 use crate::components::typography::ui_label;
@@ -245,6 +245,7 @@ impl<State, Action> BasicDialog<State, Action> {
             }
         };
         let actions = wrap(ordered_btns)
+            .main_axis_alignment(MainAxisAlignment::End)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px())
             .run_gap(8.px());
