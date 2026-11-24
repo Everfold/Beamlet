@@ -12,10 +12,10 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
 use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
-use masonry::parley::style::FontWeight;
+use masonry::parley::style::{FontWeight, OverflowWrap};
 use masonry::peniko::Color;
 use masonry::properties::types::CrossAxisAlignment;
-use masonry::properties::{Background, ContentColor, CornerRadius, Dimensions, Gap, Padding};
+use masonry::properties::{Background, ContentColor, CornerRadius, Gap, LineBreaking, Padding};
 use masonry::widgets::{Flex, Label, SizedBox};
 use tracing::{Span, trace_span};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
@@ -63,14 +63,19 @@ impl TooltipContentSpec {
                 let lbl = Label::new(sub.clone())
                     .with_style(StyleProperty::FontSize(14.0))
                     .with_style(StyleProperty::FontWeight(FontWeight::MEDIUM))
+                    .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                     .prepare()
-                    .with_props(ContentColor::new(self.subhead_color));
+                    .with_props((
+                        ContentColor::new(self.subhead_color),
+                        LineBreaking::WordWrap,
+                    ));
                 col = col.with_fixed(lbl);
             }
             let body_lbl = Label::new(self.body.clone())
                 .with_style(StyleProperty::FontSize(14.0))
+                .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                 .prepare()
-                .with_props(ContentColor::new(self.body_color));
+                .with_props((ContentColor::new(self.body_color), LineBreaking::WordWrap));
             col = col.with_fixed(body_lbl);
             SizedBox::new(col.prepare().with_props(Gap::new(4.px())))
                 .prepare()
@@ -81,17 +86,14 @@ impl TooltipContentSpec {
                     },
                     Padding::from_vh(12.px(), 16.px()),
                     ElevationLevel::Level2.box_shadow(self.shadow_color),
-                    Dimensions::new(
-                        masonry::layout::Dim::MaxContent,
-                        masonry::layout::Dim::MaxContent,
-                    ),
                 ))
                 .erased()
         } else {
             let body_lbl = Label::new(self.body.clone())
                 .with_style(StyleProperty::FontSize(12.0))
+                .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                 .prepare()
-                .with_props(ContentColor::new(self.body_color));
+                .with_props((ContentColor::new(self.body_color), LineBreaking::WordWrap));
             SizedBox::new(body_lbl)
                 .prepare()
                 .with_props((
@@ -182,23 +184,57 @@ impl Widget for TooltipLayer {
         if let (Some(w), Some(h)) = (cs.length(Axis::Horizontal), cs.length(Axis::Vertical)) {
             self.window_size = Size::new(w.get(), h.get());
         }
-        let auto_length = len_req.into();
-        let context_size = LayoutSize::maybe(axis.cross(), cross_length);
-        ctx.compute_length(
+        let vp_cap = match axis {
+            Axis::Horizontal => (self.window_size.width > 0.0)
+                .then(|| Length::px((self.window_size.width - 12.0).max(0.0))),
+            Axis::Vertical => (self.window_size.height > 0.0)
+                .then(|| Length::px((self.window_size.height - 12.0).max(0.0))),
+        };
+        let eff_cross = cross_length.or_else(|| match axis.cross() {
+            Axis::Horizontal if self.window_size.width > 0.0 => {
+                Some(Length::px((self.window_size.width - 12.0).max(0.0)))
+            }
+            Axis::Vertical if self.window_size.height > 0.0 => {
+                Some(Length::px((self.window_size.height - 12.0).max(0.0)))
+            }
+            _ => None,
+        });
+        let eff_req = match (len_req, vp_cap) {
+            (LenReq::FitContent(s), Some(cap)) => LenReq::FitContent(s.min(cap)),
+            (LenReq::MaxContent, Some(cap)) if axis == Axis::Horizontal => LenReq::FitContent(cap),
+            _ => len_req,
+        };
+        let measured = ctx.compute_length(
             &mut self.child,
-            auto_length,
-            context_size,
+            eff_req.into(),
+            LayoutSize::maybe(axis.cross(), eff_cross),
             axis,
-            cross_length,
-        )
+            eff_cross,
+        );
+        match vp_cap {
+            Some(cap) => measured.min(cap),
+            None => measured,
+        }
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        let child_size = ctx.compute_size(&mut self.child, SizeDef::fit(size), size.into());
-        ctx.run_layout(&mut self.child, child_size);
+        let vp_w = if self.window_size.width > 0.0 {
+            size.width.min((self.window_size.width - 12.0).max(0.0))
+        } else {
+            (size.width - 12.0).max(0.0)
+        };
+        let vp_h = if self.window_size.height > 0.0 {
+            size.height.min((self.window_size.height - 12.0).max(0.0))
+        } else {
+            (size.height - 12.0).max(0.0)
+        };
+        let bounded = Size::new(vp_w, vp_h);
+        let child_size = ctx.compute_size(&mut self.child, SizeDef::fit(bounded), bounded.into());
+        let clamped = Size::new(child_size.width.min(vp_w), child_size.height.min(vp_h));
+        ctx.run_layout(&mut self.child, clamped);
         ctx.place_child(&mut self.child, Point::ORIGIN);
         ctx.derive_baselines(&self.child);
-        self.layer_size = child_size;
+        self.layer_size = clamped;
     }
 
     fn paint(

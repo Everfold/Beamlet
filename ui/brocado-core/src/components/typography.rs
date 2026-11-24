@@ -3,15 +3,14 @@
 use std::marker::PhantomData;
 
 use masonry::core::{ArcStr, NewWidget, PropertySet, StyleProperty};
-use masonry::parley::LineHeight;
-use masonry::parley::style::FontFamily;
+use masonry::parley::style::{FontFamily, FontWeight, OverflowWrap};
+use masonry::parley::{Alignment as TextAlign, FontFamilyName, GenericFamily, LineHeight};
 use masonry::peniko::Color;
-use masonry::properties::ContentColor;
+use masonry::properties::{ContentColor, LineBreaking};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
-use xilem_masonry::view::{Label, label};
 
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{TextStyleSpec, TypeRole};
@@ -23,6 +22,9 @@ pub struct UiLabel<State, Action> {
     role: TypeRole,
     text: ArcStr,
     color: Option<Color>,
+    weight: Option<FontWeight>,
+    text_alignment: TextAlign,
+    line_breaking: Option<LineBreaking>,
     phantom: PhantomData<fn(State) -> Action>,
 }
 
@@ -33,10 +35,38 @@ impl<State, Action> UiLabel<State, Action> {
         self
     }
 
-    fn inner_view(&self, ctx: &ViewCtx) -> Label {
+    /// Overrides the font weight derived from `role`.
+    pub fn weight(mut self, weight: FontWeight) -> Self {
+        self.weight = Some(weight);
+        self
+    }
+
+    /// Sets horizontal paragraph alignment (`Start`, `Center`, `End`, `Justified`).
+    pub fn text_alignment(mut self, align: TextAlign) -> Self {
+        self.text_alignment = align;
+        self
+    }
+
+    /// Overrides line breaking behavior (defaults to ambient `LineBreaking::WordWrap`).
+    pub fn line_breaking(mut self, mode: LineBreaking) -> Self {
+        self.line_breaking = Some(mode);
+        self
+    }
+
+    fn resolved_style(&self, ctx: &ViewCtx) -> (TextStyleSpec, FontFamily<'static>) {
         let spec = current_spec_arc(ctx);
-        spec.typography
-            .style_label(self.role, label(self.text.clone()))
+        let mut style = spec.typography.get(self.role);
+        if let Some(w) = self.weight {
+            style.weight = w;
+        }
+        let font = spec
+            .typography
+            .font_family()
+            .cloned()
+            .unwrap_or(FontFamily::Single(FontFamilyName::Generic(
+                GenericFamily::SystemUi,
+            )));
+        (style, font)
     }
 }
 
@@ -44,61 +74,119 @@ impl<State: 'static, Action: 'static> ViewMarker for UiLabel<State, Action> {}
 
 impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<State, Action> {
     type Element = Pod<widgets::Label>;
-    type ViewState = (Label, Option<Color>);
+    type ViewState = (
+        TextStyleSpec,
+        FontFamily<'static>,
+        Option<Color>,
+        Option<LineBreaking>,
+    );
 
-    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let inner = self.inner_view(ctx);
-        let (mut pod, ()) = View::<State, Action, ViewCtx>::build(&inner, ctx, app_state);
+    fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let (style, font) = self.resolved_style(ctx);
+        let mut widget = widgets::Label::new(self.text.clone())
+            .with_text_alignment(self.text_alignment)
+            .with_style(StyleProperty::FontSize(style.font_size))
+            .with_style(StyleProperty::FontWeight(style.weight))
+            .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
+                style.line_height,
+            )))
+            .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
+            .with_style(StyleProperty::FontFamily(font.clone()))
+            .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
+        let _ = &mut widget;
+        let mut pod = ctx.create_pod(widget);
         if let Some(c) = self.color {
             pod.new_widget.properties.insert(ContentColor::new(c));
         }
-        (pod, (inner, self.color))
+        if let Some(lb) = self.line_breaking {
+            pod.new_widget.properties.insert(lb);
+        }
+        (pod, (style, font, self.color, self.line_breaking))
     }
 
     fn rebuild(
         &self,
-        _prev: &Self,
-        (prev_inner, prev_color): &mut Self::ViewState,
+        prev: &Self,
+        (prev_style, prev_font, prev_color, prev_lb): &mut Self::ViewState,
         ctx: &mut ViewCtx,
         mut element: Mut<'_, Self::Element>,
-        app_state: &mut State,
+        _app_state: &mut State,
     ) {
-        let next_inner = self.inner_view(ctx);
-        View::<State, Action, ViewCtx>::rebuild(
-            &next_inner,
-            prev_inner,
-            &mut (),
-            ctx,
-            element.reborrow_mut(),
-            app_state,
-        );
+        let (next_style, next_font) = self.resolved_style(ctx);
+        if prev.text != self.text {
+            widgets::Label::set_text(&mut element, self.text.clone());
+        }
+        if prev.text_alignment != self.text_alignment {
+            widgets::Label::set_text_alignment(&mut element, self.text_alignment);
+        }
+        if prev_style.font_size != next_style.font_size {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::FontSize(next_style.font_size),
+            );
+        }
+        if prev_style.weight != next_style.weight {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::FontWeight(next_style.weight),
+            );
+        }
+        if prev_style.line_height != next_style.line_height {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::LineHeight(LineHeight::Absolute(next_style.line_height)),
+            );
+        }
+        if prev_style.letter_spacing != next_style.letter_spacing {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::LetterSpacing(next_style.letter_spacing),
+            );
+        }
+        if *prev_font != next_font {
+            widgets::Label::insert_style(
+                &mut element,
+                StyleProperty::FontFamily(next_font.clone()),
+            );
+            *prev_font = next_font;
+        }
         if *prev_color != self.color {
             ctx.mark_prop_changed::<ContentColor>(element.id());
             if let Some(c) = self.color {
                 element.insert_prop(ContentColor::new(c));
+            } else {
+                element.remove_prop::<ContentColor>();
             }
             *prev_color = self.color;
         }
-        *prev_inner = next_inner;
+        if *prev_lb != self.line_breaking {
+            ctx.mark_prop_changed::<LineBreaking>(element.id());
+            if let Some(lb) = self.line_breaking {
+                element.insert_prop(lb);
+            } else {
+                element.remove_prop::<LineBreaking>();
+            }
+            *prev_lb = self.line_breaking;
+        }
+        *prev_style = next_style;
     }
 
     fn teardown(
         &self,
-        (prev_inner, _): &mut Self::ViewState,
-        ctx: &mut ViewCtx,
-        element: Mut<'_, Self::Element>,
+        _view_state: &mut Self::ViewState,
+        _ctx: &mut ViewCtx,
+        _element: Mut<'_, Self::Element>,
     ) {
-        View::<State, Action, ViewCtx>::teardown(prev_inner, &mut (), ctx, element);
     }
 
     fn message(
         &self,
-        (prev_inner, _): &mut Self::ViewState,
-        message: &mut MessageCtx,
-        element: Mut<'_, Self::Element>,
-        app_state: &mut State,
+        _view_state: &mut Self::ViewState,
+        _message: &mut MessageCtx,
+        _element: Mut<'_, Self::Element>,
+        _app_state: &mut State,
     ) -> MessageResult<Action> {
-        View::<State, Action, ViewCtx>::message(prev_inner, &mut (), message, element, app_state)
+        MessageResult::Stale
     }
 }
 
@@ -111,6 +199,9 @@ pub fn ui_label<State: 'static, Action: 'static>(
         role,
         text: text.into(),
         color: None,
+        weight: None,
+        text_alignment: TextAlign::Start,
+        line_breaking: None,
         phantom: PhantomData,
     }
 }

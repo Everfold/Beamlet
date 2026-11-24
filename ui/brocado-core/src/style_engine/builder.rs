@@ -10,8 +10,8 @@ use masonry::layout::{AsUnit, Dim, Length};
 use masonry::peniko::Color;
 use masonry::properties::{
     Background, BorderColor, BorderWidth, BoxShadow, CaretColor, CheckmarkColor,
-    CheckmarkStrokeWidth, ContentColor, CornerRadius, Dimensions, Gap, Padding, PlaceholderColor,
-    SelectionColor, ThumbColor, ThumbRadius, TrackColor, TrackThickness,
+    CheckmarkStrokeWidth, ContentColor, CornerRadius, Dimensions, Gap, LineBreaking, Padding,
+    PlaceholderColor, SelectionColor, ThumbColor, ThumbRadius, TrackColor, TrackThickness,
 };
 use masonry::widgets::{
     Button, Checkbox, Divider, Flex, Label, ProgressBar, Prose, RadioButton, SizedBox, Slider,
@@ -648,6 +648,7 @@ fn configure_inputs(props: &mut DefaultProperties, spec: &DesignSpec) {
     let m = &spec.metrics;
 
     props.insert::<Label, _>(ContentColor::new(p.text_primary));
+    props.insert::<Label, _>(LineBreaking::WordWrap);
     props.insert::<Prose, _>(ContentColor::new(p.text_primary));
     props.insert::<TextArea<true>, _>(CaretColor { color: p.accent });
     props.insert::<TextArea<true>, _>(SelectionColor {

@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use masonry::core::{CollectionWidget, NewWidget};
-use masonry::kurbo::Vec2;
-use masonry::layout::UnitPoint;
+use masonry::core::{CollectionWidget, NewWidget, Widget};
+use masonry::kurbo::{Axis, Vec2};
+use masonry::layout::{Dim, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use masonry::widgets::{self, Passthrough, ZStack};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewPathTracker as _};
@@ -61,7 +61,39 @@ fn with_zstack_parts<R>(
     f(zstack_dyn.downcast::<ZStack>())
 }
 
-/// Builds an [`EscapeCatcher`] -> `ZStack(scrim, SlideTransition(SizedBox(content)))` modal shell.
+struct ModalLimits {
+    card_dims: Dimensions,
+    clamp_axes: (bool, bool),
+    preferred_max: (Option<f64>, Option<f64>),
+}
+
+fn resolve_modal_limits(dims: Dimensions, alignment: UnitPoint) -> ModalLimits {
+    let clamp_axes = (
+        alignment != UnitPoint::BOTTOM,
+        alignment != UnitPoint::RIGHT && alignment != UnitPoint::LEFT,
+    );
+    let mut card_dims = dims;
+    let mut preferred_max = (None, None);
+    if clamp_axes.0
+        && let Dim::Fixed(w) = dims.dim(Axis::Horizontal)
+    {
+        preferred_max.0 = Some(w.get());
+        card_dims = card_dims.with_width(Dim::Stretch);
+    }
+    if clamp_axes.1
+        && let Dim::Fixed(h) = dims.dim(Axis::Vertical)
+    {
+        preferred_max.1 = Some(h.get());
+        card_dims = card_dims.with_height(Dim::Stretch);
+    }
+    ModalLimits {
+        card_dims,
+        clamp_axes,
+        preferred_max,
+    }
+}
+
+/// Builds an [`EscapeCatcher`] -> `ZStack(scrim, SlideTransition(SizedBox(Portal(content))))` modal shell.
 pub fn modal_shell_build<State, Action, V>(
     ctx: &mut ViewCtx,
     app_state: &mut State,
@@ -84,9 +116,13 @@ where
         ctx.with_id(MODAL_CONTENT_ID, |ctx| content.build(ctx, app_state))
     });
 
-    let mut card = NewWidget::new(widgets::SizedBox::new(content_el.new_widget.erased()));
+    let limits = resolve_modal_limits(config.dims, config.alignment);
+    let portal = NewWidget::new(
+        widgets::Portal::new(content_el.new_widget.erased()).constrain_horizontal(true),
+    );
+    let mut card = NewWidget::new(widgets::SizedBox::new(portal.erased()));
     card.classes.insert(config.class.to_string());
-    card.properties.insert(config.dims);
+    card.properties.insert(limits.card_dims);
     card.properties.insert(config.padding);
 
     let reduced_motion = current_spec_arc(ctx).reduced_motion;
@@ -95,16 +131,13 @@ where
     } else {
         (config.enter_offset, config.duration.as_millis())
     };
-    let clamp_axes = (
-        config.alignment != UnitPoint::BOTTOM,
-        config.alignment != UnitPoint::RIGHT,
-    );
-    let slide = NewWidget::new(SlideTransition::new_with_clamp(
+    let slide = NewWidget::new(SlideTransition::new_with_limits(
         card,
         enter_offset,
         duration_ms,
         MotionEasing::EmphasizedDecelerate,
-        clamp_axes,
+        limits.clamp_axes,
+        limits.preferred_max,
     ));
 
     let zstack = ZStack::new()
@@ -170,12 +203,20 @@ pub fn modal_shell_rebuild<State, Action, V>(
             ZStack::set_params(&mut zstack, 1, config.alignment);
         }
 
+        let prev_limits = resolve_modal_limits(view_state.config.dims, view_state.config.alignment);
+        let next_limits = resolve_modal_limits(config.dims, config.alignment);
+
         let mut slide_dyn = <ZStack as CollectionWidget<_>>::get_mut(&mut zstack, 1);
         let mut slide = slide_dyn.downcast::<SlideTransition>();
+        SlideTransition::set_limits(
+            &mut slide,
+            next_limits.clamp_axes,
+            next_limits.preferred_max,
+        );
         let mut card_dyn = SlideTransition::child_mut(&mut slide);
         let mut card = card_dyn.downcast::<widgets::SizedBox>();
-        if view_state.config.dims != config.dims {
-            card.insert_prop(config.dims);
+        if prev_limits.card_dims != next_limits.card_dims {
+            card.insert_prop(next_limits.card_dims);
         }
         if view_state.config.padding != config.padding {
             card.insert_prop(config.padding);
@@ -184,8 +225,10 @@ pub fn modal_shell_rebuild<State, Action, V>(
             card.ctx.remove_class(view_state.config.class);
             card.ctx.add_class(config.class);
         }
-        let mut content_dyn =
-            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds content child");
+        let mut portal_dyn =
+            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds portal child");
+        let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
+        let mut content_dyn = widgets::Portal::child_mut(&mut portal);
         ctx.with_id(MODAL_CONTENT_ID, |ctx| {
             content.rebuild(
                 prev_content,
@@ -225,8 +268,10 @@ pub fn modal_shell_teardown<State, Action, V>(
         let mut slide = slide_dyn.downcast::<SlideTransition>();
         let mut card_dyn = SlideTransition::child_mut(&mut slide);
         let mut card = card_dyn.downcast::<widgets::SizedBox>();
-        let mut content_dyn =
-            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds content child");
+        let mut portal_dyn =
+            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds portal child");
+        let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
+        let mut content_dyn = widgets::Portal::child_mut(&mut portal);
         ctx.with_id(MODAL_CONTENT_ID, |ctx| {
             content.teardown(&mut view_state.child_state, ctx, content_dyn.downcast());
         });
@@ -263,8 +308,10 @@ where
             let mut slide = slide_dyn.downcast::<SlideTransition>();
             let mut card_dyn = SlideTransition::child_mut(&mut slide);
             let mut card = card_dyn.downcast::<widgets::SizedBox>();
-            let mut content_dyn = widgets::SizedBox::child_mut(&mut card)
-                .expect("modal card always holds content child");
+            let mut portal_dyn = widgets::SizedBox::child_mut(&mut card)
+                .expect("modal card always holds portal child");
+            let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
+            let mut content_dyn = widgets::Portal::child_mut(&mut portal);
             content.message(
                 &mut view_state.child_state,
                 message,

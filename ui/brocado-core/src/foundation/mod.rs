@@ -1,8 +1,10 @@
 //! Reusable cross-theme UI infrastructure: color blending, SVG icon cache, transitions,
 //! Masonry class injection, and window overlay primitives.
 
+pub mod adaptive_pair;
 pub mod bevel;
 pub mod class_view;
+pub mod clip_box;
 pub mod focus_frame;
 pub mod icon;
 pub mod overlay;
@@ -11,8 +13,10 @@ pub mod state_layer;
 pub mod transition;
 pub mod wrap;
 
+pub use adaptive_pair::{AdaptivePairView, AdaptivePairWidget, adaptive_pair};
 pub use bevel::{BeveledBorder, BeveledBorderView, beveled_surface};
 pub use class_view::{UiClassExt, WithClass};
+pub use clip_box::{ClipBoxView, ClipBoxWidget, clip_box};
 pub use focus_frame::{FocusFrame, FocusFrameView, focus_frame};
 pub use icon::{icons, ui_icon};
 pub use overlay::{
