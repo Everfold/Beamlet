@@ -63,6 +63,15 @@ impl AdwBreakpointBin {
     }
 }
 
+fn opt_layout_size(w: Option<Length>, h: Option<Length>) -> LayoutSize {
+    match (w, h) {
+        (Some(w), Some(h)) => LayoutSize::from(Size::new(w.get(), h.get())),
+        (Some(w), None) => LayoutSize::maybe(Axis::Horizontal, Some(w)),
+        (None, Some(h)) => LayoutSize::maybe(Axis::Vertical, Some(h)),
+        (None, None) => LayoutSize::NONE,
+    }
+}
+
 impl Widget for AdwBreakpointBin {
     type Action = NoAction;
 
@@ -79,40 +88,68 @@ impl Widget for AdwBreakpointBin {
         len_req: LenReq,
         cross_length: Option<Length>,
     ) -> Length {
-        let use_narrow = match (axis, len_req) {
-            (Axis::Horizontal, LenReq::MinContent) => true,
-            (Axis::Horizontal, LenReq::FitContent(space)) => space.get() < self.breakpoint_px,
-            (Axis::Horizontal, LenReq::MaxContent) => ctx
-                .context_size()
-                .length(Axis::Horizontal)
-                .map_or(self.is_narrow, |w| w.get() < self.breakpoint_px),
-            (Axis::Vertical, _) => cross_length
-                .or_else(|| ctx.context_size().length(Axis::Horizontal))
-                .map_or(self.is_narrow, |w| w.get() < self.breakpoint_px),
-        };
-        let active = if use_narrow {
-            &mut self.narrow
-        } else {
-            &mut self.wide
-        };
-        match (axis, len_req) {
-            (Axis::Horizontal, LenReq::FitContent(space)) => {
-                let _ = ctx.compute_length(
+        match axis {
+            Axis::Horizontal => {
+                let use_narrow = match len_req {
+                    LenReq::MinContent => true,
+                    LenReq::FitContent(space) => space.get() < self.breakpoint_px,
+                    LenReq::MaxContent => {
+                        if let Some(w) = ctx.context_size().length(Axis::Horizontal) {
+                            w.get() < self.breakpoint_px
+                        } else {
+                            ctx.cache_result(false);
+                            self.is_narrow
+                        }
+                    }
+                };
+                let eff_cross = cross_length.or_else(|| ctx.context_size().length(Axis::Vertical));
+                let active = if use_narrow {
+                    &mut self.narrow
+                } else {
+                    &mut self.wide
+                };
+                match len_req {
+                    LenReq::FitContent(space) => {
+                        let _ = ctx.compute_length(
+                            active,
+                            len_req.into(),
+                            opt_layout_size(Some(space), eff_cross),
+                            Axis::Horizontal,
+                            eff_cross,
+                        );
+                        space
+                    }
+                    LenReq::MinContent | LenReq::MaxContent => ctx.compute_length(
+                        active,
+                        len_req.into(),
+                        opt_layout_size(None, eff_cross),
+                        Axis::Horizontal,
+                        eff_cross,
+                    ),
+                }
+            }
+            Axis::Vertical => {
+                let eff_cross = cross_length.or_else(|| {
+                    let cw = ctx.context_size().length(Axis::Horizontal);
+                    if cw.is_none() {
+                        ctx.cache_result(false);
+                    }
+                    cw
+                });
+                let use_narrow = eff_cross.map_or(self.is_narrow, |w| w.get() < self.breakpoint_px);
+                let active = if use_narrow {
+                    &mut self.narrow
+                } else {
+                    &mut self.wide
+                };
+                ctx.compute_length(
                     active,
                     len_req.into(),
-                    LayoutSize::maybe(Axis::Vertical, cross_length),
-                    Axis::Horizontal,
-                    cross_length,
-                );
-                space
+                    LayoutSize::maybe(Axis::Horizontal, eff_cross),
+                    Axis::Vertical,
+                    eff_cross,
+                )
             }
-            _ => ctx.compute_length(
-                active,
-                len_req.into(),
-                LayoutSize::maybe(axis.cross(), cross_length),
-                axis,
-                cross_length,
-            ),
         }
     }
 

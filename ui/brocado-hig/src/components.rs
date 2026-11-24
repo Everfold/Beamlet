@@ -4,12 +4,14 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use brocado_core::components::divider::{horizontal_divider, vertical_divider};
+use brocado_core::components::typography::ui_label;
 use brocado_core::components::{
     MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,
 };
 use brocado_core::foundation::{
-    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, icons,
-    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, adaptive_pair,
+    clip_box, icons, modal_shell_build, modal_shell_message, modal_shell_rebuild,
+    modal_shell_teardown, ui_icon, wrap,
 };
 use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
 use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
@@ -17,7 +19,7 @@ use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::{AsUnit, Dim, UnitPoint};
 use masonry::peniko::Color;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::AnyWidgetView;
@@ -26,7 +28,7 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, FlexExt, button, flex_col, flex_row, label, sized_box,
 };
 
 /// Unified macOS compact `38px` window toolbar hosting an arbitrary custom center view (e.g. search bar or segmented switcher).
@@ -41,17 +43,21 @@ where
     flex_col((
         sized_box(
             flex_row((
-                flex_row(leading_actions)
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
-                center.flex(1.0),
-                flex_row(trailing_actions)
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
+                (!leading_actions.is_empty()).then(|| {
+                    flex_row(leading_actions)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px())
+                }),
+                clip_box(center).flex(1.0),
+                (!trailing_actions.is_empty()).then(|| {
+                    flex_row(trailing_actions)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px())
+                }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px())
-            .padding(Padding::from_vh(4.px(), 12.px())),
+            .gap(8.px())
+            .padding(Padding::from_vh(4.px(), 10.px())),
         )
         .dims(Dimensions::height(38.px()))
         .ui_class(classes::HEADER_BAR),
@@ -68,9 +74,11 @@ pub fn macos_toolbar<State: 'static, Action: 'static>(
 ) -> impl WidgetView<State, Action, Widget = widgets::Flex> {
     let title: ArcStr = title.into();
     let title_view = with_spec(move |spec: &DesignSpec, _| {
-        spec.typography
-            .style_label(TypeRole::TitleSmall, label(title.clone()))
-            .color(spec.palette.text_primary)
+        clip_box(
+            ui_label(TypeRole::TitleSmall, title.clone())
+                .color(spec.palette.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        )
     });
     macos_toolbar_with_center(leading_actions, title_view, trailing_actions)
 }
@@ -202,22 +210,20 @@ pub fn form_group<State: 'static, Action: 'static>(
 pub fn form_row<State: 'static, Action: 'static, C>(
     label_text: impl Into<ArcStr>,
     control: C,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+) -> impl WidgetView<State, Action, Widget = brocado_core::foundation::AdaptivePairWidget>
 where
     C: WidgetView<State, Action>,
 {
     let text: ArcStr = label_text.into();
     let lbl = with_spec(move |spec: &DesignSpec, _| {
-        spec.typography
-            .style_label(TypeRole::BodyMedium, label(text.clone()))
-            .color(spec.palette.text_primary)
+        ui_label(TypeRole::BodyMedium, text.clone()).color(spec.palette.text_primary)
     });
 
-    flex_row((lbl.flex(1.0), control))
-        .main_axis_alignment(MainAxisAlignment::SpaceBetween)
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(16.px())
-        .padding(Padding::from_vh(10.px(), 14.px()))
+    adaptive_pair(lbl, control)
+        .gap(12.px())
+        .run_gap(8.px())
+        .min_leading(56.0)
+        .padding(Padding::from_vh(10.px(), 12.px()))
 }
 
 /// Classic circular macOS `?` help button (`24×24`), returning `Pod<widgets::Button>` directly.
@@ -293,7 +299,7 @@ pub fn stepper<State: 'static, Action: 'static, F>(
     max: i32,
     step: i32,
     on_change: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+) -> impl WidgetView<State, Action, Widget = brocado_core::foundation::AdaptivePairWidget>
 where
     F: Fn(&mut State, i32) -> Action + Send + Sync + 'static,
 {
@@ -311,14 +317,10 @@ where
         let next_dec = clamped.saturating_sub(step).clamp(min, max);
         let next_inc = clamped.saturating_add(step).clamp(min, max);
 
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(label_text.clone()))
-            .color(p.text_primary);
-        let readout = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(format!("{clamped}")))
-            .color(p.text_secondary);
+        let lbl = ui_label(TypeRole::BodyMedium, label_text.clone()).color(p.text_primary);
+        let readout = ui_label(TypeRole::BodyMedium, format!("{clamped}"))
+            .color(p.text_secondary)
+            .line_breaking(LineBreaking::Clip);
 
         let dec_btn = button(
             ui_icon(
@@ -330,7 +332,8 @@ where
         )
         .disabled(!can_dec)
         .ui_class(classes::ICON_BTN_STD)
-        .dims(Dimensions::fixed(24.px(), 24.px()));
+        .dims(Dimensions::fixed(24.px(), 24.px()))
+        .padding(Padding::all(0.px()));
 
         let inc_btn = button(
             ui_icon(
@@ -342,7 +345,8 @@ where
         )
         .disabled(!can_inc)
         .ui_class(classes::ICON_BTN_STD)
-        .dims(Dimensions::fixed(24.px(), 24.px()));
+        .dims(Dimensions::fixed(24.px(), 24.px()))
+        .padding(Padding::all(0.px()));
 
         let pill = sized_box(
             flex_row((
@@ -357,9 +361,15 @@ where
         .border(p.border_strong, 1.px())
         .corner_radius(spec.metrics.button_radius.px());
 
-        flex_row((lbl.flex(1.0), readout, pill))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px())
+        adaptive_pair(
+            lbl,
+            flex_row((readout, pill))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(8.px()),
+        )
+        .gap(10.px())
+        .run_gap(6.px())
+        .min_leading(48.0)
     })
 }
 
@@ -424,15 +434,18 @@ where
             } else {
                 p.text_secondary
             };
-            let lbl = spec
-                .typography
-                .style_label(TypeRole::BodySmall, label(name.clone()))
-                .color(fg);
+            let lbl = clip_box(
+                ui_label(TypeRole::BodySmall, name.clone())
+                    .color(fg)
+                    .line_breaking(LineBreaking::Clip),
+            );
             children.push(
                 button(
-                    flex_row((ui_icon(icon_path, 14.0, fg), lbl))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(4.px()),
+                    clip_box(
+                        flex_row((ui_icon(icon_path, 14.0, fg), lbl.flex(1.0)))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(4.px()),
+                    ),
                     move |s: &mut State| cb(s, idx),
                 )
                 .ui_class(classes::BTN_SUBTLE)
@@ -444,10 +457,11 @@ where
         sized_box(
             flex_col((
                 horizontal_divider(),
-                flex_row(children)
+                wrap(children)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(4.px())
-                    .padding(Padding::from_vh(3.px(), 10.px())),
+                    .run_gap(4.px())
+                    .padding(Padding::from_vh(3.px(), 8.px())),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch),
         )
@@ -481,10 +495,11 @@ where
     let trigger = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let toggle_cb = toggle_cb.clone();
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(current_text.clone()))
-            .color(p.text_primary);
+        let lbl = clip_box(
+            ui_label(TypeRole::BodyMedium, current_text.clone())
+                .color(p.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        );
         let chevrons = sized_box(
             flex_col((
                 ui_icon(icons::ARROW_DROP_UP, 8.0, p.on_accent),
@@ -498,9 +513,11 @@ where
         .corner_radius(4.px());
 
         button(
-            flex_row((lbl.flex(1.0), chevrons))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px()),
+            clip_box(
+                flex_row((lbl.flex(1.0), chevrons))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px()),
+            ),
             move |s: &mut State| toggle_cb(s),
         )
         .ui_class(classes::BTN_OUTLINED)
@@ -577,14 +594,8 @@ impl<State, Action> MacosAlertDialog<State, Action> {
                 .corner_radius(10.px())
         });
 
-        let title_lbl = spec
-            .typography
-            .style_label(TypeRole::TitleMedium, label(self.title.clone()))
-            .color(p.text_primary);
-        let msg_lbl = spec
-            .typography
-            .style_label(TypeRole::BodySmall, label(self.message.clone()))
-            .color(p.text_secondary);
+        let title_lbl = ui_label(TypeRole::TitleMedium, self.title.clone()).color(p.text_primary);
+        let msg_lbl = ui_label(TypeRole::BodySmall, self.message.clone()).color(p.text_secondary);
 
         let on_primary = self.on_primary.clone();
         let primary_btn: Box<AnyWidgetView<State, Action>> = if self.destructive {
@@ -640,7 +651,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
-            padding: Padding::all(20.px()),
+            padding: Padding::all(16.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 12.0),
             duration: MotionDuration::Medium1,
@@ -664,7 +675,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
-            padding: Padding::all(20.px()),
+            padding: Padding::all(16.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 12.0),
             duration: MotionDuration::Medium1,

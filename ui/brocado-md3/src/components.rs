@@ -5,20 +5,21 @@ use std::sync::Arc;
 use brocado_core::components::{
     NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
 };
-use brocado_core::foundation::{UiClassExt, ui_icon};
+use brocado_core::foundation::{UiClassExt, clip_box, ui_icon, wrap};
 use brocado_core::style_engine::{classes, with_spec};
 use brocado_core::tokens::{DesignSpec, ElevationLevel, TypeRole};
 use masonry::core::ArcStr;
-use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::layout::AsUnit;
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label,
-    sized_box, zstack,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
 };
+
+use brocado_core::TextAlign;
 
 /// Material 3 FAB tonal color mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -213,48 +214,63 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
     let (height, body): (f64, Box<AnyWidgetView<State, Action>>) = match variant {
         TopAppBarVariant::Small => (
             64.0,
-            flex_row((leading, title_large(title).flex(1.0), trail_row))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px())
-                .padding(Padding::from_vh(8.px(), 16.px()))
-                .boxed(),
+            flex_row((
+                leading,
+                clip_box(title_large(title).line_breaking(LineBreaking::Clip)).flex(1.0),
+                trail_row,
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(6.px())
+            .padding(Padding::from_vh(8.px(), 12.px()))
+            .boxed(),
         ),
         TopAppBarVariant::CenterAligned => (
             64.0,
-            zstack((
-                title_large(title).alignment(UnitPoint::CENTER),
-                flex_row((leading, trail_row))
-                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .padding(Padding::from_vh(8.px(), 16.px()))
-                    .alignment(UnitPoint::CENTER),
+            flex_row((
+                leading,
+                clip_box(
+                    title_large(title)
+                        .text_alignment(TextAlign::Center)
+                        .line_breaking(LineBreaking::Clip),
+                )
+                .flex(1.0),
+                trail_row,
             ))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(6.px())
+            .padding(Padding::from_vh(8.px(), 12.px()))
             .boxed(),
         ),
         TopAppBarVariant::Medium => {
             let nav_row = flex_row((leading, sized_box(label("")).flex(1.0), trail_row))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px());
+                .gap(6.px());
             (
                 112.0,
-                flex_col((nav_row, headline_small(title)))
-                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .padding(Padding::from_vh(14.px(), 16.px()))
-                    .boxed(),
+                flex_col((
+                    nav_row,
+                    clip_box(headline_small(title).line_breaking(LineBreaking::Clip)),
+                ))
+                .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .padding(Padding::from_vh(14.px(), 12.px()))
+                .boxed(),
             )
         }
         TopAppBarVariant::Large => {
             let nav_row = flex_row((leading, sized_box(label("")).flex(1.0), trail_row))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px());
+                .gap(6.px());
             (
                 152.0,
-                flex_col((nav_row, headline_medium(title)))
-                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .padding(Padding::from_vh(18.px(), 16.px()))
-                    .boxed(),
+                flex_col((
+                    nav_row,
+                    clip_box(headline_medium(title).line_breaking(LineBreaking::Clip)),
+                ))
+                .main_axis_alignment(MainAxisAlignment::SpaceBetween)
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .padding(Padding::from_vh(18.px(), 12.px()))
+                .boxed(),
             )
         }
     };
@@ -300,16 +316,17 @@ pub fn bottom_app_bar<State: 'static, Action: 'static>(
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     sized_box(
         flex_row((
-            flex_row(actions)
+            wrap(actions)
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(4.px())
+                .run_gap(4.px())
                 .flex(1.0),
             trailing_fab,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .padding(Padding::from_vh(8.px(), 16.px())),
+        .gap(6.px())
+        .padding(Padding::from_vh(10.px(), 10.px())),
     )
-    .dims(Dimensions::height(80.px()))
     .ui_class(classes::BOTTOM_BAR)
 }
 
@@ -393,12 +410,12 @@ pub fn floating_toolbar<State: 'static, Action: 'static>(
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     surface_box(
         ElevationLevel::Level3,
-        flex_row(actions)
+        wrap(actions)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(6.px())
-            .padding(Padding::from_vh(0.px(), 8.px())),
+            .run_gap(6.px())
+            .padding(Padding::from_vh(4.px(), 8.px())),
     )
-    .radius(999.0)
+    .radius(28.0)
     .padding(8.0)
-    .dims(Dimensions::height(56.px()))
 }

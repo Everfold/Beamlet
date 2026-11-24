@@ -4,9 +4,10 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use brocado_core::components::divider::{horizontal_divider, vertical_divider};
+use brocado_core::components::typography::ui_label;
 use brocado_core::components::{MenuEntry, NavDestination, dropdown_menu, icon_button};
 use brocado_core::foundation::state_layer::blend_over;
-use brocado_core::foundation::{UiClassExt, beveled_surface, icons, ui_icon};
+use brocado_core::foundation::{UiClassExt, adaptive_pair, beveled_surface, icons, ui_icon, wrap};
 use brocado_core::style_engine::{classes, with_spec};
 use brocado_core::tokens::{Brightness, DesignSpec, TypeRole};
 use masonry::accesskit::{Node, Role};
@@ -96,14 +97,8 @@ pub fn info_bar<State: 'static, Action: 'static>(
         let p = &spec.palette;
         let (icon_path, badge_color, bg) = severity.visual(spec);
 
-        let title_lbl = spec
-            .typography
-            .style_label(TypeRole::LabelLarge, label(title.clone()))
-            .color(p.text_primary);
-        let msg_lbl = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(message.clone()))
-            .color(p.text_secondary);
+        let title_lbl = ui_label(TypeRole::LabelLarge, title.clone()).color(p.text_primary);
+        let msg_lbl = ui_label(TypeRole::BodyMedium, message.clone()).color(p.text_secondary);
 
         let close_btn = on_close.as_ref().map(|cb| {
             let cb = cb.clone();
@@ -113,22 +108,33 @@ pub fn info_bar<State: 'static, Action: 'static>(
             .ui_class(classes::ICON_BTN_STD)
         });
 
-        sized_box(
-            flex_row((
-                ui_icon(icon_path, 18.0, badge_color),
-                flex_col((title_lbl, msg_lbl))
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
-                    .gap(2.px())
-                    .flex(1.0),
-                close_btn,
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px())
-            .padding(Padding::from_vh(10.px(), 14.px())),
-        )
-        .background_color(bg)
-        .border(p.border, 1.px())
-        .corner_radius(spec.metrics.card_radius.px())
+        let icon_and_text = flex_row((
+            ui_icon(icon_path, 18.0, badge_color),
+            flex_col((title_lbl, msg_lbl))
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(2.px())
+                .flex(1.0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(12.px());
+
+        let inner: Box<AnyWidgetView<State, Action>> = if let Some(close_btn) = close_btn {
+            adaptive_pair(icon_and_text, close_btn)
+                .gap(10.px())
+                .run_gap(6.px())
+                .min_leading(56.0)
+                .padding(Padding::from_vh(10.px(), 12.px()))
+                .boxed()
+        } else {
+            icon_and_text
+                .padding(Padding::from_vh(10.px(), 12.px()))
+                .boxed()
+        };
+
+        sized_box(inner)
+            .background_color(bg)
+            .border(p.border, 1.px())
+            .corner_radius(spec.metrics.card_radius.px())
     })
 }
 
@@ -147,15 +153,10 @@ where
     let title_view = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let ic = icon_svg.map(|path| ui_icon(path, 20.0, p.text_primary));
-        let t = spec
-            .typography
-            .style_label(TypeRole::BodyLarge, label(title.clone()))
-            .color(p.text_primary);
-        let d = description.as_ref().map(|sub| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(sub.clone()))
-                .color(p.text_secondary)
-        });
+        let t = ui_label(TypeRole::BodyLarge, title.clone()).color(p.text_primary);
+        let d = description
+            .as_ref()
+            .map(|sub| ui_label(TypeRole::BodySmall, sub.clone()).color(p.text_secondary));
         flex_row((
             ic,
             flex_col((t, d))
@@ -164,14 +165,15 @@ where
                 .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(14.px())
+        .gap(12.px())
     });
 
     sized_box(beveled_surface(
-        flex_row((title_view.flex(1.0), trailing_control))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(16.px())
-            .padding(Padding::from_vh(14.px(), 16.px())),
+        adaptive_pair(title_view, trailing_control)
+            .gap(12.px())
+            .run_gap(8.px())
+            .min_leading(56.0)
+            .padding(Padding::from_vh(12.px(), 12.px())),
     ))
     .ui_class(classes::GROUPED_CARD)
 }
@@ -197,15 +199,10 @@ where
     let header_left = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let ic = icon_svg.map(|path| ui_icon(path, 20.0, p.text_primary));
-        let t = spec
-            .typography
-            .style_label(TypeRole::BodyLarge, label(title.clone()))
-            .color(p.text_primary);
-        let d = description.as_ref().map(|sub| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(sub.clone()))
-                .color(p.text_secondary)
-        });
+        let t = ui_label(TypeRole::BodyLarge, title.clone()).color(p.text_primary);
+        let d = description
+            .as_ref()
+            .map(|sub| ui_label(TypeRole::BodySmall, sub.clone()).color(p.text_secondary));
         flex_row((
             ic,
             flex_col((t, d))
@@ -214,7 +211,7 @@ where
                 .flex(1.0),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(14.px())
+        .gap(12.px())
     });
 
     let toggle_btn = with_spec(move |spec: &DesignSpec, _| {
@@ -231,10 +228,16 @@ where
         .ui_class(classes::ICON_BTN_STD)
     });
 
-    let header_row = flex_row((header_left.flex(1.0), header_control, toggle_btn))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(12.px())
-        .padding(Padding::from_vh(14.px(), 16.px()));
+    let header_row = adaptive_pair(
+        header_left,
+        flex_row((header_control, toggle_btn))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(6.px()),
+    )
+    .gap(12.px())
+    .run_gap(8.px())
+    .min_leading(56.0)
+    .padding(Padding::from_vh(12.px(), 12.px()));
 
     let expanded_section = expanded.then(|| {
         let mut children: Vec<Box<AnyWidgetView<State, Action>>> =
@@ -243,7 +246,7 @@ where
             children.push(horizontal_divider().boxed());
             children.push(
                 sized_box(item)
-                    .padding(Padding::from_vh(10.px(), 20.px()))
+                    .padding(Padding::from_vh(10.px(), 12.px()))
                     .boxed(),
             );
         }
@@ -261,20 +264,25 @@ pub fn command_bar<State: 'static, Action: 'static>(
     primary_commands: Vec<Box<AnyWidgetView<State, Action>>>,
     secondary_commands: Vec<Box<AnyWidgetView<State, Action>>>,
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
-    sized_box(beveled_surface(
-        flex_row((
-            flex_row(primary_commands)
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(4.px())
-                .flex(1.0),
-            flex_row(secondary_commands)
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(4.px()),
-        ))
+    let primary = wrap(primary_commands)
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .padding(Padding::from_vh(4.px(), 8.px())),
-    ))
-    .ui_class(classes::GROUPED_CARD)
+        .gap(4.px())
+        .run_gap(4.px());
+    let inner: Box<AnyWidgetView<State, Action>> = if secondary_commands.is_empty() {
+        primary.padding(Padding::from_vh(4.px(), 8.px())).boxed()
+    } else {
+        let secondary = wrap(secondary_commands)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(4.px())
+            .run_gap(4.px());
+        adaptive_pair(primary, secondary)
+            .gap(8.px())
+            .run_gap(4.px())
+            .min_leading(56.0)
+            .padding(Padding::from_vh(4.px(), 8.px()))
+            .boxed()
+    };
+    sized_box(beveled_surface(inner)).ui_class(classes::GROUPED_CARD)
 }
 
 /// WinUI 3 horizontal `CommandBar` with primary actions and a trailing `...` anchored overflow menu.
@@ -305,13 +313,15 @@ where
 
     sized_box(beveled_surface(
         flex_row((
-            flex_row(primary_commands)
+            wrap(primary_commands)
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(4.px())
+                .run_gap(4.px())
                 .flex(1.0),
             overflow_btn,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(4.px())
         .padding(Padding::from_vh(4.px(), 8.px())),
     ))
     .ui_class(classes::GROUPED_CARD)
@@ -620,7 +630,7 @@ pub fn info_badge<State: 'static, Action: 'static>(
 pub fn breadcrumb_bar<State: 'static, Action: 'static, F>(
     segments: &[&str],
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = brocado_core::foundation::WrapWidget> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -636,8 +646,7 @@ where
             }
             if idx == last_idx {
                 children.push(
-                    spec.typography
-                        .style_label(TypeRole::BodyMedium, label(seg.clone()))
+                    ui_label(TypeRole::BodyMedium, seg.clone())
                         .weight(FontWeight::SEMI_BOLD)
                         .color(p.text_primary)
                         .padding(Padding::from_vh(4.px(), 6.px()))
@@ -645,10 +654,7 @@ where
                 );
             } else {
                 let cb = cb.clone();
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::BodyMedium, label(seg.clone()))
-                    .color(p.text_secondary);
+                let lbl = ui_label(TypeRole::BodyMedium, seg.clone()).color(p.text_secondary);
                 children.push(
                     button(lbl, move |s: &mut State| cb(s, idx))
                         .ui_class(classes::BTN_SUBTLE)
@@ -656,9 +662,10 @@ where
                 );
             }
         }
-        flex_row(children)
+        wrap(children)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
+            .run_gap(4.px())
     })
 }
 
@@ -680,15 +687,10 @@ where
 
     let header_left = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
-        let t = spec
-            .typography
-            .style_label(TypeRole::BodyLarge, label(title.clone()))
-            .color(p.text_primary);
-        let sub = subtitle.as_ref().map(|s| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(s.clone()))
-                .color(p.text_secondary)
-        });
+        let t = ui_label(TypeRole::BodyLarge, title.clone()).color(p.text_primary);
+        let sub = subtitle
+            .as_ref()
+            .map(|s| ui_label(TypeRole::BodySmall, s.clone()).color(p.text_secondary));
         flex_col((t, sub))
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(2.px())
@@ -708,15 +710,16 @@ where
         .ui_class(classes::ICON_BTN_STD)
     });
 
-    let header_row = flex_row((header_left.flex(1.0), toggle_btn))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
+    let header_row = adaptive_pair(header_left, toggle_btn)
         .gap(12.px())
-        .padding(Padding::from_vh(12.px(), 16.px()));
+        .run_gap(8.px())
+        .min_leading(56.0)
+        .padding(Padding::from_vh(12.px(), 12.px()));
 
     let expanded_body = expanded.then(|| {
         flex_col((
             horizontal_divider(),
-            sized_box(content).padding(Padding::from_vh(12.px(), 16.px())),
+            sized_box(content).padding(Padding::from_vh(12.px(), 12.px())),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
     });
@@ -980,7 +983,9 @@ where
             move |s: &mut State| dec_cb(s, next_dec),
         )
         .disabled(!can_dec)
-        .ui_class(classes::ICON_BTN_STD);
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(28.px(), 28.px()))
+        .padding(Padding::all(0.px()));
 
         let inc_btn = button(
             ui_icon(
@@ -991,13 +996,15 @@ where
             move |s: &mut State| inc_cb(s, next_inc),
         )
         .disabled(!can_inc)
-        .ui_class(classes::ICON_BTN_STD);
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(28.px(), 28.px()))
+        .padding(Padding::all(0.px()));
 
         let readout = spec
             .typography
             .style_label(TypeRole::BodyMedium, label(formatted.clone()))
             .color(p.text_primary)
-            .padding(Padding::from_vh(0.px(), 12.px()));
+            .padding(Padding::from_vh(0.px(), 8.px()));
 
         let catcher = NumberStepCatcherView {
             child: flex_row((dec_btn, readout, inc_btn))

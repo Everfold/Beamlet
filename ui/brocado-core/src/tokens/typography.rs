@@ -291,25 +291,33 @@ impl TypeScale {
     /// Selects the canonical Material Design 3 Roboto + CJK sans fallback stack.
     #[must_use]
     pub fn with_md3_font_stack(self) -> Self {
-        self.with_font_stack("Roboto, 'Noto Sans CJK SC', sans-serif")
+        self.with_font_stack(
+            "Roboto, 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif",
+        )
     }
 
-    /// Selects the canonical Windows 11 Segoe UI Variable + YaHei fallback stack.
+    /// Selects the canonical Windows 11 Segoe UI Variable + YaHei + cross-platform CJK fallback stack.
     #[must_use]
     pub fn with_fluent_font_stack(self) -> Self {
-        self.with_font_stack("'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', sans-serif")
+        self.with_font_stack(
+            "'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Sarasa UI SC', 'PingFang SC', sans-serif",
+        )
     }
 
-    /// Selects the canonical Apple macOS SF Pro + PingFang fallback stack.
+    /// Selects the canonical Apple macOS SF Pro + PingFang + cross-platform CJK fallback stack.
     #[must_use]
     pub fn with_hig_font_stack(self) -> Self {
-        self.with_font_stack("'SF Pro Text', 'SF Pro Display', 'PingFang SC', sans-serif")
+        self.with_font_stack(
+            "'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', sans-serif",
+        )
     }
 
-    /// Selects the canonical GNOME Adwaita Sans + Cantarell fallback stack.
+    /// Selects the canonical GNOME Adwaita Sans + Cantarell + cross-platform CJK fallback stack.
     #[must_use]
     pub fn with_adwaita_font_stack(self) -> Self {
-        self.with_font_stack("'Adwaita Sans', 'Cantarell', 'Noto Sans CJK SC', sans-serif")
+        self.with_font_stack(
+            "'Adwaita Sans', 'Cantarell', 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif",
+        )
     }
 
     /// Convenience helper selecting the generic sans-serif stack (`FontFamily::from(GenericFamily::SansSerif)`).

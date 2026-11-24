@@ -5,16 +5,18 @@ pub use crate::theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
 #[cfg(feature = "winit")]
 pub use crate::theme::{themed_window, themed_window_with_backdrop};
 pub use crate::{
-    AnyWidgetView, BeveledBorder, BeveledBorderView, Brightness, Color, ContextMenuHost,
-    ContextMenuView, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder,
-    ElevationLevel, EscapeCatcher, FocusFrame, FocusFrameView, FontWeight, HoverTooltipHost,
-    InputFocusStyle, InsertNewline, MotionDuration, MotionEasing, NavIndicatorStyle, Pod,
-    PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer, RippleLayerView,
-    SemanticPalette, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextAlign, TypeRole,
-    TypeScale, UiClassExt, ViewCtx, WidgetView, WidgetViewSequence, WindowBackdrop,
-    WindowSizeClass, WrapState, WrapView, WrapWidget, beveled_surface, build_default_properties,
-    cached_default_properties, classes, current_spec, focus_frame, icons, memoize_with_spec,
-    popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition, with_spec, wrap,
+    AdaptivePairView, AdaptivePairWidget, AnyWidgetView, BeveledBorder, BeveledBorderView,
+    Brightness, ClipBoxView, ClipBoxWidget, Color, ContextMenuHost, ContextMenuView,
+    ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
+    EscapeCatcher, FocusFrame, FocusFrameView, FontWeight, HoverTooltipHost, InputFocusStyle,
+    InsertNewline, MotionDuration, MotionEasing, NavIndicatorStyle, Pod, PopoverAnchorRect,
+    PopoverAnchorView, PopoverAnchorWidget, RippleLayer, RippleLayerView, SemanticPalette,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextAlign, TypeRole, TypeScale,
+    UiClassExt, ViewCtx, WidgetView, WidgetViewSequence, WindowBackdrop, WindowSizeClass,
+    WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface, build_default_properties,
+    cached_default_properties, classes, clip_box, current_spec, focus_frame, icons,
+    memoize_with_spec, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition,
+    with_spec, wrap,
 };
 
 #[cfg(feature = "winit")]

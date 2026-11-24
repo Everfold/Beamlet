@@ -90,7 +90,9 @@ impl Widget for AdwClamp {
                 }
             },
             Axis::Vertical => {
-                let capped_cross = cross_length.map(|w| Length::px(w.get().min(self.max_width)));
+                let eff_cross =
+                    cross_length.or_else(|| ctx.context_size().length(Axis::Horizontal));
+                let capped_cross = eff_cross.map(|w| Length::px(w.get().min(self.max_width)));
                 ctx.compute_length(
                     &mut self.child,
                     len_req.into(),

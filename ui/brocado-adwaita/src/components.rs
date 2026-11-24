@@ -9,16 +9,18 @@ use brocado_core::components::button::{
 use brocado_core::components::divider::horizontal_divider;
 use brocado_core::components::menu::select;
 use brocado_core::components::selection::switch;
+use brocado_core::components::typography::ui_label;
 use brocado_core::foundation::{
-    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, focus_frame, icons,
-    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, adaptive_pair,
+    clip_box, focus_frame, icons, modal_shell_build, modal_shell_message, modal_shell_rebuild,
+    modal_shell_teardown, ui_icon, wrap,
 };
 use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
 use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::{AsUnit, Dim, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::AnyWidgetView;
@@ -43,17 +45,21 @@ where
     flex_col((
         sized_box(
             flex_row((
-                flex_row(start_actions)
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
-                title_view.flex(1.0),
-                flex_row(end_actions)
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
+                (!start_actions.is_empty()).then(|| {
+                    flex_row(start_actions)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px())
+                }),
+                clip_box(title_view).flex(1.0),
+                (!end_actions.is_empty()).then(|| {
+                    flex_row(end_actions)
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px())
+                }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px())
-            .padding(Padding::from_vh(6.px(), 12.px())),
+            .gap(8.px())
+            .padding(Padding::from_vh(6.px(), 10.px())),
         )
         .dims(Dimensions::height(46.px()))
         .ui_class(classes::HEADER_BAR),
@@ -73,16 +79,19 @@ pub fn header_bar<State: 'static, Action: 'static>(
     let subtitle: Option<ArcStr> = subtitle.map(Into::into);
     let center_title = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
-        let t = spec
-            .typography
-            .style_label(TypeRole::TitleSmall, label(title.clone()))
-            .color(p.text_primary);
+        let t = clip_box(
+            ui_label(TypeRole::TitleSmall, title.clone())
+                .color(p.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        );
         let sub = subtitle.as_ref().map(|s| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(s.clone()))
-                .color(p.text_secondary)
+            clip_box(
+                ui_label(TypeRole::BodySmall, s.clone())
+                    .color(p.text_secondary)
+                    .line_breaking(LineBreaking::Clip),
+            )
         });
-        flex_col((t, sub)).cross_axis_alignment(CrossAxisAlignment::Center)
+        clip_box(flex_col((t, sub)).cross_axis_alignment(CrossAxisAlignment::Center))
     });
 
     header_bar_with_title(center_title, start_actions, end_actions)
@@ -144,22 +153,17 @@ fn action_row_inner<State: 'static, Action: 'static, S>(
     subtitle: Option<ArcStr>,
     prefix_icon: Option<&'static str>,
     suffix: Option<S>,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+) -> Box<AnyWidgetView<State, Action>>
 where
     S: WidgetView<State, Action>,
 {
     let leading_and_text = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let ic = prefix_icon.map(|path| ui_icon(path, 18.0, p.text_secondary));
-        let t = spec
-            .typography
-            .style_label(TypeRole::BodyLarge, label(title.clone()))
-            .color(p.text_primary);
-        let sub = subtitle.as_ref().map(|s| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(s.clone()))
-                .color(p.text_secondary)
-        });
+        let t = ui_label(TypeRole::BodyLarge, title.clone()).color(p.text_primary);
+        let sub = subtitle
+            .as_ref()
+            .map(|s| ui_label(TypeRole::BodySmall, s.clone()).color(p.text_secondary));
         flex_row((
             ic,
             flex_col((t, sub))
@@ -171,9 +175,15 @@ where
         .gap(12.px())
     });
 
-    flex_row((leading_and_text.flex(1.0), suffix))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(12.px())
+    if let Some(suffix) = suffix {
+        adaptive_pair(leading_and_text, suffix)
+            .gap(12.px())
+            .run_gap(8.px())
+            .min_leading(56.0)
+            .boxed()
+    } else {
+        leading_and_text.boxed()
+    }
 }
 
 /// GNOME `AdwActionRow` displaying leading icon, title/subtitle, and trailing suffix widget.
@@ -250,12 +260,8 @@ pub fn status_page<State: 'static, Action: 'static, T1: Into<ArcStr>, T2: Into<A
         let p = &spec.palette;
         flex_col((
             ui_icon(icon_svg, 56.0, p.text_secondary),
-            spec.typography
-                .style_label(TypeRole::HeadlineMedium, label(title.clone()))
-                .color(p.text_primary),
-            spec.typography
-                .style_label(TypeRole::BodyMedium, label(description.clone()))
-                .color(p.text_secondary),
+            ui_label(TypeRole::HeadlineMedium, title.clone()).color(p.text_primary),
+            ui_label(TypeRole::BodyMedium, description.clone()).color(p.text_secondary),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(10.px())
@@ -270,7 +276,7 @@ pub fn status_page<State: 'static, Action: 'static, T1: Into<ArcStr>, T2: Into<A
         .main_axis_alignment(MainAxisAlignment::Center)
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(16.px())
-        .padding(Padding::all(24.px()))
+        .padding(Padding::all(16.px()))
 }
 
 /// GNOME `AdwBanner` full-width inline accent alert strip with optional button and close icon.
@@ -284,11 +290,7 @@ pub fn banner<State: 'static, Action: 'static, T: Into<ArcStr>>(
     let action_label = action_label.map(ArcStr::from);
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::LabelLarge, label(title.clone()))
-            .color(p.on_accent_container)
-            .flex(1.0);
+        let lbl = ui_label(TypeRole::LabelLarge, title.clone()).color(p.on_accent_container);
         let act = action_label
             .as_ref()
             .zip(on_action.as_ref())
@@ -305,13 +307,23 @@ pub fn banner<State: 'static, Action: 'static, T: Into<ArcStr>>(
             .ui_class(classes::ICON_BTN_STD)
         });
 
-        sized_box(
-            flex_row((lbl, act, close))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px())
-                .padding(Padding::from_vh(8.px(), 14.px())),
-        )
-        .background_color(p.accent_container)
+        let body: Box<AnyWidgetView<State, Action>> = if act.is_some() || close.is_some() {
+            adaptive_pair(
+                lbl,
+                flex_row((act, close))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(4.px()),
+            )
+            .gap(8.px())
+            .run_gap(6.px())
+            .min_leading(56.0)
+            .padding(Padding::from_vh(8.px(), 12.px()))
+            .boxed()
+        } else {
+            lbl.padding(Padding::from_vh(8.px(), 12.px())).boxed()
+        };
+
+        sized_box(body).background_color(p.accent_container)
     })
 }
 
@@ -320,7 +332,7 @@ pub fn view_switcher<State: 'static, Action: 'static, F>(
     items: &[(&str, &'static str)],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = brocado_core::foundation::WrapWidget> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -348,14 +360,17 @@ where
                 } else {
                     classes::SEG_BTN
                 };
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelMedium, label(name.clone()))
-                    .color(fg);
+                let lbl = clip_box(
+                    ui_label(TypeRole::LabelMedium, name.clone())
+                        .color(fg)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 button(
-                    flex_row((ui_icon(icon_path, 16.0, fg), lbl))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(6.px()),
+                    clip_box(
+                        flex_row((ui_icon(icon_path, 16.0, fg), lbl.flex(1.0)))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(6.px()),
+                    ),
                     move |s: &mut State| cb(s, idx),
                 )
                 .ui_class(cls)
@@ -363,10 +378,10 @@ where
             })
             .collect();
 
-        flex_row(views)
-            .main_axis_alignment(MainAxisAlignment::Center)
+        wrap(views)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
+            .run_gap(4.px())
     })
 }
 
@@ -521,17 +536,21 @@ where
                 } else {
                     classes::SEG_BTN
                 };
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelSmall, label(name.clone()))
-                    .color(fg);
+                let lbl = clip_box(
+                    ui_label(TypeRole::LabelSmall, name.clone())
+                        .color(fg)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 button(
-                    flex_col((ui_icon(icon_path, 18.0, fg), lbl))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(2.px()),
+                    clip_box(
+                        flex_col((ui_icon(icon_path, 18.0, fg), lbl))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(2.px()),
+                    ),
                     move |s: &mut State| cb(s, idx),
                 )
                 .ui_class(cls)
+                .padding(Padding::from_vh(4.px(), 2.px()))
                 .boxed()
                 .flex(1.0)
             })
@@ -540,8 +559,8 @@ where
         sized_box(
             flex_row(views)
                 .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(4.px())
-                .padding(Padding::from_vh(4.px(), 8.px())),
+                .gap(2.px())
+                .padding(Padding::from_vh(4.px(), 4.px())),
         )
         .dims(Dimensions::height(56.px()))
         .ui_class(classes::HEADER_BAR)
@@ -588,48 +607,58 @@ impl<State, Action> AdwAlertDialog<State, Action> {
     {
         let p = &spec.palette;
         let header = flex_col((
-            spec.typography
-                .style_label(TypeRole::HeadlineSmall, label(self.heading.clone()))
-                .color(p.text_primary),
-            spec.typography
-                .style_label(TypeRole::BodyMedium, label(self.body.clone()))
-                .color(p.text_secondary),
+            ui_label(TypeRole::HeadlineSmall, self.heading.clone()).color(p.text_primary),
+            ui_label(TypeRole::BodyMedium, self.body.clone()).color(p.text_secondary),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(8.px())
         .padding(Padding {
-            top: 22.px(),
-            right: 22.px(),
-            bottom: 18.px(),
-            left: 22.px(),
+            top: 18.px(),
+            right: 16.px(),
+            bottom: 14.px(),
+            left: 16.px(),
         });
 
-        let on_dismiss = self.on_dismiss.clone();
-        let cancel_btn =
-            secondary_button(self.cancel_text.clone(), move |s: &mut State| on_dismiss(s))
-                .flex(1.0);
-
-        let on_confirm = self.on_confirm.clone();
-        let confirm_btn: Box<AnyWidgetView<State, Action>> = if self.destructive {
-            destructive_button(self.confirm_text.clone(), move |s: &mut State| {
-                on_confirm(s)
-            })
-            .boxed()
-        } else {
-            primary_button(self.confirm_text.clone(), move |s: &mut State| {
-                on_confirm(s)
-            })
-            .boxed()
+        let make_cancel = |cb: AlertDialogCallback<State, Action>, txt: ArcStr| {
+            secondary_button(txt, move |s: &mut State| cb(s))
+        };
+        let make_confirm = |cb: AlertDialogCallback<State, Action>, txt: ArcStr, dest: bool| {
+            if dest {
+                destructive_button(txt, move |s: &mut State| cb(s)).boxed()
+            } else {
+                primary_button(txt, move |s: &mut State| cb(s)).boxed()
+            }
         };
 
-        let responses = flex_row((cancel_btn, confirm_btn.flex(1.0)))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px())
+        let wide_responses = flex_row((
+            make_cancel(self.on_dismiss.clone(), self.cancel_text.clone()).flex(1.0),
+            make_confirm(
+                self.on_confirm.clone(),
+                self.confirm_text.clone(),
+                self.destructive,
+            )
+            .flex(1.0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(10.px());
+
+        let narrow_responses = flex_col((
+            make_confirm(
+                self.on_confirm.clone(),
+                self.confirm_text.clone(),
+                self.destructive,
+            ),
+            make_cancel(self.on_dismiss.clone(), self.cancel_text.clone()),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(8.px());
+
+        let responses = crate::breakpoint::breakpoint_bin(240.0, wide_responses, narrow_responses)
             .padding(Padding {
                 top: 0.px(),
-                right: 18.px(),
-                bottom: 18.px(),
-                left: 18.px(),
+                right: 16.px(),
+                bottom: 16.px(),
+                left: 16.px(),
             });
 
         flex_col((header, responses))

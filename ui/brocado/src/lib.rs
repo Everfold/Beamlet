@@ -9,10 +9,12 @@ pub mod theme;
 pub use brocado_core as core_ui;
 pub use brocado_core::components;
 pub use brocado_core::foundation::{
-    BeveledBorder, BeveledBorderView, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame,
-    FocusFrameView, HoverTooltipHost, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget,
-    RippleLayer, RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, beveled_surface,
-    focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition, wrap,
+    AdaptivePairView, AdaptivePairWidget, BeveledBorder, BeveledBorderView, ClipBoxView,
+    ClipBoxWidget, ContextMenuHost, ContextMenuView, EscapeCatcher, FocusFrame, FocusFrameView,
+    HoverTooltipHost, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer,
+    RippleLayerView, UiClassExt, WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface,
+    clip_box, focus_frame, icons, popover_anchor, popover_place, ripple_layer, ui_icon,
+    ui_transition, wrap,
 };
 pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
