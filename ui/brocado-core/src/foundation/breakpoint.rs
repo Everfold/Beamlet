@@ -1,4 +1,4 @@
-//! Responsive `AdwBreakpointBin` container switching cleanly between wide and narrow layouts.
+//! Responsive [`BreakpointBin`] container switching cleanly between wide and narrow layouts.
 
 use std::marker::PhantomData;
 
@@ -16,6 +16,8 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
+use crate::foundation::{BoundedX, BoundedY};
+
 const WIDE_CHILD_ID: ViewId = ViewId::new(0x5549_3810);
 const NARROW_CHILD_ID: ViewId = ViewId::new(0x5549_3811);
 
@@ -25,14 +27,14 @@ const NARROW_CHILD_ID: ViewId = ViewId::new(0x5549_3811);
     missing_debug_implementations,
     reason = "Holds erased Masonry WidgetPods"
 )]
-pub struct AdwBreakpointBin {
+pub struct BreakpointBin {
     wide: WidgetPod<dyn Widget>,
     narrow: WidgetPod<dyn Widget>,
     breakpoint_px: f64,
     is_narrow: bool,
 }
 
-impl AdwBreakpointBin {
+impl BreakpointBin {
     fn new(
         wide: NewWidget<impl Widget + ?Sized>,
         narrow: NewWidget<impl Widget + ?Sized>,
@@ -72,7 +74,7 @@ fn opt_layout_size(w: Option<Length>, h: Option<Length>) -> LayoutSize {
     }
 }
 
-impl Widget for AdwBreakpointBin {
+impl Widget for BreakpointBin {
     type Action = NoAction;
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
@@ -194,31 +196,31 @@ impl Widget for AdwBreakpointBin {
     }
 
     fn make_trace_span(&self, id: WidgetId) -> Span {
-        trace_span!("AdwBreakpointBin", id = id.trace())
+        trace_span!("BreakpointBin", id = id.trace())
     }
 }
 
 /// View wrapper constructed by [`breakpoint_bin`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
-pub struct BreakpointBin<W, N, State, Action> {
+pub struct BreakpointBinView<W, N, State, Action> {
     breakpoint_px: f64,
     wide: W,
     narrow: N,
     phantom: PhantomData<fn(&mut State) -> Action>,
 }
 
-/// GNOME `AdwBreakpointBin`: displays `wide` when width `>= breakpoint_px`, otherwise switches to `narrow`.
+/// Responsive container: displays `wide` when width `>= breakpoint_px`, otherwise switches to `narrow`.
 pub fn breakpoint_bin<State: 'static, Action: 'static, W, N>(
     breakpoint_px: f64,
     wide: W,
     narrow: N,
-) -> BreakpointBin<W, N, State, Action>
+) -> BreakpointBinView<W, N, State, Action>
 where
     W: WidgetView<State, Action>,
     N: WidgetView<State, Action>,
 {
-    BreakpointBin {
+    BreakpointBinView {
         breakpoint_px,
         wide,
         narrow,
@@ -226,16 +228,16 @@ where
     }
 }
 
-impl<W, N, State, Action> ViewMarker for BreakpointBin<W, N, State, Action> {}
+impl<W, N, State, Action> ViewMarker for BreakpointBinView<W, N, State, Action> {}
 
-impl<W, N, State, Action> View<State, Action, ViewCtx> for BreakpointBin<W, N, State, Action>
+impl<W, N, State, Action> View<State, Action, ViewCtx> for BreakpointBinView<W, N, State, Action>
 where
     W: WidgetView<State, Action>,
     N: WidgetView<State, Action>,
     State: 'static,
     Action: 'static,
 {
-    type Element = Pod<AdwBreakpointBin>;
+    type Element = Pod<BreakpointBin>;
     type ViewState = (W::ViewState, N::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
@@ -243,7 +245,7 @@ where
             ctx.with_id(WIDE_CHILD_ID, |ctx| self.wide.build(ctx, app_state));
         let (narrow_pod, narrow_state) =
             ctx.with_id(NARROW_CHILD_ID, |ctx| self.narrow.build(ctx, app_state));
-        let pod = ctx.create_pod(AdwBreakpointBin::new(
+        let pod = ctx.create_pod(BreakpointBin::new(
             wide_pod.new_widget,
             narrow_pod.new_widget,
             self.breakpoint_px,
@@ -259,15 +261,15 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        AdwBreakpointBin::set_breakpoint(&mut element, self.breakpoint_px);
+        BreakpointBin::set_breakpoint(&mut element, self.breakpoint_px);
         {
-            let mut wide_dyn = AdwBreakpointBin::wide_mut(&mut element);
+            let mut wide_dyn = BreakpointBin::wide_mut(&mut element);
             ctx.with_id(WIDE_CHILD_ID, |ctx| {
                 self.wide
                     .rebuild(&prev.wide, wide_state, ctx, wide_dyn.downcast(), app_state);
             });
         }
-        let mut narrow_dyn = AdwBreakpointBin::narrow_mut(&mut element);
+        let mut narrow_dyn = BreakpointBin::narrow_mut(&mut element);
         ctx.with_id(NARROW_CHILD_ID, |ctx| {
             self.narrow.rebuild(
                 &prev.narrow,
@@ -286,12 +288,12 @@ where
         mut element: Mut<'_, Self::Element>,
     ) {
         {
-            let mut wide_dyn = AdwBreakpointBin::wide_mut(&mut element);
+            let mut wide_dyn = BreakpointBin::wide_mut(&mut element);
             ctx.with_id(WIDE_CHILD_ID, |ctx| {
                 self.wide.teardown(wide_state, ctx, wide_dyn.downcast());
             });
         }
-        let mut narrow_dyn = AdwBreakpointBin::narrow_mut(&mut element);
+        let mut narrow_dyn = BreakpointBin::narrow_mut(&mut element);
         ctx.with_id(NARROW_CHILD_ID, |ctx| {
             self.narrow
                 .teardown(narrow_state, ctx, narrow_dyn.downcast());
@@ -307,12 +309,12 @@ where
     ) -> MessageResult<Action> {
         match message.take_first() {
             Some(WIDE_CHILD_ID) => {
-                let mut wide_dyn = AdwBreakpointBin::wide_mut(&mut element);
+                let mut wide_dyn = BreakpointBin::wide_mut(&mut element);
                 self.wide
                     .message(wide_state, message, wide_dyn.downcast(), app_state)
             }
             Some(NARROW_CHILD_ID) => {
-                let mut narrow_dyn = AdwBreakpointBin::narrow_mut(&mut element);
+                let mut narrow_dyn = BreakpointBin::narrow_mut(&mut element);
                 self.narrow
                     .message(narrow_state, message, narrow_dyn.downcast(), app_state)
             }
@@ -321,16 +323,16 @@ where
     }
 }
 
-impl<W, N, State, Action> brocado_core::foundation::BoundedX for BreakpointBin<W, N, State, Action>
+impl<W, N, State, Action> BoundedX for BreakpointBinView<W, N, State, Action>
 where
-    W: brocado_core::foundation::BoundedX,
-    N: brocado_core::foundation::BoundedX,
+    W: BoundedX,
+    N: BoundedX,
 {
 }
 
-impl<W, N, State, Action> brocado_core::foundation::BoundedY for BreakpointBin<W, N, State, Action>
+impl<W, N, State, Action> BoundedY for BreakpointBinView<W, N, State, Action>
 where
-    W: brocado_core::foundation::BoundedY,
-    N: brocado_core::foundation::BoundedY,
+    W: BoundedY,
+    N: BoundedY,
 {
 }

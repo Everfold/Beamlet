@@ -1,4 +1,4 @@
-//! Layout system showcase: spacing rhythm, Flex weights, AdwClamp, BreakpointBin, and Elevation/ZStack.
+//! Layout system showcase: spacing rhythm, Flex weights, Clamp, BreakpointBin, and Elevation/ZStack.
 
 use brocado::prelude::*;
 use brocado::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
@@ -77,7 +77,7 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let clamp_lab = outlined_card(
         flex_col((
-            title_medium("AdwClamp 限宽"),
+            title_medium("Clamp 限宽"),
             segmented_button(
                 &["480px", "680px", "880px"],
                 state.layout.clamp_idx,
@@ -144,10 +144,10 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             sized_box(zstack((
                 surface_box(ElevationLevel::Level1, body_small("ZStack"))
                     .alignment(UnitPoint::TOP_LEFT),
-                sized_box(info_badge(InfoBarSeverity::Success, Some("TOP_RIGHT")))
+                sized_box(large_badge("TOP_RIGHT"))
                     .padding(Padding::all(6.px()))
                     .alignment(UnitPoint::TOP_RIGHT),
-                sized_box(info_badge(InfoBarSeverity::Warning, Some("BOTTOM_RIGHT")))
+                sized_box(large_badge("BOTTOM_RIGHT"))
                     .padding(Padding::all(6.px()))
                     .alignment(UnitPoint::BOTTOM_RIGHT),
             )))
@@ -201,9 +201,9 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let wrap_tags = [
         "MD3",
-        "Fluent 2",
-        "Apple HIG",
-        "Adwaita",
+        "Expressive",
+        "OKLCH",
+        "Spring",
         "Parley",
         "Vello",
         "AccessKit",

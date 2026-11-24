@@ -46,37 +46,11 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
         .dismiss_text("取消")
     });
 
-    let platform_alert_overlay: Option<Box<AnyWidgetView<GalleryState>>> = state
-        .overlays
-        .show_platform_alert
-        .then(|| match state.theme.language {
-            DesignLanguage::Adwaita => alert_dialog(
-                "AdwAlertDialog",
-                "GNOME Pill 警告框。",
-                "取消",
-                "确定",
-                |s: &mut GalleryState| {
-                    s.components.click_count += 1;
-                    s.overlays.show_platform_alert = false;
-                },
-                |s: &mut GalleryState| s.overlays.show_platform_alert = false,
-            )
-            .boxed(),
-            DesignLanguage::Hig => macos_alert_dialog(
-                "NSAlert",
-                "macOS 原生警告框。",
-                "确定",
-                "取消",
-                |s: &mut GalleryState| {
-                    s.components.click_count += 1;
-                    s.overlays.show_platform_alert = false;
-                },
-                |s: &mut GalleryState| s.overlays.show_platform_alert = false,
-            )
-            .boxed(),
-            DesignLanguage::Fluent | DesignLanguage::Md3 => basic_dialog(
-                "平台对话框",
-                "遵循平台主次按钮顺序。",
+    let platform_alert_overlay: Option<Box<AnyWidgetView<GalleryState>>> =
+        state.overlays.show_platform_alert.then(|| {
+            basic_dialog(
+                "确认提示",
+                "遵循 Material 3 Expressive 动作顺序。",
                 "确定",
                 |s: &mut GalleryState| {
                     s.components.click_count += 1;
@@ -86,7 +60,7 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             )
             .icon(icons::INFO)
             .dismiss_text("取消")
-            .boxed(),
+            .boxed()
         });
 
     let date_overlay = state.overlays.show_date_dialog.then(|| {

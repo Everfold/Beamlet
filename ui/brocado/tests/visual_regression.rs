@@ -85,54 +85,34 @@ fn golden_md3_light_workspace() {
 }
 
 #[test]
-fn golden_fluent_dark_workspace() {
+fn golden_md3_dark_workspace() {
     assert_scene_snapshot(
         "workspace",
-        UiTheme::new(DesignLanguage::Fluent, Brightness::Dark),
+        UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
         &[],
-        "fluent_dark_workspace",
+        "md3_dark_workspace",
     );
 }
 
 #[test]
-fn golden_hig_light_workspace() {
-    assert_scene_snapshot(
-        "workspace",
-        UiTheme::new(DesignLanguage::Hig, Brightness::Light),
-        &[],
-        "hig_light_workspace",
-    );
-}
-
-#[test]
-fn golden_adwaita_light_workspace() {
-    assert_scene_snapshot(
-        "workspace",
-        UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
-        &[],
-        "adwaita_light_workspace",
-    );
-}
-
-#[test]
-fn golden_fluent_light_inputs_focused() {
+fn golden_md3_light_inputs_focused() {
     assert_scene_snapshot(
         "inputs",
-        UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         &[PreviewStep::FocusType {
             type_name: "TextArea".to_owned(),
             index: 0,
         }],
-        "fluent_light_inputs_focused",
+        "md3_light_inputs_focused",
     );
 }
 
 #[test]
-fn golden_hig_light_dialog_open() {
+fn golden_md3_light_dialog_open() {
     assert_scene_snapshot(
         "overlays",
-        UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+        UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         &[PreviewStep::ClickLabel("Open Basic Dialog".to_owned())],
-        "hig_light_dialog_open",
+        "md3_light_dialog_open",
     );
 }

@@ -18,47 +18,29 @@ type ThemeSpecCache = Vec<(UiTheme, Arc<DesignSpec>)>;
 
 static THEME_SPEC_CACHE: LazyLock<Mutex<ThemeSpecCache>> = LazyLock::new(|| Mutex::new(Vec::new()));
 
-/// Supported cross-platform design systems.
+/// Supported design language (Material 3 Expressive).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum DesignLanguage {
-    /// Google Material Design 3 (OKLCH dynamic color, pill chrome, tinted state layers).
+    /// Google Material Design 3 Expressive (OKLCH dynamic color, pill chrome, tinted state layers).
     #[default]
     Md3,
-    /// Microsoft Windows 11 / WinUI 3 Fluent (Mica layers, `4px` radius, `2px` bottom focus bar).
-    Fluent,
-    /// Apple macOS Human Interface Guidelines (Aqua surfaces, compact `26px` chrome, `3px` halo focus).
-    Hig,
-    /// GNOME Libadwaita (Flat alpha veils, `12px` boxed lists, `46px` headerbar).
-    Adwaita,
 }
 
 impl DesignLanguage {
-    /// Ordered array of all four supported design languages.
-    pub const ALL: [Self; 4] = [Self::Md3, Self::Fluent, Self::Hig, Self::Adwaita];
+    /// Ordered array of supported design languages.
+    pub const ALL: [Self; 1] = [Self::Md3];
 
-    /// Selects the host OS native design language at compile time (`Fluent` on Windows,
-    /// `Hig` on macOS, `Adwaita` on Linux, falling back to `Md3`).
+    /// Selects the Material Design 3 Expressive design language.
     #[must_use]
     pub const fn native() -> Self {
-        if cfg!(target_os = "windows") {
-            Self::Fluent
-        } else if cfg!(target_os = "macos") {
-            Self::Hig
-        } else if cfg!(target_os = "linux") {
-            Self::Adwaita
-        } else {
-            Self::Md3
-        }
+        Self::Md3
     }
 
     /// Human-readable display name.
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Md3 => "Material 3",
-            Self::Fluent => "Windows Fluent",
-            Self::Hig => "macOS HIG",
-            Self::Adwaita => "GNOME Adwaita",
+            Self::Md3 => "Material 3 Expressive",
         }
     }
 }
@@ -295,86 +277,6 @@ impl UiTheme {
                     DesignSpec::neutral_fallback(self.brightness)
                 }
             }
-            DesignLanguage::Fluent => {
-                #[cfg(feature = "fluent")]
-                {
-                    let accent = match self.accent {
-                        UiAccent::Default | UiAccent::Blue => {
-                            brocado_fluent::FluentAccent::WindowsBlue
-                        }
-                        UiAccent::Teal => brocado_fluent::FluentAccent::Teal,
-                        UiAccent::Green => brocado_fluent::FluentAccent::Green,
-                        UiAccent::Purple => brocado_fluent::FluentAccent::Purple,
-                        UiAccent::Pink | UiAccent::Red => brocado_fluent::FluentAccent::Rose,
-                        UiAccent::Orange => brocado_fluent::FluentAccent::Amber,
-                        UiAccent::Custom(c) => brocado_fluent::FluentAccent::Custom(c),
-                    };
-                    brocado_fluent::FluentTheme {
-                        brightness: self.brightness,
-                        accent,
-                        reduced_motion: self.reduced_motion,
-                        ..brocado_fluent::FluentTheme::light()
-                    }
-                    .to_spec()
-                }
-                #[cfg(not(feature = "fluent"))]
-                {
-                    DesignSpec::neutral_fallback(self.brightness)
-                }
-            }
-            DesignLanguage::Hig => {
-                #[cfg(feature = "hig")]
-                {
-                    let accent = match self.accent {
-                        UiAccent::Default | UiAccent::Blue | UiAccent::Custom(_) => {
-                            brocado_hig::HigAccent::Blue
-                        }
-                        UiAccent::Teal | UiAccent::Green => brocado_hig::HigAccent::Green,
-                        UiAccent::Purple => brocado_hig::HigAccent::Purple,
-                        UiAccent::Pink => brocado_hig::HigAccent::Pink,
-                        UiAccent::Orange => brocado_hig::HigAccent::Orange,
-                        UiAccent::Red => brocado_hig::HigAccent::Red,
-                    };
-                    brocado_hig::HigTheme {
-                        brightness: self.brightness,
-                        accent,
-                        reduced_motion: self.reduced_motion,
-                        ..brocado_hig::HigTheme::light()
-                    }
-                    .to_spec()
-                }
-                #[cfg(not(feature = "hig"))]
-                {
-                    DesignSpec::neutral_fallback(self.brightness)
-                }
-            }
-            DesignLanguage::Adwaita => {
-                #[cfg(feature = "adwaita")]
-                {
-                    let accent = match self.accent {
-                        UiAccent::Default | UiAccent::Blue | UiAccent::Custom(_) => {
-                            brocado_adwaita::AdwaitaAccent::Blue
-                        }
-                        UiAccent::Teal => brocado_adwaita::AdwaitaAccent::Teal,
-                        UiAccent::Green => brocado_adwaita::AdwaitaAccent::Green,
-                        UiAccent::Purple => brocado_adwaita::AdwaitaAccent::Purple,
-                        UiAccent::Pink => brocado_adwaita::AdwaitaAccent::Pink,
-                        UiAccent::Orange => brocado_adwaita::AdwaitaAccent::Orange,
-                        UiAccent::Red => brocado_adwaita::AdwaitaAccent::Red,
-                    };
-                    brocado_adwaita::AdwaitaTheme {
-                        brightness: self.brightness,
-                        accent,
-                        reduced_motion: self.reduced_motion,
-                        ..brocado_adwaita::AdwaitaTheme::light()
-                    }
-                    .to_spec()
-                }
-                #[cfg(not(feature = "adwaita"))]
-                {
-                    DesignSpec::neutral_fallback(self.brightness)
-                }
-            }
         };
         if let Some(font) = &self.font_family {
             spec.typography = spec.typography.with_font_family(font.clone());
@@ -480,34 +382,6 @@ mod tests {
     }
 
     #[test]
-    fn ui_theme_assigns_expected_platform_backdrops() {
-        assert_eq!(
-            UiTheme::new(DesignLanguage::Md3, Brightness::Light)
-                .to_spec()
-                .backdrop,
-            WindowBackdrop::Opaque
-        );
-        assert_eq!(
-            UiTheme::new(DesignLanguage::Fluent, Brightness::Light)
-                .to_spec()
-                .backdrop,
-            WindowBackdrop::Mica
-        );
-        assert_eq!(
-            UiTheme::new(DesignLanguage::Hig, Brightness::Light)
-                .to_spec()
-                .backdrop,
-            WindowBackdrop::MacosVibrancy
-        );
-        assert_eq!(
-            UiTheme::new(DesignLanguage::Adwaita, Brightness::Light)
-                .to_spec()
-                .backdrop,
-            WindowBackdrop::Opaque
-        );
-    }
-
-    #[test]
     fn ui_theme_defaults_to_system_font_and_propagates_custom_fallbacks() {
         use std::borrow::Cow;
         let system_ui = FontFamily::Single(FontFamilyName::Generic(
@@ -531,7 +405,7 @@ mod tests {
             ])))
         );
 
-        let appended = UiTheme::new(DesignLanguage::Hig, Brightness::Light)
+        let appended = UiTheme::new(DesignLanguage::Md3, Brightness::Light)
             .append_font_fallback(FontFamilyName::Named(Cow::Borrowed("AppEmoji")));
         assert_eq!(
             appended.cached_spec().typography.font_family(),

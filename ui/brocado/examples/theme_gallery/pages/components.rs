@@ -167,8 +167,8 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
             filter_chip("筛选 B", c.chip_flags[1], |s: &mut GalleryState| {
                 s.components.chip_flags[1] = !s.components.chip_flags[1];
             }),
-            suggestion_chip("Fluent", |s: &mut GalleryState| {
-                s.theme.language = DesignLanguage::Fluent;
+            suggestion_chip("高对比", |s: &mut GalleryState| {
+                s.theme.high_contrast = !s.theme.high_contrast;
             }),
         )
     };

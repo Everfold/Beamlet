@@ -19,12 +19,7 @@ impl AppState for GalleryState {
 }
 
 fn app_view(state: &mut GalleryState) -> Box<AnyWidgetView<GalleryState>> {
-    match state.theme.language {
-        DesignLanguage::Md3 => shells::md3_shell(state).boxed(),
-        DesignLanguage::Fluent => shells::fluent_shell(state).boxed(),
-        DesignLanguage::Hig => shells::hig_shell(state).boxed(),
-        DesignLanguage::Adwaita => shells::adwaita_shell(state).boxed(),
-    }
+    shells::md3_shell(state).boxed()
 }
 
 fn main() {
@@ -398,22 +393,12 @@ mod tests {
         h.run_step(&PreviewStep::ClickLabel("减动效".into()))
             .unwrap();
         assert!(h.state().theme.reduced_motion);
-        h.run_step(&PreviewStep::ClickLabel("Fluent".into()))
+        h.run_step(&PreviewStep::ClickLabel("高对比".into()))
             .unwrap();
-        assert_eq!(h.state().theme.language, DesignLanguage::Fluent);
-
-        // Fluent collapsible navigation toggle
-        assert!(!h.state().native.nav_collapsed);
-        h.run_step(&PreviewStep::ClickType {
-            type_name: "Button".into(),
-            index: 0,
-        })
-        .unwrap();
-        assert!(h.state().native.nav_collapsed);
-
-        // Return to MD3 light
-        h.run_step(&PreviewStep::ClickLabel("MD3".into())).unwrap();
-        assert_eq!(h.state().theme.language, DesignLanguage::Md3);
+        assert!(h.state().theme.high_contrast);
+        h.run_step(&PreviewStep::ClickLabel("高对比".into()))
+            .unwrap();
+        assert!(!h.state().theme.high_contrast);
 
         // 2. Components page: buttons, disabled no-op, destructive dialog + Escape,
         //    checkbox/switch/radio/sliders/tabs/chips
@@ -545,84 +530,25 @@ mod tests {
             assert_visual_invariants(&mut h, &format!("Tooltip on {tip_lbl}"));
         }
 
-        // Native alert across Adwaita & HIG
-        for lang_btn in ["Adwaita", "HIG"] {
-            h.run_step(&PreviewStep::ClickLabel(lang_btn.into()))
-                .unwrap();
+        // Platform confirm dialog
+        {
             h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
                 .unwrap();
             assert!(h.state().overlays.show_platform_alert);
-            assert_visual_invariants(&mut h, &format!("{lang_btn} Native Alert"));
+            assert_visual_invariants(&mut h, "MD3 Platform Confirm");
             let before_confirm = h.state().components.click_count;
             h.run_step(&PreviewStep::ClickLabel("确定".into())).unwrap();
             assert!(!h.state().overlays.show_platform_alert);
             assert_eq!(h.state().components.click_count, before_confirm + 1);
         }
 
-        // 5. Native page across all 4 platforms
+        // 5. Native M3 Expressive showcase page
         h.run_step(&PreviewStep::ClickLabel("平台".into())).unwrap();
         assert_eq!(h.state().active_tab, GalleryTab::Native);
 
-        h.run_step(&PreviewStep::ClickLabel("MD3".into())).unwrap();
         let md3_before = h.state().components.click_count;
         h.run_step(&PreviewStep::ClickLabel("发布".into())).unwrap();
         assert_eq!(h.state().components.click_count, md3_before + 1);
-
-        h.run_step(&PreviewStep::ClickLabel("Fluent".into()))
-            .unwrap();
-        let fluent_hosts = h.find_widget_ids("AnchoredPopupHost");
-        if let Some(&overflow_host) = fluent_hosts.get(1) {
-            let rr = h.inner_harness_mut().render_root();
-            let overflow_btn = rr.get_widget(overflow_host).and_then(|host_ref| {
-                fn find_btn(
-                    n: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
-                ) -> Option<masonry::core::WidgetId> {
-                    if n.inner().short_type_name() == "Button" {
-                        return Some(n.id());
-                    }
-                    n.children().iter().find_map(find_btn)
-                }
-                find_btn(&host_ref)
-            });
-            if let Some(btn_id) = overflow_btn {
-                h.click_widget_id(btn_id);
-                assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
-                assert_visual_invariants(&mut h, "Fluent CommandBar overflow open");
-                h.run_step(&PreviewStep::ClickLabel("导出".into())).unwrap();
-                assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
-            }
-        }
-        let fluent_before = h.state().components.click_count;
-        h.run_step(&PreviewStep::ClickLabel("保存".into())).unwrap();
-        assert!(h.state().components.click_count >= fluent_before + 1);
-
-        h.run_step(&PreviewStep::ClickLabel("HIG".into())).unwrap();
-        h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
-        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
-        assert_visual_invariants(&mut h, "HIG Native + open popup_button");
-        h.run_step(&PreviewStep::ClickLabel("Metal".into()))
-            .unwrap();
-        assert_eq!(h.state().native.hig_popup_idx, 1);
-        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
-        let sw_before = h.state().native.native_switch;
-        h.run_step(&PreviewStep::ClickType {
-            type_name: "UiSwitch".into(),
-            index: 0,
-        })
-        .unwrap();
-        assert_eq!(h.state().native.native_switch, !sw_before);
-
-        h.run_step(&PreviewStep::ClickLabel("Adwaita".into()))
-            .unwrap();
-        h.run_step(&PreviewStep::ClickLabel("WGPU".into())).unwrap();
-        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
-        assert_visual_invariants(&mut h, "Adwaita Native + open combo_row");
-        h.run_step(&PreviewStep::ClickLabel("CPU".into())).unwrap();
-        assert_eq!(h.state().native.adw_combo_idx, 1);
-        assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
-        let adw_before = h.state().components.click_count;
-        h.run_step(&PreviewStep::ClickLabel("同步".into())).unwrap();
-        assert_eq!(h.state().components.click_count, adw_before + 1);
 
         // 6. Lab page: memoize_with_spec counters & virtual_list
         h.run_step(&PreviewStep::ClickLabel("性能".into())).unwrap();
@@ -866,20 +792,9 @@ mod tests {
             h.render_png(out_dir.join(name)).expect("write audit png");
         };
 
-        // 1-3: Overlays -> Native Alert across Adwaita, HIG, Fluent
-        for (lang, file) in [
-            (DesignLanguage::Adwaita, "01_adwaita_native_alert.png"),
-            (DesignLanguage::Hig, "02_hig_native_alert.png"),
-            (DesignLanguage::Fluent, "03_fluent_native_alert.png"),
-        ] {
-            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
-            h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
-                .unwrap();
-            save(&mut h, file, &mut issues);
-        }
-
-        // 4-12: MD3 Overlays (dialogs, sheets, pickers, toast, tooltips)
+        // 1-9: MD3 Overlays (dialogs, sheets, pickers, toast, tooltips)
         for (lbl, file) in [
+            ("原生警告", "01_md3_confirm_dialog.png"),
             ("基础弹窗", "04_md3_basic_dialog.png"),
             ("危险确认", "05_md3_destructive_dialog.png"),
             ("底抽屉", "06_md3_bottom_sheet.png"),
@@ -910,49 +825,6 @@ mod tests {
             save(&mut h, "13_md3_select_open.png", &mut issues);
         }
 
-        // 14: Fluent Native overflow menu open
-        {
-            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Native);
-            let popup_hosts = h.find_widget_ids("AnchoredPopupHost");
-            if let Some(&host_id) = popup_hosts.get(1) {
-                let rr = h.inner_harness_mut().render_root();
-                if let Some(host_ref) = rr.get_widget(host_id) {
-                    fn first_button(
-                        n: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
-                    ) -> Option<masonry::core::WidgetId> {
-                        if n.inner().short_type_name() == "Button" {
-                            return Some(n.id());
-                        }
-                        n.children().iter().find_map(first_button)
-                    }
-                    if let Some(btn_id) = first_button(&host_ref) {
-                        h.click_widget_id(btn_id);
-                    }
-                }
-            }
-            save(&mut h, "14_fluent_native_overflow.png", &mut issues);
-        }
-
-        // 15: HIG Native popup_button open
-        {
-            let mut h = make_gallery_harness(DesignLanguage::Hig, GalleryTab::Native);
-            h.run_step(&PreviewStep::ClickLabel("自动".into())).unwrap();
-            save(&mut h, "15_hig_native_popup.png", &mut issues);
-        }
-
-        // 16: Adwaita Native combo_row open
-        {
-            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Native);
-            h.run_step(&PreviewStep::ClickLabel("WGPU".into())).unwrap();
-            save(&mut h, "16_adwaita_native_combo.png", &mut issues);
-        }
-
-        // 18: Adwaita Layout page
-        {
-            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Layout);
-            save(&mut h, "18_adwaita_layout.png", &mut issues);
-        }
-
         // 19-24: Narrow & short responsive screenshots (360x640, 320x480, 640x360)
         for (lang, tab, w, height, file) in [
             (
@@ -963,25 +835,25 @@ mod tests {
                 "19_narrow_360x640_md3_components.png",
             ),
             (
-                DesignLanguage::Adwaita,
+                DesignLanguage::Md3,
                 GalleryTab::Layout,
                 360,
                 640,
-                "20_narrow_360x640_adwaita_layout.png",
+                "20_narrow_360x640_md3_layout.png",
             ),
             (
-                DesignLanguage::Fluent,
+                DesignLanguage::Md3,
                 GalleryTab::Lab,
                 360,
                 640,
-                "21_narrow_360x640_fluent_lab.png",
+                "21_narrow_360x640_md3_lab.png",
             ),
             (
-                DesignLanguage::Hig,
+                DesignLanguage::Md3,
                 GalleryTab::Native,
                 360,
                 640,
-                "22_narrow_360x640_hig_native.png",
+                "22_narrow_360x640_md3_native.png",
             ),
             (
                 DesignLanguage::Md3,
@@ -996,22 +868,15 @@ mod tests {
             save(&mut h, file, &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Overlays);
-            h.resize(320, 480);
-            h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
-                .unwrap();
-            save(&mut h, "23_narrow_320x480_adwaita_alert.png", &mut issues);
-        }
-        {
             let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
             h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
             save(&mut h, "25_md3_accent_select_open.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
             h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
                 .unwrap();
-            save(&mut h, "26_fluent_popover_open.png", &mut issues);
+            save(&mut h, "26_md3_popover_open.png", &mut issues);
         }
         {
             let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
@@ -1040,11 +905,11 @@ mod tests {
             save(&mut h, "28_md3_dark_layout_split.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
             h.resize(320, 480);
             h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
                 .unwrap();
-            save(&mut h, "29_narrow_320x480_fluent_popover.png", &mut issues);
+            save(&mut h, "29_narrow_320x480_md3_popover.png", &mut issues);
         }
         {
             let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
@@ -1514,43 +1379,6 @@ mod tests {
         h_ov.run_step(&PreviewStep::ClickLabel("关闭".into()))
             .unwrap();
         assert!(!h_ov.state().overlays.show_bottom_sheet);
-
-        // 3. Adwaita sidebar left-alignment & HIG disclosure left-alignment + Fluent info_badge centering
-        let mut h_adw = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Native);
-        let adw_tree = dump_layout_tree(&mut h_adw);
-        let (nav_btn, nav_lbl) =
-            find_ancestor_button_and_label(&adw_tree, "组件").expect("Adwaita sidebar '组件'");
-        assert!(
-            nav_lbl.rect.x < nav_btn.rect.x + nav_btn.rect.width * 0.4,
-            "sidebar nav label should be left-aligned: btn={:?}, lbl={:?}",
-            nav_btn.rect,
-            nav_lbl.rect
-        );
-
-        let mut h_hig = make_gallery_harness(DesignLanguage::Hig, GalleryTab::Native);
-        let hig_tree = dump_layout_tree(&mut h_hig);
-        let (disc_btn, disc_lbl) =
-            find_ancestor_button_and_label(&hig_tree, "详情").expect("HIG disclosure '详情'");
-        assert!(
-            disc_lbl.rect.x < disc_btn.rect.x + 60.0,
-            "disclosure_group label should be left-aligned: btn={:?}, lbl={:?}",
-            disc_btn.rect,
-            disc_lbl.rect
-        );
-
-        let mut h_flu = make_gallery_harness(DesignLanguage::Fluent, GalleryTab::Native);
-        let flu_tree = dump_layout_tree(&mut h_flu);
-        let (ib_box, ib_lbl) =
-            find_sized_box_and_label(&flu_tree, "展开内容").expect("Fluent info_badge '展开内容'");
-        assert!(
-            ((ib_box.rect.y + ib_box.rect.height * 0.5)
-                - (ib_lbl.rect.y + ib_lbl.rect.height * 0.5))
-                .abs()
-                <= 2.5,
-            "Fluent info_badge text should be vertically centered: box={:?}, lbl={:?}",
-            ib_box.rect,
-            ib_lbl.rect
-        );
     }
 
     #[test]
@@ -1611,21 +1439,6 @@ mod tests {
                 GalleryTab::Native,
                 "04_160_md3_native.png",
             ),
-            (
-                DesignLanguage::Fluent,
-                GalleryTab::Native,
-                "05_160_fluent_native.png",
-            ),
-            (
-                DesignLanguage::Hig,
-                GalleryTab::Native,
-                "06_160_hig_native.png",
-            ),
-            (
-                DesignLanguage::Adwaita,
-                GalleryTab::Native,
-                "07_160_adwaita_native.png",
-            ),
             (DesignLanguage::Md3, GalleryTab::Lab, "15_160_md3_lab.png"),
         ] {
             let mut h = make_gallery_harness(lang, tab);
@@ -1639,12 +1452,6 @@ mod tests {
                 "基础弹窗",
                 "08_160_md3_basic_dialog.png",
             ),
-            (
-                DesignLanguage::Adwaita,
-                "原生警告",
-                "09_160_adwaita_alert.png",
-            ),
-            (DesignLanguage::Hig, "原生警告", "10_160_hig_alert.png"),
             (
                 DesignLanguage::Md3,
                 "日期弹窗",

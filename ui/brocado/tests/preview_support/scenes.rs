@@ -1,7 +1,5 @@
 //! Built-in multi-theme scene catalog and snapshot/preview orchestration helpers.
 
-use std::sync::Arc;
-
 use anyhow::bail;
 use brocado::prelude::*;
 use image::RgbaImage;
@@ -135,28 +133,6 @@ pub struct SceneState {
     pub show_time_dialog: bool,
     /// Toast queue state.
     pub toasts: ToastHostState,
-    /// Fluent `InfoBar` visibility.
-    pub info_bar_visible: bool,
-    /// Fluent `SettingsExpander` state.
-    pub expander_open: bool,
-    /// Fluent `NumberBox` value.
-    pub fluent_number_val: f64,
-    /// HIG inspector visibility.
-    pub show_hig_inspector: bool,
-    /// HIG disclosure group visibility.
-    pub hig_disclosure_open: bool,
-    /// HIG stepper value.
-    pub hig_stepper_val: i32,
-    /// Adwaita banner visibility.
-    pub banner_visible: bool,
-    /// Adwaita expander row state.
-    pub adw_expander_open: bool,
-    /// Adwaita combo row open state.
-    pub adw_combo_open: bool,
-    /// Adwaita combo row selection.
-    pub adw_combo_idx: usize,
-    /// Adwaita entry row text.
-    pub adw_entry_val: String,
     /// Selected workbench row.
     pub selected_row: usize,
 }
@@ -183,9 +159,9 @@ impl SceneState {
             multi_seg_mask: [true, false, true],
             tags: vec![
                 "MD3".into(),
-                "WinUI3".into(),
-                "Aqua".into(),
-                "Adwaita".into(),
+                "Expressive".into(),
+                "OKLCH".into(),
+                "Spring".into(),
             ],
             selected_tab: 0,
             secondary_tab: 1,
@@ -200,17 +176,6 @@ impl SceneState {
             show_date_dialog: false,
             show_time_dialog: false,
             toasts: ToastHostState::new(),
-            info_bar_visible: true,
-            expander_open: true,
-            fluent_number_val: 24.0,
-            show_hig_inspector: true,
-            hig_disclosure_open: true,
-            hig_stepper_val: 8,
-            banner_visible: true,
-            adw_expander_open: true,
-            adw_combo_open: false,
-            adw_combo_idx: 0,
-            adw_entry_val: "beamlet-workspace".into(),
             selected_row: 0,
         }
     }
@@ -598,7 +563,7 @@ fn render_tokens_page() -> Box<AnyWidgetView<SceneState>> {
     .boxed()
 }
 
-fn render_platform_native_page(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
+fn render_platform_native_page(_state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
     let md3_card = filled_card(
         flex_col((
             title_medium("Material Design 3 Signature"),
@@ -633,131 +598,10 @@ fn render_platform_native_page(state: &mut SceneState) -> Box<AnyWidgetView<Scen
         .gap(10.px()),
     );
 
-    let fluent_card = flex_col((
-        title_medium("Windows Fluent / WinUI 3"),
-        breadcrumb_bar(
-            &["Settings", "Personalization", "Colors"],
-            |_: &mut SceneState, _| {},
-        ),
-        settings_card(
-            Some(icons::TUNE),
-            "WinUI 3 NumberBox + InfoBadge",
-            Some("Clamped spin control inside SettingsCard"),
-            flex_row((
-                info_badge(InfoBarSeverity::Success, Some("Ready")),
-                number_box(
-                    state.fluent_number_val,
-                    0.0,
-                    100.0,
-                    4.0,
-                    |s: &mut SceneState, v| {
-                        s.fluent_number_val = v;
-                    },
-                ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
-        ),
-        expander(
-            "Advanced Mica Options",
-            None::<&str>,
-            state.expander_open,
-            |s: &mut SceneState| s.expander_open = !s.expander_open,
-            body_small("Expanded Fluent panel content."),
-        ),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-    .gap(10.px());
-
-    let hig_card = form_group(
-        Some("MACOS HIG"),
-        vec![
-            form_row(
-                "Workers",
-                stepper(
-                    "Count",
-                    state.hig_stepper_val,
-                    1,
-                    16,
-                    1,
-                    |s: &mut SceneState, v| {
-                        s.hig_stepper_val = v;
-                    },
-                ),
-            )
-            .boxed(),
-            disclosure_group(
-                "Details",
-                state.hig_disclosure_open,
-                |s: &mut SceneState| s.hig_disclosure_open = !s.hig_disclosure_open,
-                body_small("Disclosed Aqua sub-row."),
-            )
-            .boxed(),
-        ],
-        None,
-    );
-
-    let adw_card = clamp(
-        620.0,
-        preferences_group(
-            Some("GNOME Libadwaita"),
-            Some("AdwClamp + AdwEntryRow + AdwComboRow + AdwExpanderRow"),
-            vec![
-                entry_row(
-                    "App Slug",
-                    state.adw_entry_val.clone(),
-                    |s: &mut SceneState, v| {
-                        s.adw_entry_val = v;
-                    },
-                )
-                .boxed(),
-                combo_row(
-                    "Backend",
-                    None::<&str>,
-                    &["Vello WGPU", "Vello CPU"],
-                    state.adw_combo_idx,
-                    state.adw_combo_open,
-                    |s: &mut SceneState| s.adw_combo_open = !s.adw_combo_open,
-                    |s: &mut SceneState, i| {
-                        s.adw_combo_idx = i;
-                        s.adw_combo_open = false;
-                    },
-                    |s: &mut SceneState| s.adw_combo_open = false,
-                )
-                .boxed(),
-                expander_row(
-                    "More Options",
-                    None::<&str>,
-                    Some(icons::CODE),
-                    state.adw_expander_open,
-                    |s: &mut SceneState| s.adw_expander_open = !s.adw_expander_open,
-                    vec![
-                        switch_row(
-                            "Flat Alpha",
-                            None::<&str>,
-                            state.switch_on,
-                            |s: &mut SceneState, v| {
-                                s.switch_on = v;
-                            },
-                        )
-                        .boxed(),
-                    ],
-                )
-                .boxed(),
-            ],
-        ),
-    );
-
-    flex_col((
-        headline_small("Platform Native Suites"),
-        md3_card,
-        fluent_card,
-        hig_card,
-        adw_card,
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-    .gap(14.px())
-    .boxed()
+    flex_col((headline_small("Material 3 Expressive Suite"), md3_card))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        .gap(14.px())
+        .boxed()
 }
 
 fn wrap_overlays<V: WidgetView<SceneState>>(
@@ -903,14 +747,7 @@ fn workspace_body(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
                     flex_col((title_small(*title), body_small(*desc)))
                         .cross_axis_alignment(CrossAxisAlignment::Start)
                         .flex(1.0),
-                    info_badge(
-                        if active {
-                            InfoBarSeverity::Success
-                        } else {
-                            InfoBarSeverity::Informational
-                        },
-                        Some(*badge),
-                    ),
+                    large_badge(*badge),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Center)
                 .gap(10.px()),
@@ -1002,153 +839,6 @@ fn render_workspace_scene(state: &mut SceneState) -> Box<AnyWidgetView<SceneStat
                 state,
                 flex_row((rail, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch),
                 Some(dock),
-            )
-        }
-        DesignLanguage::Fluent => {
-            let nav = navigation_view(
-                Some("WinUI 3 Shell"),
-                &dests[..3],
-                &dests[3..],
-                state.active_tab,
-                |s: &mut SceneState, i| s.active_tab = i,
-            );
-            let bc = breadcrumb_bar(
-                &["Beamlet", "Gallery", "Overview"],
-                |_: &mut SceneState, _| {},
-            );
-            let cmd = command_bar(
-                vec![primary_button("New", |s: &mut SceneState| s.click_count += 1).boxed()],
-                vec![
-                    outlined_button("Dialog", |s: &mut SceneState| s.show_basic_dialog = true)
-                        .boxed(),
-                ],
-            );
-            let notice = state.info_bar_visible.then(|| {
-                info_bar(
-                    InfoBarSeverity::Informational,
-                    "Fluent Mica Shell",
-                    "NavigationView with footer pin + BreadcrumbBar + CommandBar.",
-                    Some(Arc::new(|s: &mut SceneState| s.info_bar_visible = false)),
-                )
-            });
-            let main = flex_col((
-                sized_box(flex_col((bc, cmd, notice)).gap(8.px()))
-                    .padding(Padding::from_vh(10.px(), 16.px())),
-                horizontal_divider(),
-                workspace_body(state).flex(1.0),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch);
-            wrap_overlays(
-                state,
-                flex_row((nav, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch),
-                None,
-            )
-        }
-        DesignLanguage::Hig => {
-            let sections = [
-                (
-                    "SHOWCASE",
-                    vec![
-                        ("Overview", icons::HOME),
-                        ("Inputs", icons::EDIT),
-                        ("Tokens", icons::TUNE),
-                    ],
-                ),
-                ("SYSTEM", vec![("Native Suites", icons::PALETTE)]),
-            ];
-            let sidebar = source_list_sidebar(
-                &sections,
-                (0, state.active_tab.min(2)),
-                |s: &mut SceneState, r| {
-                    s.active_tab = r.1;
-                },
-            );
-            let toolbar = macos_toolbar_with_center(
-                vec![icon_button(icons::ARROW_BACK, |s: &mut SceneState| s.active_tab = 0).boxed()],
-                search_bar(state.search_query.clone(), |s: &mut SceneState, v| {
-                    s.search_query = v;
-                })
-                .width(240.px()),
-                vec![
-                    icon_button(icons::DOCK_LEFT, |s: &mut SceneState| {
-                        s.show_hig_inspector = !s.show_hig_inspector;
-                    })
-                    .boxed(),
-                    help_button(|s: &mut SceneState| s.show_basic_dialog = true).boxed(),
-                ],
-            );
-            let inspector = state.show_hig_inspector.then(|| {
-                inspector_panel(
-                    "Attributes",
-                    vec![
-                        form_group(
-                            Some("METRICS"),
-                            vec![
-                                form_row("Clicks", label_medium(format!("{}", state.click_count)))
-                                    .boxed(),
-                            ],
-                            None,
-                        )
-                        .boxed(),
-                    ],
-                )
-            });
-            let main = flex_col((
-                toolbar,
-                workspace_body(state).flex(1.0),
-                path_control(
-                    &[
-                        ("Macintosh HD", icons::FOLDER),
-                        ("Beamlet", icons::CODE),
-                        ("Gallery", icons::DESCRIPTION),
-                    ],
-                    |_: &mut SceneState, _| {},
-                ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch);
-            wrap_overlays(
-                state,
-                flex_row((sidebar, main.flex(1.0), inspector))
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch),
-                None,
-            )
-        }
-        DesignLanguage::Adwaita => {
-            let sidebar = navigation_drawer(
-                Some("Beamlet"),
-                &dests,
-                state.active_tab,
-                |s: &mut SceneState, i| {
-                    s.active_tab = i;
-                },
-            );
-            let hdr = header_bar_with_title(
-                view_switcher(
-                    &[("Overview", icons::HOME), ("Native", icons::PALETTE)],
-                    0,
-                    |s: &mut SceneState, i| s.active_tab = i,
-                ),
-                vec![icon_button(icons::MENU, |s: &mut SceneState| s.click_count += 1).boxed()],
-                vec![
-                    primary_button("Dialog", |s: &mut SceneState| s.show_basic_dialog = true)
-                        .boxed(),
-                ],
-            );
-            let bnr = state.banner_visible.then(|| {
-                banner(
-                    "GNOME Adwaita SplitView + AdwClamp(880px)",
-                    Some("Hide"),
-                    Some(Arc::new(|s: &mut SceneState| s.banner_visible = false)),
-                    None,
-                )
-            });
-            let main = flex_col((hdr, bnr, clamp(880.0, workspace_body(state)).flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch);
-            wrap_overlays(
-                state,
-                flex_row((sidebar, main.flex(1.0)))
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch),
-                None,
             )
         }
     }

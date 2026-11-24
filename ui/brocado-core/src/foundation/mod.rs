@@ -4,6 +4,8 @@
 pub mod adaptive_pair;
 pub mod bevel;
 pub mod bounded;
+pub mod breakpoint;
+pub mod clamp;
 pub mod class_view;
 pub mod clip_box;
 pub mod constrained_box;
@@ -24,6 +26,8 @@ pub use bounded::{
     UncheckedBounded, UncheckedBoundedX, UncheckedBoundedY, UnminAxis, assume_bounded,
     assume_bounded_x, assume_bounded_y, bounded, bounded_x, bounded_y, column, container, row,
 };
+pub use breakpoint::{BreakpointBin, BreakpointBinView, breakpoint_bin};
+pub use clamp::{Clamp, ClampView, bounded_clamp, clamp};
 pub use class_view::{UiClassExt, WithClass};
 pub use clip_box::{ClipBoxView, ClipBoxWidget, clip_box};
 pub use constrained_box::{ConstrainedBox, ConstrainedBoxView, constrained_box};

@@ -1,4 +1,4 @@
-//! Unified multi-theme UI facade supporting Material Design 3, Windows Fluent, macOS HIG, and GNOME Adwaita.
+//! Material Design 3 Expressive UI library built on Linebender Masonry & Xilem.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 #![cfg_attr(target_pointer_width = "64", warn(clippy::trivially_copy_pass_by_ref))]
@@ -11,15 +11,16 @@ pub use brocado_core::components;
 pub use brocado_core::foundation::{
     AdaptivePairView, AdaptivePairWidget, BeveledBorder, BeveledBorderView, Bounded,
     BoundedAnyView, BoundedViewExt, BoundedX, BoundedXAnyView, BoundedXSeq, BoundedY, BoundedYSeq,
-    ClipBoxView, ClipBoxWidget, ColumnView, ConstrainedBox, ConstrainedBoxView, ContainerView,
-    ContextMenuHost, ContextMenuView, EscapeCatcher, FitAxis, FocusFrame, FocusFrameView,
-    HasMinAxis, HoverTooltipHost, ModalAxisSizing, PopoverAnchorRect, PopoverAnchorView,
-    PopoverAnchorWidget, RippleLayer, RippleLayerView, RowView, ScrollAxis, ScrollBarStyle,
-    ScrollBarVisibility, ScrollView, ScrollViewWidget, UiClassExt, UiScrollBar, UncheckedBounded,
-    UncheckedBoundedX, UncheckedBoundedY, UnminAxis, WrapState, WrapView, WrapWidget,
-    adaptive_pair, assume_bounded, assume_bounded_x, assume_bounded_y, beveled_surface, bounded,
-    bounded_x, bounded_y, clip_box, column, constrained_box, container, focus_frame, icons,
-    popover_anchor, popover_place, ripple_layer, row, scroll_horizontal, scroll_vertical,
+    BreakpointBin, BreakpointBinView, Clamp, ClampView, ClipBoxView, ClipBoxWidget, ColumnView,
+    ConstrainedBox, ConstrainedBoxView, ContainerView, ContextMenuHost, ContextMenuView,
+    EscapeCatcher, FitAxis, FocusFrame, FocusFrameView, HasMinAxis, HoverTooltipHost,
+    ModalAxisSizing, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer,
+    RippleLayerView, RowView, ScrollAxis, ScrollBarStyle, ScrollBarVisibility, ScrollView,
+    ScrollViewWidget, UiClassExt, UiScrollBar, UncheckedBounded, UncheckedBoundedX,
+    UncheckedBoundedY, UnminAxis, WrapState, WrapView, WrapWidget, adaptive_pair, assume_bounded,
+    assume_bounded_x, assume_bounded_y, beveled_surface, bounded, bounded_clamp, bounded_x,
+    bounded_y, breakpoint_bin, clamp, clip_box, column, constrained_box, container, focus_frame,
+    icons, popover_anchor, popover_place, ripple_layer, row, scroll_horizontal, scroll_vertical,
     scroll_view, ui_icon, ui_transition, wrap,
 };
 pub use brocado_core::style_engine::{
@@ -52,12 +53,3 @@ pub use brocado_winit::{
 
 #[cfg(feature = "md3")]
 pub use brocado_md3 as md3;
-
-#[cfg(feature = "fluent")]
-pub use brocado_fluent as fluent;
-
-#[cfg(feature = "hig")]
-pub use brocado_hig as hig;
-
-#[cfg(feature = "adwaita")]
-pub use brocado_adwaita as adwaita;

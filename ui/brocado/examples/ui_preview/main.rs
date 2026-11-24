@@ -33,7 +33,7 @@ struct Cli {
     #[arg(long, default_value = "workspace")]
     scene: String,
 
-    /// Comma-separated themes: md3, fluent, hig, adwaita, or "all".
+    /// Theme selector ("md3" or "all").
     #[arg(long, default_value = "all")]
     themes: String,
 
@@ -119,21 +119,13 @@ fn parse_scenes(spec: &str) -> anyhow::Result<Vec<&'static str>> {
 
 fn parse_themes(spec: &str) -> anyhow::Result<Vec<(DesignLanguage, &'static str)>> {
     if spec.eq_ignore_ascii_case("all") {
-        return Ok(vec![
-            (DesignLanguage::Md3, "md3"),
-            (DesignLanguage::Fluent, "fluent"),
-            (DesignLanguage::Hig, "hig"),
-            (DesignLanguage::Adwaita, "adwaita"),
-        ]);
+        return Ok(vec![(DesignLanguage::Md3, "md3")]);
     }
     let mut out = Vec::new();
     for raw in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
         let pair = match raw.to_ascii_lowercase().as_str() {
             "md3" => (DesignLanguage::Md3, "md3"),
-            "fluent" => (DesignLanguage::Fluent, "fluent"),
-            "hig" => (DesignLanguage::Hig, "hig"),
-            "adwaita" => (DesignLanguage::Adwaita, "adwaita"),
-            other => bail!("unknown theme '{other}' (expected md3, fluent, hig, adwaita, or all)"),
+            other => bail!("unknown theme '{other}' (expected md3 or all)"),
         };
         out.push(pair);
     }

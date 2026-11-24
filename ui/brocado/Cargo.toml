@@ -8,10 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [features]
-default = ["adwaita", "fluent", "hig", "md3", "winit"]
-adwaita = ["dep:brocado-adwaita"]
-fluent = ["dep:brocado-fluent"]
-hig = ["dep:brocado-hig"]
+default = ["md3", "winit"]
 md3 = ["dep:brocado-md3"]
 winit = ["dep:brocado-winit"]
 
@@ -20,10 +17,7 @@ name = "theme_gallery"
 required-features = ["winit"]
 
 [dependencies]
-brocado-adwaita = { workspace = true, optional = true }
 brocado-core.workspace = true
-brocado-fluent = { workspace = true, optional = true }
-brocado-hig = { workspace = true, optional = true }
 brocado-md3 = { workspace = true, optional = true }
 brocado-winit = { workspace = true, optional = true }
 masonry.workspace = true

@@ -595,226 +595,24 @@ fn audit_platform_native_all_suites() {
             "[{lang:?}] MD3 FAB sizes + toolbar icons"
         );
 
-        // Fluent: Breadcrumb + NumberBox (icon +/-) + Expander
-        h.run_step(&PreviewStep::ClickLabel("Settings".to_owned()))
-            .unwrap();
-        let num_before = h.state().fluent_number_val;
-        // Icon buttons after the 5 MD3 FAB/toolbar icons: index 5 is NumberBox decrement, index 6 is increment.
-        assert!(
-            icon_btns.len() >= 7,
-            "[{lang:?}] expected NumberBox +/- icon buttons"
-        );
-        let all_btns = h.find_widget_ids("Button");
-        let nb_dec = *all_btns
-            .iter()
-            .find(|w| w.to_raw() == icon_btns[5])
-            .unwrap();
-        let nb_inc = *all_btns
-            .iter()
-            .find(|w| w.to_raw() == icon_btns[6])
-            .unwrap();
-        h.click_widget_id(nb_inc);
-        assert_eq!(h.state().fluent_number_val, num_before + 4.0);
-        h.click_widget_id(nb_dec);
-        assert_eq!(h.state().fluent_number_val, num_before);
-
-        let exp_before = h.state().expander_open;
-        let exp_btn = *all_btns
-            .iter()
-            .find(|w| w.to_raw() == icon_btns[7])
-            .expect("Fluent expander chevron button");
-        h.click_widget_id(exp_btn);
-        assert_eq!(
-            h.state().expander_open,
-            !exp_before,
-            "[{lang:?}] Fluent expander should toggle"
-        );
-        let exp_btn_after = find_buttons_without_label(&mut h)[7];
-        let exp_wid_after = h
-            .find_widget_ids("Button")
-            .into_iter()
-            .find(|w| w.to_raw() == exp_btn_after)
-            .unwrap();
-        h.click_widget_id(exp_wid_after);
-        assert_eq!(h.state().expander_open, exp_before);
-
-        // HIG: Stepper (icon - / +) & DisclosureGroup
-        let step_before = h.state().hig_stepper_val;
-        let pn_icons = find_buttons_without_label(&mut h);
-        assert!(
-            pn_icons.len() >= 10,
-            "[{lang:?}] expected HIG stepper icon buttons, got {}",
-            pn_icons.len()
-        );
-        let pn_btns = h.find_widget_ids("Button");
-        let hig_dec = *pn_btns.iter().find(|w| w.to_raw() == pn_icons[8]).unwrap();
-        let hig_inc = *pn_btns.iter().find(|w| w.to_raw() == pn_icons[9]).unwrap();
-        h.click_widget_id(hig_inc);
-        assert_eq!(h.state().hig_stepper_val, step_before + 1);
-        h.click_widget_id(hig_dec);
-        assert_eq!(h.state().hig_stepper_val, step_before);
-
-        let disc_before = h.state().hig_disclosure_open;
-        h.run_step(&PreviewStep::ClickLabel("Details".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().hig_disclosure_open, !disc_before);
-        h.run_step(&PreviewStep::ClickLabel("Details".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().hig_disclosure_open, disc_before);
-
-        // Adwaita: EntryRow + ComboRow + ExpanderRow + SwitchRow
-        h.run_steps(&[
-            PreviewStep::FocusType {
-                type_name: "TextArea".to_owned(),
-                index: 0,
-            },
-            PreviewStep::TypeText("-v2".to_owned()),
-        ])
-        .unwrap();
-        assert!(
-            h.state().adw_entry_val.contains("-v2"),
-            "[{lang:?}] AdwEntryRow should update on TypeText"
-        );
-
-        assert!(!h.state().adw_combo_open);
-        // Scroll the bottommost Switch inside AdwExpanderRow into view first so ComboRow sits
-        // well above the viewport bottom edge and its PopupLayer opens in-bounds.
-        let bottom_sw = h.find_widget_ids("Switch")[0];
-        h.inner_harness_mut().scroll_into_view(bottom_sw);
-        h.run_step(&PreviewStep::ClickLabel("Vello WGPU".to_owned()))
-            .unwrap();
-        assert!(h.state().adw_combo_open, "[{lang:?}] ComboRow should open");
-        h.run_step(&PreviewStep::ClickLabel("Vello CPU".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().adw_combo_idx, 1);
-        assert!(
-            !h.state().adw_combo_open,
-            "[{lang:?}] ComboRow should close"
-        );
-
-        // Switch inside SwitchRow while ExpanderRow is open
-        let sw_ids = h.find_widget_ids("Switch");
-        assert!(
-            !sw_ids.is_empty(),
-            "[{lang:?}] Adw SwitchRow Switch should exist"
-        );
-        let sw_before = h.state().switch_on;
-        h.click_widget_id(sw_ids[0]);
-        assert_eq!(h.state().switch_on, !sw_before);
-
-        let adw_exp_before = h.state().adw_expander_open;
-        let adw_exp_raw = *find_buttons_without_label(&mut h)
-            .last()
-            .expect("AdwExpanderRow chevron button");
-        let adw_exp_wid = h
-            .find_widget_ids("Button")
-            .into_iter()
-            .find(|w| w.to_raw() == adw_exp_raw)
-            .unwrap();
-        h.click_widget_id(adw_exp_wid);
-        assert_eq!(h.state().adw_expander_open, !adw_exp_before);
-        let adw_exp_raw2 = *find_buttons_without_label(&mut h)
-            .last()
-            .expect("AdwExpanderRow chevron button");
-        let adw_exp_wid2 = h
-            .find_widget_ids("Button")
-            .into_iter()
-            .find(|w| w.to_raw() == adw_exp_raw2)
-            .unwrap();
-        h.click_widget_id(adw_exp_wid2);
-        assert_eq!(h.state().adw_expander_open, adw_exp_before);
-
         assert_healthy(&mut h, &format!("platform-native/{lang:?}"));
     }
 }
 
 #[test]
-fn audit_workspaces_all_four_platforms() {
-    // 1. MD3 Workspace
-    {
-        let mut h = default_harness("workspace", DesignLanguage::Md3);
-        h.run_step(&PreviewStep::ClickLabel("Tokens".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().active_tab, 2);
-        let clicks = h.state().click_count;
-        h.run_step(&PreviewStep::ClickLabel("New Action".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().click_count, clicks + 1);
-        h.run_step(&PreviewStep::ClickLabel("Windows Mica Shell".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().selected_row, 1);
-        assert_healthy(&mut h, "workspace/md3");
-    }
-
-    // 2. Fluent Workspace
-    {
-        let mut h = default_harness("workspace", DesignLanguage::Fluent);
-        h.run_step(&PreviewStep::ClickLabel("Native".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().active_tab, 3);
-        let clicks = h.state().click_count;
-        h.run_step(&PreviewStep::ClickLabel("New".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().click_count, clicks + 1);
-        h.run_step(&PreviewStep::ClickLabel("Dialog".to_owned()))
-            .unwrap();
-        assert!(h.state().show_basic_dialog);
-        h.run_steps(&[
-            PreviewStep::HoverType {
-                type_name: "EscapeCatcher".to_owned(),
-                index: 0,
-            },
-            PreviewStep::PressEscape,
-        ])
+fn audit_workspaces_md3() {
+    let mut h = default_harness("workspace", DesignLanguage::Md3);
+    h.run_step(&PreviewStep::ClickLabel("Tokens".to_owned()))
         .unwrap();
-        assert!(!h.state().show_basic_dialog);
-        assert_healthy(&mut h, "workspace/fluent");
-    }
-
-    // 3. HIG Workspace
-    {
-        let mut h = default_harness("workspace", DesignLanguage::Hig);
-        h.run_step(&PreviewStep::ClickLabel("Inputs".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().active_tab, 1);
-        h.run_step(&PreviewStep::ClickLabel("?".to_owned()))
-            .unwrap();
-        assert!(h.state().show_basic_dialog);
-        h.run_steps(&[
-            PreviewStep::HoverType {
-                type_name: "EscapeCatcher".to_owned(),
-                index: 0,
-            },
-            PreviewStep::PressEscape,
-        ])
+    assert_eq!(h.state().active_tab, 2);
+    let clicks = h.state().click_count;
+    h.run_step(&PreviewStep::ClickLabel("New Action".to_owned()))
         .unwrap();
-        assert!(!h.state().show_basic_dialog);
-        assert_healthy(&mut h, "workspace/hig");
-    }
-
-    // 4. Adwaita Workspace
-    {
-        let mut h = default_harness("workspace", DesignLanguage::Adwaita);
-        h.run_step(&PreviewStep::ClickLabel("Tokens".to_owned()))
-            .unwrap();
-        assert_eq!(h.state().active_tab, 2);
-        h.run_step(&PreviewStep::ClickLabel("Hide".to_owned()))
-            .unwrap();
-        assert!(!h.state().banner_visible);
-        h.run_step(&PreviewStep::ClickLabel("Dialog".to_owned()))
-            .unwrap();
-        assert!(h.state().show_basic_dialog);
-        h.run_steps(&[
-            PreviewStep::HoverType {
-                type_name: "EscapeCatcher".to_owned(),
-                index: 0,
-            },
-            PreviewStep::PressEscape,
-        ])
+    assert_eq!(h.state().click_count, clicks + 1);
+    h.run_step(&PreviewStep::ClickLabel("Windows Mica Shell".to_owned()))
         .unwrap();
-        assert!(!h.state().show_basic_dialog);
-        assert_healthy(&mut h, "workspace/adwaita");
-    }
+    assert_eq!(h.state().selected_row, 1);
+    assert_healthy(&mut h, "workspace/md3");
 }
 
 #[test]
@@ -1109,10 +907,10 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
 }
 
 #[test]
-fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
+fn audit_phase3_breakpoint_bin_and_dialog() {
     use brocado::prelude::{
-        alert_dialog, breakpoint_bin, clickable_action_row, header_bar_with_title, icons,
-        preferences_group, primary_button, switch_row, view_switcher, view_switcher_bar,
+        basic_dialog, breakpoint_bin, clickable_list_item, filled_card, primary_button, switch,
+        tabs,
     };
     use masonry::layout::{AsUnit, UnitPoint};
     use xilem_masonry::WidgetView;
@@ -1120,7 +918,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
     use xilem_masonry::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, zstack};
 
     #[derive(Clone)]
-    struct AdwResponsiveState {
+    struct ResponsiveState {
         theme: UiTheme,
         tab: usize,
         toggle: bool,
@@ -1136,8 +934,8 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
             ..PreviewConfig::default()
         };
         build_ui_harness(
-            AdwResponsiveState {
-                theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+            ResponsiveState {
+                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
                 tab: 0,
                 toggle: false,
                 show_alert: false,
@@ -1148,32 +946,20 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
             |s| {
                 let toggle = s.toggle;
                 let make_body = || {
-                    let list = preferences_group(
-                        Some("Prefs"),
-                        None,
-                        vec![
-                            switch_row(
-                                "Opt A",
-                                None::<&str>,
-                                toggle,
-                                |st: &mut AdwResponsiveState, v| {
-                                    st.toggle = v;
-                                },
-                            )
-                            .boxed(),
-                            clickable_action_row(
-                                "Run Row",
-                                None::<&str>,
-                                Some(icons::CHECK_CIRCLE),
-                                None::<brocado::prelude::UiButton<AdwResponsiveState, ()>>,
-                                |st: &mut AdwResponsiveState| st.row_clicks += 1,
-                            )
-                            .boxed(),
-                        ],
+                    let list = filled_card(
+                        flex_col((
+                            switch(toggle, |st: &mut ResponsiveState, v| {
+                                st.toggle = v;
+                            }),
+                            clickable_list_item("Run Row", |st: &mut ResponsiveState| {
+                                st.row_clicks += 1;
+                            }),
+                        ))
+                        .gap(8.px()),
                     );
                     flex_col((
                         list,
-                        primary_button("Open Alert", |st: &mut AdwResponsiveState| {
+                        primary_button("Open Alert", |st: &mut ResponsiveState| {
                             st.show_alert = true;
                         }),
                     ))
@@ -1182,14 +968,10 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
                 };
 
                 let wide = flex_col((
-                    header_bar_with_title(
-                        view_switcher(
-                            &[("WidePrefs", icons::TUNE), ("WideStatus", icons::EXPLORE)],
-                            s.tab,
-                            |st: &mut AdwResponsiveState, idx| st.tab = idx,
-                        ),
-                        vec![],
-                        vec![],
+                    tabs(
+                        &["WidePrefs", "WideStatus"],
+                        s.tab,
+                        |st: &mut ResponsiveState, idx| st.tab = idx,
                     ),
                     make_body().flex(1.0),
                 ))
@@ -1197,31 +979,28 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
 
                 let narrow = flex_col((
                     make_body().flex(1.0),
-                    view_switcher_bar(
-                        &[
-                            ("NarrowPrefs", icons::TUNE),
-                            ("NarrowStatus", icons::EXPLORE),
-                        ],
+                    tabs(
+                        &["NarrowPrefs", "NarrowStatus"],
                         s.tab,
-                        |st: &mut AdwResponsiveState, idx| st.tab = idx,
+                        |st: &mut ResponsiveState, idx| st.tab = idx,
                     ),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch);
 
                 let bin = breakpoint_bin(600.0, wide, narrow);
                 let dlg = s.show_alert.then(|| {
-                    alert_dialog(
+                    basic_dialog(
                         "Confirm Reset?",
-                        "This resets Adwaita preferences.",
-                        "Cancel",
+                        "This resets preferences.",
                         "Reset",
-                        |st: &mut AdwResponsiveState| {
+                        |st: &mut ResponsiveState| {
                             st.confirmed += 1;
                             st.show_alert = false;
                         },
-                        |st: &mut AdwResponsiveState| st.show_alert = false,
+                        |st: &mut ResponsiveState| st.show_alert = false,
                     )
                     .destructive(true)
+                    .dismiss_text("Cancel")
                 });
                 zstack((
                     bin.alignment(UnitPoint::TOP_LEFT),
@@ -1233,7 +1012,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
         )
     };
 
-    // 1. Wide layout (>= 600px): header ViewSwitcher visible, bottom ViewSwitcherBar stashed.
+    // 1. Wide layout (>= 600px): wide tabs visible, narrow tabs stashed.
     let mut wide_h = make_harness(1180);
     wide_h
         .run_step(&PreviewStep::ClickLabel("WideStatus".to_owned()))
@@ -1243,10 +1022,10 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
         wide_h
             .run_step(&PreviewStep::ClickLabel("NarrowPrefs".to_owned()))
             .is_err(),
-        "narrow ViewSwitcherBar must be stashed when width >= 600px"
+        "narrow child must be stashed when width >= 600px"
     );
 
-    // 2. Narrow layout (< 600px): ViewSwitcherBar visible & interactive, alert_dialog opens and confirms.
+    // 2. Narrow layout (< 600px): narrow tabs visible & interactive, dialog opens and confirms.
     let mut narrow_h = make_harness(480);
     narrow_h
         .run_step(&PreviewStep::ClickLabel("NarrowStatus".to_owned()))
@@ -1263,22 +1042,17 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
     assert!(narrow_h.state().show_alert);
     narrow_h.settle_animations();
     let tree = dump_layout_tree(&mut narrow_h);
-    let issues = lint_ui_layout(&tree, narrow_h.viewport());
-    let errors: Vec<_> = issues
-        .iter()
+    let errors: Vec<_> = lint_ui_layout(&tree, narrow_h.viewport())
+        .into_iter()
         .filter(|i| i.severity == IssueSeverity::Error)
         .collect();
-    assert!(
-        errors.is_empty(),
-        "narrow Adwaita alert errors: {errors:#?}"
-    );
+    assert!(errors.is_empty(), "narrow dialog errors: {errors:#?}");
     narrow_h
         .run_step(&PreviewStep::ClickLabel("Reset".to_owned()))
         .unwrap();
     assert!(!narrow_h.state().show_alert);
     assert_eq!(narrow_h.state().confirmed, 1);
 
-    // Also render wide Adwaita tree to verify 0 errors.
     let wide_tree = dump_layout_tree(&mut wide_h);
     let wide_errors: Vec<_> = lint_ui_layout(&wide_tree, wide_h.viewport())
         .into_iter()
@@ -1286,7 +1060,7 @@ fn audit_phase3_adwaita_breakpoint_boxed_list_and_alert_dialog() {
         .collect();
     assert!(
         wide_errors.is_empty(),
-        "wide Adwaita errors: {wide_errors:#?}"
+        "wide responsive layout errors: {wide_errors:#?}"
     );
 }
 
@@ -1390,318 +1164,6 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
         !h_rm.inner_harness_mut().render_root().needs_anim(),
         "RippleLayer must suppress animations when reduced_motion is true"
     );
-}
-
-#[test]
-fn audit_phase5_fluent_and_hig_desktop_controls() {
-    use brocado::prelude::{
-        NavDestination, command_bar_with_overflow, icons, macos_alert_dialog, menu_item,
-        navigation_view_collapsible, number_box, popup_button, primary_button, switch, text_field,
-    };
-    use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
-    use masonry::core::{KeyboardEvent, TextEvent};
-    use masonry::layout::{AsUnit, UnitPoint};
-    use masonry::properties::Padding;
-    use xilem_masonry::WidgetView as _;
-    use xilem_masonry::style::Style as _;
-    use xilem_masonry::view::{
-        CrossAxisAlignment, FlexExt as _, ZStackExt, flex_col, flex_row, zstack,
-    };
-
-    fn find_button_center(node: &LayoutNode, needle: &str) -> Option<(f64, f64)> {
-        if node.type_name == "Button" && has_matching_text(node, needle) {
-            return Some((
-                node.rect.x + node.rect.width * 0.5,
-                node.rect.y + node.rect.height * 0.5,
-            ));
-        }
-        for c in &node.children {
-            if let Some(pt) = find_button_center(c, needle) {
-                return Some(pt);
-            }
-        }
-        None
-    }
-
-    fn has_matching_text(node: &LayoutNode, needle: &str) -> bool {
-        if node.text.as_deref().is_some_and(|t| t.contains(needle)) {
-            return true;
-        }
-        node.children.iter().any(|c| has_matching_text(c, needle))
-    }
-
-    // 1. Windows Fluent 2: collapsible NavigationView (280px <-> 52px), CommandBar overflow popup,
-    //    and NumberBox ArrowUp/ArrowDown clamped stepping.
-    struct FluentPhase5 {
-        theme: UiTheme,
-        collapsed: bool,
-        nav: usize,
-        overflow_open: bool,
-        overflow_picked: Option<usize>,
-        num: f64,
-    }
-
-    let mut fh = build_ui_harness(
-        FluentPhase5 {
-            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
-            collapsed: false,
-            nav: 0,
-            overflow_open: false,
-            overflow_picked: None,
-            num: 9.0,
-        },
-        |s| s.theme.clone(),
-        |s| {
-            let nav_items = [
-                NavDestination::new("Home", icons::HOME),
-                NavDestination::new("Settings", icons::SETTINGS),
-            ];
-            let footer = [NavDestination::new("Update", icons::REFRESH).with_badge("1")];
-            let nav = navigation_view_collapsible(
-                Some("WinUI"),
-                &nav_items,
-                &footer,
-                s.nav,
-                s.collapsed,
-                |st: &mut FluentPhase5| st.collapsed = !st.collapsed,
-                |st: &mut FluentPhase5, i| st.nav = i,
-            );
-            let cmd = command_bar_with_overflow(
-                vec![primary_button("Save", |st: &mut FluentPhase5| st.num += 0.0).boxed()],
-                vec![menu_item("OverflowOne"), menu_item("OverflowTwo")],
-                s.overflow_open,
-                |st: &mut FluentPhase5| st.overflow_open = !st.overflow_open,
-                |st: &mut FluentPhase5, idx| {
-                    st.overflow_picked = Some(idx);
-                    st.overflow_open = false;
-                },
-                |st: &mut FluentPhase5| st.overflow_open = false,
-            );
-            let nb = number_box(s.num, 0.0, 10.0, 1.0, |st: &mut FluentPhase5, v| {
-                st.num = v;
-            });
-            let right = flex_col((cmd, nb))
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .gap(12.px())
-                .padding(Padding::all(16.px()));
-            flex_row((nav, right.flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .boxed()
-        },
-        PreviewConfig {
-            width: 820,
-            height: 480,
-            ..PreviewConfig::default()
-        },
-    );
-
-    let wide_tree = dump_layout_tree(&mut fh);
-    let wide_nav_w = wide_tree.children[0].children[0].children[0].children[0]
-        .rect
-        .width;
-    assert!(
-        (wide_nav_w - 280.0).abs() < 2.0,
-        "expanded NavigationView width expected 280px, got {wide_nav_w}"
-    );
-    // Toggle hamburger collapse
-    fh.run_step(&PreviewStep::ClickType {
-        type_name: "Button".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    assert!(fh.state().collapsed);
-    let compact_tree = dump_layout_tree(&mut fh);
-    let compact_nav_w = compact_tree.children[0].children[0].children[0].children[0]
-        .rect
-        .width;
-    assert!(
-        (compact_nav_w - 52.0).abs() < 2.0,
-        "collapsed NavigationView width expected 52px, got {compact_nav_w}"
-    );
-    let compact_errors: Vec<_> = lint_ui_layout(&compact_tree, fh.viewport())
-        .into_iter()
-        .filter(|i| i.severity == IssueSeverity::Error)
-        .collect();
-    assert!(
-        compact_errors.is_empty(),
-        "compact NavigationView errors: {compact_errors:#?}"
-    );
-
-    // CommandBar overflow menu open + item click
-    fh.run_step(&PreviewStep::ClickType {
-        type_name: "AnchoredPopupHost".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    assert!(fh.state().overflow_open);
-    let popup_tree = dump_layout_tree(&mut fh);
-    let (ox, oy) = find_button_center(&popup_tree, "OverflowTwo")
-        .expect("OverflowTwo popup menu item should be visible");
-    fh.click_point(ox, oy);
-    assert!(!fh.state().overflow_open);
-    assert_eq!(fh.state().overflow_picked, Some(1));
-
-    // NumberBox ArrowUp -> clamped at 10.0, then ArrowDown -> 9.0
-    fh.run_step(&PreviewStep::FocusType {
-        type_name: "NumberStepCatcher".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    for _ in 0..3 {
-        fh.inner_harness_mut()
-            .process_text_event(TextEvent::Keyboard(KeyboardEvent {
-                state: KeyState::Down,
-                key: Key::Named(NamedKey::ArrowUp),
-                code: Code::ArrowUp,
-                ..KeyboardEvent::default()
-            }));
-        fh.pump_actions();
-    }
-    assert!((fh.state().num - 10.0).abs() < 1e-6);
-    fh.inner_harness_mut()
-        .process_text_event(TextEvent::Keyboard(KeyboardEvent {
-            state: KeyState::Down,
-            key: Key::Named(NamedKey::ArrowDown),
-            code: Code::ArrowDown,
-            ..KeyboardEvent::default()
-        }));
-    fh.pump_actions();
-    assert!((fh.state().num - 9.0).abs() < 1e-6);
-
-    // 2. macOS HIG: FocusFrame + UiSwitch inactive-window pixel diff, popup_button, and macos_alert_dialog
-    struct HigPhase5 {
-        theme: UiTheme,
-        text: String,
-        toggle: bool,
-        pop_sel: usize,
-        pop_open: bool,
-        show_alert: bool,
-        confirmed: usize,
-        dismissed: usize,
-    }
-
-    let mut hh = build_ui_harness(
-        HigPhase5 {
-            theme: UiTheme::new(DesignLanguage::Hig, Brightness::Light),
-            text: "Aqua".to_owned(),
-            toggle: true,
-            pop_sel: 0,
-            pop_open: false,
-            show_alert: false,
-            confirmed: 0,
-            dismissed: 0,
-        },
-        |s| s.theme.clone(),
-        |s| {
-            let main = flex_col((
-                text_field(s.text.clone(), |st: &mut HigPhase5, v| st.text = v).label("Field"),
-                switch(s.toggle, |st: &mut HigPhase5, v| st.toggle = v),
-                popup_button(
-                    &["PDF", "PNG", "SVG"],
-                    s.pop_sel,
-                    s.pop_open,
-                    |st: &mut HigPhase5| st.pop_open = !st.pop_open,
-                    |st: &mut HigPhase5, i| {
-                        st.pop_sel = i;
-                        st.pop_open = false;
-                    },
-                    |st: &mut HigPhase5| st.pop_open = false,
-                ),
-                primary_button("Open Mac Alert", |st: &mut HigPhase5| {
-                    st.show_alert = true;
-                }),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
-            .gap(12.px())
-            .padding(Padding::all(16.px()));
-
-            let alert = s.show_alert.then(|| {
-                macos_alert_dialog(
-                    "Export Document?",
-                    "Select primary or cancel.",
-                    "Export",
-                    "Cancel",
-                    |st: &mut HigPhase5| {
-                        st.confirmed += 1;
-                        st.show_alert = false;
-                    },
-                    |st: &mut HigPhase5| {
-                        st.dismissed += 1;
-                        st.show_alert = false;
-                    },
-                )
-            });
-
-            zstack((
-                main.alignment(UnitPoint::TOP_LEFT),
-                alert.map(|a| a.alignment(UnitPoint::CENTER)),
-            ))
-            .boxed()
-        },
-        PreviewConfig {
-            width: 560,
-            height: 440,
-            ..PreviewConfig::default()
-        },
-    );
-
-    hh.run_step(&PreviewStep::ClickType {
-        type_name: "TextInput".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    let active_img = hh.render_image();
-    hh.set_window_focused(false);
-    let inactive_img = hh.render_image();
-    assert_ne!(
-        active_img.as_raw(),
-        inactive_img.as_raw(),
-        "macOS inactive window must visually remove OuterHalo3px focus ring & desaturate controls"
-    );
-    hh.set_window_focused(true);
-
-    // PopUpButton select "SVG"
-    hh.run_step(&PreviewStep::ClickType {
-        type_name: "AnchoredPopupHost".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    assert!(hh.state().pop_open);
-    let pop_tree = dump_layout_tree(&mut hh);
-    let (px, py) = find_button_center(&pop_tree, "SVG").expect("SVG menu item should appear");
-    hh.click_point(px, py);
-    assert_eq!(hh.state().pop_sel, 2);
-    assert!(!hh.state().pop_open);
-
-    // macOS AlertDialog confirm + Escape
-    hh.run_step(&PreviewStep::ClickLabel("Open Mac Alert".to_owned()))
-        .unwrap();
-    assert!(hh.state().show_alert);
-    hh.settle_animations();
-    let alert_tree = dump_layout_tree(&mut hh);
-    let alert_errors: Vec<_> = lint_ui_layout(&alert_tree, hh.viewport())
-        .into_iter()
-        .filter(|i| i.severity == IssueSeverity::Error)
-        .collect();
-    assert!(
-        alert_errors.is_empty(),
-        "macOS alert layout errors: {alert_errors:#?}"
-    );
-    hh.run_step(&PreviewStep::ClickLabel("Export".to_owned()))
-        .unwrap();
-    assert!(!hh.state().show_alert);
-    assert_eq!(hh.state().confirmed, 1);
-
-    hh.run_step(&PreviewStep::ClickLabel("Open Mac Alert".to_owned()))
-        .unwrap();
-    hh.run_step(&PreviewStep::FocusType {
-        type_name: "EscapeCatcher".to_owned(),
-        index: 0,
-    })
-    .unwrap();
-    hh.run_step(&PreviewStep::PressEscape).unwrap();
-    assert!(!hh.state().show_alert);
-    assert_eq!(hh.state().dismissed, 1);
 }
 
 #[test]
@@ -2086,8 +1548,8 @@ fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_chang
     h.rebuild();
     assert_eq!(rebuilds.load(Ordering::SeqCst), 2);
 
-    // Switch DesignSpec theme/brightness: subtree MUST rebuild even though memo_key is unchanged.
-    h.state_mut().theme = UiTheme::new(DesignLanguage::Fluent, Brightness::Dark);
+    // Switch theme brightness: subtree MUST rebuild even though memo_key is unchanged.
+    h.state_mut().theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark);
     h.rebuild();
     assert_eq!(rebuilds.load(Ordering::SeqCst), 3);
 }
@@ -2114,7 +1576,7 @@ fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
 
     let mut h = build_ui_harness(
         ListState {
-            theme: UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         },
         |s| s.theme.clone(),
         |_| {
@@ -2167,7 +1629,7 @@ fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
 
     let mut h = build_ui_harness(
         QaState {
-            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
             clicks: 0,
             toggled: false,
         },
@@ -2226,10 +1688,6 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
         range: (f64, f64),
         sel_idx: usize,
         sel_open: bool,
-        popup_idx: usize,
-        popup_open: bool,
-        stepper_val: i32,
-        num_val: f64,
         query: String,
         text_val: String,
         date: CalendarDate,
@@ -2258,10 +1716,6 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                 range: (20.0, 80.0),
                 sel_idx: 0,
                 sel_open: false,
-                popup_idx: 0,
-                popup_open: false,
-                stepper_val: 4,
-                num_val: 42.0,
                 query: String::new(),
                 text_val: String::from("https://example.invalid/very-long-segment"),
                 date: CalendarDate::new(2026, 11, 24),
@@ -2315,11 +1769,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                         |st: &mut StressState, next| st.tri = next,
                     )
                     .boxed(),
-                    form_row(
-                        "HardwareAccelerationSetting",
-                        switch(s.sw, |st: &mut StressState, v| st.sw = v),
-                    )
-                    .boxed(),
+                    switch(s.sw, |st: &mut StressState, v| st.sw = v).boxed(),
                     clickable_list_item("SynchronizationDaemonEndpoint", |_: &mut StressState| {})
                         .supporting_text("BackgroundReplicationWorkerServiceStatus")
                         .boxed(),
@@ -2330,6 +1780,19 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                     range_slider(0.0, 100.0, s.range, |st: &mut StressState, r| st.range = r)
                         .boxed(),
                     linear_progress(Some(0.6)).boxed(),
+                    wavy_linear_progress(Some(0.6)).boxed(),
+                    split_button(
+                        "SupercalifragilisticSplitActionButton",
+                        |_: &mut StressState| {},
+                        |_: &mut StressState| {},
+                    )
+                    .boxed(),
+                    button_group(
+                        &["Day", "Week", "Month"],
+                        s.seg,
+                        |st: &mut StressState, i| st.seg = i,
+                    )
+                    .boxed(),
                     search_bar(s.query.clone(), |st: &mut StressState, q| st.query = q).boxed(),
                     text_field(s.text_val.clone(), |st: &mut StressState, v| {
                         st.text_val = v
@@ -2346,59 +1809,6 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                             st.sel_open = false;
                         },
                         |st: &mut StressState| st.sel_open = false,
-                    )
-                    .boxed(),
-                    popup_button(
-                        &["AutomaticRendererChoice", "Software"],
-                        s.popup_idx,
-                        s.popup_open,
-                        |st: &mut StressState| st.popup_open = !st.popup_open,
-                        |st: &mut StressState, i| {
-                            st.popup_idx = i;
-                            st.popup_open = false;
-                        },
-                        |st: &mut StressState| st.popup_open = false,
-                    )
-                    .boxed(),
-                    stepper(
-                        "ColumnCountPreference",
-                        s.stepper_val,
-                        1,
-                        16,
-                        1,
-                        |st: &mut StressState, v| st.stepper_val = v,
-                    )
-                    .boxed(),
-                    number_box(s.num_val, 0.0, 100.0, 2.0, |st: &mut StressState, v| {
-                        st.num_val = v
-                    })
-                    .boxed(),
-                    settings_card(
-                        Some(icons::TUNE),
-                        "SupercalifragilisticSettingsCardTitle",
-                        Some("DetailedConfigurationDescriptionLine"),
-                        switch(s.sw, |st: &mut StressState, v| st.sw = v),
-                    )
-                    .boxed(),
-                    action_row(
-                        "AdwaitaActionRowHeading",
-                        Some("AdwaitaActionRowSubtitle"),
-                        Some(icons::SETTINGS),
-                        Some(switch(s.sw, |st: &mut StressState, v| st.sw = v)),
-                        None::<brocado::adwaita::components::ActionRowCallback<StressState, ()>>,
-                    )
-                    .boxed(),
-                    breadcrumb_bar(
-                        &["Workspace", "Preferences", "Appearance", "AccentColor"],
-                        |_: &mut StressState, _| {},
-                    )
-                    .boxed(),
-                    path_control(
-                        &[
-                            ("MacintoshHD", icons::FOLDER),
-                            ("BeamletProject", icons::CODE),
-                        ],
-                        |_: &mut StressState, _| {},
                     )
                     .boxed(),
                     date_picker(s.date, |st: &mut StressState, d| st.date = d).boxed(),

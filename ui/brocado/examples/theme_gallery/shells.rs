@@ -17,27 +17,15 @@ fn destinations() -> [NavDestination; 5] {
 }
 
 fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let lang_idx = DesignLanguage::ALL
-        .iter()
-        .position(|l| *l == state.theme.language)
-        .unwrap_or(0);
     let accent_idx = UiAccent::PRESETS
         .iter()
         .position(|a| *a == state.theme.accent)
         .unwrap_or(0);
     let accent_labels = ["默认", "蓝", "青", "绿", "紫", "粉", "橙", "红"];
     let is_dark = state.theme.brightness == Brightness::Dark;
+    let is_hc = state.theme.high_contrast;
     let is_rm = state.theme.reduced_motion;
 
-    let seg = |s_idx| {
-        segmented_button(
-            &["MD3", "Fluent", "HIG", "Adwaita"],
-            s_idx,
-            |s: &mut GalleryState, idx| {
-                s.theme.language = DesignLanguage::ALL[idx];
-            },
-        )
-    };
     let sel = |open: bool| {
         select(
             &accent_labels,
@@ -54,21 +42,19 @@ fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
     let dark_chip = filter_chip("深色", is_dark, |s: &mut GalleryState| {
         s.theme.toggle_brightness();
     });
+    let hc_chip = filter_chip("高对比", is_hc, |s: &mut GalleryState| {
+        s.theme.high_contrast = !s.theme.high_contrast;
+    });
     let rm_chip = filter_chip("减动效", is_rm, |s: &mut GalleryState| {
         s.theme.reduced_motion = !s.theme.reduced_motion;
     });
 
     sized_box(
-        wrap((
-            seg(lang_idx),
-            sel(state.accent_menu_open),
-            dark_chip,
-            rm_chip,
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px())
-        .run_gap(6.px())
-        .padding(Padding::from_vh(6.px(), 10.px())),
+        wrap((sel(state.accent_menu_open), dark_chip, hc_chip, rm_chip))
+            .cross_axis_alignment(CrossAxisAlignment::Center)
+            .gap(8.px())
+            .run_gap(6.px())
+            .padding(Padding::from_vh(6.px(), 10.px())),
     )
 }
 
@@ -88,25 +74,11 @@ fn active_page_body(
 
 fn narrow_bottom_nav(state: &GalleryState) -> Box<AnyWidgetView<GalleryState>> {
     let idx = state.active_tab.index();
-    match state.theme.language {
-        DesignLanguage::Adwaita => {
-            let items: Vec<(&'static str, &'static str)> = GalleryTab::ALL
-                .iter()
-                .map(|t| (t.title(), t.icon()))
-                .collect();
-            view_switcher_bar(&items, idx, |s: &mut GalleryState, i| {
-                s.active_tab = GalleryTab::from_index(i);
-            })
-            .boxed()
-        }
-        DesignLanguage::Md3 | DesignLanguage::Fluent | DesignLanguage::Hig => {
-            let dests = destinations();
-            navigation_bar(&dests, idx, |s: &mut GalleryState, i| {
-                s.active_tab = GalleryTab::from_index(i);
-            })
-            .boxed()
-        }
-    }
+    let dests = destinations();
+    navigation_bar(&dests, idx, |s: &mut GalleryState, i| {
+        s.active_tab = GalleryTab::from_index(i);
+    })
+    .boxed()
 }
 
 fn responsive_shell<S: WidgetView<GalleryState> + 'static>(
@@ -151,50 +123,4 @@ pub fn md3_shell(state: &mut GalleryState) -> impl WidgetView<GalleryState> + us
         },
     );
     responsive_shell(state, rail, false)
-}
-
-pub fn fluent_shell(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let dests = destinations();
-    let nav = navigation_view_collapsible(
-        Some("Fluent"),
-        &dests[..4],
-        &dests[4..],
-        state.active_tab.index(),
-        state.native.nav_collapsed,
-        |s: &mut GalleryState| s.native.nav_collapsed = !s.native.nav_collapsed,
-        |s: &mut GalleryState, i| s.active_tab = GalleryTab::from_index(i),
-    );
-    responsive_shell(state, nav, false)
-}
-
-pub fn hig_shell(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let sections = [(
-        "展示台",
-        vec![
-            ("组件", icons::EDIT),
-            ("布局", icons::DOCK_LEFT),
-            ("浮层", icons::MORE_HORIZ),
-            ("平台", icons::PALETTE),
-            ("性能", icons::TUNE),
-        ],
-    )];
-    let sidebar = source_list_sidebar(
-        &sections,
-        (0, state.active_tab.index()),
-        |s: &mut GalleryState, (_, row)| {
-            s.active_tab = GalleryTab::from_index(row);
-        },
-    );
-    responsive_shell(state, sidebar, false)
-}
-
-pub fn adwaita_shell(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let dests = destinations();
-    let sidebar = navigation_drawer(
-        Some("Adwaita"),
-        &dests,
-        state.active_tab.index(),
-        |s: &mut GalleryState, i| s.active_tab = GalleryTab::from_index(i),
-    );
-    responsive_shell(state, sidebar, true)
 }

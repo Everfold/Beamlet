@@ -143,7 +143,7 @@ fn split_view_lays_out_panes_and_resizes_on_drag() {
 
     let mut harness = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |_s| {
             sized_box(
                 split_view(
@@ -209,7 +209,7 @@ fn text_area_inserts_newline_on_enter_and_submits_with_on_shift_enter() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |s| {
             flex_col((
                 text_area(s.enter_text.clone(), |st: &mut State, v| {
@@ -298,7 +298,7 @@ fn rich_prose_clicks_link_and_drags_selection() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |_s| {
             sized_box(
                 rich_prose(vec![
@@ -460,7 +460,7 @@ fn popover_anchor_opens_interactive_surface_and_dismisses() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |s| {
             let main = sized_box(popover_anchor(
                 primary_button("Toggle Popover", |st: &mut State| {
@@ -690,7 +690,7 @@ fn split_view_extreme_drag_cancel_asymmetric_mins_and_vertical() {
     struct NarrowSplitState;
     let mut tight_harness = build_ui_harness(
         NarrowSplitState,
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |_| {
             flex_col((
                 sized_box(
@@ -788,7 +788,7 @@ fn rich_prose_out_of_bounds_drag_and_narrow_wrap() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Dark),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
         |_| {
             flex_col((sized_box(
                 rich_prose(vec![
@@ -926,7 +926,7 @@ fn popover_and_context_menu_fit_extreme_narrow_and_short_viewports() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |s| {
             let trigger = context_menu(
                 popover_anchor(
@@ -1028,7 +1028,7 @@ fn wrap_handles_extreme_narrow_120px_and_60px_without_overflow() {
     for container_w in [120.0_f64, 60.0_f64] {
         let mut harness = build_ui_harness(
             State { max_w: container_w },
-            |_| UiTheme::new(DesignLanguage::Hig, Brightness::Light),
+            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
             |s| {
                 let tags: Vec<_> = ["Alpha", "LongerChipLabel", "B", "Gamma"]
                     .into_iter()
@@ -1285,92 +1285,9 @@ fn adaptive_dialogs_locale_and_font_scale() {
 }
 
 #[test]
-fn adw_alert_dialog_switches_by_content_width() {
-    struct State {
-        cancel_label: &'static str,
-        confirm_label: &'static str,
-    }
-
-    let run_alert = |cancel_label: &'static str, confirm_label: &'static str| {
-        let mut h = build_ui_harness(
-            State {
-                cancel_label,
-                confirm_label,
-            },
-            |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
-            |s| {
-                alert_dialog(
-                    "Delete?",
-                    "Confirm action.",
-                    s.cancel_label,
-                    s.confirm_label,
-                    |_| {},
-                    |_| {},
-                )
-                .boxed()
-            },
-            PreviewConfig {
-                width: 340,
-                height: 480,
-                ..PreviewConfig::default()
-            },
-        );
-        h.settle_animations();
-        dump_layout_tree(&mut h)
-    };
-
-    let short_tree = run_alert("No", "Yes");
-    let short_row = find_first_node(&short_tree, "AdwResponseRowWidget")
-        .expect("short AdwResponseRowWidget missing");
-    assert_eq!(short_row.children.len(), 2);
-    let sb0 = short_row.children[0].rect;
-    let sb1 = short_row.children[1].rect;
-    assert!(
-        (sb0.y - sb1.y).abs() <= 1.0 && sb1.x >= sb0.x + sb0.width - 0.5,
-        "expected horizontal responses for short labels at 340px: b0={sb0:?}, b1={sb1:?}"
-    );
-
-    let long_tree = run_alert("Keep Existing Document", "Permanently Delete Everything");
-    let long_row = find_first_node(&long_tree, "AdwResponseRowWidget")
-        .expect("long AdwResponseRowWidget missing");
-    assert_eq!(long_row.children.len(), 2);
-    let lb0 = long_row.children[0].rect;
-    let lb1 = long_row.children[1].rect;
-    assert!(
-        lb1.y >= lb0.y + lb0.height - 0.5 || lb0.y >= lb1.y + lb1.height - 0.5,
-        "expected stacked vertical responses for long labels at 340px: b0={lb0:?}, b1={lb1:?}"
-    );
-    assert!(
-        lb0.x + lb0.width <= 340.5 && lb1.x + lb1.width <= 340.5 && lb1.y + lb1.height <= 480.5,
-        "stacked alert buttons overflowed 340x480: b0={lb0:?}, b1={lb1:?}"
-    );
-}
-
-#[test]
-fn sidebars_and_inspector_clamp_in_narrow_containers() {
+fn sidebars_clamp_in_narrow_containers() {
     #[derive(Default)]
     struct State;
-
-    let mut inspector_h = build_ui_harness(
-        State,
-        |_| UiTheme::new(DesignLanguage::Hig, Brightness::Light),
-        |_| inspector_panel("Inspector", vec![label("Item").boxed()]).boxed(),
-        PreviewConfig {
-            width: 160,
-            height: 480,
-            ..PreviewConfig::default()
-        },
-    );
-    inspector_h.settle_animations();
-    let inspector_tree = dump_layout_tree(&mut inspector_h);
-    let inspector_box = find_first_node(&inspector_tree, "ConstrainedBox")
-        .expect("inspector ConstrainedBox missing");
-    assert!(
-        inspector_box.rect.width <= 160.5,
-        "inspector_panel overflowed 160px container: {:?}",
-        inspector_box.rect
-    );
-    assert_all_descendants_within(inspector_box, 160.0, "inspector_panel@160");
 
     let mut drawer_narrow = build_ui_harness(
         State,
@@ -1652,7 +1569,7 @@ fn scroll_view_shift_wheel_and_focus_pan_to_child() {
     // 1. Shift+Wheel scrolls horizontally when vertically constrained
     let mut h_horiz = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |_| {
             scroll_view(sized_box(label("WideStart")).dims(Dimensions::fixed(900.px(), 60.px())))
                 .constrain_vertical(true)
@@ -1841,7 +1758,7 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
     // 1. scroll_horizontal permits horizontal wheel scroll on a Bounded row while preserving Bounded
     let mut h_horiz = build_ui_harness(
         ParityState,
-        |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
         |_| {
             bounded(scroll_horizontal(
                 row((
@@ -1897,7 +1814,7 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
     // 2. constrained_box max_width preserves BoundedX and caps card width cleanly
     let mut h_cbox = build_ui_harness(
         ParityState,
-        |_| UiTheme::new(DesignLanguage::Hig, Brightness::Dark),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
         |_| {
             scroll_vertical(
                 constrained_box(bounded_card(
@@ -1926,100 +1843,6 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
         "ConstrainedBox must respect 220px max_width: {:?}",
         cbox_node.rect
     );
-}
-
-#[test]
-fn fluent_collapsed_navigation_view_aligns_toggle_and_items() {
-    #[derive(Default)]
-    struct NavState;
-
-    fn collect_nodes<'a>(node: &'a LayoutNode, type_name: &str, out: &mut Vec<&'a LayoutNode>) {
-        if node.type_name == type_name {
-            out.push(node);
-        }
-        for c in &node.children {
-            collect_nodes(c, type_name, out);
-        }
-    }
-
-    let mut harness = build_ui_harness(
-        NavState,
-        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
-        |_| {
-            let primary = [
-                NavDestination::new("Home", icons::HOME),
-                NavDestination::new("Explore", icons::EXPLORE),
-            ];
-            let footer = [NavDestination::new("Settings", icons::SETTINGS)];
-            navigation_view_collapsible(
-                Some("Fluent"),
-                &primary,
-                &footer,
-                0,
-                true,
-                |_| {},
-                |_, _| {},
-            )
-            .boxed()
-        },
-        PreviewConfig {
-            width: 320,
-            height: 360,
-            ..PreviewConfig::default()
-        },
-    );
-    harness.settle_animations();
-    let tree = dump_layout_tree(&mut harness);
-
-    let mut buttons = Vec::new();
-    collect_nodes(&tree, "Button", &mut buttons);
-    assert_eq!(
-        buttons.len(),
-        4,
-        "expected toggle + 2 primary + 1 footer nav buttons"
-    );
-
-    let toggle_btn = buttons[0];
-    for (idx, btn) in buttons.iter().enumerate() {
-        assert!(
-            (btn.rect.x - toggle_btn.rect.x).abs() < 0.5
-                && (btn.rect.width - toggle_btn.rect.width).abs() < 0.5,
-            "button[{idx}] outer rect must match toggle button {:?}: got {:?}",
-            toggle_btn.rect,
-            btn.rect
-        );
-    }
-
-    let mut toggle_svgs = Vec::new();
-    collect_nodes(toggle_btn, "Svg", &mut toggle_svgs);
-    assert_eq!(toggle_svgs.len(), 1);
-    let toggle_icon = &toggle_svgs[0].rect;
-    let toggle_center = toggle_icon.x + toggle_icon.width * 0.5;
-
-    for (idx, btn) in buttons.iter().enumerate().skip(1) {
-        let mut svgs = Vec::new();
-        collect_nodes(btn, "Svg", &mut svgs);
-        assert_eq!(svgs.len(), 1);
-        let icon_rect = &svgs[0].rect;
-        let icon_center = icon_rect.x + icon_rect.width * 0.5;
-        assert!(
-            (icon_center - toggle_center).abs() < 0.5,
-            "nav item[{idx}] icon center ({icon_center}) must align with toggle icon center ({toggle_center}): item={icon_rect:?}, toggle={toggle_icon:?}"
-        );
-
-        let mut bars = Vec::new();
-        collect_nodes(btn, "SizedBox", &mut bars);
-        let bar = bars
-            .into_iter()
-            .find(|n| (n.rect.width - 3.0).abs() < 0.5 && (n.rect.height - 16.0).abs() < 0.5)
-            .expect("compact nav item must render 3x16 active indicator slot");
-        assert!(
-            bar.rect.x + bar.rect.width <= icon_rect.x - 1.0,
-            "active bar {:?} must stay clear of icon {:?}",
-            bar.rect,
-            icon_rect
-        );
-    }
 }
 
 #[test]
@@ -2128,7 +1951,7 @@ fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
             false,
         );
         let state = ToastMotionState {
-            theme: UiTheme::new(DesignLanguage::Fluent, Brightness::Light)
+            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
                 .with_reduced_motion(reduced_motion),
             toasts,
         };

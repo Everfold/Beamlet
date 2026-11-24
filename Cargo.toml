@@ -22,10 +22,7 @@ members = [
   "crates/app-support/beamlet-host",
 
   "ui/brocado",
-  "ui/brocado-adwaita",
   "ui/brocado-core",
-  "ui/brocado-fluent",
-  "ui/brocado-hig",
   "ui/brocado-md3",
   "ui/brocado-preview",
   "ui/brocado-winit",
@@ -92,10 +89,7 @@ reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboa
 tachyonfx = "0.25"
 
 brocado = { path = "ui/brocado" }
-brocado-adwaita = { path = "ui/brocado-adwaita" }
 brocado-core = { path = "ui/brocado-core" }
-brocado-fluent = { path = "ui/brocado-fluent" }
-brocado-hig = { path = "ui/brocado-hig" }
 brocado-md3 = { path = "ui/brocado-md3" }
 brocado-preview = { path = "ui/brocado-preview" }
 brocado-winit = { path = "ui/brocado-winit" }

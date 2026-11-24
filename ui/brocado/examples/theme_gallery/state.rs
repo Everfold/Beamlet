@@ -133,9 +133,9 @@ impl Default for ComponentsState {
             multi_seg_mask: vec![true, false, true],
             input_tags: vec![
                 "MD3".into(),
-                "Fluent".into(),
-                "HIG".into(),
-                "Adwaita".into(),
+                "Expressive".into(),
+                "OKLCH".into(),
+                "Spring".into(),
             ],
             selected_tab: 0,
             secondary_tab: 0,
@@ -184,56 +184,20 @@ impl Default for OverlaysState {
     }
 }
 
-/// Active platform-native controls state.
+/// Active Material 3 Expressive showcase state.
 #[derive(Clone, Debug)]
 pub struct PlatformNativeState {
-    pub nav_collapsed: bool,
     pub md3_group_selected: usize,
     pub md3_fab_menu_open: bool,
     pub md3_last_action: String,
-    pub info_bar_visible: bool,
-    pub fluent_expander_open: bool,
-    pub fluent_breadcrumb_depth: usize,
-    pub fluent_number_val: f64,
-    pub cmd_overflow_open: bool,
-    pub hig_disclosure_open: bool,
-    pub hig_stepper_val: i32,
-    pub hig_path_depth: usize,
-    pub hig_popup_open: bool,
-    pub hig_popup_idx: usize,
-    pub banner_visible: bool,
-    pub native_switch: bool,
-    pub adw_expander_open: bool,
-    pub adw_combo_open: bool,
-    pub adw_combo_idx: usize,
-    pub adw_entry_val: String,
-    pub adw_switcher_idx: usize,
 }
 
 impl Default for PlatformNativeState {
     fn default() -> Self {
         Self {
-            nav_collapsed: false,
             md3_group_selected: 0,
             md3_fab_menu_open: false,
             md3_last_action: "等待操作".to_owned(),
-            info_bar_visible: true,
-            fluent_expander_open: true,
-            fluent_breadcrumb_depth: 2,
-            fluent_number_val: 24.0,
-            cmd_overflow_open: false,
-            hig_disclosure_open: true,
-            hig_stepper_val: 8,
-            hig_path_depth: 2,
-            hig_popup_open: false,
-            hig_popup_idx: 0,
-            banner_visible: true,
-            native_switch: true,
-            adw_expander_open: true,
-            adw_combo_open: false,
-            adw_combo_idx: 0,
-            adw_entry_val: "beamlet-workspace".to_owned(),
-            adw_switcher_idx: 0,
         }
     }
 }
