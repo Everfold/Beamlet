@@ -548,3 +548,90 @@ pub fn write_html_report(
     fs::write(path, html)
         .with_context(|| format!("failed writing HTML report to {}", path.display()))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "brocado_report_{label}_{}_{nanos}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn generate_html_report_escapes_html_and_summarizes_issues() {
+        let entries = vec![
+            PreviewReportEntry {
+                name: "scene_<xss>".into(),
+                scene: "overview".into(),
+                theme: "md3".into(),
+                brightness: "light".into(),
+                viewport: (640, 480),
+                scale_factor: 1.0,
+                elapsed_ms: 14,
+                image_path: "overview_md3_light.png".into(),
+                diff_image_path: Some("overview_md3_light.diff.png".into()),
+                layout_issues: vec![LayoutIssue {
+                    severity: IssueSeverity::Error,
+                    kind: "zero-size",
+                    widget_id: 7,
+                    widget_type: "Button".into(),
+                    message: "bad <script> & width".into(),
+                }],
+                contrast_issues: vec![ContrastIssue {
+                    pair: "fg/bg",
+                    ratio: 2.1,
+                    minimum: 4.5,
+                }],
+                a11y_issues: vec![],
+                tree_text: Some("#1 Root <Flex>".into()),
+            },
+            PreviewReportEntry {
+                name: "clean_frame".into(),
+                scene: "workspace".into(),
+                theme: "fluent".into(),
+                brightness: "dark".into(),
+                viewport: (1180, 800),
+                scale_factor: 2.0,
+                elapsed_ms: 21,
+                image_path: "workspace_fluent_dark.png".into(),
+                diff_image_path: None,
+                layout_issues: vec![],
+                contrast_issues: vec![],
+                a11y_issues: vec![],
+                tree_text: None,
+            },
+        ];
+
+        let html = generate_html_report("Preview <Audit>", &entries);
+        assert!(html.contains("<title>Preview &lt;Audit&gt;</title>"));
+        assert!(html.contains("Frames: 2"));
+        assert!(html.contains("Layout Errors: 1"));
+        assert!(html.contains("Contrast: 1"));
+        assert!(html.contains("scene_&lt;xss&gt;"));
+        assert!(html.contains("bad &lt;script&gt; &amp; width"));
+        assert!(!html.contains("bad <script>"));
+        assert!(html.contains("Show diff overlay"));
+        assert!(html.contains("Layout tree"));
+    }
+
+    #[test]
+    fn write_html_report_persists_valid_file() {
+        let dir = unique_temp_dir("html");
+        let report_path = dir.join("nested/index.html");
+        write_html_report(&report_path, "Empty Report", &[]).expect("report write should succeed");
+        let body = fs::read_to_string(&report_path).expect("report should exist");
+        assert!(body.starts_with("<!DOCTYPE html>"));
+        assert!(body.contains("Frames: 0"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

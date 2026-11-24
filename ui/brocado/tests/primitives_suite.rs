@@ -2,6 +2,7 @@
 //! `wrap`, `split_view`, `text_area`, `rich_prose`, `context_menu`, and `popover`.
 
 use brocado::prelude::*;
+use brocado_preview::diff::{ImageDiffTolerance, compare_images};
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
 use brocado_preview::inspect::{LayoutNode, dump_layout_tree, lint_layout};
 use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
@@ -13,7 +14,7 @@ use masonry::core::{
 use masonry::dpi::LogicalPosition;
 use masonry::kurbo::{Axis, Point, Vec2};
 use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Background, CornerRadius, Dimensions, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
@@ -2189,4 +2190,92 @@ fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
 
     run_dismiss_sequence(false);
     run_dismiss_sequence(true);
+}
+
+#[test]
+fn preview_harness_probes_resolved_props_cropped_widget_and_pixel_diff() {
+    #[derive(Default)]
+    struct ProbeState;
+
+    let theme = UiTheme::new(DesignLanguage::Md3, Brightness::Light);
+    let spec = theme.to_spec();
+    let expected_states = brocado::core_ui::foundation::resolve_interactive_colors(
+        spec.palette.accent,
+        spec.palette.on_accent,
+        spec.disabled_container(),
+        spec.brightness,
+        spec.feedback,
+    );
+
+    let mut harness = build_ui_harness(
+        ProbeState,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            outlined_card(
+                column((primary_button("Save", |_| {}),))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .padding(Padding::all(12.px())),
+            )
+            .boxed()
+        },
+        PreviewConfig {
+            width: 320,
+            height: 160,
+            ..PreviewConfig::default()
+        },
+    );
+    harness.settle_animations();
+
+    let btn_ids = harness.find_widget_ids("Button");
+    assert_eq!(btn_ids.len(), 1);
+    let btn_id = btn_ids[0];
+
+    let rest_bg = harness
+        .widget_prop::<Background>(btn_id)
+        .expect("Button must resolve Background property");
+    assert_eq!(rest_bg, Background::Color(expected_states.rest));
+
+    let radius = harness
+        .widget_prop::<CornerRadius>(btn_id)
+        .expect("Button must resolve CornerRadius property");
+    assert!((radius.radius.get() - spec.metrics.button_radius).abs() < 1e-6);
+
+    let btn_rect = harness.widget_rect(btn_id).expect("Button rect missing");
+    let rest_crop = harness
+        .render_widget_image(btn_id)
+        .expect("cropped button image should render");
+    assert!(
+        (f64::from(rest_crop.width()) - btn_rect.2).abs() <= 2.0
+            && (f64::from(rest_crop.height()) - btn_rect.3).abs() <= 2.0,
+        "crop {:?} should tightly match rect {:?}",
+        rest_crop.dimensions(),
+        btn_rect
+    );
+
+    let center_px = harness
+        .sample_widget_pixel(btn_id, 0.5, 0.5)
+        .expect("center pixel should be sampleable");
+    assert_eq!(center_px[3], 255, "button center pixel should be opaque");
+
+    harness
+        .run_step(&PreviewStep::HoverLabel("Save".into()))
+        .unwrap();
+    let hover_bg = harness
+        .widget_prop::<Background>(btn_id)
+        .expect("Hovered Button must resolve Background property");
+    assert_eq!(
+        hover_bg,
+        Background::Color(expected_states.hover),
+        "hovered Button should resolve spec hover background color"
+    );
+
+    let hover_crop = harness
+        .render_widget_image(btn_id)
+        .expect("hovered crop should render");
+    assert!(compare_images(&rest_crop, &rest_crop, ImageDiffTolerance::exact()).matched);
+    let diff = compare_images(&rest_crop, &hover_crop, ImageDiffTolerance::exact());
+    assert!(
+        !diff.matched && diff.diff_pixels > 0,
+        "hovered button crop must visibly differ from resting crop"
+    );
 }

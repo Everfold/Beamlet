@@ -249,3 +249,91 @@ pub fn check_snapshot_image(
     remove_if_exists(&diff_path);
     Ok(report)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "brocado_preview_{label}_{}_{nanos}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn compare_images_handles_exact_tolerance_ratio_and_size_mismatch() {
+        let base = RgbaImage::from_pixel(10, 10, Rgba([100, 100, 100, 255]));
+        let exact = compare_images(&base, &base, ImageDiffTolerance::exact());
+        assert!(exact.matched);
+        assert_eq!(exact.diff_pixels, 0);
+        assert_eq!(exact.max_channel_delta, 0);
+        assert!(exact.diff_image.is_none());
+
+        let mut aa = base.clone();
+        aa.put_pixel(0, 0, Rgba([102, 99, 100, 255]));
+        let strict_aa = compare_images(&base, &aa, ImageDiffTolerance::exact());
+        assert!(!strict_aa.matched);
+        assert_eq!(strict_aa.diff_pixels, 1);
+        assert_eq!(strict_aa.max_channel_delta, 2);
+        assert!(strict_aa.diff_image.is_some());
+
+        let tolerant_aa = compare_images(&base, &aa, ImageDiffTolerance::antialiased());
+        assert!(tolerant_aa.matched);
+        assert_eq!(tolerant_aa.diff_pixels, 0);
+        assert_eq!(tolerant_aa.max_channel_delta, 2);
+
+        let mut broken = base.clone();
+        broken.put_pixel(1, 1, Rgba([200, 100, 100, 255]));
+        let ratio_fail = compare_images(&base, &broken, ImageDiffTolerance::antialiased());
+        assert!(!ratio_fail.matched);
+        assert_eq!(ratio_fail.diff_pixels, 1);
+        assert_eq!(ratio_fail.diff_ratio, 0.01);
+        let diff_img = ratio_fail.diff_image.expect("diff image generated");
+        assert_eq!(*diff_img.get_pixel(1, 1), Rgba([255, 0, 128, 255]));
+
+        let smaller = RgbaImage::from_pixel(8, 10, Rgba([100, 100, 100, 255]));
+        let size_report = compare_images(&base, &smaller, ImageDiffTolerance::antialiased());
+        assert!(!size_report.matched);
+        assert_eq!(size_report.size_mismatch, Some(((10, 10), (8, 10))));
+        assert!(size_report.diff_image.is_some());
+    }
+
+    #[test]
+    fn check_snapshot_image_verifies_writes_failures_and_cleans_stale_artifacts() {
+        let dir = unique_temp_dir("snap");
+        let baseline = RgbaImage::from_pixel(4, 4, Rgba([20, 40, 80, 255]));
+
+        // Missing baseline writes `.new.png` and returns descriptive Err
+        let err = check_snapshot_image(&baseline, &dir, "sample", ImageDiffTolerance::exact())
+            .expect_err("missing baseline must fail");
+        assert!(err.to_string().contains("missing baseline screenshot"));
+        assert!(dir.join("screenshots/sample.new.png").exists());
+
+        // Seed reference PNG, then assert mismatch produces `.diff.png` + `.new.png`
+        write_png(&baseline, &dir.join("screenshots/sample.png")).unwrap();
+        let mut altered = baseline.clone();
+        altered.put_pixel(2, 2, Rgba([255, 255, 255, 255]));
+        let mismatch = check_snapshot_image(&altered, &dir, "sample", ImageDiffTolerance::exact())
+            .expect_err("altered image must fail");
+        assert!(mismatch.to_string().contains("mismatch"));
+        assert!(dir.join("screenshots/sample.new.png").exists());
+        assert!(dir.join("screenshots/sample.diff.png").exists());
+
+        // Matching check passes and cleans up stale `.new.png` / `.diff.png`
+        let ok = check_snapshot_image(&baseline, &dir, "sample", ImageDiffTolerance::exact())
+            .expect("matching image should succeed");
+        assert!(ok.matched);
+        assert!(!dir.join("screenshots/sample.new.png").exists());
+        assert!(!dir.join("screenshots/sample.diff.png").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
