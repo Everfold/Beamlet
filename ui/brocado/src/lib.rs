@@ -28,9 +28,9 @@ pub use brocado_core::tokens::{
     WindowSizeClass,
 };
 pub use brocado_core::{
-    AnyWidgetView, Color, FontWeight, InitialRootWidget, InsertNewline, MasonryRoot, Pod,
-    TextAlign, ViewCtx, WidgetView, WidgetViewSequence, core, dpi, kurbo, masonry, reactive, style,
-    view,
+    AnyWidgetView, Color, FontFamily, FontFamilyName, FontWeight, GenericFamily, InitialRootWidget,
+    InsertNewline, MasonryRoot, Pod, TextAlign, ViewCtx, WidgetView, WidgetViewSequence, core, dpi,
+    kurbo, masonry, reactive, style, view,
 };
 pub use theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
 #[cfg(feature = "winit")]

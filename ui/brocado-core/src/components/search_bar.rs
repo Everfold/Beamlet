@@ -65,16 +65,14 @@ impl<State, Action> UiSearchBar<State, Action> {
         let style = spec.typography.get(TypeRole::BodyMedium);
         let on_change = self.on_change.clone();
 
-        let mut ti = text_input(self.query.clone(), move |s: &mut State, val: String| {
+        let ti = text_input(self.query.clone(), move |s: &mut State, val: String| {
             on_change(s, val)
         })
         .placeholder(self.placeholder.clone())
         .text_size(style.font_size)
         .weight(style.weight)
-        .text_color(p.text_primary);
-        if let Some(font) = spec.typography.font_family() {
-            ti = ti.font(font.clone());
-        }
+        .text_color(p.text_primary)
+        .font(spec.typography.resolved_font_family());
         let clear_btn = if !self.query.is_empty()
             && let Some(on_clear) = &self.on_clear
         {

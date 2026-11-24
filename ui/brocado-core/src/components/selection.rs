@@ -123,8 +123,8 @@ impl ControlVisualTheme {
 }
 
 fn label_typography_differs(
-    a: &(TextStyleSpec, Option<FontFamily<'static>>),
-    b: &(TextStyleSpec, Option<FontFamily<'static>>),
+    a: &(TextStyleSpec, FontFamily<'static>),
+    b: &(TextStyleSpec, FontFamily<'static>),
 ) -> bool {
     a.0 != b.0 || a.1 != b.1
 }
@@ -132,20 +132,18 @@ fn label_typography_differs(
 fn prepare_label_pod(
     text: ArcStr,
     style: TextStyleSpec,
-    font: Option<&FontFamily<'static>>,
+    font: &FontFamily<'static>,
     color: Color,
 ) -> NewWidget<widgets::Label> {
-    let mut lbl = widgets::Label::new(text)
+    let lbl = widgets::Label::new(text)
         .with_style(StyleProperty::FontSize(style.font_size))
         .with_style(StyleProperty::FontWeight(style.weight))
         .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
             style.line_height,
         )))
         .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
+        .with_style(StyleProperty::FontFamily(font.clone()))
         .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
-    if let Some(f) = font {
-        lbl = lbl.with_style(StyleProperty::FontFamily(f.clone()));
-    }
     NewWidget::new(lbl).with_props(PropertySet::new().with(ContentColor::new(color)))
 }
 
@@ -153,8 +151,8 @@ fn sync_label_pod(
     mut label: WidgetMut<'_, widgets::Label>,
     text_changed: bool,
     new_text: ArcStr,
-    prev_typo: &mut (TextStyleSpec, Option<FontFamily<'static>>),
-    next_typo: &(TextStyleSpec, Option<FontFamily<'static>>),
+    prev_typo: &mut (TextStyleSpec, FontFamily<'static>),
+    next_typo: &(TextStyleSpec, FontFamily<'static>),
     color: Color,
     prev_color: Color,
 ) {
@@ -186,10 +184,11 @@ fn sync_label_pod(
                 StyleProperty::LetterSpacing(next_typo.0.letter_spacing),
             );
         }
-        if prev_typo.1 != next_typo.1
-            && let Some(f) = &next_typo.1
-        {
-            widgets::Label::insert_style(&mut label, StyleProperty::FontFamily(f.clone()));
+        if prev_typo.1 != next_typo.1 {
+            widgets::Label::insert_style(
+                &mut label,
+                StyleProperty::FontFamily(next_typo.1.clone()),
+            );
         }
         *prev_typo = next_typo.clone();
     }
@@ -579,15 +578,15 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     for UiCheckboxView<State, Action>
 {
     type Element = Pod<UiCheckbox>;
-    type ViewState = (TextStyleSpec, Option<FontFamily<'static>>, Color);
+    type ViewState = (TextStyleSpec, FontFamily<'static>, Color);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec = current_spec_arc(ctx);
         let visual = ControlVisualTheme::from_spec(&spec);
         let ts = spec.typography.get(TypeRole::BodyMedium);
-        let font = spec.typography.font_family().cloned();
+        let font = spec.typography.resolved_font_family();
         let color = visual.label_color(self.disabled);
-        let lbl = prepare_label_pod(self.text.clone(), ts, font.as_ref(), color);
+        let lbl = prepare_label_pod(self.text.clone(), ts, &font, color);
         let pod = ctx.with_action_widget(|ctx| {
             let mut pod = ctx.create_pod(UiCheckbox::new(self.checked, lbl, visual));
             pod.new_widget.options.disabled = self.disabled;
@@ -607,7 +606,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let spec = current_spec_arc(ctx);
         let visual = ControlVisualTheme::from_spec(&spec);
         let next_ts = spec.typography.get(TypeRole::BodyMedium);
-        let next_font = spec.typography.font_family().cloned();
+        let next_font = spec.typography.resolved_font_family();
         let next_color = visual.label_color(self.disabled);
 
         if prev.disabled != self.disabled {
@@ -1561,15 +1560,15 @@ impl<State, Action> ViewMarker for UiRadio<State, Action> {}
 
 impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRadio<State, Action> {
     type Element = Pod<UiRadioButton>;
-    type ViewState = (TextStyleSpec, Option<FontFamily<'static>>, Color);
+    type ViewState = (TextStyleSpec, FontFamily<'static>, Color);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec = current_spec_arc(ctx);
         let visual = ControlVisualTheme::from_spec(&spec);
         let ts = spec.typography.get(TypeRole::BodyMedium);
-        let font = spec.typography.font_family().cloned();
+        let font = spec.typography.resolved_font_family();
         let color = visual.label_color(self.disabled);
-        let lbl = prepare_label_pod(self.text.clone(), ts, font.as_ref(), color);
+        let lbl = prepare_label_pod(self.text.clone(), ts, &font, color);
         let pod = ctx.with_action_widget(|ctx| {
             let mut pod = ctx.create_pod(UiRadioButton::new(self.selected, lbl, visual));
             pod.new_widget.options.disabled = self.disabled;
@@ -1589,7 +1588,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRadio<S
         let spec = current_spec_arc(ctx);
         let visual = ControlVisualTheme::from_spec(&spec);
         let next_ts = spec.typography.get(TypeRole::BodyMedium);
-        let next_font = spec.typography.font_family().cloned();
+        let next_font = spec.typography.resolved_font_family();
         let next_color = visual.label_color(self.disabled);
 
         if prev.disabled != self.disabled {

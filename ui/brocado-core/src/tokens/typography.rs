@@ -1,4 +1,8 @@
-//! Shared 15-role typography ramp, line-height/tracking tokens, and platform font stacks.
+//! Shared 15-role typography ramp, line-height/tracking tokens, and developer-configurable font fallback support.
+//!
+//! By default, typography scales defer to the operating system's default UI font
+//! (`GenericFamily::SystemUi`) rather than hardcoding proprietary or locale-biased font stacks.
+//! Applications may override or extend the font family / fallback chain on [`TypeScale`] or `UiTheme`.
 
 use std::borrow::Cow;
 
@@ -114,45 +118,6 @@ impl Default for TypeScale {
     }
 }
 
-const MD3_FONT_STACK: &[FontFamilyName<'static>] = &[
-    FontFamilyName::Named(Cow::Borrowed("Roboto")),
-    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
-    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
-    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
-    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
-    FontFamilyName::Generic(GenericFamily::SansSerif),
-];
-
-const FLUENT_FONT_STACK: &[FontFamilyName<'static>] = &[
-    FontFamilyName::Named(Cow::Borrowed("Segoe UI Variable")),
-    FontFamilyName::Named(Cow::Borrowed("Segoe UI")),
-    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
-    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
-    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
-    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
-    FontFamilyName::Generic(GenericFamily::SansSerif),
-];
-
-const HIG_FONT_STACK: &[FontFamilyName<'static>] = &[
-    FontFamilyName::Named(Cow::Borrowed("SF Pro Text")),
-    FontFamilyName::Named(Cow::Borrowed("SF Pro Display")),
-    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
-    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
-    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
-    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
-    FontFamilyName::Generic(GenericFamily::SansSerif),
-];
-
-const ADWAITA_FONT_STACK: &[FontFamilyName<'static>] = &[
-    FontFamilyName::Named(Cow::Borrowed("Adwaita Sans")),
-    FontFamilyName::Named(Cow::Borrowed("Cantarell")),
-    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
-    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
-    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
-    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
-    FontFamilyName::Generic(GenericFamily::SansSerif),
-];
-
 impl TypeScale {
     /// Returns the baseline Material Design 3 15-role typography ramp (`16sp`/`14sp` body).
     #[must_use]
@@ -161,6 +126,8 @@ impl TypeScale {
     }
 
     /// Returns the official Material Design 3 typography ramp (size, line height, tracking, weight).
+    ///
+    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
     #[must_use]
     pub const fn md3() -> Self {
         Self {
@@ -179,11 +146,13 @@ impl TypeScale {
             label_large: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.5, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(11.0, 16.0, 0.5, FontWeight::MEDIUM),
-            font_family: Some(FontFamily::List(Cow::Borrowed(MD3_FONT_STACK))),
+            font_family: None,
         }
     }
 
-    /// Returns the Windows 11 / WinUI 3 Fluent 2 type ramp (`Segoe UI Variable` scale).
+    /// Returns the Windows 11 / WinUI 3 Fluent 2 typography ramp (size, line height, tracking, weight).
+    ///
+    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
     #[must_use]
     pub const fn fluent2() -> Self {
         Self {
@@ -202,11 +171,13 @@ impl TypeScale {
             label_large: TextStyleSpec::new(14.0, 20.0, 0.0, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: Some(FontFamily::List(Cow::Borrowed(FLUENT_FONT_STACK))),
+            font_family: None,
         }
     }
 
-    /// Returns the Apple macOS HIG desktop typography ramp (`13pt` SF Pro body baseline).
+    /// Returns the Apple macOS HIG desktop typography ramp (`13pt` body baseline).
+    ///
+    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
     #[must_use]
     pub const fn macos_hig() -> Self {
         Self {
@@ -225,11 +196,13 @@ impl TypeScale {
             label_large: TextStyleSpec::new(13.0, 16.0, 0.0, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(10.0, 13.0, 0.0, FontWeight::MEDIUM),
-            font_family: Some(FontFamily::List(Cow::Borrowed(HIG_FONT_STACK))),
+            font_family: None,
         }
     }
 
-    /// Returns the GNOME HIG / Libadwaita 1.x typography ramp (`15px`/`11pt` Adwaita Sans baseline).
+    /// Returns the GNOME HIG / Libadwaita 1.x typography ramp (`15px`/`11pt` body baseline).
+    ///
+    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
     #[must_use]
     pub const fn adwaita() -> Self {
         Self {
@@ -248,7 +221,7 @@ impl TypeScale {
             label_large: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::SEMI_BOLD),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::BOLD),
             label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: Some(FontFamily::List(Cow::Borrowed(ADWAITA_FONT_STACK))),
+            font_family: None,
         }
     }
 
@@ -314,63 +287,85 @@ impl TypeScale {
         }
     }
 
-    /// Sets an explicit font family (useful for bundling CJK/UI fonts).
+    /// Parses a CSS-style font fallback stack string (e.g. `"Inter, system-ui, sans-serif"`).
+    ///
+    /// Returns `None` when the input contains no non-empty font family names.
+    #[must_use]
+    pub fn parse_font_stack(stack: &str) -> Option<FontFamily<'static>> {
+        let items: Vec<FontFamilyName<'static>> = stack
+            .split(',')
+            .map(|part| part.trim().trim_matches('\'').trim_matches('"').trim())
+            .filter(|part| !part.is_empty())
+            .map(|name| {
+                if let Some(generic) = GenericFamily::parse(name) {
+                    FontFamilyName::Generic(generic)
+                } else {
+                    FontFamilyName::Named(Cow::Owned(name.to_owned()))
+                }
+            })
+            .collect();
+        match items.len() {
+            0 => None,
+            1 => Some(FontFamily::Single(items.into_iter().next().unwrap())),
+            _ => Some(FontFamily::List(Cow::Owned(items))),
+        }
+    }
+
+    /// Sets an explicit font family or fallback list (useful for app-bundled or custom UI fonts).
     #[must_use]
     pub fn with_font_family(mut self, family: FontFamily<'static>) -> Self {
         self.font_family = Some(family);
         self
     }
 
-    /// Parses and assigns a CSS-style font fallback stack string (e.g. `"Roboto, sans-serif"`).
+    /// Parses and assigns a CSS-style font fallback stack string (e.g. `"Inter, system-ui, sans-serif"`).
+    ///
+    /// An empty/whitespace-only string resets back to the OS system UI default.
     #[must_use]
-    pub fn with_font_stack(mut self, stack: &'static str) -> Self {
-        let items: Vec<FontFamilyName<'static>> = stack
-            .split(',')
-            .map(|part| part.trim().trim_matches('\'').trim_matches('"'))
-            .filter(|part| !part.is_empty())
-            .map(|name| match name {
-                "sans-serif" => FontFamilyName::Generic(GenericFamily::SansSerif),
-                "serif" => FontFamilyName::Generic(GenericFamily::Serif),
-                "monospace" => FontFamilyName::Generic(GenericFamily::Monospace),
-                "system-ui" => FontFamilyName::Generic(GenericFamily::SystemUi),
-                other => FontFamilyName::Named(Cow::Borrowed(other)),
-            })
-            .collect();
-        if let [single] = items.as_slice() {
-            self.font_family = Some(FontFamily::Single(single.clone()));
-        } else if !items.is_empty() {
-            self.font_family = Some(FontFamily::List(Cow::Owned(items)));
-        } else {
-            self.font_family = Some(FontFamily::from(stack));
-        }
+    pub fn with_font_stack(mut self, stack: &str) -> Self {
+        self.font_family = Self::parse_font_stack(stack);
         self
     }
 
-    /// Selects the canonical Material Design 3 Roboto + CJK sans fallback stack.
+    /// Replaces the active font stack with an explicit ordered sequence of [`FontFamilyName`] items.
+    ///
+    /// An empty sequence resets back to the OS system UI default.
     #[must_use]
-    pub fn with_md3_font_stack(mut self) -> Self {
-        self.font_family = Some(FontFamily::List(Cow::Borrowed(MD3_FONT_STACK)));
+    pub fn with_font_fallbacks<I>(mut self, families: I) -> Self
+    where
+        I: IntoIterator<Item = FontFamilyName<'static>>,
+    {
+        let items: Vec<FontFamilyName<'static>> = families.into_iter().collect();
+        self.font_family = match items.len() {
+            0 => None,
+            1 => Some(FontFamily::Single(items.into_iter().next().unwrap())),
+            _ => Some(FontFamily::List(Cow::Owned(items))),
+        };
         self
     }
 
-    /// Selects the canonical Windows 11 Segoe UI Variable + YaHei + cross-platform CJK fallback stack.
+    /// Appends a fallback font family to the end of the current stack (or after `GenericFamily::SystemUi` when unset).
     #[must_use]
-    pub fn with_fluent_font_stack(mut self) -> Self {
-        self.font_family = Some(FontFamily::List(Cow::Borrowed(FLUENT_FONT_STACK)));
+    pub fn append_font_fallback(mut self, fallback: FontFamilyName<'static>) -> Self {
+        let mut items = match self.font_family.take() {
+            None => vec![FontFamilyName::Generic(GenericFamily::SystemUi)],
+            Some(FontFamily::Single(existing)) => vec![existing],
+            Some(FontFamily::List(existing)) => existing.into_owned(),
+            Some(FontFamily::Source(src)) => match Self::parse_font_stack(&src) {
+                Some(FontFamily::Single(existing)) => vec![existing],
+                Some(FontFamily::List(existing)) => existing.into_owned(),
+                _ => vec![FontFamilyName::Generic(GenericFamily::SystemUi)],
+            },
+        };
+        items.push(fallback);
+        self.font_family = Some(FontFamily::List(Cow::Owned(items)));
         self
     }
 
-    /// Selects the canonical Apple macOS SF Pro + PingFang + cross-platform CJK fallback stack.
+    /// Resets the font selection back to the operating system's default UI font (`GenericFamily::SystemUi`).
     #[must_use]
-    pub fn with_hig_font_stack(mut self) -> Self {
-        self.font_family = Some(FontFamily::List(Cow::Borrowed(HIG_FONT_STACK)));
-        self
-    }
-
-    /// Selects the canonical GNOME Adwaita Sans + Cantarell + cross-platform CJK fallback stack.
-    #[must_use]
-    pub fn with_adwaita_font_stack(mut self) -> Self {
-        self.font_family = Some(FontFamily::List(Cow::Borrowed(ADWAITA_FONT_STACK)));
+    pub fn with_system_font(mut self) -> Self {
+        self.font_family = None;
         self
     }
 
@@ -381,10 +376,20 @@ impl TypeScale {
         self
     }
 
-    /// Returns the configured font family, if overridden.
+    /// Returns the explicit font family override, or `None` when deferring to OS `system-ui`.
     #[must_use]
     pub fn font_family(&self) -> Option<&FontFamily<'static>> {
         self.font_family.as_ref()
+    }
+
+    /// Returns the effective font family used when building text views (defaults to `GenericFamily::SystemUi`).
+    #[must_use]
+    pub fn resolved_font_family(&self) -> FontFamily<'static> {
+        self.font_family
+            .clone()
+            .unwrap_or(FontFamily::Single(FontFamilyName::Generic(
+                GenericFamily::SystemUi,
+            )))
     }
 
     /// Looks up the [`TextStyleSpec`] for a given [`TypeRole`].
@@ -409,19 +414,15 @@ impl TypeScale {
         }
     }
 
-    /// Applies `role` sizing, weight, line height, tracking, and configured font family onto a Brocado [`Label`].
+    /// Applies `role` sizing, weight, line height, tracking, and resolved font family onto a Brocado [`Label`].
     pub fn style_label(&self, role: TypeRole, label: Label) -> Label {
         let style = self.get(role);
-        let styled = label
+        label
             .text_size(style.font_size)
             .weight(style.weight)
             .line_height(LineHeight::Absolute(style.line_height))
-            .letter_spacing(style.letter_spacing);
-        if let Some(font) = &self.font_family {
-            styled.font(font.clone())
-        } else {
-            styled
-        }
+            .letter_spacing(style.letter_spacing)
+            .font(self.resolved_font_family())
     }
 }
 
@@ -468,30 +469,66 @@ mod tests {
     }
 
     #[test]
-    fn font_stack_helpers_assign_family() {
-        assert!(
-            TypeScale::md3()
-                .with_md3_font_stack()
-                .font_family()
-                .is_some()
+    fn type_scales_default_to_system_ui_and_allow_fallback_customization() {
+        let system_ui = FontFamily::Single(FontFamilyName::Generic(GenericFamily::SystemUi));
+        for ramp in [
+            TypeScale::md3(),
+            TypeScale::fluent2(),
+            TypeScale::macos_hig(),
+            TypeScale::adwaita(),
+            TypeScale::compact_desktop(14.0),
+        ] {
+            assert!(ramp.font_family().is_none());
+            assert_eq!(ramp.resolved_font_family(), system_ui);
+        }
+
+        let single = TypeScale::md3().with_font_stack("sans-serif");
+        assert_eq!(
+            single.font_family(),
+            Some(&FontFamily::Single(FontFamilyName::Generic(
+                GenericFamily::SansSerif
+            )))
         );
-        assert!(
-            TypeScale::fluent2()
-                .with_fluent_font_stack()
-                .font_family()
-                .is_some()
+
+        let runtime_string = String::from(" 'Custom UI' , system-ui , \"Fallback Serif\" , serif ");
+        let list = TypeScale::fluent2().with_font_stack(&runtime_string);
+        assert_eq!(
+            list.font_family(),
+            Some(&FontFamily::List(Cow::Owned(vec![
+                FontFamilyName::Named(Cow::Owned(String::from("Custom UI"))),
+                FontFamilyName::Generic(GenericFamily::SystemUi),
+                FontFamilyName::Named(Cow::Owned(String::from("Fallback Serif"))),
+                FontFamilyName::Generic(GenericFamily::Serif),
+            ])))
         );
-        assert!(
-            TypeScale::macos_hig()
-                .with_hig_font_stack()
-                .font_family()
-                .is_some()
+
+        let cleared = list.clone().with_font_stack("  ");
+        assert!(cleared.font_family().is_none());
+        assert_eq!(cleared.resolved_font_family(), system_ui);
+
+        let appended_default = TypeScale::adwaita()
+            .append_font_fallback(FontFamilyName::Named(Cow::Borrowed("AppFallback")));
+        assert_eq!(
+            appended_default.font_family(),
+            Some(&FontFamily::List(Cow::Owned(vec![
+                FontFamilyName::Generic(GenericFamily::SystemUi),
+                FontFamilyName::Named(Cow::Borrowed("AppFallback")),
+            ])))
         );
-        assert!(
-            TypeScale::adwaita()
-                .with_adwaita_font_stack()
-                .font_family()
-                .is_some()
+
+        let appended_existing = TypeScale::macos_hig()
+            .with_font_fallbacks([FontFamilyName::Named(Cow::Borrowed("AppPrimary"))])
+            .append_font_fallback(FontFamilyName::Generic(GenericFamily::SansSerif));
+        assert_eq!(
+            appended_existing.font_family(),
+            Some(&FontFamily::List(Cow::Owned(vec![
+                FontFamilyName::Named(Cow::Borrowed("AppPrimary")),
+                FontFamilyName::Generic(GenericFamily::SansSerif),
+            ])))
         );
+
+        let reset = appended_existing.with_system_font();
+        assert!(reset.font_family().is_none());
+        assert_eq!(reset.resolved_font_family(), system_ui);
     }
 }

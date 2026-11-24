@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use masonry::core::{ArcStr, NewWidget, PropertySet, StyleProperty};
 use masonry::parley::style::{FontFamily, FontWeight, OverflowWrap};
-use masonry::parley::{Alignment as TextAlign, FontFamilyName, GenericFamily, LineHeight};
+use masonry::parley::{Alignment as TextAlign, LineHeight};
 use masonry::peniko::Color;
 use masonry::properties::{ContentColor, LineBreaking};
 use masonry::widgets;
@@ -59,14 +59,7 @@ impl<State, Action> UiLabel<State, Action> {
         if let Some(w) = self.weight {
             style.weight = w;
         }
-        let font = spec
-            .typography
-            .font_family()
-            .cloned()
-            .unwrap_or(FontFamily::Single(FontFamilyName::Generic(
-                GenericFamily::SystemUi,
-            )));
-        (style, font)
+        (style, spec.typography.resolved_font_family())
     }
 }
 
@@ -228,28 +221,21 @@ impl<State: 'static, Action: 'static> ViewMarker for UiProse<State, Action> {}
 
 impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<State, Action> {
     type Element = Pod<widgets::Prose>;
-    type ViewState = (
-        ArcStr,
-        TextStyleSpec,
-        Option<FontFamily<'static>>,
-        Option<Color>,
-    );
+    type ViewState = (ArcStr, TextStyleSpec, FontFamily<'static>, Option<Color>);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec = current_spec_arc(ctx);
         let style = spec.typography.get(self.role);
-        let font = spec.typography.font_family().cloned();
-        let mut text_area = widgets::TextArea::new_immutable(&self.text)
+        let font = spec.typography.resolved_font_family();
+        let text_area = widgets::TextArea::new_immutable(&self.text)
             .with_style(StyleProperty::FontSize(style.font_size))
             .with_style(StyleProperty::FontWeight(style.weight))
             .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
                 style.line_height,
             )))
             .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
+            .with_style(StyleProperty::FontFamily(font.clone()))
             .with_word_wrap(true);
-        if let Some(f) = &font {
-            text_area = text_area.with_style(StyleProperty::FontFamily(f.clone()));
-        }
 
         let mut props = PropertySet::new();
         if let Some(c) = self.color {
@@ -270,7 +256,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<S
     ) {
         let spec = current_spec_arc(ctx);
         let next_style = spec.typography.get(self.role);
-        let next_font = spec.typography.font_family().cloned();
+        let next_font = spec.typography.resolved_font_family();
 
         let mut text_area = widgets::Prose::text_mut(&mut element);
         if *prev_color != self.color {
@@ -310,12 +296,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<S
             );
         }
         if *prev_font != next_font {
-            if let Some(f) = &next_font {
-                widgets::TextArea::insert_style(
-                    &mut text_area,
-                    StyleProperty::FontFamily(f.clone()),
-                );
-            }
+            widgets::TextArea::insert_style(
+                &mut text_area,
+                StyleProperty::FontFamily(next_font.clone()),
+            );
             *prev_font = next_font;
         }
         *prev_style = next_style;

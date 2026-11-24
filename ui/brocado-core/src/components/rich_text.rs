@@ -206,7 +206,7 @@ pub struct RichTextWidget {
     base_size: f32,
     base_weight: FontWeight,
     base_line_height: f32,
-    base_font: Option<FontFamily<'static>>,
+    base_font: FontFamily<'static>,
     selection_color: Color,
     selectable: bool,
     layout: Option<Layout<BrushIndex>>,
@@ -226,7 +226,7 @@ struct RichLayoutConfig {
     base_size: f32,
     base_weight: FontWeight,
     base_line_height: f32,
-    base_font: Option<FontFamily<'static>>,
+    base_font: FontFamily<'static>,
     selection_color: Color,
     selectable: bool,
 }
@@ -292,7 +292,7 @@ fn compile_rich_config(
         base_size: ts.font_size,
         base_weight: ts.weight,
         base_line_height: ts.line_height,
-        base_font: spec.typography.font_family().cloned(),
+        base_font: spec.typography.resolved_font_family(),
         selection_color: with_opacity(p.accent, 0.25),
         selectable,
     }
@@ -366,9 +366,7 @@ impl RichTextWidget {
             self.base_line_height,
         )));
         builder.push_default(StyleProperty::Brush(BrushIndex(0)));
-        if let Some(family) = &self.base_font {
-            builder.push_default(StyleProperty::FontFamily(family.clone()));
-        }
+        builder.push_default(StyleProperty::FontFamily(self.base_font.clone()));
 
         for span in &self.spans {
             let r = span.range.clone();

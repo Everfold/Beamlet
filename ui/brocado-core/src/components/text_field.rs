@@ -173,13 +173,11 @@ impl<State, Action> UiTextField<State, Action> {
         .text_size(style.font_size)
         .weight(style.weight)
         .text_color(spec.content_color(p.text_primary, self.disabled))
+        .font(spec.typography.resolved_font_family())
         .disabled(self.disabled);
 
         if let Some(ph) = &self.placeholder {
             ti = ti.placeholder(ph.clone());
-        }
-        if let Some(font) = spec.typography.font_family() {
-            ti = ti.font(font.clone());
         }
 
         let has_addons = self.prefix_text.is_some()
@@ -779,13 +777,11 @@ impl<State, Action> UiTextArea<State, Action> {
         .text_size(style.font_size)
         .weight(style.weight)
         .text_color(spec.content_color(p.text_primary, self.disabled))
+        .font(spec.typography.resolved_font_family())
         .disabled(self.disabled);
 
         if let Some(ph) = &self.placeholder {
             ti = ti.placeholder(ph.clone());
-        }
-        if let Some(font) = spec.typography.font_family() {
-            ti = ti.font(font.clone());
         }
         if let Some(on_submit) = &self.on_submit {
             let on_submit = on_submit.clone();

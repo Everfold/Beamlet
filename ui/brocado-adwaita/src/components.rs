@@ -476,14 +476,12 @@ where
         let cb = cb.clone();
         let top = ui_label(TypeRole::LabelSmall, title.clone()).color(p.text_secondary);
         let style = spec.typography.get(TypeRole::BodyLarge);
-        let mut ti = text_input(value.clone(), move |s: &mut State, txt| cb(s, txt))
+        let ti = text_input(value.clone(), move |s: &mut State, txt| cb(s, txt))
             .text_size(style.font_size)
             .weight(style.weight)
-            .text_color(p.text_primary);
-        if let Some(font) = spec.typography.font_family() {
-            ti = ti.font(font.clone());
-        }
-        let ti = ti.ui_class(classes::TEXT_FIELD_FLUSH);
+            .text_color(p.text_primary)
+            .font(spec.typography.resolved_font_family())
+            .ui_class(classes::TEXT_FIELD_FLUSH);
 
         sized_box(
             flex_col((top, ti))

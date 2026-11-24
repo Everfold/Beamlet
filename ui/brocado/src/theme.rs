@@ -3,7 +3,8 @@
 use std::sync::{Arc, LazyLock, Mutex};
 
 use brocado_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
-use brocado_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
+use brocado_core::tokens::{Brightness, DesignSpec, TypeScale, WindowBackdrop};
+use brocado_core::{FontFamily, FontFamilyName};
 #[cfg(feature = "winit")]
 use brocado_winit::{
     DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop,
@@ -143,6 +144,8 @@ pub struct UiTheme {
     pub high_contrast: bool,
     /// Disables entrance/transition motion durations and spatial offsets when `true`.
     pub reduced_motion: bool,
+    /// Optional font family / fallback stack overriding the OS system UI default (`None` uses `system-ui`).
+    pub font_family: Option<FontFamily<'static>>,
 }
 
 impl UiTheme {
@@ -167,6 +170,7 @@ impl UiTheme {
             accent: UiAccent::Default,
             high_contrast: false,
             reduced_motion: false,
+            font_family: None,
         }
     }
 
@@ -191,6 +195,55 @@ impl UiTheme {
         self
     }
 
+    /// Overrides the theme's font family / fallback chain explicitly.
+    #[must_use]
+    pub fn with_font_family(mut self, family: FontFamily<'static>) -> Self {
+        self.font_family = Some(family);
+        self
+    }
+
+    /// Parses and assigns a CSS-style font fallback stack string (e.g. `"Inter, system-ui, sans-serif"`).
+    ///
+    /// An empty or whitespace-only string resets to the OS system UI default.
+    #[must_use]
+    pub fn with_font_stack(mut self, stack: &str) -> Self {
+        self.font_family = TypeScale::parse_font_stack(stack);
+        self
+    }
+
+    /// Replaces the font stack with an explicit ordered sequence of [`FontFamilyName`] items.
+    ///
+    /// An empty sequence resets to the OS system UI default.
+    #[must_use]
+    pub fn with_font_fallbacks<I>(mut self, families: I) -> Self
+    where
+        I: IntoIterator<Item = FontFamilyName<'static>>,
+    {
+        self.font_family = TypeScale::baseline()
+            .with_font_fallbacks(families)
+            .font_family()
+            .cloned();
+        self
+    }
+
+    /// Appends a fallback font family to the current font stack (or after `GenericFamily::SystemUi` when unset).
+    #[must_use]
+    pub fn append_font_fallback(mut self, fallback: FontFamilyName<'static>) -> Self {
+        let base = match self.font_family.take() {
+            Some(f) => TypeScale::baseline().with_font_family(f),
+            None => TypeScale::baseline(),
+        };
+        self.font_family = base.append_font_fallback(fallback).font_family().cloned();
+        self
+    }
+
+    /// Resets the font configuration back to the OS default UI font (`GenericFamily::SystemUi`).
+    #[must_use]
+    pub fn with_system_font(mut self) -> Self {
+        self.font_family = None;
+        self
+    }
+
     /// Toggles `Light <-> Dark` polarity in-place.
     pub fn toggle_brightness(&mut self) {
         self.brightness = match self.brightness {
@@ -202,7 +255,7 @@ impl UiTheme {
     /// Synthesizes the complete cross-theme [`DesignSpec`].
     #[must_use]
     pub fn to_spec(&self) -> DesignSpec {
-        match self.language {
+        let mut spec = match self.language {
             DesignLanguage::Md3 => {
                 #[cfg(feature = "md3")]
                 {
@@ -302,7 +355,11 @@ impl UiTheme {
                     DesignSpec::neutral_fallback(self.brightness)
                 }
             }
+        };
+        if let Some(font) = &self.font_family {
+            spec.typography = spec.typography.with_font_family(font.clone());
         }
+        spec
     }
 
     /// Returns a cached [`Arc<DesignSpec>`] for this theme, avoiding repeated palette
@@ -421,6 +478,48 @@ mod tests {
                 .to_spec()
                 .backdrop,
             WindowBackdrop::Opaque
+        );
+    }
+
+    #[test]
+    fn ui_theme_defaults_to_system_font_and_propagates_custom_fallbacks() {
+        use std::borrow::Cow;
+        let system_ui = FontFamily::Single(FontFamilyName::Generic(
+            brocado_core::GenericFamily::SystemUi,
+        ));
+
+        for lang in DesignLanguage::ALL {
+            let theme = UiTheme::new(lang, Brightness::Light);
+            assert!(theme.font_family.is_none());
+            assert!(theme.to_spec().typography.font_family().is_none());
+            assert_eq!(theme.to_spec().typography.resolved_font_family(), system_ui);
+        }
+
+        let stacked =
+            UiTheme::new(DesignLanguage::Md3, Brightness::Dark).with_font_stack("CustomUI, serif");
+        assert_eq!(
+            stacked.cached_spec().typography.font_family(),
+            Some(&FontFamily::List(Cow::Owned(vec![
+                FontFamilyName::Named(Cow::Owned(String::from("CustomUI"))),
+                FontFamilyName::Generic(brocado_core::GenericFamily::Serif),
+            ])))
+        );
+
+        let appended = UiTheme::new(DesignLanguage::Hig, Brightness::Light)
+            .append_font_fallback(FontFamilyName::Named(Cow::Borrowed("AppEmoji")));
+        assert_eq!(
+            appended.cached_spec().typography.font_family(),
+            Some(&FontFamily::List(Cow::Owned(vec![
+                FontFamilyName::Generic(brocado_core::GenericFamily::SystemUi),
+                FontFamilyName::Named(Cow::Borrowed("AppEmoji")),
+            ])))
+        );
+
+        let reset = appended.with_system_font();
+        assert!(reset.font_family.is_none());
+        assert_eq!(
+            reset.cached_spec().typography.resolved_font_family(),
+            system_ui
         );
     }
 }
