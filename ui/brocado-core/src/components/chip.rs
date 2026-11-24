@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use masonry::core::ArcStr;
 use masonry::layout::AsUnit;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem_masonry::AnyWidgetView;
@@ -13,9 +13,10 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, button, flex_row, sized_box};
 
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::components::typography::ui_label;
+use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
@@ -92,19 +93,22 @@ impl<State, Action> UiChip<State, Action> {
             (_, _, Some(icon)) => Some(ui_icon(icon, 16.0, fg)),
             _ => None,
         };
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::LabelLarge, label(self.text.clone()))
-            .color(fg);
+        let lbl = clip_box(
+            ui_label(TypeRole::LabelLarge, self.text.clone())
+                .color(fg)
+                .line_breaking(LineBreaking::Clip),
+        );
         let on_click = self.on_click.clone();
 
         if let Some(on_rem) = &self.on_remove {
             let on_rem = on_rem.clone();
             let inner_h = (spec.metrics.chip_height - 4.0).max(20.0);
             let main_chip = button(
-                flex_row((lead, lbl))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
+                clip_box(
+                    flex_row((lead, lbl.flex(1.0)))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(6.px()),
+                ),
                 move |state: &mut State| on_click(state),
             )
             .disabled(self.disabled)
@@ -139,11 +143,11 @@ impl<State, Action> UiChip<State, Action> {
                 Some(c) => (c, 1.px()),
                 None => (masonry::peniko::Color::TRANSPARENT, 0.px()),
             };
-            sized_box(
-                flex_row((main_chip, close_btn))
+            sized_box(clip_box(
+                flex_row((main_chip.flex(1.0), close_btn))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(2.px()),
-            )
+            ))
             .background_color(chip_bg)
             .border(border_color, border_w)
             .corner_radius(spec.metrics.chip_radius.px())
@@ -152,9 +156,11 @@ impl<State, Action> UiChip<State, Action> {
             .boxed()
         } else {
             button(
-                flex_row((lead, lbl))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(6.px()),
+                clip_box(
+                    flex_row((lead, lbl.flex(1.0)))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(6.px()),
+                ),
                 move |state: &mut State| on_click(state),
             )
             .disabled(self.disabled)

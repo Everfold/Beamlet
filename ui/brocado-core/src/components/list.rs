@@ -15,11 +15,12 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, Flex, FlexExt, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, Flex, FlexExt, button, flex_col, flex_row, sized_box,
 };
 
 use crate::components::divider::horizontal_divider;
-use crate::foundation::UiClassExt;
+use crate::components::typography::ui_label;
+use crate::foundation::{UiClassExt, adaptive_pair};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
@@ -120,20 +121,15 @@ impl<State, Action> UiListItem<State, Action> {
             p.text_secondary
         };
 
-        let overline = self.overline.as_ref().map(|t| {
-            spec.typography
-                .style_label(TypeRole::LabelSmall, label(t.clone()))
-                .color(sub_ink)
-        });
-        let head = spec
-            .typography
-            .style_label(TypeRole::BodyLarge, label(self.headline.clone()))
-            .color(ink);
-        let supporting = self.supporting_text.as_ref().map(|t| {
-            spec.typography
-                .style_label(TypeRole::BodyMedium, label(t.clone()))
-                .color(sub_ink)
-        });
+        let overline = self
+            .overline
+            .as_ref()
+            .map(|t| ui_label(TypeRole::LabelSmall, t.clone()).color(sub_ink));
+        let head = ui_label(TypeRole::BodyLarge, self.headline.clone()).color(ink);
+        let supporting = self
+            .supporting_text
+            .as_ref()
+            .map(|t| ui_label(TypeRole::BodyMedium, t.clone()).color(sub_ink));
 
         let text_col = flex_col((overline, head, supporting))
             .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -141,9 +137,23 @@ impl<State, Action> UiListItem<State, Action> {
         let lead = self.leading.as_ref().map(|f| f(spec));
         let trail = self.trailing.as_ref().map(|f| f(spec));
 
-        let row = flex_row((lead, text_col.flex(1.0), trail))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(12.px());
+        let row: Box<AnyWidgetView<State, Action>> = if let Some(trail) = trail {
+            adaptive_pair(
+                flex_row((lead, text_col.flex(1.0)))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(12.px()),
+                trail,
+            )
+            .gap(12.px())
+            .run_gap(8.px())
+            .min_leading(56.0)
+            .boxed()
+        } else {
+            flex_row((lead, text_col.flex(1.0)))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(12.px())
+                .boxed()
+        };
 
         let item: Box<AnyWidgetView<State, Action>> = if let Some(on_click) = &self.on_click {
             let on_click = on_click.clone();

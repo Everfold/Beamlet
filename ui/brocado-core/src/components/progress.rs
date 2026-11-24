@@ -107,7 +107,8 @@ impl Widget for LinearProgressWidget {
     ) -> Length {
         match axis {
             Axis::Horizontal => match len_req {
-                LenReq::MinContent | LenReq::MaxContent => Length::const_px(160.0),
+                LenReq::MinContent => Length::const_px(32.0),
+                LenReq::MaxContent => Length::const_px(160.0),
                 LenReq::FitContent(space) => space,
             },
             Axis::Vertical => Length::const_px(4.0),

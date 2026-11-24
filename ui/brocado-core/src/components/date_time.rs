@@ -2,22 +2,23 @@
 
 use std::sync::Arc;
 
-use masonry::layout::AsUnit;
+use masonry::layout::{AsUnit, Dim};
 use masonry::peniko::Color;
-use masonry::properties::Dimensions;
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label,
-    sized_box, zstack,
+    CrossAxisAlignment, ZStackExt, button, flex_col, flex_row, label, portal, sized_box, zstack,
 };
 
 use crate::components::button::{primary_button, subtle_button};
 use crate::components::dialog::dialog;
-use crate::components::icon_button::icon_button;
-use crate::foundation::{EscapeCatcher, UiClassExt, icons};
+use crate::components::typography::ui_label;
+use crate::foundation::{
+    EscapeCatcher, UiClassExt, WrapWidget, adaptive_pair, icons, ui_icon, wrap,
+};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, DialogActionOrder, TypeRole};
 
@@ -178,38 +179,49 @@ where
         let cb_prev = cb.clone();
         let cb_next = cb.clone();
 
-        let header = flex_row((
-            spec.typography
-                .style_label(
-                    TypeRole::TitleMedium,
-                    label(format!("{} {}", month_name(selected.month), selected.year)),
-                )
-                .color(p.text_primary)
-                .flex(1.0),
-            icon_button(icons::CHEVRON_LEFT, move |s: &mut State| {
-                cb_prev(s, prev_date)
-            }),
-            icon_button(icons::CHEVRON_RIGHT, move |s: &mut State| {
-                cb_next(s, next_date)
-            }),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(4.px());
+        let prev_btn = button(
+            ui_icon(icons::CHEVRON_LEFT, 16.0, p.text_secondary),
+            move |s: &mut State| cb_prev(s, prev_date),
+        )
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(28.px(), 28.px()))
+        .padding(Padding::all(0.px()));
+        let next_btn = button(
+            ui_icon(icons::CHEVRON_RIGHT, 16.0, p.text_secondary),
+            move |s: &mut State| cb_next(s, next_date),
+        )
+        .ui_class(classes::ICON_BTN_STD)
+        .dims(Dimensions::fixed(28.px(), 28.px()))
+        .padding(Padding::all(0.px()));
+
+        let header = adaptive_pair(
+            ui_label(
+                TypeRole::TitleMedium,
+                format!("{} {}", month_name(selected.month), selected.year),
+            )
+            .color(p.text_primary),
+            flex_row((prev_btn, next_btn))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(2.px()),
+        )
+        .gap(4.px())
+        .run_gap(6.px())
+        .min_leading(48.0);
 
         let weekday_row = flex_row(
             ["S", "M", "T", "W", "T", "F", "S"]
                 .into_iter()
                 .map(|w| {
                     sized_box(
-                        spec.typography
-                            .style_label(TypeRole::LabelSmall, label(w))
-                            .color(p.text_secondary),
+                        ui_label(TypeRole::LabelSmall, w)
+                            .color(p.text_secondary)
+                            .line_breaking(LineBreaking::Clip),
                     )
-                    .dims(Dimensions::fixed(34.px(), 24.px()))
+                    .dims(Dimensions::fixed(30.px(), 24.px()))
                 })
                 .collect::<Vec<_>>(),
         )
-        .main_axis_alignment(MainAxisAlignment::SpaceBetween);
+        .gap(2.px());
 
         let first_wd = weekday_sunday_zero(selected.year, selected.month, 1) as usize;
         let days = days_in_month(selected.year, selected.month) as usize;
@@ -230,7 +242,7 @@ where
                     .iter()
                     .map(|cell| match cell {
                         None => sized_box(label(""))
-                            .dims(Dimensions::fixed(34.px(), 34.px()))
+                            .dims(Dimensions::fixed(30.px(), 30.px()))
                             .boxed(),
                         Some(d) => {
                             let d = *d;
@@ -245,25 +257,32 @@ where
                             };
                             sized_box(
                                 button(
-                                    spec.typography
-                                        .style_label(TypeRole::BodySmall, label(d.to_string()))
-                                        .color(fg),
+                                    ui_label(TypeRole::BodySmall, d.to_string())
+                                        .color(fg)
+                                        .line_breaking(LineBreaking::Clip),
                                     move |s: &mut State| cb_d(s, target),
                                 )
-                                .ui_class(cls),
+                                .ui_class(cls)
+                                .dims(Dimensions::fixed(30.px(), 30.px()))
+                                .padding(Padding::all(0.px())),
                             )
-                            .dims(Dimensions::fixed(34.px(), 34.px()))
+                            .dims(Dimensions::fixed(30.px(), 30.px()))
                             .boxed()
                         }
                     })
                     .collect();
-                flex_row(row_cells)
-                    .main_axis_alignment(MainAxisAlignment::SpaceBetween)
-                    .boxed()
+                flex_row(row_cells).gap(2.px()).boxed()
             })
             .collect();
 
-        flex_col((header, weekday_row, flex_col(rows).gap(4.px())))
+        let grid = sized_box(
+            flex_col((weekday_row, flex_col(rows).gap(4.px())))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(6.px()),
+        )
+        .dims(Dimensions::new(Dim::MaxContent, Dim::MaxContent));
+
+        flex_col((header, portal(grid).constrain_vertical(true)))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(8.px())
     })
@@ -272,7 +291,7 @@ where
 fn picker_dialog_actions<State: 'static, Action: 'static, FOke, FDis>(
     on_confirm: FOke,
     on_dismiss: FDis,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+) -> impl WidgetView<State, Action, Widget = WrapWidget>
 where
     FOke: Fn(&mut State) -> Action + Send + Sync + 'static,
     FDis: Fn(&mut State) -> Action + Send + Sync + 'static,
@@ -288,9 +307,10 @@ where
             DialogActionOrder::PrimaryLeading => vec![ok_btn, cancel_btn],
             DialogActionOrder::PrimaryTrailing => vec![cancel_btn, ok_btn],
         };
-        flex_row(btns)
-            .main_axis_alignment(MainAxisAlignment::End)
+        wrap(btns)
+            .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px())
+            .run_gap(8.px())
     })
 }
 
@@ -319,7 +339,7 @@ where
 pub fn time_picker<State: 'static, Action: 'static, F>(
     selected: TimeOfDay,
     on_change: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex>
+) -> impl WidgetView<State, Action, Widget = WrapWidget>
 where
     F: Fn(&mut State, TimeOfDay) -> Action + Send + Sync + 'static,
 {
@@ -334,63 +354,75 @@ where
         let am_cb = cb.clone();
         let pm_cb = cb.clone();
 
-        let hour_col = flex_col((
-            icon_button(icons::ARROW_DROP_UP, move |s| {
-                h_plus(s, selected.add_hours(1))
-            }),
-            sized_box(zstack((spec
-                .typography
-                .style_label(
-                    TypeRole::DisplaySmall,
-                    label(format!("{:02}", selected.hour)),
+        let step_btn =
+            |path: &'static str, on_click: Arc<dyn Fn(&mut State) -> Action + Send + Sync>| {
+                button(
+                    ui_icon(path, 18.0, p.text_secondary),
+                    move |s: &mut State| on_click(s),
                 )
-                .color(p.on_accent_container)
-                .alignment(masonry::layout::UnitPoint::CENTER),)))
-            .dims(Dimensions::fixed(76.px(), 64.px()))
+                .ui_class(classes::ICON_BTN_STD)
+                .dims(Dimensions::fixed(32.px(), 28.px()))
+                .padding(Padding::all(0.px()))
+            };
+
+        let hour_col = flex_col((
+            step_btn(
+                icons::ARROW_DROP_UP,
+                Arc::new(move |s| h_plus(s, selected.add_hours(1))),
+            ),
+            sized_box(zstack((ui_label(
+                TypeRole::HeadlineSmall,
+                format!("{:02}", selected.hour),
+            )
+            .color(p.on_accent_container)
+            .line_breaking(LineBreaking::Clip)
+            .alignment(masonry::layout::UnitPoint::CENTER),)))
+            .dims(Dimensions::fixed(50.px(), 46.px()))
             .background_color(p.accent_container)
             .corner_radius(spec.metrics.card_radius.px()),
-            icon_button(icons::ARROW_DROP_DOWN, move |s| {
-                h_minus(s, selected.add_hours(-1))
-            }),
+            step_btn(
+                icons::ARROW_DROP_DOWN,
+                Arc::new(move |s| h_minus(s, selected.add_hours(-1))),
+            ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(4.px());
 
-        let colon = spec
-            .typography
-            .style_label(TypeRole::DisplaySmall, label(":"))
-            .color(p.text_primary);
+        let colon = ui_label(TypeRole::HeadlineSmall, ":")
+            .color(p.text_primary)
+            .line_breaking(LineBreaking::Clip);
 
         let min_col = flex_col((
-            icon_button(icons::ARROW_DROP_UP, move |s| {
-                m_plus(s, selected.add_minutes(5))
-            }),
-            sized_box(zstack((spec
-                .typography
-                .style_label(
-                    TypeRole::DisplaySmall,
-                    label(format!("{:02}", selected.minute)),
-                )
-                .color(p.text_primary)
-                .alignment(masonry::layout::UnitPoint::CENTER),)))
-            .dims(Dimensions::fixed(76.px(), 64.px()))
+            step_btn(
+                icons::ARROW_DROP_UP,
+                Arc::new(move |s| m_plus(s, selected.add_minutes(5))),
+            ),
+            sized_box(zstack((ui_label(
+                TypeRole::HeadlineSmall,
+                format!("{:02}", selected.minute),
+            )
+            .color(p.text_primary)
+            .line_breaking(LineBreaking::Clip)
+            .alignment(masonry::layout::UnitPoint::CENTER),)))
+            .dims(Dimensions::fixed(50.px(), 46.px()))
             .background_color(p.surface_highest)
             .corner_radius(spec.metrics.card_radius.px()),
-            icon_button(icons::ARROW_DROP_DOWN, move |s| {
-                m_minus(s, selected.add_minutes(-5))
-            }),
+            step_btn(
+                icons::ARROW_DROP_DOWN,
+                Arc::new(move |s| m_minus(s, selected.add_minutes(-5))),
+            ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(4.px());
 
         let am_btn = button(
-            spec.typography
-                .style_label(TypeRole::LabelMedium, label("AM"))
+            ui_label(TypeRole::LabelMedium, "AM")
                 .color(if !is_pm {
                     p.on_tertiary_container
                 } else {
                     p.text_secondary
-                }),
+                })
+                .line_breaking(LineBreaking::Clip),
             move |s: &mut State| am_cb(s, TimeOfDay::new(selected.hour % 12, selected.minute)),
         )
         .ui_class(if !is_pm {
@@ -400,13 +432,13 @@ where
         });
 
         let pm_btn = button(
-            spec.typography
-                .style_label(TypeRole::LabelMedium, label("PM"))
+            ui_label(TypeRole::LabelMedium, "PM")
                 .color(if is_pm {
                     p.on_tertiary_container
                 } else {
                     p.text_secondary
-                }),
+                })
+                .line_breaking(LineBreaking::Clip),
             move |s: &mut State| {
                 pm_cb(
                     s,
@@ -423,10 +455,10 @@ where
         let am_pm_col = flex_col((am_btn, pm_btn)).gap(6.px());
         let _ = Color::TRANSPARENT;
 
-        flex_row((hour_col, colon, min_col, am_pm_col))
-            .main_axis_alignment(MainAxisAlignment::Center)
+        wrap((hour_col, colon, min_col, am_pm_col))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px())
+            .gap(8.px())
+            .run_gap(8.px())
     })
 }
 

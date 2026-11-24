@@ -11,7 +11,7 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef, UnitPoint};
-use masonry::properties::{ContentColor, Gap, Padding};
+use masonry::properties::{Gap, LineBreaking, Padding};
 use masonry::widgets;
 use masonry::widgets::InsertNewline;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
@@ -21,11 +21,12 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, Flex, FlexExt, Label, Prop, ZStackExt, button, flex_col, flex_row, label,
-    portal, sized_box, text_input, zstack,
+    CrossAxisAlignment, Flex, FlexExt, Prop, ZStackExt, button, flex_col, flex_row, label, portal,
+    sized_box, text_input, zstack,
 };
 
-use crate::foundation::{UiClassExt, focus_frame, icons, ui_icon};
+use crate::components::typography::{UiLabel, ui_label};
+use crate::foundation::{UiClassExt, clip_box, focus_frame, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{ControlVisualGrammar, DesignSpec, TypeRole};
 
@@ -53,7 +54,7 @@ type TextFieldFlex<State, Action> = Prop<
     Gap,
     Flex<
         (
-            Option<Prop<ContentColor, Label, State, Action>>,
+            Option<UiLabel<State, Action>>,
             Box<AnyWidgetView<State, Action>>,
             Option<Box<AnyWidgetView<State, Action>>>,
         ),
@@ -188,14 +189,14 @@ impl<State, Action> UiTextField<State, Action> {
         let make_row_inner = |ti_view: Box<AnyWidgetView<State, Action>>| {
             let sub_ink = spec.content_color(p.text_secondary, self.disabled);
             let prefix = self.prefix_text.as_ref().map(|t| {
-                spec.typography
-                    .style_label(TypeRole::BodyMedium, label(t.clone()))
+                ui_label(TypeRole::BodyMedium, t.clone())
                     .color(sub_ink)
+                    .line_breaking(LineBreaking::Clip)
             });
             let suffix = self.suffix_text.as_ref().map(|t| {
-                spec.typography
-                    .style_label(TypeRole::BodyMedium, label(t.clone()))
+                ui_label(TypeRole::BodyMedium, t.clone())
                     .color(sub_ink)
+                    .line_breaking(LineBreaking::Clip)
             });
             let trail = self.trailing_action.as_ref().map(|(icon, cb)| {
                 let cb = cb.clone();
@@ -234,7 +235,7 @@ impl<State, Action> UiTextField<State, Action> {
                     } else {
                         flush
                     };
-                    let container = flex_col((float_lbl, row))
+                    let container = flex_col((clip_box(float_lbl), row))
                         .cross_axis_alignment(CrossAxisAlignment::Stretch)
                         .gap(2.px())
                         .ui_class(classes::TEXT_FIELD_FILLED)
@@ -382,15 +383,11 @@ where
 }
 
 fn build_top_label<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    _spec: &DesignSpec,
     label_text: Option<&ArcStr>,
     label_color: masonry::peniko::Color,
-) -> Option<Prop<ContentColor, Label, State, Action>> {
-    label_text.map(|t| {
-        spec.typography
-            .style_label(TypeRole::LabelMedium, label(t.clone()))
-            .color(label_color)
-    })
+) -> Option<UiLabel<State, Action>> {
+    label_text.map(|t| ui_label(TypeRole::LabelMedium, t.clone()).color(label_color))
 }
 
 fn build_floating_label<State: 'static, Action: 'static>(
@@ -400,11 +397,10 @@ fn build_floating_label<State: 'static, Action: 'static>(
     is_error: bool,
     disabled: bool,
     label_color: masonry::peniko::Color,
-) -> Prop<ContentColor, Label, State, Action> {
+) -> UiLabel<State, Action> {
     let p = &spec.palette;
     let float_text = label_text.unwrap_or_default();
-    spec.typography
-        .style_label(TypeRole::LabelSmall, label(float_text))
+    ui_label(TypeRole::LabelSmall, float_text)
         .color(if is_error {
             p.error
         } else if !is_empty {
@@ -412,19 +408,20 @@ fn build_floating_label<State: 'static, Action: 'static>(
         } else {
             label_color
         })
+        .line_breaking(LineBreaking::Clip)
 }
 
 fn wrap_outlined_floating_notch<State: 'static, Action: 'static>(
     surface: masonry::peniko::Color,
     input_widget: Box<AnyWidgetView<State, Action>>,
-    float_lbl: Prop<ContentColor, Label, State, Action>,
+    float_lbl: UiLabel<State, Action>,
     is_error: bool,
 ) -> Box<AnyWidgetView<State, Action>> {
     let framed = sized_box(focus_frame(input_widget).error(is_error))
         .padding(Padding::top(7.px()))
         .alignment(UnitPoint::TOP_LEFT);
     let notch = sized_box(
-        sized_box(float_lbl)
+        sized_box(clip_box(float_lbl))
             .padding(Padding::from_vh(0.px(), 4.px()))
             .background_color(surface),
     )
@@ -451,14 +448,12 @@ fn build_bottom_row<State: 'static, Action: 'static>(
 
     let msg_view = msg_text.map(|t| {
         let c = if is_error { p.error } else { p.text_secondary };
-        spec.typography
-            .style_label(TypeRole::BodySmall, label(t.clone()))
-            .color(c)
+        ui_label(TypeRole::BodySmall, t.clone()).color(c)
     });
     let cnt_view = counter_text.map(|txt| {
-        spec.typography
-            .style_label(TypeRole::LabelSmall, label(txt))
+        ui_label(TypeRole::LabelSmall, txt)
             .color(p.text_secondary)
+            .line_breaking(LineBreaking::Clip)
     });
 
     Some(
@@ -820,7 +815,7 @@ impl<State, Action> UiTextArea<State, Action> {
             );
             match self.variant {
                 TextFieldVariant::Filled => {
-                    let container = flex_col((float_lbl, bounded_portal))
+                    let container = flex_col((clip_box(float_lbl), bounded_portal))
                         .cross_axis_alignment(CrossAxisAlignment::Stretch)
                         .gap(4.px())
                         .ui_class(classes::TEXT_FIELD_FILLED)

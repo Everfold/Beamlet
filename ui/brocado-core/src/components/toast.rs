@@ -11,9 +11,9 @@ use masonry::core::{
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
-use masonry::layout::{AsUnit, LenReq, Length};
+use masonry::layout::{AsUnit, Dim, LenReq, Length};
 use masonry::peniko::Color;
-use masonry::properties::{CornerRadius, Dimensions, Padding};
+use masonry::properties::{CornerRadius, Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem_masonry::AnyWidgetView;
@@ -21,10 +21,11 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, label, sized_box};
+use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, sized_box};
 
+use crate::components::typography::ui_label;
 use crate::foundation::overlay::empty_slot;
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::foundation::{UiClassExt, adaptive_pair, clip_box, icons, ui_icon};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, ElevationLevel, TypeRole};
 
@@ -137,10 +138,7 @@ pub fn toast<State: 'static, Action: 'static>(
     let data = data.clone();
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
-        let msg = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(data.message.clone()))
-            .color(p.inverse_on_surface);
+        let msg = ui_label(TypeRole::BodyMedium, data.message.clone()).color(p.inverse_on_surface);
 
         let act_btn = data
             .action_label
@@ -148,10 +146,11 @@ pub fn toast<State: 'static, Action: 'static>(
             .zip(on_action.as_ref())
             .map(|(lbl, cb)| {
                 let cb = cb.clone();
-                let action_lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelLarge, label(lbl.clone()))
-                    .color(p.accent_container);
+                let action_lbl = clip_box(
+                    ui_label(TypeRole::LabelLarge, lbl.clone())
+                        .color(p.accent_container)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 button(action_lbl, move |s: &mut State| cb(s)).ui_class(classes::BTN_SUBTLE)
             });
         let close_btn = if data.with_close
@@ -169,16 +168,28 @@ pub fn toast<State: 'static, Action: 'static>(
             None
         };
 
-        sized_box(
-            flex_row((msg, act_btn, close_btn))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px())
-                .padding(Padding::from_vh(10.px(), 16.px())),
-        )
-        .dims(Dimensions::MAX)
-        .background_color(p.inverse_surface)
-        .corner_radius(spec.metrics.button_radius.max(8.0).px())
-        .box_shadow(spec.box_shadow(ElevationLevel::Level3))
+        let inner: Box<AnyWidgetView<State, Action>> = if act_btn.is_some() || close_btn.is_some() {
+            adaptive_pair(
+                msg,
+                flex_row((act_btn, close_btn))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(4.px()),
+            )
+            .gap(8.px())
+            .run_gap(6.px())
+            .min_leading(48.0)
+            .fill_available(false)
+            .padding(Padding::from_vh(8.px(), 12.px()))
+            .boxed()
+        } else {
+            msg.padding(Padding::from_vh(8.px(), 12.px())).boxed()
+        };
+
+        sized_box(inner)
+            .dims(Dimensions::new(Dim::FitContent, Dim::MaxContent))
+            .background_color(p.inverse_surface)
+            .corner_radius(spec.metrics.button_radius.max(8.0).px())
+            .box_shadow(spec.box_shadow(ElevationLevel::Level3))
     })
 }
 

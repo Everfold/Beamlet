@@ -265,7 +265,8 @@ impl Widget for RangeSliderWidget {
     ) -> Length {
         match axis {
             Axis::Horizontal => match len_req {
-                LenReq::MinContent | LenReq::MaxContent => Length::const_px(160.0),
+                LenReq::MinContent => Length::const_px(48.0),
+                LenReq::MaxContent => Length::const_px(160.0),
                 LenReq::FitContent(space) => space,
             },
             Axis::Vertical => {

@@ -7,7 +7,7 @@ use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::{AsUnit, UnitPoint};
 use masonry::peniko::Color;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::AnyWidgetView;
@@ -21,11 +21,12 @@ use xilem_masonry::view::{
 };
 
 use crate::components::divider::{horizontal_divider, vertical_divider};
+use crate::components::typography::ui_label;
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
-use crate::foundation::{UiClassExt, ui_icon};
+use crate::foundation::{UiClassExt, clip_box, ui_icon};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, MotionDuration, NavIndicatorStyle, TypeRole};
 
@@ -147,14 +148,16 @@ pub fn top_bar<State: 'static, Action: 'static>(
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let title: ArcStr = title.into();
     let title_view = with_spec(move |spec: &DesignSpec, _| {
-        spec.typography
-            .style_label(TypeRole::TitleLarge, label(title.clone()))
-            .color(spec.palette.text_primary)
+        clip_box(
+            ui_label(TypeRole::TitleLarge, title.clone())
+                .color(spec.palette.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        )
     });
     let row = flex_row((leading, title_view.flex(1.0), trailing))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(8.px())
-        .padding(Padding::from_vh(8.px(), 16.px()));
+        .padding(Padding::from_vh(8.px(), 12.px()));
     TopBarWrapper {
         inner: row,
         phantom: PhantomData,
@@ -206,23 +209,27 @@ where
                     Color::TRANSPARENT
                 };
                 let icon_pill = sized_box(ui_icon(d.icon, 18.0, fg))
-                    .padding(Padding::from_vh(4.px(), 14.px()))
+                    .padding(Padding::from_vh(3.px(), 4.px()))
                     .background_color(pill_bg)
                     .corner_radius(999.px());
-                let txt = spec
-                    .typography
-                    .style_label(TypeRole::LabelMedium, label(d.label.clone()))
-                    .color(if active {
-                        p.text_primary
-                    } else {
-                        p.text_secondary
-                    });
-                let col = flex_col((icon_pill, txt))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(4.px());
+                let txt = clip_box(
+                    ui_label(TypeRole::LabelMedium, d.label.clone())
+                        .color(if active {
+                            p.text_primary
+                        } else {
+                            p.text_secondary
+                        })
+                        .line_breaking(LineBreaking::Clip),
+                );
+                let col = clip_box(
+                    flex_col((icon_pill, txt))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(4.px()),
+                );
                 AnyFlexChild::Item(
                     button(col, move |s: &mut State| cb(s, i))
                         .ui_class(classes::TAB_ITEM)
+                        .padding(Padding::from_vh(4.px(), 2.px()))
                         .boxed()
                         .flex(1.0),
                 )
@@ -234,7 +241,8 @@ where
                 flex_row(items)
                     .main_axis_alignment(MainAxisAlignment::SpaceAround)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .padding(Padding::from_vh(6.px(), 8.px())),
+                    .gap(2.px())
+                    .padding(Padding::from_vh(6.px(), 4.px())),
             )
             .ui_class(classes::BOTTOM_BAR),
         ))
@@ -313,11 +321,12 @@ where
 /// - MD3 `PillBackground`
 /// - Windows Fluent `LeadingAccentBar` (`3px × 16px` left pill accent bar)
 /// - macOS HIG / GNOME Adwaita `RoundedRow`
-pub fn navigation_drawer<State: 'static, Action: 'static, F>(
+fn navigation_drawer_inner<State: 'static, Action: 'static, F>(
     header_title: Option<&str>,
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
+    fixed_width: Option<f64>,
 ) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
@@ -328,8 +337,7 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let head = header_title.as_ref().map(|h| {
-            spec.typography
-                .style_label(TypeRole::TitleSmall, label(h.clone()))
+            ui_label(TypeRole::TitleSmall, h.clone())
                 .color(p.text_secondary)
                 .padding(Padding::from_vh(8.px(), 12.px()))
         });
@@ -355,10 +363,11 @@ where
                             .corner_radius(2.px())
                     });
                 let icon_c = if active { p.accent } else { fg };
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelLarge, label(d.label.clone()))
-                    .color(fg);
+                let lbl = clip_box(
+                    ui_label(TypeRole::LabelLarge, d.label.clone())
+                        .color(fg)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 let badge = nav_badge_view(spec, &d.badge_text);
                 let cls = if active {
                     classes::NAV_PILL_ACTIVE
@@ -366,14 +375,16 @@ where
                     classes::NAV_PILL
                 };
                 button(
-                    flex_row((
-                        leading_bar,
-                        ui_icon(d.icon, 18.0, icon_c),
-                        lbl.flex(1.0),
-                        badge,
-                    ))
-                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(10.px()),
+                    clip_box(
+                        flex_row((
+                            leading_bar,
+                            ui_icon(d.icon, 18.0, icon_c),
+                            lbl.flex(1.0),
+                            badge,
+                        ))
+                        .cross_axis_alignment(CrossAxisAlignment::Center)
+                        .gap(10.px()),
+                    ),
                     move |s: &mut State| cb(s, i),
                 )
                 .ui_class(cls)
@@ -381,24 +392,44 @@ where
             })
             .collect();
 
-        flex_row((
-            sized_box(
-                flex_col((
-                    head,
-                    flex_col(items)
-                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                        .gap(4.px()),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .gap(6.px())
-                .padding(Padding::all(12.px())),
-            )
-            .dims(Dimensions::STRETCH.with_width(240.px()))
-            .background_color(p.surface_low),
-            vertical_divider(),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        let drawer_dims = match fixed_width {
+            Some(w) => Dimensions::STRETCH.with_width(w.px()),
+            None => Dimensions::STRETCH,
+        };
+        let drawer_panel = sized_box(
+            flex_col((
+                head,
+                flex_col(items)
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(4.px()),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .gap(6.px())
+            .padding(Padding::all(12.px())),
+        )
+        .dims(drawer_dims)
+        .background_color(p.surface_low);
+
+        let drawer_child: AnyFlexChild<State, Action> = if fixed_width.is_some() {
+            drawer_panel.into_any_flex()
+        } else {
+            drawer_panel.flex(1.0).into_any_flex()
+        };
+        flex_row((drawer_child, vertical_divider()))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
     })
+}
+
+pub fn navigation_drawer<State: 'static, Action: 'static, F>(
+    header_title: Option<&str>,
+    destinations: &[NavDestination],
+    selected: usize,
+    on_select: F,
+) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+where
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    navigation_drawer_inner(header_title, destinations, selected, on_select, Some(240.0))
 }
 
 /// Modal drawer view created by [`modal_navigation_drawer`].
@@ -505,7 +536,8 @@ where
     S: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
-    let drawer = navigation_drawer(header_title, destinations, selected, on_select).boxed();
+    let drawer =
+        navigation_drawer_inner(header_title, destinations, selected, on_select, None).boxed();
     UiModalDrawer {
         drawer,
         width: 260.0,

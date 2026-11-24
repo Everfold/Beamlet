@@ -101,7 +101,7 @@ impl<State, Action> UiSearchBar<State, Action> {
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(8.px())
-        .padding(Padding::from_vh(0.px(), 14.px()))
+        .padding(Padding::from_vh(0.px(), 10.px()))
         .boxed();
 
         focus_frame(inner)

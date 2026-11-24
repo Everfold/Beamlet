@@ -13,14 +13,15 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, MainAxisAlignment, flex_col, flex_row, label};
+use xilem_masonry::view::{CrossAxisAlignment, flex_col};
 
 use crate::components::button::{destructive_button, primary_button, subtle_button};
+use crate::components::typography::ui_label;
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
-use crate::foundation::ui_icon;
+use crate::foundation::{ui_icon, wrap};
 use crate::style_engine::classes;
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{DialogActionOrder, MotionDuration, TypeRole};
@@ -56,7 +57,7 @@ impl<V, State, Action> UiDialog<V, State, Action> {
         ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
-            padding: Padding::all(24.px()),
+            padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
             duration: MotionDuration::Medium2,
@@ -206,14 +207,8 @@ impl<State, Action> BasicDialog<State, Action> {
         let p = &spec.palette;
         let icon_color = if self.destructive { p.error } else { p.accent };
         let ic = self.icon.map(|path| ui_icon(path, 24.0, icon_color));
-        let title_v = spec
-            .typography
-            .style_label(TypeRole::HeadlineSmall, label(self.title.clone()))
-            .color(p.text_primary);
-        let body_v = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(self.body.clone()))
-            .color(p.text_secondary);
+        let title_v = ui_label(TypeRole::HeadlineSmall, self.title.clone()).color(p.text_primary);
+        let body_v = ui_label(TypeRole::BodyMedium, self.body.clone()).color(p.text_secondary);
 
         let on_dismiss = self.on_dismiss.clone();
         let on_confirm = self.on_confirm.clone();
@@ -249,10 +244,10 @@ impl<State, Action> BasicDialog<State, Action> {
                 v
             }
         };
-        let actions = flex_row(ordered_btns)
-            .main_axis_alignment(MainAxisAlignment::End)
+        let actions = wrap(ordered_btns)
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px());
+            .gap(8.px())
+            .run_gap(8.px());
 
         flex_col((ic, title_v, body_v, actions))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -280,7 +275,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
-            padding: Padding::all(24.px()),
+            padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
             duration: MotionDuration::Medium2,
@@ -303,7 +298,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
-            padding: Padding::all(24.px()),
+            padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
             duration: MotionDuration::Medium2,

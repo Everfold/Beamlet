@@ -15,9 +15,9 @@ use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, BezPath, Circle, Line, Point, Rect, RoundedRect, Size, Stroke};
 use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
 use masonry::parley::LineHeight;
-use masonry::parley::style::FontFamily;
+use masonry::parley::style::{FontFamily, OverflowWrap};
 use masonry::peniko::Color;
-use masonry::properties::{ContentColor, Dimensions};
+use masonry::properties::{ContentColor, Dimensions, LineBreaking};
 use masonry::widgets::{self, RadioButtonSelected};
 use tracing::{Span, trace_span};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
@@ -26,12 +26,13 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, button, flex_col, flex_row, label, radio_group as raw_radio_group,
+    CrossAxisAlignment, FlexExt as _, button, flex_col, flex_row, radio_group as raw_radio_group,
     sized_box,
 };
 
+use crate::components::typography::ui_label;
 use crate::foundation::state_layer::{blend_over, with_opacity};
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{
     Brightness, ControlVisualGrammar, DesignSpec, MotionDuration, MotionEasing, TextStyleSpec,
@@ -140,7 +141,8 @@ fn prepare_label_pod(
         .with_style(StyleProperty::LineHeight(LineHeight::Absolute(
             style.line_height,
         )))
-        .with_style(StyleProperty::LetterSpacing(style.letter_spacing));
+        .with_style(StyleProperty::LetterSpacing(style.letter_spacing))
+        .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere));
     if let Some(f) = font {
         lbl = lbl.with_style(StyleProperty::FontFamily(f.clone()));
     }
@@ -703,15 +705,18 @@ where
         .border(border_c, 2.px())
         .corner_radius(spec.metrics.checkbox_radius.px());
 
-        let text_view = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(label_text.clone()))
-            .color(p.text_primary);
+        let text_view = clip_box(
+            ui_label(TypeRole::BodyMedium, label_text.clone())
+                .color(p.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        );
         let cb = cb.clone();
         button(
-            flex_row((box_view, text_view))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px()),
+            clip_box(
+                flex_row((box_view, text_view.flex(1.0)))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px()),
+            ),
             move |s: &mut State| cb(s, next),
         )
         .ui_class(classes::MENU_ITEM)
@@ -1879,7 +1884,8 @@ impl Widget for UiSlider {
     ) -> Length {
         match axis {
             Axis::Horizontal => match len_req {
-                LenReq::MinContent | LenReq::MaxContent => Length::const_px(160.0),
+                LenReq::MinContent => Length::const_px(48.0),
+                LenReq::MaxContent => Length::const_px(160.0),
                 LenReq::FitContent(space) => space,
             },
             Axis::Vertical => Length::const_px(32.0),

@@ -6,15 +6,17 @@ use std::sync::Arc;
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
 use masonry::layout::AsUnit;
+use masonry::properties::LineBreaking;
 use xilem_masonry::Pod;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, FlexExt, button, flex_row, label};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, button, flex_row};
 
+use crate::components::typography::ui_label;
 use crate::foundation::overlay::{
     AnchoredPopupHost, AnchoredPopupView, ContextMenuView, PopupEntrySpec, PopupLayerSpec,
 };
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
 use crate::style_engine::classes;
 use crate::tokens::{DesignSpec, TypeRole};
 
@@ -210,10 +212,11 @@ where
 
     let trigger = crate::style_engine::with_spec(move |spec: &DesignSpec, _| {
         let on_t = on_toggle.clone();
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::BodyMedium, label(current.clone()))
-            .color(spec.palette.text_primary);
+        let lbl = clip_box(
+            ui_label(TypeRole::BodyMedium, current.clone())
+                .color(spec.palette.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        );
         let chevron = ui_icon(
             if open {
                 icons::ARROW_DROP_UP
@@ -224,9 +227,11 @@ where
             spec.palette.text_secondary,
         );
         button(
-            flex_row((lbl.flex(1.0), chevron))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px()),
+            clip_box(
+                flex_row((lbl.flex(1.0), chevron))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px()),
+            ),
             move |s: &mut State| on_t(s),
         )
         .ui_class(classes::BTN_OUTLINED)

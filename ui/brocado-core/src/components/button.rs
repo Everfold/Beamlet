@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use masonry::core::{ArcStr, PointerButton};
 use masonry::layout::AsUnit;
+use masonry::properties::LineBreaking;
 use masonry::widgets::{self, ButtonPress};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem_masonry::AnyWidgetView;
@@ -12,9 +13,10 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, flex_row};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, flex_row};
 
-use crate::foundation::ui_icon;
+use crate::components::typography::ui_label;
+use crate::foundation::{clip_box, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{DesignSpec, TypeRole};
 
@@ -214,21 +216,21 @@ impl<State, Action> UiButton<State, Action> {
             ButtonVariant::Destructive => p.on_error,
         };
         let fg = spec.content_color(active_fg, self.disabled);
-        let lbl = spec
-            .typography
-            .style_label(
-                TypeRole::LabelLarge,
-                xilem_masonry::view::label(self.text.clone()),
-            )
-            .color(fg);
+        let lbl = clip_box(
+            ui_label(TypeRole::LabelLarge, self.text.clone())
+                .color(fg)
+                .line_breaking(LineBreaking::Clip),
+        );
 
         if self.leading_icon.is_some() || self.trailing_icon.is_some() {
             let lead = self.leading_icon.map(|path| ui_icon(path, 16.0, fg));
             let trail = self.trailing_icon.map(|path| ui_icon(path, 16.0, fg));
-            flex_row((lead, lbl, trail))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(6.px())
-                .boxed()
+            clip_box(
+                flex_row((lead, lbl.flex(1.0), trail))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px()),
+            )
+            .boxed()
         } else {
             lbl.boxed()
         }

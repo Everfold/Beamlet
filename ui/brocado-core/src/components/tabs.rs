@@ -5,7 +5,7 @@ use std::sync::Arc;
 use masonry::core::ArcStr;
 use masonry::layout::AsUnit;
 use masonry::peniko::Color;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
@@ -16,7 +16,8 @@ use xilem_masonry::view::{
 };
 
 use crate::components::divider::horizontal_divider;
-use crate::foundation::UiClassExt;
+use crate::components::typography::ui_label;
+use crate::foundation::{UiClassExt, clip_box};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, TabIndicatorStyle, TypeRole};
 
@@ -45,10 +46,12 @@ where
                 let active = i == selected;
                 let cb = cb.clone();
                 let ink = if active { p.accent } else { p.text_secondary };
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::TitleSmall, label(title.clone()))
-                    .color(ink);
+                let lbl = clip_box(
+                    ui_label(TypeRole::TitleSmall, title.clone())
+                        .color(ink)
+                        .line_breaking(LineBreaking::Clip),
+                );
+                let narrow_pad = Padding::from_vh(8.px(), 4.px());
 
                 match indicator {
                     TabIndicatorStyle::Underline { height } => {
@@ -61,6 +64,11 @@ where
                             .background_color(ind_color);
                         let btn =
                             button(lbl, move |s: &mut State| cb(s, i)).ui_class(classes::TAB_ITEM);
+                        let btn: Box<AnyWidgetView<State, Action>> = if !scrollable {
+                            btn.padding(narrow_pad).boxed()
+                        } else {
+                            btn.boxed()
+                        };
                         let col =
                             flex_col((btn, bar)).cross_axis_alignment(CrossAxisAlignment::Stretch);
                         if scrollable {
@@ -82,16 +90,18 @@ where
                                 .corner_radius(999.px())
                         };
                         let btn = button(
-                            flex_col((lbl, bar))
-                                .cross_axis_alignment(CrossAxisAlignment::Center)
-                                .gap(4.px()),
+                            clip_box(
+                                flex_col((lbl, bar))
+                                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                                    .gap(4.px()),
+                            ),
                             move |s: &mut State| cb(s, i),
                         )
                         .ui_class(classes::TAB_ITEM);
                         if scrollable {
                             btn.into_any_flex()
                         } else {
-                            AnyFlexChild::Item(btn.boxed().flex(1.0))
+                            AnyFlexChild::Item(btn.padding(narrow_pad).boxed().flex(1.0))
                         }
                     }
                     TabIndicatorStyle::SegmentedThumb => {
@@ -101,11 +111,15 @@ where
                             Color::TRANSPARENT
                         };
                         let btn = button(
-                            lbl.color(if active {
-                                p.text_primary
-                            } else {
-                                p.text_secondary
-                            }),
+                            clip_box(
+                                ui_label(TypeRole::TitleSmall, title.clone())
+                                    .color(if active {
+                                        p.text_primary
+                                    } else {
+                                        p.text_secondary
+                                    })
+                                    .line_breaking(LineBreaking::Clip),
+                            ),
                             move |s: &mut State| cb(s, i),
                         )
                         .ui_class(classes::TAB_ITEM)
@@ -114,7 +128,7 @@ where
                         if scrollable {
                             btn.into_any_flex()
                         } else {
-                            AnyFlexChild::Item(btn.boxed().flex(1.0))
+                            AnyFlexChild::Item(btn.padding(narrow_pad).boxed().flex(1.0))
                         }
                     }
                 }

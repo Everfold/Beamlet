@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use masonry::core::ArcStr;
 use masonry::layout::AsUnit;
-use masonry::widgets;
+use masonry::properties::LineBreaking;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, label};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, button, flex_row};
 
-use crate::foundation::{UiClassExt, icons, ui_icon};
+use crate::components::typography::ui_label;
+use crate::foundation::{UiClassExt, WrapWidget, clip_box, icons, ui_icon, wrap};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, TypeRole};
 
@@ -19,7 +20,7 @@ pub fn segmented_button<State: 'static, Action: 'static, F>(
     options: &[&str],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = WrapWidget> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -39,28 +40,32 @@ where
                     p.text_primary
                 };
                 let ic = active.then(|| ui_icon(icons::CHECK, 15.0, fg));
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelLarge, label(text.clone()))
-                    .color(fg);
+                let lbl = clip_box(
+                    ui_label(TypeRole::LabelLarge, text.clone())
+                        .color(fg)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 let cls = if active {
                     classes::SEG_BTN_SELECTED
                 } else {
                     classes::SEG_BTN
                 };
                 button(
-                    flex_row((ic, lbl))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(6.px()),
+                    clip_box(
+                        flex_row((ic, lbl.flex(1.0)))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(6.px()),
+                    ),
                     move |s: &mut State| cb(s, i),
                 )
                 .ui_class(cls)
                 .boxed()
             })
             .collect();
-        flex_row(btns)
+        wrap(btns)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
+            .run_gap(4.px())
     })
 }
 
@@ -68,7 +73,7 @@ where
 pub fn multi_choice_segmented_button<State: 'static, Action: 'static, F>(
     options: &[(&str, bool)],
     on_toggle: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = WrapWidget> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -90,27 +95,31 @@ where
                     p.text_primary
                 };
                 let ic = active.then(|| ui_icon(icons::CHECK, 15.0, fg));
-                let lbl = spec
-                    .typography
-                    .style_label(TypeRole::LabelLarge, label(text.clone()))
-                    .color(fg);
+                let lbl = clip_box(
+                    ui_label(TypeRole::LabelLarge, text.clone())
+                        .color(fg)
+                        .line_breaking(LineBreaking::Clip),
+                );
                 let cls = if *active {
                     classes::SEG_BTN_SELECTED
                 } else {
                     classes::SEG_BTN
                 };
                 button(
-                    flex_row((ic, lbl))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(6.px()),
+                    clip_box(
+                        flex_row((ic, lbl.flex(1.0)))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(6.px()),
+                    ),
                     move |s: &mut State| cb(s, i),
                 )
                 .ui_class(cls)
                 .boxed()
             })
             .collect();
-        flex_row(btns)
+        wrap(btns)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px())
+            .run_gap(4.px())
     })
 }
