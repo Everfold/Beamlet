@@ -145,6 +145,7 @@ fn build_popup_spec(spec: &DesignSpec, entries: &[MenuEntry], min_width: f64) ->
         padding_v: 6.0,
         padding_h: 6.0,
         header: None,
+        font_family: spec.typography.resolved_font_family(),
         entries: mapped,
     }
 }
@@ -231,7 +232,8 @@ where
                 flex_row((lbl.flex(1.0), chevron))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(8.px()),
-            ),
+            )
+            .fill_available(true),
             move |s: &mut State| on_t(s),
         )
         .ui_class(classes::BTN_OUTLINED)

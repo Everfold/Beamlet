@@ -6,13 +6,13 @@ use std::sync::Arc;
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
     AccessCtx, ArcStr, ChildrenIds, EventCtx, Layer, LayerType, LayoutCtx, MeasureCtx, NewWidget,
-    NoAction, PaintCtx, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
-    Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
+    NoAction, PaintCtx, PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef, RegisterCtx,
+    StyleProperty, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
-use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
-use masonry::parley::style::{FontWeight, OverflowWrap};
+use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef};
+use masonry::parley::style::{FontFamily, FontWeight, OverflowWrap};
 use masonry::peniko::Color;
 use masonry::properties::types::CrossAxisAlignment;
 use masonry::properties::{Background, ContentColor, CornerRadius, Gap, LineBreaking, Padding};
@@ -36,6 +36,8 @@ pub struct TooltipContentSpec {
     pub subhead: Option<ArcStr>,
     /// Tooltip body text.
     pub body: ArcStr,
+    /// Font family applied to tooltip labels (resolved from active `TypeScale`).
+    pub font_family: FontFamily<'static>,
     /// Tooltip container fill color.
     pub bg: Color,
     /// Subhead text color.
@@ -63,6 +65,7 @@ impl TooltipContentSpec {
                 let lbl = Label::new(sub.clone())
                     .with_style(StyleProperty::FontSize(14.0))
                     .with_style(StyleProperty::FontWeight(FontWeight::MEDIUM))
+                    .with_style(StyleProperty::FontFamily(self.font_family.clone()))
                     .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                     .prepare()
                     .with_props((
@@ -73,6 +76,7 @@ impl TooltipContentSpec {
             }
             let body_lbl = Label::new(self.body.clone())
                 .with_style(StyleProperty::FontSize(14.0))
+                .with_style(StyleProperty::FontFamily(self.font_family.clone()))
                 .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                 .prepare()
                 .with_props((ContentColor::new(self.body_color), LineBreaking::WordWrap));
@@ -91,6 +95,7 @@ impl TooltipContentSpec {
         } else {
             let body_lbl = Label::new(self.body.clone())
                 .with_style(StyleProperty::FontSize(12.0))
+                .with_style(StyleProperty::FontFamily(self.font_family.clone()))
                 .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                 .prepare()
                 .with_props((ContentColor::new(self.body_color), LineBreaking::WordWrap));
@@ -108,6 +113,7 @@ impl TooltipContentSpec {
         NewWidget::new(TooltipLayer {
             creator,
             child: content.to_pod(),
+            max_width: if self.is_rich { 320.0 } else { 240.0 },
             anchor_rect,
             placed_pos,
             window_size: Size::ZERO,
@@ -121,6 +127,7 @@ impl TooltipContentSpec {
 struct TooltipLayer {
     creator: WidgetId,
     child: WidgetPod<dyn Widget>,
+    max_width: f64,
     anchor_rect: Rect,
     placed_pos: Point,
     window_size: Size,
@@ -184,36 +191,65 @@ impl Widget for TooltipLayer {
         if let (Some(w), Some(h)) = (cs.length(Axis::Horizontal), cs.length(Axis::Vertical)) {
             self.window_size = Size::new(w.get(), h.get());
         }
-        let vp_cap = match axis {
-            Axis::Horizontal => (self.window_size.width > 0.0)
-                .then(|| Length::px((self.window_size.width - 12.0).max(0.0))),
-            Axis::Vertical => (self.window_size.height > 0.0)
-                .then(|| Length::px((self.window_size.height - 12.0).max(0.0))),
+        let max_w = if self.window_size.width > 0.0 {
+            (self.window_size.width - 12.0).max(0.0).min(self.max_width)
+        } else {
+            self.max_width
         };
-        let eff_cross = cross_length.or_else(|| match axis.cross() {
-            Axis::Horizontal if self.window_size.width > 0.0 => {
-                Some(Length::px((self.window_size.width - 12.0).max(0.0)))
-            }
-            Axis::Vertical if self.window_size.height > 0.0 => {
-                Some(Length::px((self.window_size.height - 12.0).max(0.0)))
-            }
-            _ => None,
-        });
-        let eff_req = match (len_req, vp_cap) {
-            (LenReq::FitContent(s), Some(cap)) => LenReq::FitContent(s.min(cap)),
-            (LenReq::MaxContent, Some(cap)) if axis == Axis::Horizontal => LenReq::FitContent(cap),
-            _ => len_req,
+        let max_h = if self.window_size.height > 0.0 {
+            (self.window_size.height - 12.0).max(0.0)
+        } else {
+            f64::INFINITY
         };
-        let measured = ctx.compute_length(
-            &mut self.child,
-            eff_req.into(),
-            LayoutSize::maybe(axis.cross(), eff_cross),
-            axis,
-            eff_cross,
-        );
-        match vp_cap {
-            Some(cap) => measured.min(cap),
-            None => measured,
+
+        match axis {
+            Axis::Horizontal => {
+                let measured = ctx
+                    .compute_length(
+                        &mut self.child,
+                        LenDef::MaxContent,
+                        LayoutSize::maybe(Axis::Vertical, cross_length),
+                        Axis::Horizontal,
+                        cross_length,
+                    )
+                    .get();
+                let limit = match len_req {
+                    LenReq::FitContent(space) => space.get().min(max_w),
+                    _ => max_w,
+                };
+                Length::px(measured.min(limit))
+            }
+            Axis::Vertical => {
+                let eff_w = cross_length.map_or_else(
+                    || {
+                        ctx.compute_length(
+                            &mut self.child,
+                            LenDef::MaxContent,
+                            LayoutSize::NONE,
+                            Axis::Horizontal,
+                            None,
+                        )
+                        .get()
+                        .min(max_w)
+                    },
+                    |l| l.get().min(max_w),
+                );
+                let eff_w_len = Length::px(eff_w);
+                let measured = ctx
+                    .compute_length(
+                        &mut self.child,
+                        LenDef::MaxContent,
+                        LayoutSize::one(Axis::Horizontal, eff_w_len),
+                        Axis::Vertical,
+                        Some(eff_w_len),
+                    )
+                    .get();
+                let limit = match len_req {
+                    LenReq::FitContent(space) => space.get().min(max_h),
+                    _ => max_h,
+                };
+                Length::px(measured.min(limit))
+            }
         }
     }
 
@@ -228,9 +264,20 @@ impl Widget for TooltipLayer {
         } else {
             (size.height - 12.0).max(0.0)
         };
-        let bounded = Size::new(vp_w, vp_h);
-        let child_size = ctx.compute_size(&mut self.child, SizeDef::fit(bounded), bounded.into());
-        let clamped = Size::new(child_size.width.min(vp_w), child_size.height.min(vp_h));
+        let natural_w = ctx
+            .compute_size(
+                &mut self.child,
+                SizeDef::new(LenDef::MaxContent, LenDef::MaxContent),
+                LayoutSize::NONE,
+            )
+            .width;
+        let target_w = natural_w.min(vp_w).min(self.max_width);
+        let wrapped = ctx.compute_size(
+            &mut self.child,
+            SizeDef::new(LenDef::Fixed(Length::px(target_w)), LenDef::MaxContent),
+            LayoutSize::one(Axis::Horizontal, Length::px(target_w)),
+        );
+        let clamped = Size::new(target_w.min(vp_w), wrapped.height.min(vp_h));
         ctx.run_layout(&mut self.child, clamped);
         ctx.place_child(&mut self.child, Point::ORIGIN);
         ctx.derive_baselines(&self.child);
@@ -281,14 +328,17 @@ impl Layer for TooltipLayer {
         _props: &mut PropertiesMut<'_>,
         event: &PointerEvent,
     ) {
-        let remove_tooltip = matches!(
-            event,
+        let remove_tooltip = match event {
+            PointerEvent::Move(PointerUpdate { current, .. }) => {
+                let logical = current.position.to_logical::<f64>(ctx.scale_factor());
+                !self.anchor_rect.contains(Point::new(logical.x, logical.y))
+            }
             PointerEvent::Down(_)
-                | PointerEvent::Up(_)
-                | PointerEvent::Move(_)
-                | PointerEvent::Leave(_)
-                | PointerEvent::Cancel(_)
-        );
+            | PointerEvent::Up(_)
+            | PointerEvent::Leave(_)
+            | PointerEvent::Cancel(_) => true,
+            _ => false,
+        };
         if remove_tooltip && !self.dismissed {
             self.dismissed = true;
             let self_id = ctx.widget_id();
@@ -385,7 +435,7 @@ impl Widget for HoverTooltipHost {
         _props: &mut PropertiesMut<'_>,
         event: &PointerEvent,
     ) {
-        if matches!(event, PointerEvent::Move(_)) {
+        if matches!(event, PointerEvent::Move(_)) && self.layer_id.is_none() {
             self.hover_pending = true;
             self.hover_elapsed_ns = 0;
             ctx.request_anim_frame();
@@ -395,7 +445,9 @@ impl Widget for HoverTooltipHost {
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if matches!(
             event,
-            Update::HoveredChanged(false) | Update::StashedChanged(true)
+            Update::HoveredChanged(false)
+                | Update::ChildHoveredChanged(false)
+                | Update::StashedChanged(true)
         ) {
             self.hover_pending = false;
             self.hover_elapsed_ns = 0;

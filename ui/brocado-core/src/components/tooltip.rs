@@ -25,6 +25,7 @@ where
         spec_builder: Arc::new(move |spec: &DesignSpec| TooltipContentSpec {
             subhead: None,
             body: body.clone(),
+            font_family: spec.typography.resolved_font_family(),
             bg: spec.palette.inverse_surface,
             subhead_color: spec.palette.inverse_on_surface,
             body_color: spec.palette.inverse_on_surface,
@@ -54,6 +55,7 @@ where
         spec_builder: Arc::new(move |spec: &DesignSpec| TooltipContentSpec {
             subhead: sub.clone(),
             body: body.clone(),
+            font_family: spec.typography.resolved_font_family(),
             bg: spec.palette.surface_high,
             subhead_color: spec.palette.text_primary,
             body_color: spec.palette.text_secondary,

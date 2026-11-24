@@ -15,11 +15,12 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
 use masonry::layout::{AsUnit, LayoutSize, LenReq, Length, SizeDef};
-use masonry::parley::style::FontWeight;
+use masonry::parley::style::{FontFamily, FontWeight, OverflowWrap};
 use masonry::peniko::Color;
 use masonry::properties::types::CrossAxisAlignment;
 use masonry::properties::{
-    Background, BorderColor, BorderWidth, ContentColor, CornerRadius, Dimensions, Gap, Padding,
+    Background, BorderColor, BorderWidth, ContentColor, CornerRadius, Dimensions, Gap,
+    LineBreaking, Padding,
 };
 use masonry::widgets::{self, ButtonPress, Divider, Flex, Label, SizedBox, Svg};
 use tracing::{Span, trace_span};
@@ -81,6 +82,8 @@ pub struct PopupLayerSpec {
     pub padding_h: f64,
     /// Optional header `(subhead, subhead_color, body, body_color)`.
     pub header: Option<(Option<ArcStr>, Color, ArcStr, Color)>,
+    /// Font family applied to popup header and entry labels (resolved from active `TypeScale`).
+    pub font_family: FontFamily<'static>,
     /// Interactive menu entries and dividers.
     pub entries: Vec<PopupEntrySpec>,
 }
@@ -132,14 +135,18 @@ impl PopupLayer {
                 let lbl = Label::new(sub.clone())
                     .with_style(StyleProperty::FontSize(14.0))
                     .with_style(StyleProperty::FontWeight(FontWeight::MEDIUM))
+                    .with_style(StyleProperty::FontFamily(spec.font_family.clone()))
+                    .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                     .prepare()
-                    .with_props(ContentColor::new(*sub_color));
+                    .with_props((ContentColor::new(*sub_color), LineBreaking::WordWrap));
                 header_col = header_col.with_fixed(lbl);
             }
             let body_lbl = Label::new(body.clone())
                 .with_style(StyleProperty::FontSize(14.0))
+                .with_style(StyleProperty::FontFamily(spec.font_family.clone()))
+                .with_style(StyleProperty::OverflowWrap(OverflowWrap::Anywhere))
                 .prepare()
-                .with_props(ContentColor::new(*body_color));
+                .with_props((ContentColor::new(*body_color), LineBreaking::WordWrap));
             header_col = header_col.with_fixed(body_lbl);
             let header_box = SizedBox::new(header_col.prepare().with_props(Gap::new(4.px())))
                 .prepare()
@@ -174,14 +181,16 @@ impl PopupLayer {
                     }
                     let title = Label::new(label.clone())
                         .with_style(StyleProperty::FontSize(14.0))
+                        .with_style(StyleProperty::FontFamily(spec.font_family.clone()))
                         .prepare()
-                        .with_props(ContentColor::new(*fg));
+                        .with_props((ContentColor::new(*fg), LineBreaking::Clip));
                     row = row.with(title, 1.0);
                     if let Some(trailing) = trailing_text {
                         let tr = Label::new(trailing.clone())
                             .with_style(StyleProperty::FontSize(12.0))
+                            .with_style(StyleProperty::FontFamily(spec.font_family.clone()))
                             .prepare()
-                            .with_props(ContentColor::new(*fg));
+                            .with_props((ContentColor::new(*fg), LineBreaking::Clip));
                         row = row.with_fixed(tr);
                     }
 

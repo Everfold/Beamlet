@@ -332,6 +332,10 @@ impl RichTextWidget {
         if layout_changed {
             this.widget.full_text = cfg.full_text;
             this.widget.spans = cfg.spans;
+            this.widget.base_size = cfg.base_size;
+            this.widget.base_weight = cfg.base_weight;
+            this.widget.base_line_height = cfg.base_line_height;
+            this.widget.base_font = cfg.base_font;
             this.widget.layout = None;
             this.widget.last_max_advance = None;
             if text_changed {
@@ -585,10 +589,18 @@ impl Widget for RichTextWidget {
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
-        if matches!(event, Update::FocusChanged(false)) {
-            self.selection = None;
-            self.dragging = false;
-            ctx.request_paint_only();
+        match event {
+            Update::FocusChanged(false) => {
+                self.selection = None;
+                self.dragging = false;
+                ctx.request_paint_only();
+            }
+            Update::FontsChanged => {
+                self.layout = None;
+                self.last_max_advance = None;
+                ctx.request_layout();
+            }
+            _ => {}
         }
     }
 
