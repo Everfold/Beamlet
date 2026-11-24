@@ -7,7 +7,9 @@ use brocado_core::components::divider::{horizontal_divider, vertical_divider};
 use brocado_core::components::typography::ui_label;
 use brocado_core::components::{MenuEntry, NavDestination, dropdown_menu, icon_button};
 use brocado_core::foundation::state_layer::blend_over;
-use brocado_core::foundation::{UiClassExt, adaptive_pair, beveled_surface, icons, ui_icon, wrap};
+use brocado_core::foundation::{
+    UiClassExt, adaptive_pair, beveled_surface, clip_box, icons, ui_icon, wrap,
+};
 use brocado_core::style_engine::{classes, with_spec};
 use brocado_core::tokens::{Brightness, DesignSpec, TypeRole};
 use masonry::accesskit::{Node, Role};
@@ -23,7 +25,7 @@ use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{AsUnit, LenReq, Length};
 use masonry::parley::style::FontWeight;
 use masonry::peniko::Color;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem_masonry::AnyWidgetView;
@@ -601,14 +603,16 @@ pub fn info_badge<State: 'static, Action: 'static>(
         let (inner, dims, pad): (Box<AnyWidgetView<State, Action>>, Dimensions, Padding) =
             match &text {
                 Some(txt) => (
-                    spec.typography
-                        .style_label(TypeRole::LabelSmall, label(txt.clone()))
-                        .weight(FontWeight::BOLD)
-                        .color(ink)
-                        .boxed(),
+                    clip_box(
+                        ui_label(TypeRole::LabelSmall, txt.clone())
+                            .weight(FontWeight::BOLD)
+                            .color(ink)
+                            .line_breaking(LineBreaking::Clip),
+                    )
+                    .boxed(),
                     Dimensions::new(
-                        masonry::layout::Dim::MaxContent,
-                        masonry::layout::Dim::MaxContent,
+                        masonry::layout::Dim::FitContent,
+                        masonry::layout::Dim::FitContent,
                     ),
                     Padding::from_vh(2.px(), 7.px()),
                 ),

@@ -62,18 +62,40 @@ mod tests {
     use super::*;
     use state::GalleryTab;
 
+    fn effective_test_theme(theme: &UiTheme, fallback: &Option<FontFamily<'static>>) -> UiTheme {
+        match (&theme.font_family, fallback) {
+            (None, Some(ff)) => theme.clone().with_font_family(ff.clone()),
+            _ => theme.clone(),
+        }
+    }
+
     fn make_gallery_harness(lang: DesignLanguage, tab: GalleryTab) -> PreviewHarness<GalleryState> {
+        make_gallery_harness_with(lang, Brightness::Light, tab, 1200, 800)
+    }
+
+    fn make_gallery_harness_with(
+        lang: DesignLanguage,
+        brightness: Brightness,
+        tab: GalleryTab,
+        width: u32,
+        height: u32,
+    ) -> PreviewHarness<GalleryState> {
         let mut initial = GalleryState::default();
-        initial.theme = UiTheme::new(lang, Brightness::Light);
+        initial.theme = UiTheme::new(lang, brightness);
         initial.active_tab = tab;
+
+        let test_font_fallback: std::rc::Rc<RefCell<Option<FontFamily<'static>>>> =
+            std::rc::Rc::new(RefCell::new(None));
+        let hook_fallback = test_font_fallback.clone();
+        let view_fallback = test_font_fallback.clone();
 
         let initial_spec = initial.theme.to_spec();
         let initial_props = initial.theme.default_properties();
         let last_spec = RefCell::new(initial_spec.clone());
 
         let mut cfg = PreviewConfig {
-            width: 1200,
-            height: 800,
+            width,
+            height,
             ..PreviewConfig::default()
         };
         cfg.background = initial_spec.palette.window_bg;
@@ -82,7 +104,8 @@ mod tests {
             initial,
             initial_props,
             move |s| {
-                let next_spec = s.theme.to_spec();
+                let eff = effective_test_theme(&s.theme, &hook_fallback.borrow());
+                let next_spec = eff.to_spec();
                 let mut prev = last_spec.borrow_mut();
                 if next_spec != *prev {
                     *prev = next_spec.clone();
@@ -91,11 +114,11 @@ mod tests {
                     None
                 }
             },
-            |s| {
-                let theme = s.theme.clone();
-                let bg = theme.to_spec().palette.window_bg;
+            move |s| {
+                let eff = effective_test_theme(&s.theme, &view_fallback.borrow());
+                let bg = eff.to_spec().palette.window_bg;
                 ui_scope(
-                    &theme,
+                    &eff,
                     sized_box(app_view(s))
                         .dims(Dimensions::STRETCH)
                         .background_color(bg),
@@ -103,8 +126,28 @@ mod tests {
             },
             cfg,
         );
-        let _ = h.register_system_cjk_fallback();
+        let cjk_families = h.register_system_cjk_fallback();
+        if !cjk_families.is_empty() {
+            let mut chain = vec![FontFamilyName::Generic(GenericFamily::SystemUi)];
+            chain.extend(
+                cjk_families
+                    .into_iter()
+                    .map(|name| FontFamilyName::Named(std::borrow::Cow::Owned(name))),
+            );
+            *test_font_fallback.borrow_mut() =
+                Some(FontFamily::List(std::borrow::Cow::Owned(chain)));
+            h.rebuild();
+        }
         h
+    }
+
+    fn find_first_label_rect(node: &LayoutNode, needle: &str) -> Option<(f64, f64, f64, f64)> {
+        if node.type_name == "Label" && node.text.as_deref() == Some(needle) {
+            return Some((node.rect.x, node.rect.y, node.rect.width, node.rect.height));
+        }
+        node.children
+            .iter()
+            .find_map(|child| find_first_label_rect(child, needle))
     }
 
     fn gallery_lint_configs() -> (LintConfig, A11yLintConfig) {
@@ -981,26 +1024,13 @@ mod tests {
             save(&mut h, "27_md3_context_menu_open.png", &mut issues);
         }
         {
-            let mut h = PreviewHarness::with_dynamic_properties(
-                {
-                    let mut st = GalleryState::default();
-                    st.theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark);
-                    st.active_tab = GalleryTab::Layout;
-                    st
-                },
-                UiTheme::new(DesignLanguage::Md3, Brightness::Dark).default_properties(),
-                |st: &GalleryState| {
-                    let spec = st.theme.to_spec();
-                    Some(cached_default_properties(&spec))
-                },
-                crate::app_view,
-                PreviewConfig {
-                    width: 1180,
-                    height: 800,
-                    ..PreviewConfig::default()
-                },
+            let mut h = make_gallery_harness_with(
+                DesignLanguage::Md3,
+                Brightness::Dark,
+                GalleryTab::Layout,
+                1180,
+                800,
             );
-            let _ = h.register_system_cjk_fallback();
             save(&mut h, "28_md3_dark_layout_split.png", &mut issues);
         }
         {
@@ -1037,6 +1067,15 @@ mod tests {
         // 1. Platform alert dialogs across all 4 design languages at 160x480
         for lang in DesignLanguage::ALL {
             let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+            if !h.register_system_cjk_fallback().is_empty() {
+                let tree = dump_layout_tree(&mut h);
+                let cn_lbl = find_first_label_rect(&tree, "原生警告")
+                    .expect("expected Chinese label '原生警告' in Overlays tab");
+                assert!(
+                    cn_lbl.2 > 0.0 && cn_lbl.3 > 0.0,
+                    "[{lang:?}] expected non-zero shaped CJK label dimensions, got {cn_lbl:?}"
+                );
+            }
             h.resize(160, 480);
             h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
                 .unwrap();

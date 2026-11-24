@@ -4,12 +4,12 @@
 //! `xilem_masonry::{MasonryRoot, ViewCtx}`, and `DummyProxy` follows upstream `xilem_masonry`'s
 //! headless test proxy pattern (`linebender/xilem`, `xilem_masonry/src/view/zstack.rs`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use anyhow::{Context as _, bail};
@@ -22,6 +22,7 @@ use masonry::core::{
 };
 use masonry::dpi::PhysicalSize;
 use masonry::kurbo::Point;
+use masonry::parley::fontique::{Collection, CollectionOptions};
 use masonry::peniko::{Blob, Color};
 use masonry::theme::{BACKGROUND_COLOR, default_property_set};
 use masonry::widgets::Passthrough;
@@ -513,60 +514,46 @@ impl<State: 'static> PreviewHarness<State> {
         let _ = self.harness.redraw();
     }
 
-    /// Registers custom font bytes (TTF/OTF/TTC) into Masonry's `FontContext` and redraws.
-    pub fn register_font_bytes(&mut self, bytes: Vec<u8>) -> usize {
-        let count = self
-            .harness
-            .render_root()
-            .register_fonts(Blob::from(bytes))
-            .len();
+    /// Registers custom font bytes (TTF/OTF/TTC) into Masonry's `FontContext`, redraws, and
+    /// returns the deduplicated font family names discovered inside the payload.
+    pub fn register_font_bytes(&mut self, bytes: Vec<u8>) -> Vec<String> {
+        let families = probe_font_families(&bytes);
+        let registered = self.harness.render_root().register_fonts(Blob::from(bytes));
         let _ = self.harness.redraw();
-        count
+        if registered.is_empty() {
+            Vec::new()
+        } else {
+            families
+        }
     }
 
-    /// Registers a system CJK sans font fallback if available (via `BROCADO_TEST_CJK_FONT` or `fc-match`).
+    /// Registers a host font matching `:lang=<lang>` (via `fc-match`) for headless tests,
+    /// returning the discovered font family names so tests can apply them explicitly without
+    /// baking any font names into production theme code.
     ///
-    /// Upstream `masonry_testing::TestHarness` sets `use_system_fonts: false` with Latin-only
-    /// `ROBOTO`, which collapses CJK glyphs to `0px`. Calling this in tests loads a real
-    /// system CJK font once per process so Chinese text measures and rasterizes faithfully.
-    pub fn register_system_cjk_fallback(&mut self) -> bool {
-        static CACHED_CJK_FONT: OnceLock<Option<Vec<u8>>> = OnceLock::new();
-        let bytes = CACHED_CJK_FONT.get_or_init(|| {
-            if let Ok(path) = std::env::var("BROCADO_TEST_CJK_FONT")
-                && let Ok(data) = fs::read(path)
-            {
-                return Some(data);
-            }
-            for pattern in [
-                "Sarasa UI SC",
-                "Microsoft YaHei UI",
-                "Noto Sans CJK SC",
-                "PingFang SC",
-                ":lang=zh",
-            ] {
-                let Ok(out) = Command::new("fc-match")
-                    .args(["-f", "%{file}", pattern])
-                    .output()
-                else {
-                    break;
-                };
-                if !out.status.success() {
-                    continue;
-                }
-                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if path.is_empty() {
-                    continue;
-                }
-                if let Ok(data) = fs::read(&path) {
-                    return Some(data);
-                }
-            }
-            None
-        });
-        let Some(data) = bytes else {
-            return false;
+    /// Upstream `masonry_testing::TestHarness` sets `use_system_fonts: false` with a Latin-only
+    /// test font, which collapses non-Latin glyphs to `0px`.
+    pub fn register_system_fallback_for_lang(&mut self, lang: &str) -> Vec<String> {
+        static CACHED_LANG_FONTS: OnceLock<Mutex<HashMap<String, Option<Vec<u8>>>>> =
+            OnceLock::new();
+        let cache = CACHED_LANG_FONTS.get_or_init(|| Mutex::new(HashMap::new()));
+        let cached = {
+            let mut guard = cache.lock().expect("font fallback cache mutex poisoned");
+            guard
+                .entry(lang.to_owned())
+                .or_insert_with(|| resolve_system_font_bytes_for_lang(lang))
+                .clone()
         };
-        self.register_font_bytes(data.clone()) > 0
+        let Some(data) = cached else {
+            return Vec::new();
+        };
+        self.register_font_bytes(data)
+    }
+
+    /// Convenience wrapper for `register_system_fallback_for_lang("zh")` (honors `BROCADO_TEST_CJK_FONT`
+    /// first when set). Returns the discovered family names so tests can bind them to test themes.
+    pub fn register_system_cjk_fallback(&mut self) -> Vec<String> {
+        self.register_system_fallback_for_lang("zh")
     }
 
     /// Rasterizes the current widget tree on CPU using `vello_cpu`.
@@ -825,6 +812,60 @@ fn collect_matching_type(
     for child in node.children() {
         collect_matching_type(&child, needle, visited, exact, partial);
     }
+}
+
+fn probe_font_families(bytes: &[u8]) -> Vec<String> {
+    let mut probe = Collection::new(CollectionOptions {
+        system_fonts: false,
+        ..Default::default()
+    });
+    let registered = probe.register_fonts(Blob::from(bytes.to_vec()), None);
+    let mut names = Vec::new();
+    for (fid, _) in registered {
+        if let Some(name) = probe.family_name(fid) {
+            let owned = name.to_owned();
+            if !names.contains(&owned) {
+                names.push(owned);
+            }
+        }
+    }
+    names
+}
+
+fn resolve_system_font_bytes_for_lang(lang: &str) -> Option<Vec<u8>> {
+    if lang == "zh"
+        && let Ok(path) = std::env::var("BROCADO_TEST_CJK_FONT")
+        && let Ok(data) = fs::read(path)
+        && !probe_font_families(&data).is_empty()
+    {
+        return Some(data);
+    }
+    let query = format!(":lang={lang}");
+    let out = Command::new("fc-match")
+        .args(["-s", "-f", "%{file}\n", &query])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut seen = HashSet::new();
+    for raw_path in stdout.lines() {
+        let path = raw_path.trim();
+        if path.is_empty() || !seen.insert(path) {
+            continue;
+        }
+        // Variable CFF2 fonts (`*-VF.otf*`) currently fail headless glyph rasterization in vello_cpu.
+        if path.ends_with("-VF.otf.ttc") || path.ends_with("-VF.otf") {
+            continue;
+        }
+        if let Ok(data) = fs::read(path)
+            && !probe_font_families(&data).is_empty()
+        {
+            return Some(data);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
