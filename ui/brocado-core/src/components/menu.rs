@@ -170,6 +170,7 @@ where
         open,
         offset: Vec2::new(0.0, 4.0),
         spec_builder: Arc::new(move |spec| build_popup_spec(spec, &entries, 180.0)),
+        max_width: None,
         on_select: Arc::new(on_select),
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,

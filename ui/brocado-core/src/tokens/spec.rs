@@ -6,7 +6,7 @@ use masonry::peniko::Color;
 use masonry::properties::BoxShadow;
 
 use crate::foundation::state_layer::{blend_over, with_opacity};
-use crate::tokens::{Brightness, TypeScale};
+use crate::tokens::{Brightness, TypeScale, UiLocale};
 
 /// Surface elevation levels (`Level0..Level5`) producing tonal fill & soft shadows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -383,6 +383,8 @@ pub struct DesignSpec {
     pub reduced_motion: bool,
     /// 15-role typography ramp and optional font family.
     pub typography: TypeScale,
+    /// Localization labels and calendar/time conventions.
+    pub locale: UiLocale,
 }
 
 impl DesignSpec {
@@ -506,6 +508,7 @@ impl DesignSpec {
             control_border: ControlBorderStyle::UniformHairline,
             reduced_motion: false,
             typography: TypeScale::baseline(),
+            locale: UiLocale::default(),
         }
     }
 
@@ -546,6 +549,13 @@ impl DesignSpec {
             ControlBorderStyle::CrispElevation => ControlVisualGrammar::MacosHig,
             ControlBorderStyle::BorderlessFlat => ControlVisualGrammar::Adwaita,
         }
+    }
+
+    /// Returns a copy of this specification with localized copy and calendar conventions replaced.
+    #[must_use]
+    pub fn with_locale(mut self, locale: UiLocale) -> Self {
+        self.locale = locale;
+        self
     }
 }
 

@@ -848,12 +848,30 @@ pub struct AnchoredPopupView<TriggerV, State, Action> {
     pub offset: Vec2,
     /// Theme-aware popup spec constructor.
     pub spec_builder: Arc<dyn Fn(&DesignSpec) -> PopupLayerSpec + Send + Sync>,
+    /// Optional maximum popup width override in logical pixels.
+    pub max_width: Option<f64>,
     /// Selection callback invoked with clicked item's `action_idx`.
     pub on_select: PopupSelectCallback<State, Action>,
     /// Dismiss callback invoked on outside click, Escape, or window focus loss.
     pub on_dismiss: Arc<dyn Fn(&mut State) -> Action + Send + Sync>,
     /// State/Action marker.
     pub phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<TriggerV, State, Action> AnchoredPopupView<TriggerV, State, Action> {
+    /// Overrides the maximum width of the popup surface (always clamped to viewport bounds).
+    pub fn max_width(mut self, width: f64) -> Self {
+        self.max_width = Some(width.max(60.0));
+        self
+    }
+
+    fn resolve_spec(&self, spec_theme: &DesignSpec) -> PopupLayerSpec {
+        let mut popup_spec = (self.spec_builder)(spec_theme);
+        if let Some(mw) = self.max_width {
+            popup_spec.max_width = mw.max(popup_spec.min_width);
+        }
+        popup_spec
+    }
 }
 
 impl<TriggerV, State, Action> ViewMarker for AnchoredPopupView<TriggerV, State, Action> {}
@@ -870,7 +888,7 @@ where
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec_theme = current_spec_arc(ctx);
-        let popup_spec = (self.spec_builder)(&spec_theme);
+        let popup_spec = self.resolve_spec(&spec_theme);
         let (trigger_pod, trigger_state) =
             ctx.with_id(POPUP_TRIGGER_ID, |ctx| self.trigger.build(ctx, app_state));
         let pod = ctx.with_action_widget(|ctx| {
@@ -905,7 +923,7 @@ where
             });
         }
         let spec_theme = current_spec_arc(ctx);
-        let popup_spec = (self.spec_builder)(&spec_theme);
+        let popup_spec = self.resolve_spec(&spec_theme);
         AnchoredPopupHost::sync(&mut element, self.open, self.offset, popup_spec);
     }
 

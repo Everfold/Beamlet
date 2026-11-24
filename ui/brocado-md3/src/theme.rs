@@ -127,6 +127,7 @@ impl Md3Theme {
             control_border: ControlBorderStyle::UniformHairline,
             reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
+            locale: Default::default(),
         }
     }
 }

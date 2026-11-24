@@ -3,7 +3,7 @@
 use std::sync::{Arc, LazyLock, Mutex};
 
 use brocado_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
-use brocado_core::tokens::{Brightness, DesignSpec, TypeScale, WindowBackdrop};
+use brocado_core::tokens::{Brightness, DesignSpec, TypeScale, UiLocale, WindowBackdrop};
 use brocado_core::{FontFamily, FontFamilyName};
 #[cfg(feature = "winit")]
 use brocado_winit::{
@@ -148,6 +148,8 @@ pub struct UiTheme {
     pub font_family: Option<FontFamily<'static>>,
     /// Global typography scaling factor (`1.0` baseline; clamped to `0.5..=3.0`).
     pub font_scale: f32,
+    /// Optional localization overrides for pickers, dialogs, and search placeholders.
+    pub locale: Option<UiLocale>,
 }
 
 impl UiTheme {
@@ -174,6 +176,7 @@ impl UiTheme {
             reduced_motion: false,
             font_family: None,
             font_scale: 1.0,
+            locale: None,
         }
     }
 
@@ -251,6 +254,13 @@ impl UiTheme {
     #[must_use]
     pub fn with_font_scale(mut self, scale: f32) -> Self {
         self.font_scale = scale.clamp(0.5, 3.0);
+        self
+    }
+
+    /// Assigns localized calendar, picker, dialog, and search copy overrides.
+    #[must_use]
+    pub fn with_locale(mut self, locale: UiLocale) -> Self {
+        self.locale = Some(locale);
         self
     }
 
@@ -371,6 +381,9 @@ impl UiTheme {
         }
         if (self.font_scale - 1.0).abs() > f32::EPSILON {
             spec.typography = spec.typography.scaled(self.font_scale);
+        }
+        if let Some(locale) = &self.locale {
+            spec.locale = locale.clone();
         }
         spec
     }

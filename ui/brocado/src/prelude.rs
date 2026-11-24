@@ -13,7 +13,7 @@ pub use crate::{
     ModalAxisSizing, MotionDuration, MotionEasing, NavIndicatorStyle, Pod, PopoverAnchorRect,
     PopoverAnchorView, PopoverAnchorWidget, RippleLayer, RippleLayerView, SemanticPalette,
     ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextAlign, TypeRole, TypeScale,
-    UiClassExt, ViewCtx, WidgetView, WidgetViewSequence, WindowBackdrop, WindowSizeClass,
+    UiClassExt, UiLocale, ViewCtx, WidgetView, WidgetViewSequence, WindowBackdrop, WindowSizeClass,
     WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface, build_default_properties,
     cached_default_properties, classes, clip_box, constrained_box, current_spec, focus_frame,
     icons, memoize_with_spec, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition,

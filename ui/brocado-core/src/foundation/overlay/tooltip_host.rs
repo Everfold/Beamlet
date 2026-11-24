@@ -26,7 +26,6 @@ use xilem_masonry::WidgetView;
 use crate::style_engine::scope::current_spec_arc;
 use crate::tokens::{DesignSpec, ElevationLevel};
 
-const TOOLTIP_HOVER_DELAY_NS: u64 = 450_000_000;
 const TOOLTIP_CHILD_ID: ViewId = ViewId::new(0x5549_3410);
 
 /// Visual content description for a passive hover tooltip spawned on Masonry `LayerStack`.
@@ -50,6 +49,10 @@ pub struct TooltipContentSpec {
     pub corner_radius: f64,
     /// Whether this renders a compact plain banner (`false`) or a rich card (`true`).
     pub is_rich: bool,
+    /// Maximum tooltip card width before wrapping (`240.0` plain / `320.0` rich by default).
+    pub max_width: f64,
+    /// Hover dwell delay in milliseconds before displaying the tooltip (defaults to `450ms`).
+    pub hover_delay_ms: u64,
 }
 
 impl TooltipContentSpec {
@@ -113,7 +116,7 @@ impl TooltipContentSpec {
         NewWidget::new(TooltipLayer {
             creator,
             child: content.to_pod(),
-            max_width: if self.is_rich { 320.0 } else { 240.0 },
+            max_width: self.max_width.max(32.0),
             anchor_rect,
             placed_pos,
             window_size: Size::ZERO,
@@ -479,7 +482,8 @@ impl Widget for HoverTooltipHost {
         }
         if self.hover_pending {
             self.hover_elapsed_ns = self.hover_elapsed_ns.saturating_add(interval);
-            if self.hover_elapsed_ns >= TOOLTIP_HOVER_DELAY_NS {
+            let delay_ns = self.spec.hover_delay_ms.saturating_mul(1_000_000);
+            if self.hover_elapsed_ns >= delay_ns {
                 self.hover_pending = false;
                 self.hover_elapsed_ns = 0;
                 if let Some(old_id) = self.layer_id.take() {
@@ -567,8 +571,37 @@ pub struct HoverTooltipView<V, State, Action> {
     pub child: V,
     /// Theme-aware tooltip spec constructor.
     pub spec_builder: Arc<dyn Fn(&DesignSpec) -> TooltipContentSpec + Send + Sync>,
+    /// Optional maximum tooltip width override in logical pixels.
+    pub max_width: Option<f64>,
+    /// Optional hover dwell delay override in milliseconds.
+    pub hover_delay_ms: Option<u64>,
     /// State/Action marker.
     pub phantom: PhantomData<fn(&mut State) -> Action>,
+}
+
+impl<V, State, Action> HoverTooltipView<V, State, Action> {
+    /// Overrides the maximum width of the tooltip overlay before wrapping.
+    pub fn max_width(mut self, width: f64) -> Self {
+        self.max_width = Some(width.max(32.0));
+        self
+    }
+
+    /// Overrides the hover dwell delay in milliseconds before displaying the tooltip.
+    pub fn hover_delay_ms(mut self, delay_ms: u64) -> Self {
+        self.hover_delay_ms = Some(delay_ms);
+        self
+    }
+
+    fn resolve_spec(&self, theme_spec: &DesignSpec) -> TooltipContentSpec {
+        let mut s = (self.spec_builder)(theme_spec);
+        if let Some(mw) = self.max_width {
+            s.max_width = mw;
+        }
+        if let Some(d) = self.hover_delay_ms {
+            s.hover_delay_ms = d;
+        }
+        s
+    }
 }
 
 impl<V, State, Action> ViewMarker for HoverTooltipView<V, State, Action> {}
@@ -584,7 +617,7 @@ where
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let spec_theme = current_spec_arc(ctx);
-        let tip_spec = (self.spec_builder)(&spec_theme);
+        let tip_spec = self.resolve_spec(&spec_theme);
         let (child_pod, child_state) =
             ctx.with_id(TOOLTIP_CHILD_ID, |ctx| self.child.build(ctx, app_state));
         let pod = ctx.create_pod(HoverTooltipHost::new(child_pod.new_widget, tip_spec));
@@ -600,7 +633,7 @@ where
         app_state: &mut State,
     ) {
         let spec_theme = current_spec_arc(ctx);
-        HoverTooltipHost::set_spec(&mut element, (self.spec_builder)(&spec_theme));
+        HoverTooltipHost::set_spec(&mut element, self.resolve_spec(&spec_theme));
         let mut child = HoverTooltipHost::child_mut(&mut element);
         ctx.with_id(TOOLTIP_CHILD_ID, |ctx| {
             self.child

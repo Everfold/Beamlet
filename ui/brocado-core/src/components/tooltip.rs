@@ -32,7 +32,11 @@ where
             shadow_color: spec.palette.shadow,
             corner_radius: (spec.metrics.menu_radius * 0.5).max(4.0),
             is_rich: false,
+            max_width: 240.0,
+            hover_delay_ms: 450,
         }),
+        max_width: None,
+        hover_delay_ms: None,
         phantom: PhantomData,
     }
 }
@@ -62,7 +66,11 @@ where
             shadow_color: spec.palette.shadow,
             corner_radius: spec.metrics.card_radius,
             is_rich: true,
+            max_width: 320.0,
+            hover_delay_ms: 450,
         }),
+        max_width: None,
+        hover_delay_ms: None,
         phantom: PhantomData,
     }
 }

@@ -25,8 +25,8 @@ pub use brocado_core::tokens;
 pub use brocado_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowBackdrop,
-    WindowSizeClass,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, UiLocale,
+    WindowBackdrop, WindowSizeClass,
 };
 pub use brocado_core::{
     AnyWidgetView, Color, FontFamily, FontFamilyName, FontWeight, GenericFamily, InitialRootWidget,

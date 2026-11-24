@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use masonry::core::ArcStr;
 use masonry::layout::{AsUnit, Dim};
 use masonry::peniko::Color;
 use masonry::properties::{Dimensions, LineBreaking, Padding};
@@ -146,22 +147,16 @@ pub const fn weekday_sunday_zero(year: i32, month: u8, day: u8) -> u8 {
     (y + y / 4 - y / 100 + y / 400 + OFFSETS[m] + day as i32).rem_euclid(7) as u8
 }
 
-fn month_name(month: u8) -> &'static str {
-    match month {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "Month",
-    }
+const fn calendar_leading_blank_days(year: i32, month: u8, first_day_of_week: u8) -> usize {
+    let sun_wd = weekday_sunday_zero(year, month, 1) as usize;
+    let start = (first_day_of_week % 7) as usize;
+    (sun_wd + 7 - start) % 7
+}
+
+fn localized_month_label<'a>(months: &'a [ArcStr; 12], month: u8) -> &'a str {
+    months
+        .get(month.saturating_sub(1) as usize)
+        .map_or("", ArcStr::as_ref)
 }
 
 /// Interactive docked Gregorian month-grid date picker.
@@ -175,6 +170,7 @@ where
     let cb = Arc::new(on_select);
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
+        let loc = &spec.locale;
         let prev_date = selected.prev_month();
         let next_date = selected.next_month();
         let cb_prev = cb.clone();
@@ -198,7 +194,11 @@ where
         let header = adaptive_pair(
             ui_label(
                 TypeRole::TitleMedium,
-                format!("{} {}", month_name(selected.month), selected.year),
+                format!(
+                    "{} {}",
+                    localized_month_label(&loc.months, selected.month),
+                    selected.year
+                ),
             )
             .color(p.text_primary),
             flex_row((prev_btn, next_btn))
@@ -216,10 +216,11 @@ where
             .ceil()
             .max(24.0);
 
+        let start_day = (loc.first_day_of_week % 7) as usize;
         let weekday_row = flex_row(
-            ["S", "M", "T", "W", "T", "F", "S"]
-                .into_iter()
-                .map(|w| {
+            (0..7usize)
+                .map(|offset| {
+                    let w = loc.weekdays_sun_first[(start_day + offset) % 7].clone();
                     sized_box(zstack((ui_label(TypeRole::LabelSmall, w)
                         .line_height(masonry::parley::LineHeight::MetricsRelative(1.0))
                         .color(p.text_secondary)
@@ -231,7 +232,8 @@ where
         )
         .gap(2.px());
 
-        let first_wd = weekday_sunday_zero(selected.year, selected.month, 1) as usize;
+        let first_wd =
+            calendar_leading_blank_days(selected.year, selected.month, loc.first_day_of_week);
         let days = days_in_month(selected.year, selected.month) as usize;
         let mut cells: Vec<Option<u8>> = vec![None; first_wd];
         for d in 1..=days {
@@ -310,8 +312,8 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let ok = confirm_cb.clone();
         let dis = dismiss_cb.clone();
-        let cancel_btn = subtle_button("Cancel", move |s| dis(s)).boxed();
-        let ok_btn = primary_button("OK", move |s| ok(s)).boxed();
+        let cancel_btn = subtle_button(spec.locale.cancel_label.clone(), move |s| dis(s)).boxed();
+        let ok_btn = primary_button(spec.locale.ok_label.clone(), move |s| ok(s)).boxed();
         let btns = match spec.dialog_action_order {
             DialogActionOrder::PrimaryLeading => vec![ok_btn, cancel_btn],
             DialogActionOrder::PrimaryTrailing => vec![cancel_btn, ok_btn],
@@ -433,47 +435,54 @@ where
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(4.px());
 
-        let am_btn = button(
-            ui_label(TypeRole::LabelMedium, "AM")
-                .color(if !is_pm {
-                    p.on_tertiary_container
-                } else {
-                    p.text_secondary
-                })
-                .line_breaking(LineBreaking::Clip),
-            move |s: &mut State| am_cb(s, TimeOfDay::new(selected.hour % 12, selected.minute)),
-        )
-        .ui_class(if !is_pm {
-            classes::SEG_BTN_SELECTED
-        } else {
-            classes::SEG_BTN
-        });
+        let am_pm_col = (!spec.locale.use_24h).then(|| {
+            let am_btn = button(
+                ui_label(TypeRole::LabelMedium, spec.locale.am_label.clone())
+                    .color(if !is_pm {
+                        p.on_tertiary_container
+                    } else {
+                        p.text_secondary
+                    })
+                    .line_breaking(LineBreaking::Clip),
+                move |s: &mut State| am_cb(s, TimeOfDay::new(selected.hour % 12, selected.minute)),
+            )
+            .ui_class(if !is_pm {
+                classes::SEG_BTN_SELECTED
+            } else {
+                classes::SEG_BTN
+            });
 
-        let pm_btn = button(
-            ui_label(TypeRole::LabelMedium, "PM")
-                .color(if is_pm {
-                    p.on_tertiary_container
-                } else {
-                    p.text_secondary
-                })
-                .line_breaking(LineBreaking::Clip),
-            move |s: &mut State| {
-                pm_cb(
-                    s,
-                    TimeOfDay::new((selected.hour % 12) + 12, selected.minute),
-                )
-            },
-        )
-        .ui_class(if is_pm {
-            classes::SEG_BTN_SELECTED
-        } else {
-            classes::SEG_BTN
-        });
+            let pm_btn = button(
+                ui_label(TypeRole::LabelMedium, spec.locale.pm_label.clone())
+                    .color(if is_pm {
+                        p.on_tertiary_container
+                    } else {
+                        p.text_secondary
+                    })
+                    .line_breaking(LineBreaking::Clip),
+                move |s: &mut State| {
+                    pm_cb(
+                        s,
+                        TimeOfDay::new((selected.hour % 12) + 12, selected.minute),
+                    )
+                },
+            )
+            .ui_class(if is_pm {
+                classes::SEG_BTN_SELECTED
+            } else {
+                classes::SEG_BTN
+            });
 
-        let am_pm_col = flex_col((am_btn, pm_btn)).gap(6.px());
+            flex_col((am_btn, pm_btn)).gap(6.px())
+        });
         let _ = Color::TRANSPARENT;
 
-        wrap((hour_col, colon, min_col, am_pm_col))
+        let mut parts: Vec<Box<AnyWidgetView<State, Action>>> =
+            vec![hour_col.boxed(), colon.boxed(), min_col.boxed()];
+        if let Some(col) = am_pm_col {
+            parts.push(col.boxed());
+        }
+        wrap(parts)
             .main_axis_alignment(MainAxisAlignment::Center)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px())

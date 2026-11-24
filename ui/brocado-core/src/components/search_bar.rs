@@ -34,15 +34,15 @@ type SearchBarFrame<State, Action> =
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct UiSearchBar<State, Action> {
     query: String,
-    placeholder: ArcStr,
+    placeholder: Option<ArcStr>,
     on_change: SearchChangeCallback<State, Action>,
     on_clear: Option<SearchActionCallback<State, Action>>,
 }
 
 impl<State, Action> UiSearchBar<State, Action> {
-    /// Overrides the placeholder string (defaults to `"Search..."`).
+    /// Overrides the placeholder string (defaults to `spec.locale.search_placeholder`).
     pub fn placeholder(mut self, text: impl Into<ArcStr>) -> Self {
-        self.placeholder = text.into();
+        self.placeholder = Some(text.into());
         self
     }
 
@@ -68,7 +68,11 @@ impl<State, Action> UiSearchBar<State, Action> {
         let ti = text_input(self.query.clone(), move |s: &mut State, val: String| {
             on_change(s, val)
         })
-        .placeholder(self.placeholder.clone())
+        .placeholder(
+            self.placeholder
+                .clone()
+                .unwrap_or_else(|| spec.locale.search_placeholder.clone()),
+        )
         .text_size(style.font_size)
         .weight(style.weight)
         .text_color(p.text_primary)
@@ -163,7 +167,7 @@ where
 {
     UiSearchBar {
         query: query.into(),
-        placeholder: "Search...".into(),
+        placeholder: None,
         on_change: Arc::new(on_change),
         on_clear: None,
     }

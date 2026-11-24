@@ -43,6 +43,6 @@ pub use style_engine::{
 pub use tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, WindowBackdrop,
-    WindowSizeClass,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, UiLocale,
+    WindowBackdrop, WindowSizeClass,
 };

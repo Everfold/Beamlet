@@ -117,6 +117,7 @@ impl FluentTheme {
             control_border: ControlBorderStyle::BeveledElevation,
             reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
+            locale: Default::default(),
         }
     }
 }
