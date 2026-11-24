@@ -78,7 +78,7 @@ mod tests {
         };
         cfg.background = initial_spec.palette.window_bg;
 
-        PreviewHarness::with_dynamic_properties(
+        let mut h = PreviewHarness::with_dynamic_properties(
             initial,
             initial_props,
             move |s| {
@@ -102,7 +102,9 @@ mod tests {
                 )
             },
             cfg,
-        )
+        );
+        let _ = h.register_system_cjk_fallback();
+        h
     }
 
     fn gallery_lint_configs() -> (LintConfig, A11yLintConfig) {
@@ -229,13 +231,27 @@ mod tests {
                             portal_x1
                         ));
                     }
-                    check_children(portal_x0, portal_x1, c, out);
+                    if c.type_name == "Portal" || c.type_name == "ScrollPortal" {
+                        collect_portal_horizontal_overflows(c, out);
+                    } else {
+                        check_children(portal_x0, portal_x1, c, out);
+                    }
                 }
             }
         }
         if (node.type_name == "Portal" || node.type_name == "ScrollPortal") && node.rect.width > 1.0
         {
-            check_children(node.rect.x, node.rect.x + node.rect.width, node, out);
+            let has_h_scrollbar = node
+                .children
+                .iter()
+                .any(|c| c.type_name == "ScrollBar" && c.rect.width > c.rect.height);
+            if has_h_scrollbar {
+                for c in &node.children {
+                    collect_portal_horizontal_overflows(c, out);
+                }
+            } else {
+                check_children(node.rect.x, node.rect.x + node.rect.width, node, out);
+            }
             return;
         }
         for c in &node.children {
@@ -283,6 +299,10 @@ mod tests {
             (400, 600),
             (360, 640),
             (320, 480),
+            (240, 480),
+            (200, 480),
+            (160, 480),
+            (160, 280),
             (1200, 800),
         ];
 
@@ -980,6 +1000,7 @@ mod tests {
                     ..PreviewConfig::default()
                 },
             );
+            let _ = h.register_system_cjk_fallback();
             save(&mut h, "28_md3_dark_layout_split.png", &mut issues);
         }
         {
@@ -1005,6 +1026,230 @@ mod tests {
         assert!(
             issues.is_empty(),
             "visual alignment or viewport clipping detected:\n{}",
+            issues.join("\n")
+        );
+    }
+
+    #[test]
+    fn gallery_extreme_narrow_160px_overlays_and_interactions() {
+        let (layout_cfg, a11y_cfg) = gallery_lint_configs();
+
+        // 1. Platform alert dialogs across all 4 design languages at 160x480
+        for lang in DesignLanguage::ALL {
+            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+            h.resize(160, 480);
+            h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
+                .unwrap();
+            assert!(h.state().overlays.show_platform_alert);
+            let overflows = audit_snapshot(
+                &mut h,
+                &layout_cfg,
+                &a11y_cfg,
+                &format!("160x480/{lang:?}/platform_alert"),
+            );
+            assert!(
+                overflows.is_empty(),
+                "[{lang:?}] platform_alert overflow at 160px: {overflows:#?}"
+            );
+            assert_visual_invariants(&mut h, &format!("160x480/{lang:?}/platform_alert"));
+            let before = h.state().components.click_count;
+            h.run_step(&PreviewStep::ClickLabel("确定".into())).unwrap();
+            assert!(!h.state().overlays.show_platform_alert);
+            assert_eq!(h.state().components.click_count, before + 1);
+        }
+
+        // 2. All MD3 modal overlays (dialogs, sheets, date/time pickers) at 160x480
+        let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+        h.resize(160, 480);
+        let modals: &[(&str, fn(&GalleryState) -> bool)] = &[
+            ("基础弹窗", |s| s.overlays.show_basic_dialog),
+            ("危险确认", |s| s.overlays.show_destructive_dialog),
+            ("日期弹窗", |s| s.overlays.show_date_dialog),
+            ("时间弹窗", |s| s.overlays.show_time_dialog),
+            ("底抽屉", |s| s.overlays.show_bottom_sheet),
+            ("侧抽屉", |s| s.overlays.show_side_sheet),
+        ];
+        for &(btn, is_open) in modals {
+            h.run_step(&PreviewStep::ClickLabel(btn.into())).unwrap();
+            assert!(is_open(h.state()), "{btn} failed to open at 160x480");
+            let overflows = audit_snapshot(
+                &mut h,
+                &layout_cfg,
+                &a11y_cfg,
+                &format!("160x480/Md3/{btn}"),
+            );
+            assert!(
+                overflows.is_empty(),
+                "160x480/Md3/{btn} overflow: {overflows:#?}"
+            );
+            assert_visual_invariants(&mut h, &format!("160x480/Md3/{btn}"));
+            h.run_steps(&[
+                PreviewStep::HoverType {
+                    type_name: "EscapeCatcher".into(),
+                    index: 0,
+                },
+                PreviewStep::PressEscape,
+            ])
+            .unwrap();
+            assert!(!is_open(h.state()), "{btn} failed Escape close at 160x480");
+        }
+
+        // 3. Popover, Tooltips, and Toast at 160x480
+        h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
+            .unwrap();
+        assert!(h.state().overlays.popover_open);
+        let pop_ov = audit_snapshot(&mut h, &layout_cfg, &a11y_cfg, "160x480/Md3/popover");
+        assert!(pop_ov.is_empty(), "160x480/Md3/popover: {pop_ov:#?}");
+        assert_visual_invariants(&mut h, "160x480/Md3/popover");
+        h.run_step(&PreviewStep::ClickLabel("关闭".into())).unwrap();
+        assert!(!h.state().overlays.popover_open);
+
+        for tip in ["悬停提示", "富提示"] {
+            h.run_step(&PreviewStep::HoverLabel(tip.into())).unwrap();
+            assert_eq!(count_layer_type(&mut h, "TooltipLayer"), 1);
+            let tip_ov = audit_snapshot(&mut h, &layout_cfg, &a11y_cfg, &format!("160x480/{tip}"));
+            assert!(tip_ov.is_empty(), "160x480/{tip}: {tip_ov:#?}");
+            assert_visual_invariants(&mut h, &format!("160x480/{tip}"));
+        }
+
+        h.run_step(&PreviewStep::ClickLabel("轻提示".into()))
+            .unwrap();
+        assert!(h.state().overlays.toasts.current().is_some());
+        let toast_ov = audit_snapshot(&mut h, &layout_cfg, &a11y_cfg, "160x480/Md3/toast");
+        assert!(toast_ov.is_empty(), "160x480/Md3/toast: {toast_ov:#?}");
+        assert_visual_invariants(&mut h, "160x480/Md3/toast");
+
+        // 4. Select dropdown on Components tab at 160x480
+        let mut h_comp = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+        h_comp.resize(160, 480);
+        h_comp
+            .run_step(&PreviewStep::ClickLabel("默认".into()))
+            .unwrap();
+        assert_eq!(count_layer_type(&mut h_comp, "PopupLayer"), 1);
+        let sel_ov = audit_snapshot(&mut h_comp, &layout_cfg, &a11y_cfg, "160x480/Md3/select");
+        assert!(sel_ov.is_empty(), "160x480/Md3/select: {sel_ov:#?}");
+        assert_visual_invariants(&mut h_comp, "160x480/Md3/select");
+        h_comp
+            .run_step(&PreviewStep::ClickLabel("蓝".into()))
+            .unwrap();
+        assert_eq!(h_comp.state().theme.accent, UiAccent::PRESETS[1]);
+        assert_eq!(count_layer_type(&mut h_comp, "PopupLayer"), 0);
+    }
+
+    #[test]
+    #[ignore = "Manual visual audit helper dumping 160x480 PNGs to THEME_GALLERY_AUDIT_DIR"]
+    fn audit_dump_extreme_narrow_160_pngs() {
+        let out_dir_buf = std::env::var_os("THEME_GALLERY_AUDIT_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("beamlet_160_audit"));
+        let out_dir = out_dir_buf.as_path();
+        std::fs::create_dir_all(out_dir).expect("create 160 audit_pngs dir");
+
+        let mut issues = Vec::new();
+        let save = |h: &mut PreviewHarness<GalleryState>, name: &str, issues: &mut Vec<String>| {
+            h.settle_animations();
+            let (vw, vh) = h.viewport();
+            let tree = dump_layout_tree(h);
+            let mut local = Vec::new();
+            let popup_count = count_widgets(&tree, "PopupLayer");
+            if popup_count > 1 {
+                local.push(format!(
+                    "expected at most 1 PopupLayer, found {popup_count}"
+                ));
+            }
+            let tooltip_count = count_widgets(&tree, "TooltipLayer");
+            if tooltip_count > 1 {
+                local.push(format!(
+                    "expected at most 1 TooltipLayer, found {tooltip_count}"
+                ));
+            }
+            collect_icon_misalignments(&tree, &mut local);
+            collect_clipped_layers(&tree, vw, vh, &mut local);
+            collect_portal_horizontal_overflows(&tree, &mut local);
+            for m in local {
+                issues.push(format!("[{name}] {m}"));
+            }
+            h.render_png(out_dir.join(name))
+                .expect("write 160 audit png");
+        };
+
+        for (lang, tab, file) in [
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Components,
+                "01_160_md3_components.png",
+            ),
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Layout,
+                "02_160_md3_layout.png",
+            ),
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Overlays,
+                "03_160_md3_overlays.png",
+            ),
+            (
+                DesignLanguage::Md3,
+                GalleryTab::Native,
+                "04_160_md3_native.png",
+            ),
+            (
+                DesignLanguage::Fluent,
+                GalleryTab::Native,
+                "05_160_fluent_native.png",
+            ),
+            (
+                DesignLanguage::Hig,
+                GalleryTab::Native,
+                "06_160_hig_native.png",
+            ),
+            (
+                DesignLanguage::Adwaita,
+                GalleryTab::Native,
+                "07_160_adwaita_native.png",
+            ),
+            (DesignLanguage::Md3, GalleryTab::Lab, "15_160_md3_lab.png"),
+        ] {
+            let mut h = make_gallery_harness(lang, tab);
+            h.resize(160, 480);
+            save(&mut h, file, &mut issues);
+        }
+
+        for (lang, btn, file) in [
+            (
+                DesignLanguage::Md3,
+                "基础弹窗",
+                "08_160_md3_basic_dialog.png",
+            ),
+            (
+                DesignLanguage::Adwaita,
+                "原生警告",
+                "09_160_adwaita_alert.png",
+            ),
+            (DesignLanguage::Hig, "原生警告", "10_160_hig_alert.png"),
+            (
+                DesignLanguage::Md3,
+                "日期弹窗",
+                "11_160_md3_date_picker.png",
+            ),
+            (
+                DesignLanguage::Md3,
+                "时间弹窗",
+                "12_160_md3_time_picker.png",
+            ),
+            (DesignLanguage::Md3, "侧抽屉", "13_160_md3_side_sheet.png"),
+            (DesignLanguage::Md3, "轻提示", "14_160_md3_toast.png"),
+        ] {
+            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+            h.resize(160, 480);
+            h.run_step(&PreviewStep::ClickLabel(btn.into())).unwrap();
+            save(&mut h, file, &mut issues);
+        }
+
+        assert!(
+            issues.is_empty(),
+            "160px visual alignment or viewport clipping detected:\n{}",
             issues.join("\n")
         );
     }

@@ -2,13 +2,14 @@
 
 use std::sync::atomic::Ordering;
 
+use brocado::components::typography::ui_label;
 use brocado::prelude::*;
 use masonry::layout::AsUnit;
 use masonry::peniko::Color;
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, label, sized_box};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, sized_box};
 
 use crate::state::GalleryState;
 
@@ -18,12 +19,12 @@ fn swatch<State: 'static, Action: 'static>(
     fill: Color,
     ink: Color,
 ) -> impl WidgetView<State, Action> + use<State, Action> {
-    sized_box(
-        spec.typography
-            .style_label(TypeRole::LabelSmall, label(name))
-            .color(ink),
-    )
-    .padding(Padding::from_vh(8.px(), 10.px()))
+    sized_box(clip_box(
+        ui_label(TypeRole::LabelSmall, name)
+            .color(ink)
+            .line_breaking(LineBreaking::Clip),
+    ))
+    .padding(Padding::from_vh(8.px(), 6.px()))
     .background_color(fill)
     .border(spec.palette.border, 1.px())
     .corner_radius(6.px())
@@ -43,7 +44,7 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
                 title_small("with_spec"),
                 body_medium(format!("重建：{count} ({})", spec.name)),
             ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px()),
         )
     });
@@ -55,7 +56,7 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
                 title_small("memoize_with_spec"),
                 body_medium(format!("重建：{count} · {tag} ({})", spec.name)),
             ))
-            .cross_axis_alignment(CrossAxisAlignment::Start)
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px()),
         )
     });
@@ -92,14 +93,10 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
                 flex_row((btn_inc(), btn_key(), btn_reset()))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(10.px()),
-                flex_col((
-                    btn_inc(),
-                    flex_row((btn_key(), btn_reset()))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(8.px()),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .gap(8.px()),
+                wrap((btn_inc(), btn_key(), btn_reset()))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(8.px())
+                    .run_gap(6.px()),
             ),
             flex_col((unmemoized_panel, memoized_panel))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -116,12 +113,14 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
 
     let virtual_lab = outlined_card(
         flex_col((
-            flex_row((
-                title_medium("virtual_list (10,000)").flex(1.0),
+            adaptive_pair(
+                title_medium("virtual_list (10,000)"),
                 body_small(selected_row_text),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center),
-            flex_row((
+            )
+            .gap(8.px())
+            .run_gap(4.px())
+            .min_leading(56.0),
+            wrap((
                 secondary_button("#0", |s: &mut GalleryState| {
                     s.perf.virtual_jump_idx = Some(0);
                 }),
@@ -133,13 +132,18 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
                 }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px()),
+            .gap(6.px())
+            .run_gap(6.px()),
             sized_box(
                 virtual_list(10_000, |s: &mut GalleryState, idx| {
                     let is_selected = s.perf.selected_virtual_row == Some(idx);
                     sized_box(clickable_list_item_view(
                         flex_row((
-                            body_medium(format!("Row #{idx:04}")).flex(1.0),
+                            clip_box(
+                                body_medium(format!("Row #{idx:04}"))
+                                    .line_breaking(LineBreaking::Clip),
+                            )
+                            .flex(1.0),
                             label_small(format!("B{}", idx / 100)),
                         ))
                         .cross_axis_alignment(CrossAxisAlignment::Center),
@@ -233,20 +237,16 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .gap(12.px());
 
-        let type_narrow = flex_col((
-            flex_row((display_small("Display"), headline_small("Headline")))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(10.px()),
-            flex_row((
-                title_medium("Title"),
-                body_medium("Body"),
-                label_small("Label"),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
+        let type_narrow = wrap((
+            display_small("Display"),
+            headline_small("Headline"),
+            title_medium("Title"),
+            body_medium("Body"),
+            label_small("Label"),
         ))
-        .cross_axis_alignment(CrossAxisAlignment::Start)
-        .gap(6.px());
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .gap(8.px())
+        .run_gap(6.px());
 
         flex_col((
             title_medium("DesignSpec"),

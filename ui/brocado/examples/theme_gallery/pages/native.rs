@@ -19,28 +19,38 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             ButtonVariant::Primary,
             with_spec(|spec, _| {
                 let shortcut = spec.shortcut_convention.format_primary("S");
-                flex_row((
-                    ui_icon(icons::CHECK, 16.0, spec.palette.on_accent),
-                    label("保存").color(spec.palette.on_accent),
-                    sized_box(
-                        label(shortcut)
-                            .text_size(11.0)
-                            .color(spec.palette.on_accent),
-                    )
-                    .padding(Padding::from_vh(2.px(), 6.px()))
-                    .border(spec.palette.on_accent, 1.px())
-                    .corner_radius(4.px()),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px())
+                clip_box(
+                    flex_row((
+                        ui_icon(icons::CHECK, 16.0, spec.palette.on_accent),
+                        clip_box(label("保存").color(spec.palette.on_accent)).flex(1.0),
+                        sized_box(
+                            label(shortcut)
+                                .text_size(11.0)
+                                .color(spec.palette.on_accent),
+                        )
+                        .padding(Padding::from_vh(2.px(), 6.px()))
+                        .border(spec.palette.on_accent, 1.px())
+                        .corner_radius(4.px()),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(4.px()),
+                )
             }),
             |s: &mut GalleryState| s.components.click_count += 1,
+        )
+        .padding(Padding::from_vh(8.px(), 12.px()));
+        let wide_btn = breakpoint_bin(
+            220.0,
+            primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
+                s.components.click_count += 1;
+            })
+            .width(150.px())
+            .corner_radius(3.px()),
+            primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
+                s.components.click_count += 1;
+            })
+            .corner_radius(3.px()),
         );
-        let wide_btn = primary_button(format!("宽方角 ({clicks})"), |s: &mut GalleryState| {
-            s.components.click_count += 1;
-        })
-        .width(150.px())
-        .corner_radius(3.px());
         let list_row = list_item_view(
             flex_row((
                 ui_icon(icons::INFO, 16.0, Color::from_rgb8(0x4E, 0x8C, 0xE8)),
@@ -63,7 +73,7 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(10.px()),
                 flex_col((sb_n, wb_n, lr_n))
-                    .cross_axis_alignment(CrossAxisAlignment::Start)
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
                     .gap(8.px()),
             ),
         ))
@@ -118,14 +128,10 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                         flex_row((sf_w, f_w, lf_w, ef_w))
                             .cross_axis_alignment(CrossAxisAlignment::Center)
                             .gap(12.px()),
-                        flex_col((
-                            flex_row((sf_n, f_n, ef_n))
-                                .cross_axis_alignment(CrossAxisAlignment::Center)
-                                .gap(10.px()),
-                            lf_n,
-                        ))
-                        .cross_axis_alignment(CrossAxisAlignment::Start)
-                        .gap(8.px()),
+                        wrap((sf_n, f_n, lf_n, ef_n))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(8.px())
+                            .run_gap(8.px()),
                     ),
                     floating_toolbar(vec![
                         icon_button(icons::ARROW_BACK, |s: &mut GalleryState| {
@@ -208,12 +214,13 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     |s: &mut GalleryState| {
                         s.native.fluent_expander_open = !s.native.fluent_expander_open;
                     },
-                    flex_row((
+                    wrap((
                         info_badge(InfoBarSeverity::Warning, Some("展开内容")),
                         body_small("Fluent Expander 详情"),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(8.px()),
+                    .gap(8.px())
+                    .run_gap(6.px()),
                 ),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -315,28 +322,40 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     None,
                 )
             });
+            let wide_header = header_bar_with_title(
+                view_switcher(
+                    &[("组件", icons::EDIT), ("平台", icons::PALETTE)],
+                    1,
+                    |s: &mut GalleryState, idx| {
+                        s.active_tab = if idx == 0 {
+                            GalleryTab::Components
+                        } else {
+                            GalleryTab::Native
+                        };
+                    },
+                ),
+                vec![],
+                vec![
+                    primary_button("警告框", |s: &mut GalleryState| {
+                        s.overlays.show_platform_alert = true;
+                    })
+                    .boxed(),
+                ],
+            );
+            let compact_header = header_bar(
+                "平台",
+                None::<&str>,
+                vec![],
+                vec![
+                    primary_button("警告框", |s: &mut GalleryState| {
+                        s.overlays.show_platform_alert = true;
+                    })
+                    .boxed(),
+                ],
+            );
             flex_col((
                 title_medium("GNOME Adwaita"),
-                header_bar_with_title(
-                    view_switcher(
-                        &[("组件", icons::EDIT), ("平台", icons::PALETTE)],
-                        1,
-                        |s: &mut GalleryState, idx| {
-                            s.active_tab = if idx == 0 {
-                                GalleryTab::Components
-                            } else {
-                                GalleryTab::Native
-                            };
-                        },
-                    ),
-                    vec![],
-                    vec![
-                        primary_button("警告框", |s: &mut GalleryState| {
-                            s.overlays.show_platform_alert = true;
-                        })
-                        .boxed(),
-                    ],
-                ),
+                breakpoint_bin(340.0, wide_header, compact_header),
                 adw_banner,
                 view_switcher_bar(
                     &[

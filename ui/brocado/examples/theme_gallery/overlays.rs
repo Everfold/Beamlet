@@ -7,7 +7,7 @@ use masonry::widgets;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, flex_row, sized_box, zstack};
+use xilem_masonry::view::{CrossAxisAlignment, ZStackExt, flex_col, sized_box, zstack};
 
 use crate::state::GalleryState;
 
@@ -145,7 +145,7 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
             let _ = s.overlays.toasts.dismiss_current();
         }),
     )
-    .padding(Padding::all(16.px()))
+    .padding(Padding::all(8.px()))
     .alignment(UnitPoint::BOTTOM);
 
     let popover_overlay = (state.overlays.popover_open)
@@ -163,7 +163,7 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
                             s.overlays.popover_compact = v;
                         },
                     ),
-                    flex_row((
+                    wrap((
                         primary_button("应用", |s: &mut GalleryState| {
                             s.components.click_count += 1;
                             s.overlays.popover_open = false;
@@ -173,7 +173,8 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
                         }),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
-                    .gap(8.px()),
+                    .gap(8.px())
+                    .run_gap(6.px()),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Start)
                 .gap(10.px()),

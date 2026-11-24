@@ -58,37 +58,18 @@ fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         s.theme.reduced_motion = !s.theme.reduced_motion;
     });
 
-    let wide = sized_box(
-        flex_row((
+    sized_box(
+        wrap((
             seg(lang_idx),
             sel(state.accent_menu_open),
             dark_chip,
             rm_chip,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(10.px())
-        .padding(Padding::from_vh(8.px(), 16.px())),
-    );
-
-    let compact_dark = filter_chip("深色", is_dark, |s: &mut GalleryState| {
-        s.theme.toggle_brightness();
-    });
-    let compact_rm = filter_chip("减动效", is_rm, |s: &mut GalleryState| {
-        s.theme.reduced_motion = !s.theme.reduced_motion;
-    });
-    let compact = sized_box(
-        flex_col((
-            seg(lang_idx),
-            flex_row((sel(state.accent_menu_open), compact_dark, compact_rm))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(8.px()),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Start)
-        .gap(6.px())
-        .padding(Padding::from_vh(6.px(), 12.px())),
-    );
-
-    breakpoint_bin(520.0, wide, compact)
+        .gap(8.px())
+        .run_gap(6.px())
+        .padding(Padding::from_vh(6.px(), 10.px())),
+    )
 }
 
 fn active_page_body(
@@ -150,7 +131,7 @@ fn responsive_shell<S: WidgetView<GalleryState> + 'static>(
     let narrow_main = flex_col((
         switcher_bar(state),
         horizontal_divider(),
-        active_page_body(state, Padding::all(12.px())).flex(1.0),
+        active_page_body(state, Padding::all(8.px())).flex(1.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Stretch);
     let narrow = flex_col((narrow_main.flex(1.0), narrow_bottom_nav(state)))

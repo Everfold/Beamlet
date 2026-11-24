@@ -2204,3 +2204,263 @@ fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
         "unexpected accessibility issues: {a11y_issues:#?}"
     );
 }
+
+#[test]
+fn extreme_narrow_160px_all_components_ascii_stress() {
+    use brocado::prelude::*;
+    use masonry::layout::AsUnit;
+    use masonry::properties::Dimensions;
+    use xilem_masonry::style::Style as _;
+    use xilem_masonry::view::{CrossAxisAlignment, flex_col, portal, sized_box};
+
+    #[derive(Clone)]
+    struct StressState {
+        theme: UiTheme,
+        seg: usize,
+        tab: usize,
+        checked: bool,
+        tri: ToggleableState,
+        sw: bool,
+        slider: f64,
+        range: (f64, f64),
+        sel_idx: usize,
+        sel_open: bool,
+        popup_idx: usize,
+        popup_open: bool,
+        stepper_val: i32,
+        num_val: f64,
+        query: String,
+        text_val: String,
+        date: CalendarDate,
+        time: TimeOfDay,
+        show_dialog: bool,
+        toasts: ToastHostState,
+    }
+
+    for lang in DesignLanguage::ALL {
+        let mut init_toasts = ToastHostState::new();
+        init_toasts.show(
+            "SupercalifragilisticToastMessage",
+            Some("Undo"),
+            ToastDuration::Indefinite,
+            true,
+        );
+        let mut h = build_ui_harness(
+            StressState {
+                theme: UiTheme::new(lang, Brightness::Light),
+                seg: 0,
+                tab: 0,
+                checked: true,
+                tri: ToggleableState::Indeterminate,
+                sw: true,
+                slider: 0.4,
+                range: (20.0, 80.0),
+                sel_idx: 0,
+                sel_open: false,
+                popup_idx: 0,
+                popup_open: false,
+                stepper_val: 4,
+                num_val: 42.0,
+                query: String::new(),
+                text_val: String::from("https://example.invalid/very-long-segment"),
+                date: CalendarDate::new(2026, 11, 24),
+                time: TimeOfDay::new(9, 30),
+                show_dialog: true,
+                toasts: init_toasts,
+            },
+            |s| s.theme.clone(),
+            |s| {
+                let page = flex_col(vec![
+                    primary_button(
+                        "VeryLongUnbreakablePrimaryActionButton",
+                        |_: &mut StressState| {},
+                    )
+                    .boxed(),
+                    segmented_button(
+                        &["Overview", "Configuration", "Diagnostics"],
+                        s.seg,
+                        |st: &mut StressState, i| st.seg = i,
+                    )
+                    .boxed(),
+                    tabs(
+                        &["GeneralSettings", "Appearance", "Shortcuts"],
+                        s.tab,
+                        |st: &mut StressState, i| {
+                            st.tab = i;
+                        },
+                    )
+                    .boxed(),
+                    wrap((
+                        filter_chip("FilterOptionOne", s.checked, |st: &mut StressState| {
+                            st.checked = !st.checked;
+                        }),
+                        input_chip("RemovableVeryLongTagChip", |_: &mut StressState| {})
+                            .on_remove(|_: &mut StressState| {}),
+                    ))
+                    .gap(6.px())
+                    .run_gap(6.px())
+                    .boxed(),
+                    checkbox(
+                        "SupercalifragilisticCheckboxLabel",
+                        s.checked,
+                        |st: &mut StressState, v| {
+                            st.checked = v;
+                        },
+                    )
+                    .boxed(),
+                    tri_state_checkbox(
+                        "TriStateSynchronizationPreference",
+                        s.tri,
+                        |st: &mut StressState, next| st.tri = next,
+                    )
+                    .boxed(),
+                    form_row(
+                        "HardwareAccelerationSetting",
+                        switch(s.sw, |st: &mut StressState, v| st.sw = v),
+                    )
+                    .boxed(),
+                    clickable_list_item("SynchronizationDaemonEndpoint", |_: &mut StressState| {})
+                        .supporting_text("BackgroundReplicationWorkerServiceStatus")
+                        .boxed(),
+                    slider(0.0, 1.0, s.slider, None, |st: &mut StressState, v| {
+                        st.slider = v
+                    })
+                    .boxed(),
+                    range_slider(0.0, 100.0, s.range, |st: &mut StressState, r| st.range = r)
+                        .boxed(),
+                    linear_progress(Some(0.6)).boxed(),
+                    search_bar(s.query.clone(), |st: &mut StressState, q| st.query = q).boxed(),
+                    text_field(s.text_val.clone(), |st: &mut StressState, v| {
+                        st.text_val = v
+                    })
+                    .label("EndpointIdentifier")
+                    .boxed(),
+                    select(
+                        &["AutomaticallySelectedBackend", "Vulkan", "Metal"],
+                        s.sel_idx,
+                        s.sel_open,
+                        |st: &mut StressState| st.sel_open = !st.sel_open,
+                        |st: &mut StressState, i| {
+                            st.sel_idx = i;
+                            st.sel_open = false;
+                        },
+                        |st: &mut StressState| st.sel_open = false,
+                    )
+                    .boxed(),
+                    popup_button(
+                        &["AutomaticRendererChoice", "Software"],
+                        s.popup_idx,
+                        s.popup_open,
+                        |st: &mut StressState| st.popup_open = !st.popup_open,
+                        |st: &mut StressState, i| {
+                            st.popup_idx = i;
+                            st.popup_open = false;
+                        },
+                        |st: &mut StressState| st.popup_open = false,
+                    )
+                    .boxed(),
+                    stepper(
+                        "ColumnCountPreference",
+                        s.stepper_val,
+                        1,
+                        16,
+                        1,
+                        |st: &mut StressState, v| st.stepper_val = v,
+                    )
+                    .boxed(),
+                    number_box(s.num_val, 0.0, 100.0, 2.0, |st: &mut StressState, v| {
+                        st.num_val = v
+                    })
+                    .boxed(),
+                    settings_card(
+                        Some(icons::TUNE),
+                        "SupercalifragilisticSettingsCardTitle",
+                        Some("DetailedConfigurationDescriptionLine"),
+                        switch(s.sw, |st: &mut StressState, v| st.sw = v),
+                    )
+                    .boxed(),
+                    action_row(
+                        "AdwaitaActionRowHeading",
+                        Some("AdwaitaActionRowSubtitle"),
+                        Some(icons::SETTINGS),
+                        Some(switch(s.sw, |st: &mut StressState, v| st.sw = v)),
+                        None::<brocado::adwaita::components::ActionRowCallback<StressState, ()>>,
+                    )
+                    .boxed(),
+                    breadcrumb_bar(
+                        &["Workspace", "Preferences", "Appearance", "AccentColor"],
+                        |_: &mut StressState, _| {},
+                    )
+                    .boxed(),
+                    path_control(
+                        &[
+                            ("MacintoshHD", icons::FOLDER),
+                            ("BeamletProject", icons::CODE),
+                        ],
+                        |_: &mut StressState, _| {},
+                    )
+                    .boxed(),
+                    date_picker(s.date, |st: &mut StressState, d| st.date = d).boxed(),
+                    time_picker(s.time, |st: &mut StressState, t| st.time = t).boxed(),
+                    plain_tooltip(
+                        "SupercalifragilisticTooltipTextWrappingCheck",
+                        primary_button("HoverTipTarget", |_: &mut StressState| {}),
+                    )
+                    .boxed(),
+                ])
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(8.px());
+
+                let base =
+                    sized_box(portal(page).constrain_horizontal(true)).dims(Dimensions::STRETCH);
+                let dlg = s.show_dialog.then(|| {
+                    basic_dialog(
+                        "ConfirmSupercalifragilisticAction?",
+                        "ThisWillValidateLongTokenWrappingInsideModalCardsAt160px.",
+                        "Confirm",
+                        |st: &mut StressState| st.show_dialog = false,
+                        |st: &mut StressState| st.show_dialog = false,
+                    )
+                    .dismiss_text("Cancel")
+                });
+                let tst = toast_host(&s.toasts, |st: &mut StressState| {
+                    let _ = st.toasts.dismiss_current();
+                })
+                .on_action(|st: &mut StressState| {
+                    let _ = st.toasts.dismiss_current();
+                });
+
+                xilem_masonry::view::zstack((base, tst, dlg)).boxed()
+            },
+            PreviewConfig {
+                width: 1200,
+                height: 800,
+                ..PreviewConfig::default()
+            },
+        );
+
+        for &(w, ht) in &[(1200_u32, 800_u32), (200, 480), (160, 480), (1200, 800)] {
+            h.resize(w, ht);
+            h.settle_animations();
+            let tree = dump_layout_tree(&mut h);
+            let issues = lint_ui_layout(&tree, h.viewport());
+            let errors: Vec<_> = issues
+                .iter()
+                .filter(|i| i.severity == IssueSeverity::Error || i.kind == "overflow")
+                .collect();
+            assert!(
+                errors.is_empty(),
+                "[{lang:?}@{w}x{ht}] ASCII 160px stress errors/overflows: {errors:#?}"
+            );
+            let a11y_issues = lint_ui_accessibility(&mut h);
+            let a11y_errors: Vec<_> = a11y_issues
+                .iter()
+                .filter(|i| i.severity == IssueSeverity::Error)
+                .collect();
+            assert!(
+                a11y_errors.is_empty(),
+                "[{lang:?}@{w}x{ht}] ASCII stress a11y errors: {a11y_errors:#?}"
+            );
+        }
+    }
+}

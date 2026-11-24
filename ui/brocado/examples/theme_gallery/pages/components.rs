@@ -74,79 +74,64 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
     .cross_axis_alignment(CrossAxisAlignment::Start)
     .gap(12.px());
 
-    let btn_rows_narrow = flex_col((
-        flex_row((
-            primary_button("主要", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            })
-            .leading_icon(icons::ADD),
-            secondary_button("次要", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            }),
-            elevated_button("浮起", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            }),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
-        flex_row((
-            outlined_button("描边", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            }),
-            subtle_button("文本", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            }),
-            ripple_layer(primary_button("涟漪", |s: &mut GalleryState| {
-                s.components.click_count += 1;
-            }))
-            .corner_radius(20.px()),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
-        flex_row((
-            destructive_button("删除", |s: &mut GalleryState| {
-                s.overlays.show_destructive_dialog = true;
-            })
-            .leading_icon(icons::DELETE),
-            primary_button("禁用", |s: &mut GalleryState| {
-                s.components.click_count += 1
-            })
-            .disabled(true),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
-        flex_row((
-            icon_button(icons::FAVORITE, |s: &mut GalleryState| {
-                s.components.click_count += 1;
-            }),
-            filled_icon_button(icons::BOOKMARK, |s: &mut GalleryState| {
+    let btn_rows_narrow = wrap((
+        primary_button("主要", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        })
+        .leading_icon(icons::ADD),
+        secondary_button("次要", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        }),
+        elevated_button("浮起", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        }),
+        outlined_button("描边", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        }),
+        subtle_button("文本", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        }),
+        ripple_layer(primary_button("涟漪", |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        }))
+        .corner_radius(20.px()),
+        destructive_button("删除", |s: &mut GalleryState| {
+            s.overlays.show_destructive_dialog = true;
+        })
+        .leading_icon(icons::DELETE),
+        primary_button("禁用", |s: &mut GalleryState| {
+            s.components.click_count += 1
+        })
+        .disabled(true),
+        icon_button(icons::FAVORITE, |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        }),
+        filled_icon_button(icons::BOOKMARK, |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        }),
+        tonal_icon_button(icons::SETTINGS, |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        }),
+        outlined_icon_button(icons::SEARCH, |s: &mut GalleryState| {
+            s.components.click_count += 1;
+        }),
+        with_badge(
+            icon_button(icons::NOTIFICATIONS, |s: &mut GalleryState| {
                 s.components.click_count += 1;
             }),
-            tonal_icon_button(icons::SETTINGS, |s: &mut GalleryState| {
-                s.components.click_count += 1;
-            }),
-            outlined_icon_button(icons::SEARCH, |s: &mut GalleryState| {
-                s.components.click_count += 1;
-            }),
-            with_badge(
-                icon_button(icons::NOTIFICATIONS, |s: &mut GalleryState| {
-                    s.components.click_count += 1;
-                }),
-                Some(large_badge(format!("{clicks}"))),
-            ),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
+            Some(large_badge(format!("{clicks}"))),
+        ),
     ))
-    .cross_axis_alignment(CrossAxisAlignment::Start)
-    .gap(8.px());
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(8.px())
+    .run_gap(8.px());
 
     let buttons_card = elevated_card(
         flex_col((
             title_medium("按钮"),
             breakpoint_bin(480.0, btn_rows_wide, btn_rows_narrow),
         ))
-        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),
     );
 
@@ -168,12 +153,7 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
             .collect::<Vec<_>>()
     };
     let tag_chips_wide = make_tag_chips();
-    let mut tag_chips_narrow = make_tag_chips();
-    let tag_row_2 = if tag_chips_narrow.len() > 2 {
-        tag_chips_narrow.split_off(2)
-    } else {
-        Vec::new()
-    };
+    let tag_chips_narrow = make_tag_chips();
 
     let make_action_chips = || {
         (
@@ -225,34 +205,20 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
                 flex_row((ac_w, fa_w, fb_w, sc_w))
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(8.px()),
-                flex_col((
-                    flex_row((ac_n, fa_n))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(8.px()),
-                    flex_row((fb_n, sc_n))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(8.px()),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .gap(6.px()),
+                wrap((ac_n, fa_n, fb_n, sc_n))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px())
+                    .run_gap(6.px()),
             ),
             breakpoint_bin(
                 440.0,
                 flex_row(tag_chips_wide)
                     .cross_axis_alignment(CrossAxisAlignment::Center)
                     .gap(8.px()),
-                flex_col((
-                    flex_row(tag_chips_narrow)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(8.px()),
-                    (!tag_row_2.is_empty()).then(|| {
-                        flex_row(tag_row_2)
-                            .cross_axis_alignment(CrossAxisAlignment::Center)
-                            .gap(8.px())
-                    }),
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Start)
-                .gap(6.px()),
+                wrap(tag_chips_narrow)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px())
+                    .run_gap(6.px()),
             ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -317,7 +283,7 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
     let selection_and_progress_card = elevated_card(
         flex_col((
             title_medium("选择与进度"),
-            flex_row((
+            wrap((
                 checkbox("同意协议", c.agree_terms, |s: &mut GalleryState, v| {
                     s.components.agree_terms = v;
                 }),
@@ -329,7 +295,8 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
                 }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(16.px()),
+            .gap(10.px())
+            .run_gap(8.px()),
             radio_group(vec![
                 radio("标准", choice == 0, |s: &mut GalleryState| {
                     s.components.radio_choice = 0;
@@ -342,7 +309,7 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
                 s.components.slider_val = v;
             }),
             linear_progress(Some(prog)),
-            flex_row((
+            wrap((
                 determinate_circular_progress(prog),
                 circular_progress(),
                 small_circular_progress(),
@@ -354,7 +321,8 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
                 )),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(14.px()),
+            .gap(10.px())
+            .run_gap(8.px()),
             range_slider(0.0, 100.0, range, |s: &mut GalleryState, next| {
                 s.components.range_val = next;
             }),

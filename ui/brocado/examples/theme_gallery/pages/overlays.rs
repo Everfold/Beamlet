@@ -99,54 +99,39 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
         )
     };
 
-    let wide_triggers = flex_col((
-        flex_row((
-            basic_btn("基础弹窗"),
-            native_alert_btn("原生警告"),
-            delete_btn("危险确认"),
-            bottom_sheet_btn("底抽屉"),
-            side_sheet_btn("侧抽屉"),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(10.px()),
-        flex_row((
-            date_btn("日期弹窗"),
-            time_btn("时间弹窗"),
-            toast_btn("轻提示"),
-            popover_btn(),
-            plain_tip_btn(),
-            rich_tip_btn(),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(10.px()),
+    let wide_triggers = wrap((
+        basic_btn("基础弹窗"),
+        native_alert_btn("原生警告"),
+        delete_btn("危险确认"),
+        bottom_sheet_btn("底抽屉"),
+        side_sheet_btn("侧抽屉"),
+        date_btn("日期弹窗"),
+        time_btn("时间弹窗"),
+        toast_btn("轻提示"),
+        popover_btn(),
+        plain_tip_btn(),
+        rich_tip_btn(),
     ))
-    .cross_axis_alignment(CrossAxisAlignment::Start)
-    .gap(12.px());
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(10.px())
+    .run_gap(10.px());
 
-    let narrow_triggers = flex_col((
-        flex_row((
-            basic_btn("基础弹窗"),
-            native_alert_btn("原生警告"),
-            delete_btn("危险确认"),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
-        flex_row((
-            bottom_sheet_btn("底抽屉"),
-            side_sheet_btn("侧抽屉"),
-            toast_btn("轻提示"),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(8.px()),
-        flex_row((date_btn("日期弹窗"), time_btn("时间弹窗"), popover_btn()))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px()),
-        flex_row((plain_tip_btn(), rich_tip_btn()))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px()),
+    let narrow_triggers = wrap((
+        basic_btn("基础弹窗"),
+        native_alert_btn("原生警告"),
+        delete_btn("危险确认"),
+        bottom_sheet_btn("底抽屉"),
+        side_sheet_btn("侧抽屉"),
+        toast_btn("轻提示"),
+        date_btn("日期弹窗"),
+        time_btn("时间弹窗"),
+        popover_btn(),
+        plain_tip_btn(),
+        rich_tip_btn(),
     ))
-    .cross_axis_alignment(CrossAxisAlignment::Start)
-    .gap(8.px());
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(6.px())
+    .run_gap(6.px());
 
     let ctx_status = state
         .overlays
@@ -181,7 +166,7 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
             title_medium("弹窗、抽屉与提示"),
             breakpoint_bin(520.0, wide_triggers, narrow_triggers),
         ))
-        .cross_axis_alignment(CrossAxisAlignment::Start)
+        .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(12.px()),
     );
 

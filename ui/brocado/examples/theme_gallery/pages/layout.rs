@@ -3,7 +3,7 @@
 use brocado::prelude::*;
 use brocado::tokens::{SPACE_4, SPACE_8, SPACE_12, SPACE_16, SPACE_24};
 use masonry::layout::{AsUnit, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::properties::{Dimensions, LineBreaking, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
@@ -54,11 +54,13 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
             with_spec(move |spec: &DesignSpec, _| {
                 let p = &spec.palette;
                 let cell = |title: &'static str, bg: masonry::peniko::Color| {
-                    sized_box(title_small(title))
-                        .padding(Padding::all(12.px()))
-                        .background_color(bg)
-                        .border(p.border, 1.px())
-                        .corner_radius(spec.metrics.card_radius.px())
+                    sized_box(clip_box(
+                        title_small(title).line_breaking(LineBreaking::Clip),
+                    ))
+                    .padding(Padding::all(8.px()))
+                    .background_color(bg)
+                    .border(p.border, 1.px())
+                    .corner_radius(spec.metrics.card_radius.px())
                 };
                 flex_row((
                     cell("1x", p.surface_container).flex(1.0),
@@ -117,8 +119,8 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let breakpoint_lab = outlined_card(
         flex_col((
-            flex_row((
-                title_medium("BreakpointBin 断点 (520px)").flex(1.0),
+            adaptive_pair(
+                title_medium("BreakpointBin 断点 (520px)"),
                 filter_chip(
                     "模拟窄屏 420px",
                     state.layout.simulate_compact,
@@ -126,9 +128,10 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                         s.layout.simulate_compact = !s.layout.simulate_compact;
                     },
                 ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px()),
+            )
+            .gap(10.px())
+            .run_gap(8.px())
+            .min_leading(56.0),
             adaptive_container,
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -224,26 +227,34 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
         .gap(10.px()),
     );
 
+    let make_split = |axis: brocado::kurbo::Axis| {
+        split_view(
+            filled_card(
+                flex_col((title_small("主视图"), body_small("可拖拽分割线调节占比")))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(4.px()),
+            ),
+            outlined_card(
+                flex_col((title_small("辅助面板"), body_small("最小宽度 60px")))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(4.px()),
+            ),
+        )
+        .axis(axis)
+        .split_point(0.45)
+        .min_lengths(60.px(), 60.px())
+    };
+
     let split_lab = elevated_card(
         flex_col((
             title_medium("SplitView 可拖拽分栏"),
-            sized_box(
-                split_view(
-                    filled_card(
-                        flex_col((title_small("主视图"), body_small("可拖拽分割线调节占比")))
-                            .cross_axis_alignment(CrossAxisAlignment::Start)
-                            .gap(4.px()),
-                    ),
-                    outlined_card(
-                        flex_col((title_small("辅助面板"), body_small("最小宽度 60px")))
-                            .cross_axis_alignment(CrossAxisAlignment::Start)
-                            .gap(4.px()),
-                    ),
-                )
-                .split_point(0.45)
-                .min_lengths(60.px(), 60.px()),
-            )
-            .dims(Dimensions::height(120.px())),
+            breakpoint_bin(
+                280.0,
+                sized_box(make_split(brocado::kurbo::Axis::Horizontal))
+                    .dims(Dimensions::height(120.px())),
+                sized_box(make_split(brocado::kurbo::Axis::Vertical))
+                    .dims(Dimensions::height(220.px())),
+            ),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(10.px()),

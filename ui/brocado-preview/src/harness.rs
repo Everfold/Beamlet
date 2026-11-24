@@ -8,7 +8,8 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+use std::process::Command;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use anyhow::{Context as _, bail};
@@ -21,7 +22,7 @@ use masonry::core::{
 };
 use masonry::dpi::PhysicalSize;
 use masonry::kurbo::Point;
-use masonry::peniko::Color;
+use masonry::peniko::{Blob, Color};
 use masonry::theme::{BACKGROUND_COLOR, default_property_set};
 use masonry::widgets::Passthrough;
 use masonry_testing::{TestHarness, TestHarnessParams};
@@ -411,7 +412,9 @@ impl<State: 'static> PreviewHarness<State> {
     }
 
     fn move_pointer_to_widget(&mut self, id: WidgetId) {
-        let center = {
+        let center = if let Some((x, y, w, h)) = self.ensure_widget_visible_rect(id) {
+            Point::new(x + w * 0.5, y + h * 0.5)
+        } else {
             let w = self.harness.get_widget_with_id(id);
             w.ctx().window_transform() * w.ctx().border_box().center()
         };
@@ -510,9 +513,76 @@ impl<State: 'static> PreviewHarness<State> {
         let _ = self.harness.redraw();
     }
 
+    /// Registers custom font bytes (TTF/OTF/TTC) into Masonry's `FontContext` and redraws.
+    pub fn register_font_bytes(&mut self, bytes: Vec<u8>) -> usize {
+        let count = self
+            .harness
+            .render_root()
+            .register_fonts(Blob::from(bytes))
+            .len();
+        let _ = self.harness.redraw();
+        count
+    }
+
+    /// Registers a system CJK sans font fallback if available (via `BROCADO_TEST_CJK_FONT` or `fc-match`).
+    ///
+    /// Upstream `masonry_testing::TestHarness` sets `use_system_fonts: false` with Latin-only
+    /// `ROBOTO`, which collapses CJK glyphs to `0px`. Calling this in tests loads a real
+    /// system CJK font once per process so Chinese text measures and rasterizes faithfully.
+    pub fn register_system_cjk_fallback(&mut self) -> bool {
+        static CACHED_CJK_FONT: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+        let bytes = CACHED_CJK_FONT.get_or_init(|| {
+            if let Ok(path) = std::env::var("BROCADO_TEST_CJK_FONT")
+                && let Ok(data) = fs::read(path)
+            {
+                return Some(data);
+            }
+            for pattern in [
+                "Sarasa UI SC",
+                "Microsoft YaHei UI",
+                "Noto Sans CJK SC",
+                "PingFang SC",
+                ":lang=zh",
+            ] {
+                let Ok(out) = Command::new("fc-match")
+                    .args(["-f", "%{file}", pattern])
+                    .output()
+                else {
+                    break;
+                };
+                if !out.status.success() {
+                    continue;
+                }
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if path.is_empty() {
+                    continue;
+                }
+                if let Ok(data) = fs::read(&path) {
+                    return Some(data);
+                }
+            }
+            None
+        });
+        let Some(data) = bytes else {
+            return false;
+        };
+        self.register_font_bytes(data.clone()) > 0
+    }
+
     /// Rasterizes the current widget tree on CPU using `vello_cpu`.
     pub fn render_image(&mut self) -> RgbaImage {
-        self.harness.render()
+        let img = self.harness.render();
+        let target_w = ((f64::from(self.config.width) * self.config.scale_factor).round() as u32)
+            .max(1)
+            .min(img.width());
+        let target_h = ((f64::from(self.config.height) * self.config.scale_factor).round() as u32)
+            .max(1)
+            .min(img.height());
+        if img.width() != target_w || img.height() != target_h {
+            image::imageops::crop_imm(&img, 0, 0, target_w, target_h).to_image()
+        } else {
+            img
+        }
     }
 
     /// Rasterizes the current frame and writes a PNG file at `path`.
