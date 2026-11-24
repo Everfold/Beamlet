@@ -16,6 +16,9 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
+use crate::style_engine::current_spec_arc;
+use crate::tokens::TypeRole;
+
 /// Masonry single-child layout constraint box supporting `min_width`, `max_width`,
 /// `min_height`, `max_height`, and optional `fill_max_width`.
 #[expect(
@@ -282,6 +285,7 @@ pub struct ConstrainedBoxView<V, State, Action> {
     max_width: f64,
     min_height: f64,
     max_height: f64,
+    min_height_role: Option<(TypeRole, f64, f64)>,
     fill_max_width: bool,
     phantom: PhantomData<fn(State) -> Action>,
 }
@@ -294,6 +298,7 @@ pub fn constrained_box<State, Action, V>(child: V) -> ConstrainedBoxView<V, Stat
         max_width: f64::INFINITY,
         min_height: 0.0,
         max_height: f64::INFINITY,
+        min_height_role: None,
         fill_max_width: false,
         phantom: PhantomData,
     }
@@ -318,6 +323,12 @@ impl<V, State, Action> ConstrainedBoxView<V, State, Action> {
         self
     }
 
+    /// Derives minimum height from `max(floor, spec.typography.get(role).line_height + extra_pad)`.
+    pub fn min_height_from_role(mut self, role: TypeRole, extra_pad: f64, floor: f64) -> Self {
+        self.min_height_role = Some((role, extra_pad, floor));
+        self
+    }
+
     /// Sets the maximum logical height in pixels.
     pub fn max_height(mut self, height: f64) -> Self {
         self.max_height = height.max(0.0);
@@ -328,6 +339,16 @@ impl<V, State, Action> ConstrainedBoxView<V, State, Action> {
     pub fn fill_max_width(mut self, fill: bool) -> Self {
         self.fill_max_width = fill;
         self
+    }
+
+    fn effective_min_height(&self, ctx: &ViewCtx) -> f64 {
+        let role_h = self
+            .min_height_role
+            .map_or(0.0, |(role, extra_pad, floor)| {
+                let spec = current_spec_arc(ctx);
+                floor.max(f64::from(spec.typography.get(role).line_height) + extra_pad)
+            });
+        self.min_height.max(role_h)
     }
 }
 
@@ -343,12 +364,13 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let min_h = self.effective_min_height(ctx);
         let (child_pod, state) = self.child.build(ctx, app_state);
         let pod = ctx.create_pod(ConstrainedBox::new(
             child_pod.new_widget,
             self.min_width,
             self.max_width,
-            self.min_height,
+            min_h,
             self.max_height,
             self.fill_max_width,
         ));
@@ -363,11 +385,12 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
+        let min_h = self.effective_min_height(ctx);
         ConstrainedBox::set_constraints(
             &mut element,
             self.min_width,
             self.max_width,
-            self.min_height,
+            min_h,
             self.max_height,
             self.fill_max_width,
         );

@@ -280,8 +280,7 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
         }
     };
 
-    sized_box(body)
-        .dims(Dimensions::height(height.px()))
+    sized_box(constrained_box(body).min_height_from_role(TypeRole::TitleLarge, 20.0, height))
         .ui_class(classes::HEADER_BAR)
 }
 

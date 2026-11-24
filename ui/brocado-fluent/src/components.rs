@@ -403,14 +403,18 @@ fn nav_view_compact_item<State: 'static, Action: 'static>(
     } else {
         classes::NAV_PILL
     };
+    let min_inner_h =
+        (36.0_f64.max(f64::from(spec.typography.label_large.line_height) + 12.0) - 12.0).max(16.0);
     button(
-        flex_row((bar, ui_icon(dest.icon, 16.0, icon_color)))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(6.px()),
+        constrained_box(
+            flex_row((bar, ui_icon(dest.icon, 16.0, icon_color)))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(6.px()),
+        )
+        .min_height(min_inner_h),
         move |s: &mut State| cb(s, index),
     )
     .ui_class(cls)
-    .dims(Dimensions::height(36.px()))
     .padding(Padding::from_vh(6.px(), 4.px()))
     .boxed()
 }

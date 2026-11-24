@@ -12,8 +12,8 @@ use brocado_core::components::selection::switch;
 use brocado_core::components::typography::ui_label;
 use brocado_core::foundation::{
     EscapeCatcher, FocusFrame, ModalAxisSizing, ModalShellConfig, ModalShellState, UiClassExt,
-    adaptive_pair, clip_box, focus_frame, icons, modal_shell_build, modal_shell_message,
-    modal_shell_rebuild, modal_shell_teardown, ui_icon, wrap,
+    adaptive_pair, clip_box, constrained_box, focus_frame, icons, modal_shell_build,
+    modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon, wrap,
 };
 use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
 use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
@@ -26,7 +26,7 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size, Vec2};
 use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, UnitPoint};
-use masonry::properties::{Dimensions, LineBreaking, Padding};
+use masonry::properties::{LineBreaking, Padding};
 use masonry::widgets;
 use tracing::{Span, trace_span};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
@@ -51,24 +51,26 @@ where
 {
     flex_col((
         sized_box(
-            flex_row((
-                (!start_actions.is_empty()).then(|| {
-                    flex_row(start_actions)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(4.px())
-                }),
-                clip_box(title_view).fill_available(true).flex(1.0),
-                (!end_actions.is_empty()).then(|| {
-                    flex_row(end_actions)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(4.px())
-                }),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(4.px())
-            .padding(Padding::from_vh(6.px(), 6.px())),
+            constrained_box(
+                flex_row((
+                    (!start_actions.is_empty()).then(|| {
+                        flex_row(start_actions)
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(4.px())
+                    }),
+                    clip_box(title_view).fill_available(true).flex(1.0),
+                    (!end_actions.is_empty()).then(|| {
+                        flex_row(end_actions)
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(4.px())
+                    }),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(4.px())
+                .padding(Padding::from_vh(6.px(), 6.px())),
+            )
+            .min_height_from_role(TypeRole::TitleMedium, 18.0, 46.0),
         )
-        .dims(Dimensions::height(46.px()))
         .ui_class(classes::HEADER_BAR),
         horizontal_divider(),
     ))
@@ -556,13 +558,16 @@ where
             })
             .collect();
 
+        let min_h = 56.0_f64.max(f64::from(spec.typography.label_small.line_height) + 28.0);
         sized_box(
-            flex_row(views)
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(2.px())
-                .padding(Padding::from_vh(4.px(), 4.px())),
+            constrained_box(
+                flex_row(views)
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(2.px())
+                    .padding(Padding::from_vh(4.px(), 4.px())),
+            )
+            .min_height(min_h),
         )
-        .dims(Dimensions::height(56.px()))
         .ui_class(classes::HEADER_BAR)
     });
 

@@ -142,10 +142,12 @@ pub struct UiTheme {
     pub accent: UiAccent,
     /// Elevated contrast tier (mainly strengthens MD3 tonal contrast).
     pub high_contrast: bool,
-    /// Disables entrance/transition motion durations and spatial offsets when `true`.
+    /// Enables accessibility reduced-motion preference.
     pub reduced_motion: bool,
     /// Optional font family / fallback stack overriding the OS system UI default (`None` uses `system-ui`).
     pub font_family: Option<FontFamily<'static>>,
+    /// Global typography scaling factor (`1.0` baseline; clamped to `0.5..=3.0`).
+    pub font_scale: f32,
 }
 
 impl UiTheme {
@@ -171,6 +173,7 @@ impl UiTheme {
             high_contrast: false,
             reduced_motion: false,
             font_family: None,
+            font_scale: 1.0,
         }
     }
 
@@ -241,6 +244,13 @@ impl UiTheme {
     #[must_use]
     pub fn with_system_font(mut self) -> Self {
         self.font_family = None;
+        self
+    }
+
+    /// Uniformly scales typography sizes and line heights (clamped to `0.5..=3.0`).
+    #[must_use]
+    pub fn with_font_scale(mut self, scale: f32) -> Self {
+        self.font_scale = scale.clamp(0.5, 3.0);
         self
     }
 
@@ -358,6 +368,9 @@ impl UiTheme {
         };
         if let Some(font) = &self.font_family {
             spec.typography = spec.typography.with_font_family(font.clone());
+        }
+        if (self.font_scale - 1.0).abs() > f32::EPSILON {
+            spec.typography = spec.typography.scaled(self.font_scale);
         }
         spec
     }

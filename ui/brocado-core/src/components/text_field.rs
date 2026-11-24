@@ -34,6 +34,10 @@ pub enum TextFieldVariant {
     Filled,
 }
 
+/// Matches Masonry's `default_text_styles` (`LineHeight::FontSizeRelative(1.2)`) used by
+/// `TextInput` / `TextArea` so prefix/suffix labels share identical vertical metrics and baselines.
+const TEXT_INPUT_LINE_HEIGHT: LineHeight = LineHeight::FontSizeRelative(1.2);
+
 /// Callback type invoked when text content changes.
 pub type TextChangeCallback<State, Action> =
     Arc<dyn Fn(&mut State, String) -> Action + Send + Sync>;
@@ -182,13 +186,13 @@ impl<State, Action> UiTextField<State, Action> {
             let sub_ink = spec.content_color(p.text_secondary, self.disabled);
             let prefix = self.prefix_text.as_ref().map(|t| {
                 ui_label(TypeRole::BodyMedium, t.clone())
-                    .line_height(LineHeight::FontSizeRelative(1.2))
+                    .line_height(TEXT_INPUT_LINE_HEIGHT)
                     .color(sub_ink)
                     .line_breaking(LineBreaking::Clip)
             });
             let suffix = self.suffix_text.as_ref().map(|t| {
                 ui_label(TypeRole::BodyMedium, t.clone())
-                    .line_height(LineHeight::FontSizeRelative(1.2))
+                    .line_height(TEXT_INPUT_LINE_HEIGHT)
                     .color(sub_ink)
                     .line_breaking(LineBreaking::Clip)
             });

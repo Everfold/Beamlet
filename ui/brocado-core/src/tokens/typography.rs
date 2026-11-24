@@ -74,6 +74,16 @@ impl TextStyleSpec {
             weight,
         }
     }
+
+    /// Scales font size and line height proportionally by `factor`.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        Self {
+            font_size: self.font_size * factor,
+            line_height: self.line_height * factor,
+            ..self
+        }
+    }
 }
 
 /// Full 15-slot typography scale shared by [`DesignSpec`](crate::tokens::DesignSpec).
@@ -392,6 +402,31 @@ impl TypeScale {
             )))
     }
 
+    /// Uniformly scales font sizes and line heights across all 15 roles by `factor` (clamped to `0.5..=3.0`),
+    /// preserving any configured font family fallback chain.
+    #[must_use]
+    pub fn scaled(self, factor: f32) -> Self {
+        let f = factor.clamp(0.5, 3.0);
+        Self {
+            display_large: self.display_large.scaled(f),
+            display_medium: self.display_medium.scaled(f),
+            display_small: self.display_small.scaled(f),
+            headline_large: self.headline_large.scaled(f),
+            headline_medium: self.headline_medium.scaled(f),
+            headline_small: self.headline_small.scaled(f),
+            title_large: self.title_large.scaled(f),
+            title_medium: self.title_medium.scaled(f),
+            title_small: self.title_small.scaled(f),
+            body_large: self.body_large.scaled(f),
+            body_medium: self.body_medium.scaled(f),
+            body_small: self.body_small.scaled(f),
+            label_large: self.label_large.scaled(f),
+            label_medium: self.label_medium.scaled(f),
+            label_small: self.label_small.scaled(f),
+            font_family: self.font_family,
+        }
+    }
+
     /// Looks up the [`TextStyleSpec`] for a given [`TypeRole`].
     #[must_use]
     pub const fn get(&self, role: TypeRole) -> TextStyleSpec {
@@ -530,5 +565,30 @@ mod tests {
         let reset = appended_existing.with_system_font();
         assert!(reset.font_family().is_none());
         assert_eq!(reset.resolved_font_family(), system_ui);
+    }
+
+    #[test]
+    fn type_scale_scaled_scales_sizes_and_line_heights() {
+        let base = TypeScale::md3().with_font_stack("sans-serif");
+        let scaled = base.clone().scaled(1.5);
+        assert_eq!(
+            scaled.body_medium.font_size,
+            base.body_medium.font_size * 1.5
+        );
+        assert_eq!(
+            scaled.body_medium.line_height,
+            base.body_medium.line_height * 1.5
+        );
+        assert_eq!(
+            scaled.title_large.font_size,
+            base.title_large.font_size * 1.5
+        );
+        assert_eq!(scaled.font_family(), base.font_family());
+
+        let clamped = TypeScale::md3().scaled(10.0);
+        assert_eq!(
+            clamped.body_medium.font_size,
+            base.body_medium.font_size * 3.0
+        );
     }
 }

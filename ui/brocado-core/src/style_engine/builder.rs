@@ -85,8 +85,21 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     let mut stack = PropertyStack::new();
     let p = &spec.palette;
     let m = &spec.metrics;
+    let t = &spec.typography;
+    let eff_btn_h = m
+        .button_height
+        .max(f64::from(t.label_large.line_height) + 10.0);
+    let eff_icon_sz = m
+        .icon_btn_size
+        .max(f64::from(t.label_large.line_height) + 10.0);
+    let eff_fab_h = (m.button_height + 16.0)
+        .max(56.0)
+        .max(f64::from(t.label_large.line_height) + 20.0);
+    let eff_chip_h = m
+        .chip_height
+        .max(f64::from(t.label_large.line_height) + 8.0);
     let std_pad = Padding::from_vh(0.px(), m.button_pad_h.px());
-    let btn_dims = Some(Dimensions::height(m.button_height.px()));
+    let btn_dims = Some(Dimensions::height(eff_btn_h.px()));
 
     insert_button_variant(
         &mut stack,
@@ -166,10 +179,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         None,
     );
 
-    let icon_dims = Some(Dimensions::fixed(
-        m.icon_btn_size.px(),
-        m.icon_btn_size.px(),
-    ));
+    let icon_dims = Some(Dimensions::fixed(eff_icon_sz.px(), eff_icon_sz.px()));
     let icon_pad = Padding::ZERO;
     insert_button_variant(
         &mut stack,
@@ -269,7 +279,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     );
 
     let fab_pad = Padding::all(16.px());
-    let fab_dims = Some(Dimensions::height(56.px()));
+    let fab_dims = Some(Dimensions::height(eff_fab_h.px()));
     let fab_shadow = Some(spec.box_shadow(ElevationLevel::Level3));
     for (cls, bg, fg) in [
         (
@@ -295,7 +305,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     }
 
     let chip_pad = Padding::from_vh(0.px(), 12.px());
-    let chip_dims = Some(Dimensions::height(m.chip_height.px()));
+    let chip_dims = Some(Dimensions::height(eff_chip_h.px()));
     insert_button_variant(
         &mut stack,
         classes::CHIP_ASSIST,
@@ -622,9 +632,15 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(BorderWidth { width: 0.px() })
             .with(Padding::from_vh(2.px(), 6.px())),
     );
+    let eff_chip_h = m
+        .chip_height
+        .max(f64::from(spec.typography.label_large.line_height) + 8.0);
+    let eff_search_h = m
+        .search_height
+        .max(f64::from(spec.typography.body_medium.line_height) + 12.0);
     sized_stack.push_layer(
         Selector::classes(&[classes::CHIP_ROW]),
-        PropertySet::new().with(Dimensions::height(m.chip_height.px())),
+        PropertySet::new().with(Dimensions::height(eff_chip_h.px())),
     );
     props.insert_stack::<SizedBox>(sized_stack);
 
@@ -638,7 +654,7 @@ fn configure_surfaces(props: &mut DefaultProperties, spec: &DesignSpec) {
             .with(CornerRadius {
                 radius: m.search_radius.px(),
             })
-            .with(Dimensions::height(m.search_height.px())),
+            .with(Dimensions::height(eff_search_h.px())),
     );
     props.insert_stack::<FocusFrame>(focus_stack);
 }

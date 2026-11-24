@@ -43,24 +43,26 @@ where
 {
     flex_col((
         sized_box(
-            flex_row((
-                (!leading_actions.is_empty()).then(|| {
-                    flex_row(leading_actions)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(4.px())
-                }),
-                clip_box(center).fill_available(true).flex(1.0),
-                (!trailing_actions.is_empty()).then(|| {
-                    flex_row(trailing_actions)
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(4.px())
-                }),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(4.px())
-            .padding(Padding::from_vh(4.px(), 6.px())),
+            constrained_box(
+                flex_row((
+                    (!leading_actions.is_empty()).then(|| {
+                        flex_row(leading_actions)
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(4.px())
+                    }),
+                    clip_box(center).fill_available(true).flex(1.0),
+                    (!trailing_actions.is_empty()).then(|| {
+                        flex_row(trailing_actions)
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(4.px())
+                    }),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Center)
+                .gap(4.px())
+                .padding(Padding::from_vh(4.px(), 6.px())),
+            )
+            .min_height_from_role(TypeRole::TitleSmall, 14.0, 38.0),
         )
-        .dims(Dimensions::height(38.px()))
         .ui_class(classes::HEADER_BAR),
         horizontal_divider(),
     ))

@@ -209,6 +209,13 @@ where
         .run_gap(6.px())
         .min_leading(48.0);
 
+        let cell_sz = (f64::from(spec.typography.body_small.font_size) * 2.5)
+            .ceil()
+            .max(30.0);
+        let wd_h = (f64::from(spec.typography.label_small.line_height) + 8.0)
+            .ceil()
+            .max(24.0);
+
         let weekday_row = flex_row(
             ["S", "M", "T", "W", "T", "F", "S"]
                 .into_iter()
@@ -218,7 +225,7 @@ where
                         .color(p.text_secondary)
                         .line_breaking(LineBreaking::Clip)
                         .alignment(masonry::layout::UnitPoint::CENTER),)))
-                    .dims(Dimensions::fixed(30.px(), 24.px()))
+                    .dims(Dimensions::fixed(cell_sz.px(), wd_h.px()))
                 })
                 .collect::<Vec<_>>(),
         )
@@ -243,7 +250,7 @@ where
                     .iter()
                     .map(|cell| match cell {
                         None => sized_box(label(""))
-                            .dims(Dimensions::fixed(30.px(), 30.px()))
+                            .dims(Dimensions::fixed(cell_sz.px(), cell_sz.px()))
                             .boxed(),
                         Some(d) => {
                             let d = *d;
@@ -264,10 +271,10 @@ where
                                     move |s: &mut State| cb_d(s, target),
                                 )
                                 .ui_class(cls)
-                                .dims(Dimensions::fixed(30.px(), 30.px()))
+                                .dims(Dimensions::fixed(cell_sz.px(), cell_sz.px()))
                                 .padding(Padding::all(0.px())),
                             )
-                            .dims(Dimensions::fixed(30.px(), 30.px()))
+                            .dims(Dimensions::fixed(cell_sz.px(), cell_sz.px()))
                             .boxed()
                         }
                     })
@@ -359,6 +366,12 @@ where
         let am_cb = cb.clone();
         let pm_cb = cb.clone();
 
+        let headline = spec.typography.headline_small;
+        let box_w = (f64::from(headline.font_size) * 2.08).round().max(50.0);
+        let box_h = (f64::from(headline.line_height) + 14.0).round().max(46.0);
+        let step_h = (box_h * 0.6).round().max(28.0);
+        let step_w = (step_h + 4.0).round().max(32.0);
+
         let step_btn =
             |path: &'static str, on_click: Arc<dyn Fn(&mut State) -> Action + Send + Sync>| {
                 button(
@@ -366,7 +379,7 @@ where
                     move |s: &mut State| on_click(s),
                 )
                 .ui_class(classes::ICON_BTN_STD)
-                .dims(Dimensions::fixed(32.px(), 28.px()))
+                .dims(Dimensions::fixed(step_w.px(), step_h.px()))
                 .padding(Padding::all(0.px()))
             };
 
@@ -382,7 +395,7 @@ where
             .color(p.on_accent_container)
             .line_breaking(LineBreaking::Clip)
             .alignment(masonry::layout::UnitPoint::CENTER),)))
-            .dims(Dimensions::fixed(50.px(), 46.px()))
+            .dims(Dimensions::fixed(box_w.px(), box_h.px()))
             .background_color(p.accent_container)
             .corner_radius(spec.metrics.card_radius.px()),
             step_btn(
@@ -409,7 +422,7 @@ where
             .color(p.text_primary)
             .line_breaking(LineBreaking::Clip)
             .alignment(masonry::layout::UnitPoint::CENTER),)))
-            .dims(Dimensions::fixed(50.px(), 46.px()))
+            .dims(Dimensions::fixed(box_w.px(), box_h.px()))
             .background_color(p.surface_highest)
             .corner_radius(spec.metrics.card_radius.px()),
             step_btn(
