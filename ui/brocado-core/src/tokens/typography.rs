@@ -615,4 +615,20 @@ mod tests {
             base.body_medium.font_size * 3.0
         );
     }
+
+    #[test]
+    fn md3_expressive_type_scale_uses_emphasized_weights() {
+        let base = TypeScale::md3();
+        let exp = TypeScale::md3_expressive();
+        assert!(exp.font_family().is_none());
+        assert_eq!(exp.display_large.weight, FontWeight::BOLD);
+        assert_eq!(exp.display_medium.weight, FontWeight::BOLD);
+        assert_eq!(exp.headline_large.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(exp.title_medium.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(exp.label_large.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(exp.body_medium.weight, FontWeight::NORMAL);
+        assert!(exp.display_large.weight > base.display_large.weight);
+        assert!(exp.headline_large.weight > base.headline_large.weight);
+        assert!(exp.label_large.weight > base.label_large.weight);
+    }
 }

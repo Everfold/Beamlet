@@ -4,7 +4,10 @@
 use brocado::prelude::*;
 use brocado_preview::diff::{ImageDiffTolerance, compare_images};
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use brocado_preview::inspect::{LayoutNode, dump_layout_tree, lint_layout};
+use brocado_preview::inspect::{
+    LayoutNode, LintConfig, dump_layout_tree, lint_layout, lint_layout_with,
+};
+use masonry::accesskit::Role;
 use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
 use masonry::core::pointer::{PointerId, PointerInfo, PointerType};
 use masonry::core::{
@@ -2190,6 +2193,206 @@ fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
 
     run_dismiss_sequence(false);
     run_dismiss_sequence(true);
+}
+
+#[test]
+fn md3_expressive_button_morphs_corner_radius_on_press() {
+    let mut h = build_ui_harness(
+        0usize,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            flex_col(primary_button("Expressive", |clicks: &mut usize| {
+                *clicks += 1
+            }))
+            .padding(16.px())
+            .boxed()
+        },
+        PreviewConfig {
+            width: 320,
+            height: 140,
+            ..PreviewConfig::default()
+        },
+    );
+    let _ = dump_layout_tree(&mut h);
+    let btn_id = *h
+        .find_widget_ids("Button")
+        .first()
+        .expect("primary button widget must exist");
+    let spec = UiTheme::new(DesignLanguage::Md3, Brightness::Light).to_spec();
+    let expected_rest = CornerRadius {
+        radius: spec.metrics.button_radius.px(),
+    };
+    let expected_active = CornerRadius {
+        radius: spec
+            .active_button_radius
+            .expect("MD3 Expressive spec must define active_button_radius")
+            .px(),
+    };
+
+    assert_eq!(h.widget_prop::<CornerRadius>(btn_id), Some(expected_rest));
+    let resting_img = h
+        .render_widget_image(btn_id)
+        .expect("resting button widget snapshot");
+
+    let (bx, by, bw, bh) = h.widget_rect(btn_id).expect("button bounds");
+    h.inner_harness_mut()
+        .mouse_move(Point::new(bx + bw * 0.5, by + bh * 0.5));
+    h.inner_harness_mut()
+        .mouse_button_press(Some(PointerButton::Primary));
+    let _ = h.inner_harness_mut().redraw();
+
+    assert_eq!(
+        h.widget_prop::<CornerRadius>(btn_id),
+        Some(expected_active),
+        "pressed MD3 Expressive button should morph corner radius"
+    );
+    let pressed_img = h
+        .render_widget_image(btn_id)
+        .expect("pressed button widget snapshot");
+    let diff = compare_images(&resting_img, &pressed_img, ImageDiffTolerance::default());
+    assert!(
+        diff.diff_pixels > 0,
+        "pressing MD3 Expressive button must visibly alter rendered pixels"
+    );
+
+    h.inner_harness_mut()
+        .mouse_button_release(Some(PointerButton::Primary));
+    h.pump_actions();
+    assert_eq!(*h.state(), 1);
+    assert_eq!(h.widget_prop::<CornerRadius>(btn_id), Some(expected_rest));
+}
+
+#[derive(Default)]
+struct M3eDemoState {
+    selected: usize,
+    menu_open: bool,
+    primary_hits: usize,
+    menu_hits: usize,
+    fab_item_hits: usize,
+    toolbar_clicks: usize,
+}
+
+fn max_node_right(node: &LayoutNode) -> f64 {
+    let mut max_r = node.rect.x + node.rect.width;
+    for child in &node.children {
+        max_r = max_r.max(max_node_right(child));
+    }
+    max_r
+}
+
+#[test]
+fn md3_expressive_components_layout_interaction_and_narrow_bounds() {
+    let mut h = build_ui_harness(
+        M3eDemoState::default(),
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |state| {
+            scroll_vertical(
+                flex_col((
+                    split_button(
+                        "Publish",
+                        |s: &mut M3eDemoState| s.primary_hits += 1,
+                        |s: &mut M3eDemoState| s.menu_hits += 1,
+                    ),
+                    button_group(
+                        &["Day", "Week", "Month"],
+                        state.selected,
+                        |s: &mut M3eDemoState, idx| {
+                            s.selected = idx;
+                        },
+                    ),
+                    wavy_linear_progress(Some(0.65)),
+                    floating_toolbar_with_variant(
+                        FloatingToolbarVariant::Vibrant,
+                        vec![
+                            primary_button("Apply", |s: &mut M3eDemoState| {
+                                s.toolbar_clicks += 1;
+                            })
+                            .boxed(),
+                            outlined_button("Reset", |s: &mut M3eDemoState| {
+                                s.toolbar_clicks += 1;
+                            })
+                            .boxed(),
+                        ],
+                    ),
+                    fab_menu(
+                        state.menu_open,
+                        |s: &mut M3eDemoState| s.menu_open = !s.menu_open,
+                        vec![FabMenuItem::new(
+                            icons::ADD,
+                            "New Note",
+                            |s: &mut M3eDemoState| {
+                                s.menu_open = false;
+                                s.fab_item_hits += 1;
+                            },
+                        )],
+                    ),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(12.px())
+                .padding(12.px()),
+            )
+            .boxed()
+        },
+        PreviewConfig {
+            width: 800,
+            height: 600,
+            ..PreviewConfig::default()
+        },
+    );
+
+    let wide_tree = dump_layout_tree(&mut h);
+    let lint_cfg = LintConfig::default().with_visible_leaf_types(["WavyLinearProgressWidget"]);
+    let wide_issues = lint_layout_with(&wide_tree, (800.0, 600.0), &lint_cfg);
+    assert!(
+        wide_issues.is_empty(),
+        "unexpected layout issues at 800x600: {wide_issues:?}"
+    );
+
+    let wavy_id = *h
+        .find_widget_ids("WavyLinearProgressWidget")
+        .first()
+        .expect("WavyLinearProgressWidget must exist");
+    let a11y = h
+        .inner_harness_mut()
+        .access_node(wavy_id)
+        .expect("WavyLinearProgressWidget AccessKit node");
+    assert_eq!(a11y.role(), Role::ProgressIndicator);
+    let val = a11y
+        .numeric_value()
+        .expect("determinate wavy progress must report numeric_value");
+    assert!((val - 0.65).abs() < 1e-6);
+
+    h.run_step(&PreviewStep::ClickLabel("Publish".to_owned()))
+        .unwrap();
+    assert_eq!(h.state().primary_hits, 1);
+
+    h.run_step(&PreviewStep::ClickLabel("Week".to_owned()))
+        .unwrap();
+    assert_eq!(h.state().selected, 1);
+
+    let btn_ids = h.find_widget_ids("Button");
+    let fab_toggle_id = *btn_ids.last().expect("FAB toggle button must exist");
+    h.click_widget_id(fab_toggle_id);
+    assert!(h.state().menu_open);
+
+    h.run_step(&PreviewStep::ClickLabel("New Note".to_owned()))
+        .unwrap();
+    assert_eq!(h.state().fab_item_hits, 1);
+    assert!(!h.state().menu_open);
+
+    h.resize(220, 600);
+    h.pump_actions();
+    let narrow_tree = dump_layout_tree(&mut h);
+    let narrow_issues = lint_layout_with(&narrow_tree, (220.0, 600.0), &lint_cfg);
+    assert!(
+        narrow_issues.is_empty(),
+        "unexpected layout issues at 220x600: {narrow_issues:?}"
+    );
+    assert!(
+        max_node_right(&narrow_tree) <= 220.5,
+        "M3E components overflowed 220px viewport width: right={}",
+        max_node_right(&narrow_tree)
+    );
 }
 
 #[test]

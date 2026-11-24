@@ -435,4 +435,46 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn spring_spec_spatial_overshoots_and_effects_are_monotonic() {
+        for spatial in [
+            MotionScheme::Expressive.fast_spatial(),
+            MotionScheme::Expressive.default_spatial(),
+        ] {
+            assert_eq!(spatial.sample(0.0), 0.0);
+            let mut max_val = 0.0_f64;
+            for step in 1..=50 {
+                let val = spatial.sample(f64::from(step) * 0.01);
+                max_val = max_val.max(val);
+            }
+            assert!(
+                max_val > 1.0,
+                "expressive spatial spring {spatial:?} should overshoot 1.0 (peak={max_val})"
+            );
+            assert!(spatial.is_settled(1.5));
+            assert!((spatial.sample(1.5) - 1.0).abs() < 1e-2);
+        }
+
+        for effects in [
+            MotionScheme::Expressive.fast_effects(),
+            MotionScheme::Expressive.default_effects(),
+        ] {
+            assert_eq!(effects.sample(0.0), 0.0);
+            let mut prev = 0.0_f64;
+            for step in 1..=50 {
+                let val = effects.sample(f64::from(step) * 0.01);
+                assert!(
+                    val >= prev - 1e-6,
+                    "effects spring {effects:?} oscillated backward at step {step}"
+                );
+                assert!(
+                    val <= 1.0 + 1e-6,
+                    "effects spring {effects:?} overshot 1.0: {val}"
+                );
+                prev = val;
+            }
+            assert!(effects.is_settled(1.5));
+        }
+    }
 }

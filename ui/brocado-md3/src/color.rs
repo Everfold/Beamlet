@@ -518,6 +518,11 @@ fn oklch(l: f64, c: f64, h_deg: f64) -> Color {
 }
 
 #[cfg(test)]
+pub(crate) fn oklch_chroma(color: Color) -> f64 {
+    srgb_to_oklch(color).1
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -591,6 +596,61 @@ mod tests {
             assert!(contrast_ratio(light.on_primary_fixed, light.primary_fixed_dim) >= 4.5);
             assert!(contrast_ratio(light.on_secondary_fixed, light.secondary_fixed) >= 4.5);
             assert!(contrast_ratio(light.on_tertiary_fixed, light.tertiary_fixed) >= 4.5);
+        }
+    }
+
+    #[test]
+    fn expressive_palette_boosts_chroma_and_meets_wcag_aa() {
+        let seeds = [
+            Color::from_rgb8(0x67, 0x50, 0xA4),
+            Color::from_rgb8(0x00, 0x6A, 0x60),
+            Color::from_rgb8(0x33, 0x66, 0xCC),
+        ];
+
+        for seed in seeds {
+            let base = ColorScheme::from_seed_with_variant(
+                seed,
+                Brightness::Light,
+                ContrastLevel::Standard,
+                Md3ColorVariant::Baseline,
+            );
+            let exp = ColorScheme::from_seed_with_variant(
+                seed,
+                Brightness::Light,
+                ContrastLevel::Standard,
+                Md3ColorVariant::Expressive,
+            );
+            assert!(
+                oklch_chroma(exp.primary_container) > oklch_chroma(base.primary_container),
+                "expressive primary_container chroma should exceed baseline for {seed:?}"
+            );
+            assert!(
+                oklch_chroma(exp.secondary) >= oklch_chroma(base.secondary),
+                "expressive secondary chroma should meet or exceed baseline"
+            );
+            assert!(
+                oklch_chroma(exp.tertiary) >= oklch_chroma(base.tertiary),
+                "expressive tertiary chroma should meet or exceed baseline"
+            );
+
+            for brightness in [Brightness::Light, Brightness::Dark] {
+                for contrast in [
+                    ContrastLevel::Standard,
+                    ContrastLevel::Medium,
+                    ContrastLevel::High,
+                ] {
+                    let scheme = ColorScheme::from_seed_with_variant(
+                        seed,
+                        brightness,
+                        contrast,
+                        Md3ColorVariant::Expressive,
+                    );
+                    assert!(contrast_ratio(scheme.on_primary, scheme.primary) >= 4.5);
+                    assert!(contrast_ratio(scheme.on_surface, scheme.surface) >= 4.5);
+                    assert!(contrast_ratio(scheme.on_secondary, scheme.secondary) >= 4.5);
+                    assert!(contrast_ratio(scheme.on_error, scheme.error) >= 4.5);
+                }
+            }
         }
     }
 }
