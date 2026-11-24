@@ -15,6 +15,9 @@ use crate::state::{GalleryState, GalleryTab};
 
 pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
     let clicks = state.components.click_count;
+    let md3_group_selected = state.native.md3_group_selected;
+    let md3_fab_menu_open = state.native.md3_fab_menu_open;
+    let md3_last_action = state.native.md3_last_action.clone();
 
     let make_custom_items = |wide: bool| {
         let save_btn = button_view(
@@ -139,20 +142,73 @@ pub fn native_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                             .gap(8.px())
                             .run_gap(8.px()),
                     ),
-                    floating_toolbar(vec![
-                        icon_button(icons::ARROW_BACK, |s: &mut GalleryState| {
-                            s.components.click_count += 1;
-                        })
+                    floating_toolbar_with_variant(
+                        FloatingToolbarVariant::Vibrant,
+                        vec![
+                            icon_button(icons::ARROW_BACK, |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                                s.native.md3_last_action = "返回".to_owned();
+                            })
+                            .boxed(),
+                            icon_button(icons::COPY, |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                                s.native.md3_last_action = "复制".to_owned();
+                            })
+                            .boxed(),
+                            primary_button("发布", |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                                s.native.md3_last_action = "发布".to_owned();
+                            })
+                            .boxed(),
+                        ],
+                    ),
+                    wrap((
+                        split_button(
+                            "发布更新",
+                            |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                                s.native.md3_last_action = "发布主操作".to_owned();
+                            },
+                            |s: &mut GalleryState| {
+                                s.components.click_count += 1;
+                                s.native.md3_last_action = "展开下拉菜单".to_owned();
+                            },
+                        )
                         .boxed(),
-                        icon_button(icons::COPY, |s: &mut GalleryState| {
-                            s.components.click_count += 1;
-                        })
-                        .boxed(),
-                        primary_button("发布", |s: &mut GalleryState| {
-                            s.components.click_count += 1;
-                        })
-                        .boxed(),
-                    ]),
+                        label_medium(format!("最近动作: {md3_last_action}")).boxed(),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(12.px())
+                    .run_gap(8.px()),
+                    button_group(
+                        &["日", "周", "月", "年"],
+                        md3_group_selected,
+                        |s: &mut GalleryState, idx| {
+                            s.native.md3_group_selected = idx;
+                            s.native.md3_last_action = format!("分段 #{idx}");
+                        },
+                    ),
+                    wavy_linear_progress(Some(0.68)),
+                    fab_menu(
+                        md3_fab_menu_open,
+                        |s: &mut GalleryState| {
+                            s.native.md3_fab_menu_open = !s.native.md3_fab_menu_open;
+                        },
+                        vec![
+                            FabMenuItem::new(icons::ADD, "新建笔记", |s: &mut GalleryState| {
+                                s.native.md3_fab_menu_open = false;
+                                s.native.md3_last_action = "新建笔记".to_owned();
+                            }),
+                            FabMenuItem::new(
+                                icons::INFO,
+                                "查看详情",
+                                |s: &mut GalleryState| {
+                                    s.native.md3_fab_menu_open = false;
+                                    s.native.md3_last_action = "查看详情".to_owned();
+                                },
+                            ),
+                        ],
+                    ),
                 ))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(10.px()),

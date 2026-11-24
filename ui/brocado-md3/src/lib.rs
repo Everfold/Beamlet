@@ -31,10 +31,12 @@ pub use brocado_core::tokens::{
     SemanticPalette, ShortcutConvention, SpringSpec, StateFeedbackMode, TabIndicatorStyle,
     TextStyleSpec, TypeRole, TypeScale, WindowBackdrop, WindowSizeClass,
 };
-pub use color::{ColorScheme, ContrastLevel, contrast_ratio, relative_luminance};
+pub use color::{ColorScheme, ContrastLevel, Md3ColorVariant, contrast_ratio, relative_luminance};
 pub use components::{
-    FabColor, FabSize, TopAppBarVariant, bottom_app_bar, center_aligned_top_app_bar, extended_fab,
-    fab, floating_toolbar, large_fab, large_top_app_bar, medium_top_app_bar,
-    navigation_rail_with_fab, sized_fab, small_fab, top_app_bar, top_app_bar_slots,
+    FabColor, FabMenuItem, FabSize, FloatingToolbarVariant, TopAppBarVariant, UiWavyLinearProgress,
+    WavyLinearProgressWidget, bottom_app_bar, button_group, center_aligned_top_app_bar,
+    extended_fab, fab, fab_menu, floating_toolbar, floating_toolbar_with_variant, large_fab,
+    large_top_app_bar, medium_top_app_bar, navigation_rail_with_fab, sized_fab, small_fab,
+    split_button, top_app_bar, top_app_bar_slots, wavy_linear_progress,
 };
-pub use theme::{Md3Theme, md3_scope};
+pub use theme::{Md3Style, Md3Theme, md3_scope};

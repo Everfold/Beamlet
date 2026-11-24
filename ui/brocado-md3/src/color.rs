@@ -3,6 +3,16 @@
 use brocado_core::tokens::{Brightness, SemanticPalette};
 use masonry::peniko::Color;
 
+/// Material Design 3 color expression variant.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Md3ColorVariant {
+    /// Original Material 3 tonal chroma profile.
+    Baseline,
+    /// Material 3 Expressive higher-chroma, expanded-hue tonal profile.
+    #[default]
+    Expressive,
+}
+
 /// Accessibility contrast tier for dynamic Material 3 palettes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ContrastLevel {
@@ -109,16 +119,58 @@ pub struct ColorScheme {
 }
 
 impl ColorScheme {
-    /// Generates a full Material 3 color scheme from `seed`, `brightness`, and `contrast`.
+    /// Generates a Material 3 Expressive color scheme from `seed`, `brightness`, and `contrast`.
     #[must_use]
     pub fn from_seed(seed: Color, brightness: Brightness, contrast: ContrastLevel) -> Self {
+        Self::from_seed_with_variant(seed, brightness, contrast, Md3ColorVariant::Expressive)
+    }
+
+    /// Generates a Material 3 color scheme for the explicit [`Md3ColorVariant`].
+    #[must_use]
+    pub fn from_seed_with_variant(
+        seed: Color,
+        brightness: Brightness,
+        contrast: ContrastLevel,
+        variant: Md3ColorVariant,
+    ) -> Self {
         let (_, seed_c, hue) = srgb_to_oklch(seed);
-        let c_primary = seed_c.clamp(0.11, 0.22);
-        let c_secondary = (c_primary * 0.40).clamp(0.03, 0.08);
-        let c_tertiary = (c_primary * 0.72).clamp(0.06, 0.16);
-        let hue_tertiary = (hue + 60.0).rem_euclid(360.0);
-        let c_neutral = (c_primary * 0.08).clamp(0.008, 0.025);
-        let c_neutral_var = (c_primary * 0.14).clamp(0.014, 0.045);
+        let (
+            c_primary,
+            c_secondary,
+            c_tertiary,
+            hue_tertiary,
+            c_neutral,
+            c_neutral_var,
+            container_chroma_scale,
+            light_tone_shift,
+        ) = match variant {
+            Md3ColorVariant::Baseline => {
+                let c_primary = seed_c.clamp(0.11, 0.22);
+                (
+                    c_primary,
+                    (c_primary * 0.40).clamp(0.03, 0.08),
+                    (c_primary * 0.72).clamp(0.06, 0.16),
+                    (hue + 60.0).rem_euclid(360.0),
+                    (c_primary * 0.08).clamp(0.008, 0.025),
+                    (c_primary * 0.14).clamp(0.014, 0.045),
+                    1.0,
+                    0.0,
+                )
+            }
+            Md3ColorVariant::Expressive => {
+                let c_primary = (seed_c * 1.18).clamp(0.13, 0.24);
+                (
+                    c_primary,
+                    (c_primary * 0.50).clamp(0.045, 0.10),
+                    (c_primary * 0.85).clamp(0.08, 0.20),
+                    (hue + 75.0).rem_euclid(360.0),
+                    (c_primary * 0.09).clamp(0.010, 0.028),
+                    (c_primary * 0.16).clamp(0.016, 0.050),
+                    1.22,
+                    0.03,
+                )
+            }
+        };
 
         let boost: f64 = match contrast {
             ContrastLevel::Standard => 0.0,
@@ -157,17 +209,29 @@ impl ColorScheme {
             inverse_on_surface,
         ) = match brightness {
             Brightness::Light => (
-                oklch((0.50 - boost).max(0.32), c_primary, hue),
+                oklch((0.50 - light_tone_shift - boost).max(0.30), c_primary, hue),
                 Color::WHITE,
-                oklch(0.90, c_primary * 0.45, hue),
+                oklch(0.90, c_primary * 0.45 * container_chroma_scale, hue),
                 oklch((0.24 - boost).max(0.10), c_primary * 0.85, hue),
-                oklch((0.52 - boost).max(0.34), c_secondary, hue),
+                oklch(
+                    (0.52 - light_tone_shift - boost).max(0.32),
+                    c_secondary,
+                    hue,
+                ),
                 Color::WHITE,
-                oklch(0.91, c_secondary * 0.75, hue),
+                oklch(0.91, c_secondary * 0.75 * container_chroma_scale, hue),
                 oklch((0.24 - boost).max(0.10), c_secondary * 0.9, hue),
-                oklch((0.52 - boost).max(0.34), c_tertiary, hue_tertiary),
+                oklch(
+                    (0.52 - light_tone_shift - boost).max(0.32),
+                    c_tertiary,
+                    hue_tertiary,
+                ),
                 Color::WHITE,
-                oklch(0.91, c_tertiary * 0.48, hue_tertiary),
+                oklch(
+                    0.91,
+                    c_tertiary * 0.48 * container_chroma_scale,
+                    hue_tertiary,
+                ),
                 oklch((0.24 - boost).max(0.10), c_tertiary * 0.85, hue_tertiary),
                 oklch((0.51 - boost).max(0.34), 0.18, 25.0),
                 Color::WHITE,

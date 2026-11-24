@@ -188,6 +188,9 @@ impl Default for OverlaysState {
 #[derive(Clone, Debug)]
 pub struct PlatformNativeState {
     pub nav_collapsed: bool,
+    pub md3_group_selected: usize,
+    pub md3_fab_menu_open: bool,
+    pub md3_last_action: String,
     pub info_bar_visible: bool,
     pub fluent_expander_open: bool,
     pub fluent_breadcrumb_depth: usize,
@@ -211,6 +214,9 @@ impl Default for PlatformNativeState {
     fn default() -> Self {
         Self {
             nav_collapsed: false,
+            md3_group_selected: 0,
+            md3_fab_menu_open: false,
+            md3_last_action: "等待操作".to_owned(),
             info_bar_visible: true,
             fluent_expander_open: true,
             fluent_breadcrumb_depth: 2,

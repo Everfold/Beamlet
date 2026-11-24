@@ -33,10 +33,12 @@ pub use crate::{
 
 #[cfg(feature = "md3")]
 pub use brocado_md3::{
-    ColorScheme, ContrastLevel, FabColor, FabSize, Md3Theme, TopAppBarVariant, bottom_app_bar,
-    center_aligned_top_app_bar, extended_fab, fab, floating_toolbar, large_fab, large_top_app_bar,
-    md3_scope, medium_top_app_bar, navigation_rail_with_fab, sized_fab, small_fab, top_app_bar,
-    top_app_bar_slots,
+    ColorScheme, ContrastLevel, FabColor, FabMenuItem, FabSize, FloatingToolbarVariant,
+    Md3ColorVariant, Md3Style, Md3Theme, TopAppBarVariant, UiWavyLinearProgress,
+    WavyLinearProgressWidget, bottom_app_bar, button_group, center_aligned_top_app_bar,
+    extended_fab, fab, fab_menu, floating_toolbar, floating_toolbar_with_variant, large_fab,
+    large_top_app_bar, md3_scope, medium_top_app_bar, navigation_rail_with_fab, sized_fab,
+    small_fab, split_button, top_app_bar, top_app_bar_slots, wavy_linear_progress,
 };
 
 #[cfg(feature = "fluent")]
