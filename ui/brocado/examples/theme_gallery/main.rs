@@ -1297,8 +1297,12 @@ mod tests {
         let prefix_cy = py + ph * 0.5;
         let area_cy = matching_area.y + matching_area.height * 0.5;
         assert!(
-            (prefix_cy - area_cy).abs() <= 3.0,
-            "TextField prefix should vertically align with TextArea: prefix={prefix_cy:.2}, area={area_cy:.2}"
+            (prefix_cy - area_cy).abs() <= 0.5
+                && (py - matching_area.y).abs() <= 0.5
+                && (ph - matching_area.height).abs() <= 0.5,
+            "TextField prefix should baseline/vertically align with TextArea: prefix=({py:.2}, h={ph:.2}, cy={prefix_cy:.2}), area=({:.2}, h={:.2}, cy={area_cy:.2})",
+            matching_area.y,
+            matching_area.height
         );
 
         // RichTextWidget link click event ("设计规范链接")
@@ -1405,6 +1409,75 @@ mod tests {
             !h_ov.state().overlays.show_basic_dialog,
             "clicking dialog scrim should dismiss BasicDialog"
         );
+
+        // DatePickerDialog, TimePickerDialog compact width (no dead space on right) + BottomSheet sizing
+        h_ov.run_step(&PreviewStep::ClickLabel("日期弹窗".into()))
+            .unwrap();
+        assert!(h_ov.state().overlays.show_date_dialog);
+        h_ov.settle_animations();
+        let date_dlg_tree = dump_layout_tree(&mut h_ov);
+        let date_card = find_first_with_type(&date_dlg_tree, "SlideTransition")
+            .expect("DatePickerDialog SlideTransition")
+            .children
+            .first()
+            .expect("DatePickerDialog card");
+        assert!(
+            date_card.rect.width <= 280.0 && date_card.rect.width >= 240.0,
+            "DatePickerDialog should hug calendar width (~272px) without right-side void: {:?}",
+            date_card.rect
+        );
+        h_ov.run_step(&PreviewStep::ClickLabel("Cancel".into()))
+            .unwrap();
+        assert!(!h_ov.state().overlays.show_date_dialog);
+
+        h_ov.run_step(&PreviewStep::ClickLabel("时间弹窗".into()))
+            .unwrap();
+        assert!(h_ov.state().overlays.show_time_dialog);
+        h_ov.settle_animations();
+        let time_dlg_tree = dump_layout_tree(&mut h_ov);
+        let time_card = find_first_with_type(&time_dlg_tree, "SlideTransition")
+            .expect("TimePickerDialog SlideTransition")
+            .children
+            .first()
+            .expect("TimePickerDialog card");
+        assert!(
+            time_card.rect.width <= 264.0 && time_card.rect.width >= 220.0,
+            "TimePickerDialog should stay compact (~256px) without right-side void: {:?}",
+            time_card.rect
+        );
+        let time_wrap = find_first_with_type(time_card, "WrapWidget")
+            .expect("TimePicker WrapWidget inside dialog");
+        let wrap_center = time_wrap.rect.x + time_wrap.rect.width * 0.5;
+        let card_center = time_card.rect.x + time_card.rect.width * 0.5;
+        assert!(
+            (wrap_center - card_center).abs() <= 2.0,
+            "TimePicker content should center inside dialog: wrap_cx={wrap_center:.2}, card_cx={card_center:.2}"
+        );
+        h_ov.run_step(&PreviewStep::ClickLabel("Cancel".into()))
+            .unwrap();
+        assert!(!h_ov.state().overlays.show_time_dialog);
+
+        h_ov.run_step(&PreviewStep::ClickLabel("底抽屉".into()))
+            .unwrap();
+        assert!(h_ov.state().overlays.show_bottom_sheet);
+        h_ov.settle_animations();
+        let sheet_tree = dump_layout_tree(&mut h_ov);
+        let sheet_card = find_first_with_type(&sheet_tree, "SlideTransition")
+            .expect("BottomSheet SlideTransition")
+            .children
+            .first()
+            .expect("BottomSheet card");
+        assert!(
+            sheet_card.rect.width <= 640.5
+                && (sheet_card.rect.x - 280.0).abs() <= 2.0
+                && sheet_card.rect.height < 200.0
+                && sheet_card.rect.height >= 80.0,
+            "BottomSheet at 1200x800 should respect 640px max width, center horizontally, and fit content height: {:?}",
+            sheet_card.rect
+        );
+        h_ov.run_step(&PreviewStep::ClickLabel("关闭".into()))
+            .unwrap();
+        assert!(!h_ov.state().overlays.show_bottom_sheet);
 
         // 3. Adwaita sidebar left-alignment & HIG disclosure left-alignment + Fluent info_badge centering
         let mut h_adw = make_gallery_harness(DesignLanguage::Adwaita, GalleryTab::Native);
