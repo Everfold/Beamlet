@@ -5,7 +5,9 @@ use std::sync::Arc;
 use brocado_core::components::{
     NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
 };
-use brocado_core::foundation::{UiClassExt, clip_box, ui_icon, wrap};
+use brocado_core::foundation::{
+    ConstrainedBox, UiClassExt, clip_box, constrained_box, ui_icon, wrap,
+};
 use brocado_core::style_engine::{classes, with_spec};
 use brocado_core::tokens::{DesignSpec, ElevationLevel, TypeRole};
 use masonry::core::ArcStr;
@@ -339,7 +341,7 @@ pub fn navigation_rail_with_fab<State: 'static, Action: 'static, H, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, H, F>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, H, F>
 where
     H: WidgetView<State, Action>,
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
@@ -391,20 +393,25 @@ where
             .gap(8.px())
     });
 
-    flex_row((
-        surface_box(
-            ElevationLevel::Level1,
-            flex_col((header, nav_items))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(14.px())
-                .padding(Padding::from_vh(14.px(), 6.px())),
-        )
-        .radius(0.0)
-        .padding(0.0)
-        .dims(Dimensions::STRETCH.with_width(80.px())),
-        vertical_divider(),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    constrained_box(
+        flex_row((
+            surface_box(
+                ElevationLevel::Level1,
+                flex_col((header, nav_items))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(14.px())
+                    .padding(Padding::from_vh(14.px(), 6.px())),
+            )
+            .radius(0.0)
+            .padding(0.0)
+            .dims(Dimensions::STRETCH)
+            .flex(1.0),
+            vertical_divider(),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch),
+    )
+    .max_width(81.0)
+    .fill_max_width(true)
 }
 
 /// Material 3 Expressive pill-shaped floating toolbar hosting an action row with `Level3` elevation.

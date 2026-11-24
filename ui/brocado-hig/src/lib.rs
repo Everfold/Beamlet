@@ -27,8 +27,8 @@ pub use brocado_core::tokens::{
 };
 pub use components::{
     MacosAlertDialog, disclosure_group, form_group, form_row, help_button, inspector_panel,
-    macos_alert_dialog, macos_toolbar, macos_toolbar_with_center, path_control, popup_button,
-    source_list_sidebar, stepper,
+    inspector_panel_with_width, macos_alert_dialog, macos_toolbar, macos_toolbar_with_center,
+    path_control, popup_button, source_list_sidebar, stepper,
 };
 pub use palette::{HigAccent, hig_palette};
 pub use theme::{HigTheme, hig_scope};

@@ -9,15 +9,16 @@ use brocado_core::components::{
     MenuEntry, destructive_button, dropdown_menu, menu_item, primary_button, secondary_button,
 };
 use brocado_core::foundation::{
-    AnchoredPopupView, EscapeCatcher, ModalShellConfig, ModalShellState, UiClassExt, adaptive_pair,
-    clip_box, icons, modal_shell_build, modal_shell_message, modal_shell_rebuild,
-    modal_shell_teardown, ui_icon, wrap,
+    AnchoredPopupView, ConstrainedBox, EscapeCatcher, ModalAxisSizing, ModalShellConfig,
+    ModalShellState, UiClassExt, adaptive_pair, clip_box, constrained_box, icons,
+    modal_shell_build, modal_shell_message, modal_shell_rebuild, modal_shell_teardown, ui_icon,
+    wrap,
 };
 use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
 use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
-use masonry::layout::{AsUnit, Dim, UnitPoint};
+use masonry::layout::{AsUnit, UnitPoint};
 use masonry::peniko::Color;
 use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
@@ -88,7 +89,7 @@ pub fn source_list_sidebar<State: 'static, Action: 'static, F>(
     sections: &[(&str, Vec<(&str, &'static str)>)],
     selected: (usize, usize),
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, F>
 where
     F: Fn(&mut State, (usize, usize)) -> Action + Send + Sync + 'static,
 {
@@ -148,18 +149,24 @@ where
             }
         }
 
-        flex_row((
-            sized_box(
-                flex_col(nodes)
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .gap(4.px())
-                    .padding(Padding::all(10.px())),
-            )
-            .dims(Dimensions::STRETCH.with_width(spec.metrics.sidebar_width.px()))
-            .background_color(p.sidebar_bg),
-            vertical_divider(),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        let w = spec.metrics.sidebar_width;
+        constrained_box(
+            flex_row((
+                sized_box(
+                    flex_col(nodes)
+                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                        .gap(4.px())
+                        .padding(Padding::all(10.px())),
+                )
+                .dims(Dimensions::STRETCH)
+                .background_color(p.sidebar_bg)
+                .flex(1.0),
+                vertical_divider(),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch),
+        )
+        .max_width(w + 1.0)
+        .fill_max_width(true)
     })
 }
 
@@ -375,11 +382,20 @@ where
     })
 }
 
-/// Trailing macOS Inspector pane (`260px`) with leading hairline divider and compact grouped section stack.
+/// Trailing macOS Inspector pane (`260px` preferred width, shrinking cleanly on narrower viewports).
 pub fn inspector_panel<State: 'static, Action: 'static>(
     title: impl Into<ArcStr>,
     sections: Vec<Box<AnyWidgetView<State, Action>>>,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> {
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> {
+    inspector_panel_with_width(title, sections, 260.0)
+}
+
+/// Trailing macOS Inspector pane with configurable preferred max width (`width + 1px` incl. divider).
+pub fn inspector_panel_with_width<State: 'static, Action: 'static>(
+    title: impl Into<ArcStr>,
+    sections: Vec<Box<AnyWidgetView<State, Action>>>,
+    width: f64,
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> {
     let title: ArcStr = title.into();
     let hdr = with_spec(move |spec: &DesignSpec, _| {
         spec.typography
@@ -387,25 +403,30 @@ pub fn inspector_panel<State: 'static, Action: 'static>(
             .color(spec.palette.text_primary)
     });
 
-    flex_row((
-        vertical_divider(),
-        sized_box(
-            flex_col((
-                hdr,
-                horizontal_divider(),
-                flex_col(sections)
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .gap(12.px()),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch)
-            .gap(10.px()),
-        )
-        .ui_class(classes::CARD_FILLED)
-        .corner_radius(0.px())
-        .padding(Padding::all(12.px()))
-        .dims(Dimensions::STRETCH.with_width(260.px())),
-    ))
-    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+    constrained_box(
+        flex_row((
+            vertical_divider(),
+            sized_box(
+                flex_col((
+                    hdr,
+                    horizontal_divider(),
+                    flex_col(sections)
+                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                        .gap(12.px()),
+                ))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(10.px()),
+            )
+            .ui_class(classes::CARD_FILLED)
+            .corner_radius(0.px())
+            .padding(Padding::all(12.px()))
+            .dims(Dimensions::STRETCH)
+            .flex(1.0),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch),
+    )
+    .max_width(width + 1.0)
+    .fill_max_width(true)
 }
 
 /// macOS Finder-style bottom `NSPathControl` bar with `14px` segment icons and chevron separators.
@@ -652,7 +673,15 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
+            width: ModalAxisSizing::FitContent {
+                min: Some(260.0),
+                max: Some(360.0),
+            },
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::all(16.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 12.0),
@@ -676,7 +705,15 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(280.px()), Dim::MaxContent),
+            width: ModalAxisSizing::FitContent {
+                min: Some(260.0),
+                max: Some(360.0),
+            },
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::all(16.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 12.0),

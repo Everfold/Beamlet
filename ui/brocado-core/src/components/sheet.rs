@@ -4,13 +4,14 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use masonry::kurbo::Vec2;
-use masonry::layout::{AsUnit, Dim, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
+use crate::foundation::ModalAxisSizing;
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
@@ -34,6 +35,7 @@ pub struct UiSheet<V, State, Action> {
     edge: SheetEdge,
     size: Option<f64>,
     max_width: f64,
+    fit_width: bool,
     content: V,
     on_dismiss: SheetDismissCallback<State, Action>,
     phantom: PhantomData<fn(State) -> Action>,
@@ -52,13 +54,37 @@ impl<V, State, Action> UiSheet<V, State, Action> {
         self
     }
 
+    /// Configures a `bottom_sheet` to hug its content width up to `max_width` (`true`) or fill up to `max_width` (`false`, default).
+    pub fn fit_width(mut self, fit: bool) -> Self {
+        self.fit_width = fit;
+        self
+    }
+
     fn shell_config(&self) -> ModalShellConfig {
         match self.edge {
             SheetEdge::Bottom => {
-                let height_dim = self.size.map_or(Dim::MaxContent, |h| h.px().into());
+                let width = if self.fit_width {
+                    ModalAxisSizing::FitContent {
+                        min: None,
+                        max: Some(self.max_width),
+                    }
+                } else {
+                    ModalAxisSizing::FillUpTo {
+                        max: Some(self.max_width),
+                    }
+                };
+                let height = self.size.map_or(
+                    ModalAxisSizing::FitContent {
+                        min: None,
+                        max: None,
+                    },
+                    |h| ModalAxisSizing::FillUpTo { max: Some(h) },
+                );
                 ModalShellConfig {
                     class: classes::SHEET_SURFACE,
-                    dims: Dimensions::new(self.max_width.px().into(), height_dim),
+                    width,
+                    height,
+                    viewport_margin: None,
                     padding: Padding::all(20.px()),
                     alignment: UnitPoint::BOTTOM,
                     enter_offset: Vec2::new(0.0, 48.0),
@@ -70,7 +96,9 @@ impl<V, State, Action> UiSheet<V, State, Action> {
                 let width = self.size.unwrap_or(360.0);
                 ModalShellConfig {
                     class: classes::SHEET_SURFACE,
-                    dims: Dimensions::STRETCH.with_width(width.px()),
+                    width: ModalAxisSizing::FillUpTo { max: Some(width) },
+                    height: ModalAxisSizing::FillUpTo { max: None },
+                    viewport_margin: None,
                     padding: Padding::all(20.px()),
                     alignment: UnitPoint::RIGHT,
                     enter_offset: Vec2::new(48.0, 0.0),
@@ -165,6 +193,7 @@ where
         edge: SheetEdge::Bottom,
         size: None,
         max_width: 640.0,
+        fit_width: false,
         content,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
@@ -184,6 +213,7 @@ where
         edge: SheetEdge::Side,
         size: Some(360.0),
         max_width: 640.0,
+        fit_width: false,
         content,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,

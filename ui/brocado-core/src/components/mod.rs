@@ -52,8 +52,8 @@ pub use list::{
 pub use masonry::widgets::InsertNewline;
 pub use menu::{MenuEntry, context_menu, dropdown_menu, menu_divider, menu_item, select};
 pub use navigation::{
-    NavDestination, modal_navigation_drawer, navigation_bar, navigation_drawer, navigation_rail,
-    top_bar,
+    NavDestination, modal_navigation_drawer, navigation_bar, navigation_drawer,
+    navigation_drawer_with_width, navigation_rail, top_bar,
 };
 pub use popover::popover_surface;
 pub use progress::{

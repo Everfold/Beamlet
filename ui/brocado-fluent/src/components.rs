@@ -8,7 +8,8 @@ use brocado_core::components::typography::ui_label;
 use brocado_core::components::{MenuEntry, NavDestination, dropdown_menu, icon_button};
 use brocado_core::foundation::state_layer::blend_over;
 use brocado_core::foundation::{
-    UiClassExt, adaptive_pair, beveled_surface, clip_box, icons, ui_icon, wrap,
+    ConstrainedBox, UiClassExt, adaptive_pair, beveled_surface, clip_box, constrained_box, icons,
+    ui_icon, wrap,
 };
 use brocado_core::style_engine::{classes, with_spec};
 use brocado_core::tokens::{Brightness, DesignSpec, TypeRole};
@@ -424,7 +425,7 @@ pub fn navigation_view<State: 'static, Action: 'static, F>(
     footer_items: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
@@ -467,29 +468,35 @@ where
             .gap(6.px())
         });
 
-        flex_row((
-            sized_box(
-                flex_col((
-                    head,
-                    flex_col(primary_views)
-                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                        .gap(4.px())
-                        .flex(1.0),
-                    footer_section,
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .gap(8.px())
-                .padding(Padding::all(10.px())),
-            )
-            .dims(Dimensions::STRETCH.with_width(spec.metrics.sidebar_width.px()))
-            .background_color(p.sidebar_bg),
-            vertical_divider(),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        let pane_w = spec.metrics.sidebar_width;
+        constrained_box(
+            flex_row((
+                sized_box(
+                    flex_col((
+                        head,
+                        flex_col(primary_views)
+                            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                            .gap(4.px())
+                            .flex(1.0),
+                        footer_section,
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(8.px())
+                    .padding(Padding::all(10.px())),
+                )
+                .dims(Dimensions::STRETCH)
+                .background_color(p.sidebar_bg)
+                .flex(1.0),
+                vertical_divider(),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch),
+        )
+        .max_width(pane_w + 1.0)
+        .fill_max_width(true)
     })
 }
 
-/// Collapsible WinUI 3 `NavigationView` switching between `280px` Expanded and `52px` Compact icon-only rail.
+/// Collapsible WinUI 3 `NavigationView` switching between Expanded (`sidebar_width`) and `52px` Compact icon-only rail.
 pub fn navigation_view_collapsible<State: 'static, Action: 'static, ToggleF, SelectF>(
     header: Option<&str>,
     primary_items: &[NavDestination],
@@ -498,7 +505,7 @@ pub fn navigation_view_collapsible<State: 'static, Action: 'static, ToggleF, Sel
     collapsed: bool,
     on_toggle_collapse: ToggleF,
     on_select: SelectF,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, ToggleF, SelectF>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, ToggleF, SelectF>
 where
     ToggleF: Fn(&mut State) -> Action + Send + Sync + 'static,
     SelectF: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
@@ -571,25 +578,30 @@ where
             Padding::all(10.px())
         };
 
-        flex_row((
-            sized_box(
-                flex_col((
-                    top_row,
-                    flex_col(primary_views)
-                        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                        .gap(4.px())
-                        .flex(1.0),
-                    footer_section,
-                ))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .gap(8.px())
-                .padding(pane_pad),
-            )
-            .dims(Dimensions::STRETCH.with_width(pane_width.px()))
-            .background_color(p.sidebar_bg),
-            vertical_divider(),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch)
+        constrained_box(
+            flex_row((
+                sized_box(
+                    flex_col((
+                        top_row,
+                        flex_col(primary_views)
+                            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                            .gap(4.px())
+                            .flex(1.0),
+                        footer_section,
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                    .gap(8.px())
+                    .padding(pane_pad),
+                )
+                .dims(Dimensions::STRETCH)
+                .background_color(p.sidebar_bg)
+                .flex(1.0),
+                vertical_divider(),
+            ))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch),
+        )
+        .max_width(pane_width + 1.0)
+        .fill_max_width(true)
     })
 }
 

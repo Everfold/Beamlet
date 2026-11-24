@@ -70,9 +70,6 @@ impl<State: 'static, Action: 'static> UiScaffold<State, Action> {
 
     /// Finalizes the scaffold into a single composable [`WidgetView`].
     pub fn build(self) -> impl WidgetView<State, Action, Widget = widgets::ZStack> {
-        let base_col = flex_col((self.top_bar, self.body.flex(1.0), self.bottom_bar))
-            .cross_axis_alignment(CrossAxisAlignment::Stretch);
-
         let fab_layer = self.floating_action.map(|fab| {
             sized_box(fab)
                 .padding(Padding::all(16.px()))
@@ -85,14 +82,22 @@ impl<State: 'static, Action: 'static> UiScaffold<State, Action> {
                 .alignment(UnitPoint::BOTTOM)
         });
 
+        // Host FAB and toast inside the flexible body stack so they automatically sit above `bottom_bar`.
+        let body_area = zstack((
+            self.body.alignment(UnitPoint::CENTER),
+            fab_layer,
+            toast_layer,
+        ));
+
+        let base_col = flex_col((self.top_bar, body_area.flex(1.0), self.bottom_bar))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch);
+
         let drawer_layer = self.modal_drawer.map(|d| d.alignment(UnitPoint::LEFT));
         let sheet_layer = self.sheet.map(|s| s.alignment(UnitPoint::CENTER));
         let dialog_layer = self.dialog.map(|d| d.alignment(UnitPoint::CENTER));
 
         zstack((
             base_col.alignment(UnitPoint::CENTER),
-            fab_layer,
-            toast_layer,
             drawer_layer,
             sheet_layer,
             dialog_layer,

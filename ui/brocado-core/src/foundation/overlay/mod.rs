@@ -32,6 +32,7 @@ use xilem_masonry::view::{button, label, sized_box};
 use crate::foundation::UiClassExt as _;
 use crate::style_engine::classes;
 
+pub use crate::foundation::transition::ModalAxisSizing;
 pub use modal::{
     ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message, modal_shell_rebuild,
     modal_shell_teardown,

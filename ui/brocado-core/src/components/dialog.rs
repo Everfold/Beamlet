@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use masonry::core::ArcStr;
 use masonry::kurbo::Vec2;
-use masonry::layout::{AsUnit, Dim, UnitPoint};
-use masonry::properties::{Dimensions, Padding};
+use masonry::layout::{AsUnit, UnitPoint};
+use masonry::properties::Padding;
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::Pod;
@@ -17,6 +17,7 @@ use xilem_masonry::view::{CrossAxisAlignment, MainAxisAlignment, flex_col};
 
 use crate::components::button::{destructive_button, primary_button, subtle_button};
 use crate::components::typography::ui_label;
+use crate::foundation::ModalAxisSizing;
 use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
@@ -34,17 +35,46 @@ pub type DialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct UiDialog<V, State, Action> {
     content: V,
-    width: f64,
+    width: ModalAxisSizing,
     dismiss_on_scrim: bool,
     on_dismiss: DialogCallback<State, Action>,
     phantom: PhantomData<fn(State) -> Action>,
 }
 
 impl<V, State, Action> UiDialog<V, State, Action> {
-    /// Overrides the modal dialog card width (defaults to `360px`).
+    /// Forces a preferred dialog card width up to `width` (still clamped on narrow viewports).
     pub fn width(mut self, width: f64) -> Self {
-        self.width = width;
+        self.width = ModalAxisSizing::FillUpTo { max: Some(width) };
         self
+    }
+
+    /// Sets the minimum content-adaptive dialog card width (defaults to `260px`).
+    pub fn min_width(mut self, min_width: f64) -> Self {
+        let max = self.width_max();
+        self.width = ModalAxisSizing::FitContent {
+            min: Some(min_width),
+            max,
+        };
+        self
+    }
+
+    /// Sets the maximum content-adaptive dialog card width (defaults to `560px`).
+    pub fn max_width(mut self, max_width: f64) -> Self {
+        let min = match self.width {
+            ModalAxisSizing::FitContent { min, .. } => min,
+            ModalAxisSizing::FillUpTo { .. } => Some(260.0),
+        };
+        self.width = ModalAxisSizing::FitContent {
+            min,
+            max: Some(max_width),
+        };
+        self
+    }
+
+    const fn width_max(&self) -> Option<f64> {
+        match self.width {
+            ModalAxisSizing::FitContent { max, .. } | ModalAxisSizing::FillUpTo { max } => max,
+        }
     }
 
     /// Configures whether clicking the dimmed backdrop scrim triggers `on_dismiss`.
@@ -56,7 +86,12 @@ impl<V, State, Action> UiDialog<V, State, Action> {
     fn shell_config(&self) -> ModalShellConfig {
         ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            width: self.width,
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
@@ -145,7 +180,10 @@ where
 {
     UiDialog {
         content,
-        width: 360.0,
+        width: ModalAxisSizing::FitContent {
+            min: Some(260.0),
+            max: Some(560.0),
+        },
         dismiss_on_scrim: true,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
@@ -161,7 +199,7 @@ pub struct BasicDialog<State, Action> {
     body: ArcStr,
     confirm_text: ArcStr,
     dismiss_text: Option<ArcStr>,
-    width: f64,
+    width: ModalAxisSizing,
     dismiss_on_scrim: bool,
     destructive: bool,
     on_confirm: DialogCallback<State, Action>,
@@ -181,9 +219,34 @@ impl<State, Action> BasicDialog<State, Action> {
         self
     }
 
-    /// Overrides the modal dialog card width (defaults to `380px`).
+    /// Forces a preferred modal dialog card width up to `width` (still clamped on narrow viewports).
     pub fn width(mut self, width: f64) -> Self {
-        self.width = width;
+        self.width = ModalAxisSizing::FillUpTo { max: Some(width) };
+        self
+    }
+
+    /// Sets the minimum content-adaptive dialog card width (defaults to `280px`).
+    pub fn min_width(mut self, min_width: f64) -> Self {
+        let max = match self.width {
+            ModalAxisSizing::FitContent { max, .. } | ModalAxisSizing::FillUpTo { max } => max,
+        };
+        self.width = ModalAxisSizing::FitContent {
+            min: Some(min_width),
+            max,
+        };
+        self
+    }
+
+    /// Sets the maximum content-adaptive dialog card width (defaults to `420px`).
+    pub fn max_width(mut self, max_width: f64) -> Self {
+        let min = match self.width {
+            ModalAxisSizing::FitContent { min, .. } => min,
+            ModalAxisSizing::FillUpTo { .. } => Some(280.0),
+        };
+        self.width = ModalAxisSizing::FitContent {
+            min,
+            max: Some(max_width),
+        };
         self
     }
 
@@ -275,7 +338,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            width: self.width,
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
@@ -298,7 +366,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            width: self.width,
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::all(18.px()),
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 20.0),
@@ -363,7 +436,10 @@ where
         body: body.into(),
         confirm_text: confirm_text.into(),
         dismiss_text: None,
-        width: 380.0,
+        width: ModalAxisSizing::FitContent {
+            min: Some(280.0),
+            max: Some(420.0),
+        },
         dismiss_on_scrim: true,
         destructive: false,
         on_confirm: Arc::new(on_confirm),

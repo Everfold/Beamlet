@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use masonry::core::{CollectionWidget, NewWidget, Widget};
-use masonry::kurbo::{Axis, Vec2};
+use masonry::kurbo::Vec2;
 use masonry::layout::{Dim, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use masonry::widgets::{self, Passthrough, ZStack};
@@ -15,7 +15,7 @@ use xilem_masonry::WidgetView;
 
 use crate::foundation::overlay::focus_bridge::collect_modal_focusables;
 use crate::foundation::overlay::{EscapeCatcher, EscapePressed, ui_scrim};
-use crate::foundation::transition::SlideTransition;
+use crate::foundation::transition::{ModalAxisSizing, SlideTransition};
 use crate::style_engine::current_spec_arc;
 use crate::tokens::{MotionDuration, MotionEasing};
 
@@ -27,8 +27,12 @@ const MODAL_CONTENT_ID: ViewId = ViewId::new(0x5549_3431);
 pub struct ModalShellConfig {
     /// Masonry surface class attached to the modal card (`DIALOG_SURFACE` or `SHEET_SURFACE`).
     pub class: &'static str,
-    /// Card sizing requirements.
-    pub dims: Dimensions,
+    /// Horizontal card sizing policy (`FitContent { min, max }` or `FillUpTo { max }`).
+    pub width: ModalAxisSizing,
+    /// Vertical card sizing policy (`FitContent { min, max }` or `FillUpTo { max }`).
+    pub height: ModalAxisSizing,
+    /// Optional explicit safe viewport margin (defaults to adaptive `12px`/`24px`).
+    pub viewport_margin: Option<f64>,
     /// Interior card padding.
     pub padding: Padding,
     /// Anchor position inside the full-window `ZStack`.
@@ -64,28 +68,30 @@ fn with_zstack_parts<R>(
 struct ModalLimits {
     card_dims: Dimensions,
     clamp_axes: (bool, bool),
-    preferred_max: (Option<f64>, Option<f64>),
+    axis_sizing: (ModalAxisSizing, ModalAxisSizing),
 }
 
-fn resolve_modal_limits(dims: Dimensions, alignment: UnitPoint) -> ModalLimits {
+fn resolve_modal_limits(
+    width: ModalAxisSizing,
+    height: ModalAxisSizing,
+    alignment: UnitPoint,
+) -> ModalLimits {
     let clamp_axes = (
         alignment != UnitPoint::BOTTOM,
         alignment != UnitPoint::RIGHT && alignment != UnitPoint::LEFT,
     );
-    let mut card_dims = dims;
-    let mut preferred_max = (None, None);
-    if let Dim::Fixed(w) = dims.dim(Axis::Horizontal) {
-        preferred_max.0 = Some(w.get());
-        card_dims = card_dims.with_width(Dim::Stretch);
-    }
-    if let Dim::Fixed(h) = dims.dim(Axis::Vertical) {
-        preferred_max.1 = Some(h.get());
-        card_dims = card_dims.with_height(Dim::Stretch);
-    }
+    let card_w = match width {
+        ModalAxisSizing::FitContent { .. } => Dim::Auto,
+        ModalAxisSizing::FillUpTo { .. } => Dim::Stretch,
+    };
+    let card_h = match height {
+        ModalAxisSizing::FitContent { .. } => Dim::MaxContent,
+        ModalAxisSizing::FillUpTo { .. } => Dim::Stretch,
+    };
     ModalLimits {
-        card_dims,
+        card_dims: Dimensions::new(card_w, card_h),
         clamp_axes,
-        preferred_max,
+        axis_sizing: (width, height),
     }
 }
 
@@ -112,7 +118,7 @@ where
         ctx.with_id(MODAL_CONTENT_ID, |ctx| content.build(ctx, app_state))
     });
 
-    let limits = resolve_modal_limits(config.dims, config.alignment);
+    let limits = resolve_modal_limits(config.width, config.height, config.alignment);
     let portal = NewWidget::new(
         widgets::Portal::new(content_el.new_widget.erased()).constrain_horizontal(true),
     );
@@ -133,7 +139,8 @@ where
         duration_ms,
         MotionEasing::EmphasizedDecelerate,
         limits.clamp_axes,
-        limits.preferred_max,
+        limits.axis_sizing,
+        config.viewport_margin,
     ));
 
     let zstack = ZStack::new()
@@ -199,15 +206,20 @@ pub fn modal_shell_rebuild<State, Action, V>(
             ZStack::set_params(&mut zstack, 1, config.alignment);
         }
 
-        let prev_limits = resolve_modal_limits(view_state.config.dims, view_state.config.alignment);
-        let next_limits = resolve_modal_limits(config.dims, config.alignment);
+        let prev_limits = resolve_modal_limits(
+            view_state.config.width,
+            view_state.config.height,
+            view_state.config.alignment,
+        );
+        let next_limits = resolve_modal_limits(config.width, config.height, config.alignment);
 
         let mut slide_dyn = <ZStack as CollectionWidget<_>>::get_mut(&mut zstack, 1);
         let mut slide = slide_dyn.downcast::<SlideTransition>();
         SlideTransition::set_limits(
             &mut slide,
             next_limits.clamp_axes,
-            next_limits.preferred_max,
+            next_limits.axis_sizing,
+            config.viewport_margin,
         );
         let mut card_dyn = SlideTransition::child_mut(&mut slide);
         let mut card = card_dyn.downcast::<widgets::SizedBox>();

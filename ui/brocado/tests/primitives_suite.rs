@@ -898,8 +898,8 @@ fn text_area_has_visible_chrome_and_fits_tight_viewports() {
             );
             assert!(
                 find_first_node(ff, "Flex").is_some()
-                    && find_first_node(ff, "HeightRangeWidget").is_some(),
-                "text_area FocusFrame should host class-styled Flex box + HeightRangeWidget"
+                    && find_first_node(ff, "ConstrainedBox").is_some(),
+                "text_area FocusFrame should host class-styled Flex box + ConstrainedBox"
             );
         }
     }

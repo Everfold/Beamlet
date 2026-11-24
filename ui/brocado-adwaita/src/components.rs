@@ -11,18 +11,25 @@ use brocado_core::components::menu::select;
 use brocado_core::components::selection::switch;
 use brocado_core::components::typography::ui_label;
 use brocado_core::foundation::{
-    EscapeCatcher, FocusFrame, ModalShellConfig, ModalShellState, UiClassExt, adaptive_pair,
-    clip_box, focus_frame, icons, modal_shell_build, modal_shell_message, modal_shell_rebuild,
-    modal_shell_teardown, ui_icon, wrap,
+    EscapeCatcher, FocusFrame, ModalAxisSizing, ModalShellConfig, ModalShellState, UiClassExt,
+    adaptive_pair, clip_box, focus_frame, icons, modal_shell_build, modal_shell_message,
+    modal_shell_rebuild, modal_shell_teardown, ui_icon, wrap,
 };
 use brocado_core::style_engine::{classes, current_spec_arc, with_spec};
 use brocado_core::tokens::{DesignSpec, MotionDuration, TypeRole};
-use masonry::core::ArcStr;
-use masonry::kurbo::Vec2;
-use masonry::layout::{AsUnit, Dim, UnitPoint};
+use masonry::accesskit::{Node, Role};
+use masonry::core::{
+    AccessCtx, ArcStr, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
+    PropertiesMut, PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetId, WidgetMut,
+    WidgetPod,
+};
+use masonry::imaging::Painter;
+use masonry::kurbo::{Axis, Point, Size, Vec2};
+use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, UnitPoint};
 use masonry::properties::{Dimensions, LineBreaking, Padding};
 use masonry::widgets;
-use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
+use tracing::{Span, trace_span};
+use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewId, ViewMarker, ViewPathTracker as _};
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
@@ -562,10 +569,374 @@ where
     flex_col((horizontal_divider(), bar_items)).cross_axis_alignment(CrossAxisAlignment::Stretch)
 }
 
+const ADW_CANCEL_ID: ViewId = ViewId::new(0x5549_3830);
+const ADW_CONFIRM_ID: ViewId = ViewId::new(0x5549_3831);
+
+struct AdwResponseRowWidget {
+    cancel: WidgetPod<dyn Widget>,
+    confirm: WidgetPod<dyn Widget>,
+}
+
+impl AdwResponseRowWidget {
+    const H_GAP: f64 = 10.0;
+    const V_GAP: f64 = 8.0;
+
+    fn new(
+        cancel: NewWidget<impl Widget + ?Sized>,
+        confirm: NewWidget<impl Widget + ?Sized>,
+    ) -> Self {
+        Self {
+            cancel: cancel.erased().to_pod(),
+            confirm: confirm.erased().to_pod(),
+        }
+    }
+
+    fn cancel_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> WidgetMut<'t, dyn Widget> {
+        this.ctx.get_mut(&mut this.widget.cancel)
+    }
+
+    fn confirm_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> WidgetMut<'t, dyn Widget> {
+        this.ctx.get_mut(&mut this.widget.confirm)
+    }
+
+    fn side_by_side(wc: f64, w_ok: f64, avail_w: f64) -> bool {
+        !avail_w.is_finite() || (wc.max(w_ok) * 2.0 + Self::H_GAP) <= avail_w + 0.5
+    }
+}
+
+impl Widget for AdwResponseRowWidget {
+    type Action = NoAction;
+
+    fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
+        ctx.register_child(&mut self.cancel);
+        ctx.register_child(&mut self.confirm);
+    }
+
+    fn update(
+        &mut self,
+        _ctx: &mut UpdateCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        _event: &Update,
+    ) {
+    }
+
+    fn measure(
+        &mut self,
+        ctx: &mut MeasureCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        axis: Axis,
+        len_req: LenReq,
+        cross_length: Option<Length>,
+    ) -> Length {
+        let wc = ctx
+            .compute_length(
+                &mut self.cancel,
+                LenDef::MaxContent,
+                LayoutSize::NONE,
+                Axis::Horizontal,
+                None,
+            )
+            .get();
+        let w_ok = ctx
+            .compute_length(
+                &mut self.confirm,
+                LenDef::MaxContent,
+                LayoutSize::NONE,
+                Axis::Horizontal,
+                None,
+            )
+            .get();
+        let max_btn = wc.max(w_ok);
+        let horiz_need = max_btn * 2.0 + Self::H_GAP;
+
+        match axis {
+            Axis::Horizontal => match len_req {
+                LenReq::MinContent => {
+                    let mc = ctx
+                        .compute_length(
+                            &mut self.cancel,
+                            LenDef::MinContent,
+                            LayoutSize::NONE,
+                            Axis::Horizontal,
+                            None,
+                        )
+                        .get();
+                    let mok = ctx
+                        .compute_length(
+                            &mut self.confirm,
+                            LenDef::MinContent,
+                            LayoutSize::NONE,
+                            Axis::Horizontal,
+                            None,
+                        )
+                        .get();
+                    Length::px(mc.max(mok))
+                }
+                LenReq::MaxContent => Length::px(horiz_need),
+                LenReq::FitContent(space) => {
+                    let av = space.get().max(0.0);
+                    if Self::side_by_side(wc, w_ok, av) {
+                        Length::px(horiz_need.min(av))
+                    } else {
+                        Length::px(max_btn.min(av))
+                    }
+                }
+            },
+            Axis::Vertical => {
+                let avail_w = cross_length
+                    .or_else(|| ctx.context_size().length(Axis::Horizontal))
+                    .map(Length::get);
+                if avail_w.is_none_or(|aw| Self::side_by_side(wc, w_ok, aw)) {
+                    let col_w = avail_w.map(|aw| Length::px(((aw - Self::H_GAP) * 0.5).max(0.0)));
+                    let hc = ctx
+                        .compute_length(
+                            &mut self.cancel,
+                            LenDef::MaxContent,
+                            LayoutSize::maybe(Axis::Horizontal, col_w),
+                            Axis::Vertical,
+                            col_w,
+                        )
+                        .get();
+                    let h_ok = ctx
+                        .compute_length(
+                            &mut self.confirm,
+                            LenDef::MaxContent,
+                            LayoutSize::maybe(Axis::Horizontal, col_w),
+                            Axis::Vertical,
+                            col_w,
+                        )
+                        .get();
+                    Length::px(hc.max(h_ok))
+                } else {
+                    let full_w = avail_w.map(|aw| Length::px(aw.max(0.0)));
+                    let h_ok = ctx
+                        .compute_length(
+                            &mut self.confirm,
+                            LenDef::MaxContent,
+                            LayoutSize::maybe(Axis::Horizontal, full_w),
+                            Axis::Vertical,
+                            full_w,
+                        )
+                        .get();
+                    let hc = ctx
+                        .compute_length(
+                            &mut self.cancel,
+                            LenDef::MaxContent,
+                            LayoutSize::maybe(Axis::Horizontal, full_w),
+                            Axis::Vertical,
+                            full_w,
+                        )
+                        .get();
+                    Length::px(h_ok + Self::V_GAP + hc)
+                }
+            }
+        }
+    }
+
+    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
+        let wc = ctx
+            .compute_length(
+                &mut self.cancel,
+                LenDef::MaxContent,
+                LayoutSize::NONE,
+                Axis::Horizontal,
+                None,
+            )
+            .get();
+        let w_ok = ctx
+            .compute_length(
+                &mut self.confirm,
+                LenDef::MaxContent,
+                LayoutSize::NONE,
+                Axis::Horizontal,
+                None,
+            )
+            .get();
+
+        if Self::side_by_side(wc, w_ok, size.width) {
+            let col_w = ((size.width - Self::H_GAP) * 0.5).max(0.0);
+            let col_len = Some(Length::px(col_w));
+            let hc = ctx
+                .compute_length(
+                    &mut self.cancel,
+                    LenDef::MaxContent,
+                    LayoutSize::one(Axis::Horizontal, Length::px(col_w)),
+                    Axis::Vertical,
+                    col_len,
+                )
+                .get();
+            let h_ok = ctx
+                .compute_length(
+                    &mut self.confirm,
+                    LenDef::MaxContent,
+                    LayoutSize::one(Axis::Horizontal, Length::px(col_w)),
+                    Axis::Vertical,
+                    col_len,
+                )
+                .get();
+            let row_h = hc
+                .max(h_ok)
+                .max(size.height)
+                .min(size.height.max(hc.max(h_ok)));
+            ctx.run_layout(&mut self.cancel, Size::new(col_w, row_h));
+            ctx.place_child(&mut self.cancel, Point::ORIGIN);
+            ctx.run_layout(&mut self.confirm, Size::new(col_w, row_h));
+            ctx.place_child(&mut self.confirm, Point::new(col_w + Self::H_GAP, 0.0));
+        } else {
+            let full_w = size.width.max(0.0);
+            let full_len = Some(Length::px(full_w));
+            let h_ok = ctx
+                .compute_length(
+                    &mut self.confirm,
+                    LenDef::MaxContent,
+                    LayoutSize::one(Axis::Horizontal, Length::px(full_w)),
+                    Axis::Vertical,
+                    full_len,
+                )
+                .get();
+            let hc = ctx
+                .compute_length(
+                    &mut self.cancel,
+                    LenDef::MaxContent,
+                    LayoutSize::one(Axis::Horizontal, Length::px(full_w)),
+                    Axis::Vertical,
+                    full_len,
+                )
+                .get();
+            ctx.run_layout(&mut self.confirm, Size::new(full_w, h_ok));
+            ctx.place_child(&mut self.confirm, Point::ORIGIN);
+            ctx.run_layout(&mut self.cancel, Size::new(full_w, hc));
+            ctx.place_child(&mut self.cancel, Point::new(0.0, h_ok + Self::V_GAP));
+        }
+        ctx.derive_baselines(&self.confirm);
+    }
+
+    fn paint(
+        &mut self,
+        _ctx: &mut PaintCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        _painter: &mut Painter<'_>,
+    ) {
+    }
+
+    fn accessibility_role(&self) -> Role {
+        Role::GenericContainer
+    }
+
+    fn accessibility(
+        &mut self,
+        _ctx: &mut AccessCtx<'_>,
+        _props: &PropertiesRef<'_>,
+        _node: &mut Node,
+    ) {
+    }
+
+    fn children_ids(&self) -> ChildrenIds {
+        ChildrenIds::from_slice(&[self.cancel.id(), self.confirm.id()])
+    }
+
+    fn make_trace_span(&self, id: WidgetId) -> Span {
+        trace_span!("AdwResponseRowWidget", id = id.trace())
+    }
+}
+
+struct AdwResponseRowView<C, K, State, Action> {
+    cancel: C,
+    confirm: K,
+    phantom: PhantomData<fn(State) -> Action>,
+}
+
+impl<C, K, State, Action> ViewMarker for AdwResponseRowView<C, K, State, Action> {}
+
+impl<C, K, State, Action> View<State, Action, ViewCtx> for AdwResponseRowView<C, K, State, Action>
+where
+    State: 'static,
+    Action: 'static,
+    C: WidgetView<State, Action>,
+    K: WidgetView<State, Action>,
+{
+    type Element = Pod<AdwResponseRowWidget>;
+    type ViewState = (C::ViewState, K::ViewState);
+
+    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        let (c_pod, c_st) = ctx.with_id(ADW_CANCEL_ID, |ctx| self.cancel.build(ctx, app_state));
+        let (k_pod, k_st) = ctx.with_id(ADW_CONFIRM_ID, |ctx| self.confirm.build(ctx, app_state));
+        let pod = ctx.create_pod(AdwResponseRowWidget::new(
+            c_pod.new_widget,
+            k_pod.new_widget,
+        ));
+        (pod, (c_st, k_st))
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        (c_st, k_st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        {
+            let mut c = AdwResponseRowWidget::cancel_mut(&mut element);
+            ctx.with_id(ADW_CANCEL_ID, |ctx| {
+                self.cancel
+                    .rebuild(&prev.cancel, c_st, ctx, c.downcast(), app_state);
+            });
+        }
+        {
+            let mut k = AdwResponseRowWidget::confirm_mut(&mut element);
+            ctx.with_id(ADW_CONFIRM_ID, |ctx| {
+                self.confirm
+                    .rebuild(&prev.confirm, k_st, ctx, k.downcast(), app_state);
+            });
+        }
+    }
+
+    fn teardown(
+        &self,
+        (c_st, k_st): &mut Self::ViewState,
+        ctx: &mut ViewCtx,
+        mut element: Mut<'_, Self::Element>,
+    ) {
+        {
+            let mut c = AdwResponseRowWidget::cancel_mut(&mut element);
+            ctx.with_id(ADW_CANCEL_ID, |ctx| {
+                self.cancel.teardown(c_st, ctx, c.downcast());
+            });
+        }
+        {
+            let mut k = AdwResponseRowWidget::confirm_mut(&mut element);
+            ctx.with_id(ADW_CONFIRM_ID, |ctx| {
+                self.confirm.teardown(k_st, ctx, k.downcast());
+            });
+        }
+    }
+
+    fn message(
+        &self,
+        (c_st, k_st): &mut Self::ViewState,
+        message: &mut MessageCtx,
+        mut element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<Action> {
+        match message.take_first() {
+            Some(ADW_CANCEL_ID) => {
+                let mut c = AdwResponseRowWidget::cancel_mut(&mut element);
+                self.cancel.message(c_st, message, c.downcast(), app_state)
+            }
+            Some(ADW_CONFIRM_ID) => {
+                let mut k = AdwResponseRowWidget::confirm_mut(&mut element);
+                self.confirm.message(k_st, message, k.downcast(), app_state)
+            }
+            _ => MessageResult::Stale,
+        }
+    }
+}
+
 /// Callback invoked by [`AdwAlertDialog`].
 pub type AlertDialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
 
-/// GNOME `AdwAlertDialog` modal featuring centered copy and full-width split footer responses.
+/// GNOME `AdwAlertDialog` modal featuring centered copy and adaptive split/stacked footer responses.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callbacks")]
 pub struct AdwAlertDialog<State, Action> {
@@ -574,7 +945,7 @@ pub struct AdwAlertDialog<State, Action> {
     confirm_text: ArcStr,
     cancel_text: ArcStr,
     destructive: bool,
-    width: f64,
+    width: ModalAxisSizing,
     on_confirm: AlertDialogCallback<State, Action>,
     on_dismiss: AlertDialogCallback<State, Action>,
     phantom: PhantomData<fn(&mut State) -> Action>,
@@ -587,9 +958,34 @@ impl<State, Action> AdwAlertDialog<State, Action> {
         self
     }
 
-    /// Overrides the modal dialog card width (defaults to `360px`).
+    /// Forces a preferred modal dialog card width up to `width` (still clamped on narrow viewports).
     pub fn width(mut self, width: f64) -> Self {
-        self.width = width;
+        self.width = ModalAxisSizing::FillUpTo { max: Some(width) };
+        self
+    }
+
+    /// Sets the minimum content-adaptive modal dialog width (defaults to `260px`).
+    pub fn min_width(mut self, min_width: f64) -> Self {
+        let max = match self.width {
+            ModalAxisSizing::FitContent { max, .. } | ModalAxisSizing::FillUpTo { max } => max,
+        };
+        self.width = ModalAxisSizing::FitContent {
+            min: Some(min_width),
+            max,
+        };
+        self
+    }
+
+    /// Sets the maximum content-adaptive modal dialog width (defaults to `420px`).
+    pub fn max_width(mut self, max_width: f64) -> Self {
+        let min = match self.width {
+            ModalAxisSizing::FitContent { min, .. } => min,
+            ModalAxisSizing::FillUpTo { .. } => Some(260.0),
+        };
+        self.width = ModalAxisSizing::FitContent {
+            min,
+            max: Some(max_width),
+        };
         self
     }
 
@@ -612,47 +1008,33 @@ impl<State, Action> AdwAlertDialog<State, Action> {
             left: 16.px(),
         });
 
-        let make_cancel = |cb: AlertDialogCallback<State, Action>, txt: ArcStr| {
-            secondary_button(txt, move |s: &mut State| cb(s))
+        let cancel_cb = self.on_dismiss.clone();
+        let cancel_btn =
+            secondary_button(self.cancel_text.clone(), move |s: &mut State| cancel_cb(s));
+        let confirm_cb = self.on_confirm.clone();
+        let confirm_btn: Box<AnyWidgetView<State, Action>> = if self.destructive {
+            destructive_button(self.confirm_text.clone(), move |s: &mut State| {
+                confirm_cb(s)
+            })
+            .boxed()
+        } else {
+            primary_button(self.confirm_text.clone(), move |s: &mut State| {
+                confirm_cb(s)
+            })
+            .boxed()
         };
-        let make_confirm = |cb: AlertDialogCallback<State, Action>, txt: ArcStr, dest: bool| {
-            if dest {
-                destructive_button(txt, move |s: &mut State| cb(s)).boxed()
-            } else {
-                primary_button(txt, move |s: &mut State| cb(s)).boxed()
-            }
-        };
 
-        let wide_responses = flex_row((
-            make_cancel(self.on_dismiss.clone(), self.cancel_text.clone()).flex(1.0),
-            make_confirm(
-                self.on_confirm.clone(),
-                self.confirm_text.clone(),
-                self.destructive,
-            )
-            .flex(1.0),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .gap(10.px());
-
-        let narrow_responses = flex_col((
-            make_confirm(
-                self.on_confirm.clone(),
-                self.confirm_text.clone(),
-                self.destructive,
-            ),
-            make_cancel(self.on_dismiss.clone(), self.cancel_text.clone()),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch)
-        .gap(8.px());
-
-        let responses = crate::breakpoint::breakpoint_bin(240.0, wide_responses, narrow_responses)
-            .padding(Padding {
-                top: 0.px(),
-                right: 16.px(),
-                bottom: 16.px(),
-                left: 16.px(),
-            });
+        let responses = AdwResponseRowView {
+            cancel: cancel_btn,
+            confirm: confirm_btn,
+            phantom: PhantomData,
+        }
+        .padding(Padding {
+            top: 0.px(),
+            right: 16.px(),
+            bottom: 16.px(),
+            left: 16.px(),
+        });
 
         flex_col((header, responses))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -680,7 +1062,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            width: self.width,
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::ZERO,
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 16.0),
@@ -703,7 +1090,12 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         let next_content = self.build_content(&spec);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
-            dims: Dimensions::new(Dim::Fixed(self.width.px()), Dim::MaxContent),
+            width: self.width,
+            height: ModalAxisSizing::FitContent {
+                min: None,
+                max: None,
+            },
+            viewport_margin: None,
             padding: Padding::ZERO,
             alignment: UnitPoint::CENTER,
             enter_offset: Vec2::new(0.0, 16.0),
@@ -769,7 +1161,10 @@ where
         confirm_text: confirm_text.into(),
         cancel_text: cancel_text.into(),
         destructive: false,
-        width: 360.0,
+        width: ModalAxisSizing::FitContent {
+            min: Some(260.0),
+            max: Some(420.0),
+        },
         on_confirm: Arc::new(on_confirm),
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,

@@ -1,16 +1,9 @@
 //! Outlined & Filled single-line and multi-line text fields with reactive [`FocusFrame`](crate::foundation::FocusFrame) indicators.
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 
-use masonry::accesskit::{Node, Role};
-use masonry::core::{
-    AccessCtx, ArcStr, ChildrenIds, LayoutCtx, MeasureCtx, PaintCtx, PropertiesMut, PropertiesRef,
-    RegisterCtx, Update, UpdateCtx, Widget, WidgetMut, WidgetPod,
-};
-use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Size};
-use masonry::layout::{AsUnit, Dim, LayoutSize, LenDef, LenReq, Length, SizeDef, UnitPoint};
+use masonry::core::ArcStr;
+use masonry::layout::{AsUnit, Dim, Length, UnitPoint};
 use masonry::parley::LineHeight;
 use masonry::properties::{Dimensions, Gap, LineBreaking, Padding};
 use masonry::widgets;
@@ -27,7 +20,7 @@ use xilem_masonry::view::{
 };
 
 use crate::components::typography::{UiLabel, ui_label};
-use crate::foundation::{UiClassExt, clip_box, focus_frame, icons, ui_icon};
+use crate::foundation::{UiClassExt, clip_box, constrained_box, focus_frame, icons, ui_icon};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{ControlVisualGrammar, DesignSpec, TypeRole};
 
@@ -474,185 +467,6 @@ fn build_bottom_row<State: 'static, Action: 'static>(
     )
 }
 
-/// Internal vertical bounds container so [`UiTextArea`] starts at `min_height`, expands up to `max_height`, and scrolls beyond.
-struct HeightRangeWidget {
-    child: WidgetPod<dyn Widget>,
-    min_height: f64,
-    max_height: f64,
-}
-
-impl HeightRangeWidget {
-    fn set_bounds(this: &mut WidgetMut<'_, Self>, min_height: f64, max_height: f64) {
-        let max_height = max_height.max(min_height);
-        if (this.widget.min_height - min_height).abs() > 0.01
-            || (this.widget.max_height - max_height).abs() > 0.01
-        {
-            this.widget.min_height = min_height;
-            this.widget.max_height = max_height;
-            this.ctx.request_layout();
-        }
-    }
-
-    fn child_mut<'t>(this: &'t mut WidgetMut<'_, Self>) -> WidgetMut<'t, dyn Widget> {
-        this.ctx.get_mut(&mut this.widget.child)
-    }
-}
-
-impl Widget for HeightRangeWidget {
-    type Action = masonry::core::NoAction;
-
-    fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
-        ctx.register_child(&mut self.child);
-    }
-
-    fn update(
-        &mut self,
-        _ctx: &mut UpdateCtx<'_>,
-        _props: &mut PropertiesMut<'_>,
-        _event: &Update,
-    ) {
-    }
-
-    fn measure(
-        &mut self,
-        ctx: &mut MeasureCtx<'_>,
-        _props: &PropertiesRef<'_>,
-        axis: Axis,
-        len_req: LenReq,
-        cross_length: Option<Length>,
-    ) -> Length {
-        let len_def = match len_req {
-            LenReq::MinContent => LenDef::MinContent,
-            LenReq::MaxContent => LenDef::MaxContent,
-            LenReq::FitContent(l) => LenDef::FitContent(l),
-        };
-        let context_size = LayoutSize::maybe(axis.cross(), cross_length);
-        let len = ctx.compute_length(&mut self.child, len_def, context_size, axis, cross_length);
-        match axis {
-            Axis::Vertical => {
-                let (lo, hi) = match len_req {
-                    LenReq::FitContent(space) => (
-                        self.min_height.min(space.get()),
-                        self.max_height.min(space.get()),
-                    ),
-                    _ => (self.min_height, self.max_height),
-                };
-                Length::px(len.get().clamp(lo, hi.max(lo)))
-            }
-            Axis::Horizontal => len,
-        }
-    }
-
-    fn layout(&mut self, ctx: &mut LayoutCtx<'_>, _props: &PropertiesRef<'_>, size: Size) {
-        let child_def = SizeDef::fixed(size);
-        let measured = ctx.compute_size(&mut self.child, child_def, size.into());
-        ctx.run_layout(&mut self.child, measured);
-        ctx.place_child(&mut self.child, Point::ORIGIN);
-    }
-
-    fn paint(
-        &mut self,
-        _ctx: &mut PaintCtx<'_>,
-        _props: &PropertiesRef<'_>,
-        _painter: &mut Painter<'_>,
-    ) {
-    }
-
-    fn accessibility_role(&self) -> Role {
-        Role::GenericContainer
-    }
-
-    fn accessibility(
-        &mut self,
-        _ctx: &mut AccessCtx<'_>,
-        _props: &PropertiesRef<'_>,
-        _node: &mut Node,
-    ) {
-    }
-
-    fn children_ids(&self) -> ChildrenIds {
-        ChildrenIds::from_slice(&[self.child.id()])
-    }
-}
-
-struct HeightRangeView<V, State, Action> {
-    child: V,
-    min_height: f64,
-    max_height: f64,
-    phantom: PhantomData<fn(State) -> Action>,
-}
-
-fn height_range<V, State, Action>(
-    child: V,
-    min_height: f64,
-    max_height: f64,
-) -> HeightRangeView<V, State, Action> {
-    HeightRangeView {
-        child,
-        min_height,
-        max_height: max_height.max(min_height),
-        phantom: PhantomData,
-    }
-}
-
-impl<V, State, Action> ViewMarker for HeightRangeView<V, State, Action> {}
-
-impl<V, State, Action> View<State, Action, ViewCtx> for HeightRangeView<V, State, Action>
-where
-    State: 'static,
-    Action: 'static,
-    V: WidgetView<State, Action>,
-{
-    type Element = Pod<HeightRangeWidget>;
-    type ViewState = V::ViewState;
-
-    fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let (child_pod, st) = self.child.build(ctx, app_state);
-        let pod = ctx.create_pod(HeightRangeWidget {
-            child: child_pod.erased().new_widget.to_pod(),
-            min_height: self.min_height,
-            max_height: self.max_height,
-        });
-        (pod, st)
-    }
-
-    fn rebuild(
-        &self,
-        prev: &Self,
-        view_state: &mut Self::ViewState,
-        ctx: &mut ViewCtx,
-        mut element: Mut<'_, Self::Element>,
-        app_state: &mut State,
-    ) {
-        HeightRangeWidget::set_bounds(&mut element, self.min_height, self.max_height);
-        let mut child = HeightRangeWidget::child_mut(&mut element);
-        self.child
-            .rebuild(&prev.child, view_state, ctx, child.downcast(), app_state);
-    }
-
-    fn teardown(
-        &self,
-        view_state: &mut Self::ViewState,
-        ctx: &mut ViewCtx,
-        mut element: Mut<'_, Self::Element>,
-    ) {
-        let mut child = HeightRangeWidget::child_mut(&mut element);
-        self.child.teardown(view_state, ctx, child.downcast());
-    }
-
-    fn message(
-        &self,
-        view_state: &mut Self::ViewState,
-        message: &mut MessageCtx,
-        mut element: Mut<'_, Self::Element>,
-        app_state: &mut State,
-    ) -> MessageResult<Action> {
-        let mut child = HeightRangeWidget::child_mut(&mut element);
-        self.child
-            .message(view_state, message, child.downcast(), app_state)
-    }
-}
-
 /// Optional text submission callback invoked on Enter (when [`InsertNewline`] is `OnShiftEnter` or `Never`).
 pub type TextSubmitCallback<State, Action> =
     Arc<dyn Fn(&mut State, String) -> Action + Send + Sync>;
@@ -799,13 +613,13 @@ impl<State, Action> UiTextArea<State, Action> {
             ti = ti.on_cancel(move |s: &mut State, txt: String| on_cancel(s, txt));
         }
 
-        let bounded_portal = height_range(
+        let bounded_portal = constrained_box(
             portal(ti.ui_class(classes::TEXT_FIELD_FLUSH))
                 .constrain_horizontal(true)
                 .must_fill(true),
-            self.min_height,
-            self.max_height,
-        );
+        )
+        .min_height(self.min_height)
+        .max_height(self.max_height);
 
         let frame_slot: Box<AnyWidgetView<State, Action>> = if is_md3_floating {
             let float_lbl = build_floating_label(

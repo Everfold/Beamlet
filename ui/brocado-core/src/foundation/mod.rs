@@ -5,6 +5,7 @@ pub mod adaptive_pair;
 pub mod bevel;
 pub mod class_view;
 pub mod clip_box;
+pub mod constrained_box;
 pub mod focus_frame;
 pub mod icon;
 pub mod overlay;
@@ -17,6 +18,7 @@ pub use adaptive_pair::{AdaptivePairView, AdaptivePairWidget, adaptive_pair};
 pub use bevel::{BeveledBorder, BeveledBorderView, beveled_surface};
 pub use class_view::{UiClassExt, WithClass};
 pub use clip_box::{ClipBoxView, ClipBoxWidget, clip_box};
+pub use constrained_box::{ConstrainedBox, ConstrainedBoxView, constrained_box};
 pub use focus_frame::{FocusFrame, FocusFrameView, focus_frame};
 pub use icon::{icons, ui_icon};
 pub use overlay::{
@@ -30,5 +32,5 @@ pub use overlay::{
 };
 pub use ripple::{RippleLayer, RippleLayerView, ripple_layer};
 pub use state_layer::{InteractiveColors, blend_over, resolve_interactive_colors, with_opacity};
-pub use transition::{SlideTransition, UiTransition, ui_transition};
+pub use transition::{ModalAxisSizing, SlideTransition, UiTransition, ui_transition};
 pub use wrap::{WrapState, WrapView, WrapWidget, wrap};

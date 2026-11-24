@@ -26,7 +26,9 @@ use crate::foundation::overlay::{
     EscapeCatcher, ModalShellConfig, ModalShellState, modal_shell_build, modal_shell_message,
     modal_shell_rebuild, modal_shell_teardown,
 };
-use crate::foundation::{UiClassExt, clip_box, ui_icon};
+use crate::foundation::{
+    ConstrainedBox, ModalAxisSizing, UiClassExt, clip_box, constrained_box, ui_icon,
+};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, MotionDuration, NavIndicatorStyle, TypeRole};
 
@@ -255,13 +257,13 @@ pub fn navigation_rail<State: 'static, Action: 'static, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let dests = destinations.to_vec();
     let cb = Arc::new(on_select);
-    with_spec(move |spec: &DesignSpec, _| {
+    let row = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let items: Vec<Box<AnyWidgetView<State, Action>>> = dests
             .iter()
@@ -309,12 +311,14 @@ where
                     .gap(8.px())
                     .padding(Padding::from_vh(12.px(), 6.px())),
             )
-            .dims(Dimensions::STRETCH.with_width(80.px()))
-            .background_color(p.surface_low),
+            .dims(Dimensions::STRETCH)
+            .background_color(p.surface_low)
+            .flex(1.0),
             vertical_divider(),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
-    })
+    });
+    constrained_box(row).max_width(81.0).fill_max_width(true)
 }
 
 /// Persistent sidebar navigation drawer honoring [`NavIndicatorStyle`]:
@@ -326,7 +330,6 @@ fn navigation_drawer_inner<State: 'static, Action: 'static, F>(
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-    fixed_width: Option<f64>,
 ) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
@@ -393,10 +396,6 @@ where
             })
             .collect();
 
-        let drawer_dims = match fixed_width {
-            Some(w) => Dimensions::STRETCH.with_width(w.px()),
-            None => Dimensions::STRETCH,
-        };
         let drawer_panel = sized_box(
             flex_col((
                 head,
@@ -408,29 +407,47 @@ where
             .gap(6.px())
             .padding(Padding::all(12.px())),
         )
-        .dims(drawer_dims)
+        .dims(Dimensions::STRETCH)
         .background_color(p.surface_low);
 
-        let drawer_child: AnyFlexChild<State, Action> = if fixed_width.is_some() {
-            drawer_panel.into_any_flex()
-        } else {
-            drawer_panel.flex(1.0).into_any_flex()
-        };
-        flex_row((drawer_child, vertical_divider()))
+        flex_row((drawer_panel.flex(1.0), vertical_divider()))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
     })
 }
 
+/// Persistent sidebar navigation drawer (`240px` preferred width, shrinking cleanly in narrower containers).
 pub fn navigation_drawer<State: 'static, Action: 'static, F>(
     header_title: Option<&str>,
     destinations: &[NavDestination],
     selected: usize,
     on_select: F,
-) -> impl WidgetView<State, Action, Widget = widgets::Flex> + use<State, Action, F>
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, F>
 where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
-    navigation_drawer_inner(header_title, destinations, selected, on_select, Some(240.0))
+    navigation_drawer_with_width(header_title, destinations, selected, on_select, 240.0)
+}
+
+/// Persistent sidebar navigation drawer with an explicit maximum width (`width + 1px` incl. divider)
+/// that shrinks cleanly inside narrower containers.
+pub fn navigation_drawer_with_width<State: 'static, Action: 'static, F>(
+    header_title: Option<&str>,
+    destinations: &[NavDestination],
+    selected: usize,
+    on_select: F,
+    width: f64,
+) -> impl WidgetView<State, Action, Widget = ConstrainedBox> + use<State, Action, F>
+where
+    F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
+{
+    constrained_box(navigation_drawer_inner(
+        header_title,
+        destinations,
+        selected,
+        on_select,
+    ))
+    .max_width(width + 1.0)
+    .fill_max_width(true)
 }
 
 /// Modal drawer view created by [`modal_navigation_drawer`].
@@ -444,10 +461,20 @@ pub struct UiModalDrawer<V, State, Action> {
 }
 
 impl<V, State, Action> UiModalDrawer<V, State, Action> {
+    /// Overrides the modal drawer maximum width (defaults to `260.0`).
+    pub fn width(mut self, width: f64) -> Self {
+        self.width = width;
+        self
+    }
+
     fn shell_config(&self) -> ModalShellConfig {
         ModalShellConfig {
             class: classes::SHEET_SURFACE,
-            dims: Dimensions::STRETCH.with_width(self.width.px()),
+            width: ModalAxisSizing::FillUpTo {
+                max: Some(self.width),
+            },
+            height: ModalAxisSizing::FillUpTo { max: None },
+            viewport_margin: None,
             padding: Padding::all(0.px()),
             alignment: UnitPoint::LEFT,
             enter_offset: Vec2::new(-48.0, 0.0),
@@ -537,8 +564,7 @@ where
     S: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
-    let drawer =
-        navigation_drawer_inner(header_title, destinations, selected, on_select, None).boxed();
+    let drawer = navigation_drawer_inner(header_title, destinations, selected, on_select).boxed();
     UiModalDrawer {
         drawer,
         width: 260.0,

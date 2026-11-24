@@ -29,6 +29,38 @@ fn opt_layout_size(width: Option<Length>, height: Option<Length>) -> LayoutSize 
     }
 }
 
+/// Per-axis sizing policy inside modal shells wrapped by [`SlideTransition`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ModalAxisSizing {
+    /// Hug the child's natural `MaxContent` extent, clamped into `[min, min(max, viewport_cap)]`.
+    FitContent {
+        /// Optional minimum extent (automatically clamped to `viewport_cap`).
+        min: Option<f64>,
+        /// Optional maximum extent before viewport clamping.
+        max: Option<f64>,
+    },
+    /// Fill available viewport extent up to `max` (always clamped to `viewport_cap`).
+    FillUpTo {
+        /// Optional maximum extent before viewport clamping.
+        max: Option<f64>,
+    },
+}
+
+impl ModalAxisSizing {
+    const fn max(self) -> Option<f64> {
+        match self {
+            Self::FitContent { max, .. } | Self::FillUpTo { max } => max,
+        }
+    }
+
+    const fn min(self) -> Option<f64> {
+        match self {
+            Self::FitContent { min, .. } => min,
+            Self::FillUpTo { .. } => None,
+        }
+    }
+}
+
 /// Masonry wrapper widget animating child position and opacity on mount, key change, or exit.
 #[expect(
     missing_debug_implementations,
@@ -42,7 +74,8 @@ pub struct SlideTransition {
     exiting: bool,
     easing: MotionEasing,
     clamp_axes: (bool, bool),
-    preferred_max: (Option<f64>, Option<f64>),
+    axis_sizing: (ModalAxisSizing, ModalAxisSizing),
+    viewport_margin: Option<f64>,
 }
 
 impl SlideTransition {
@@ -60,7 +93,11 @@ impl SlideTransition {
             duration_ms,
             easing,
             (false, false),
-            (None, None),
+            (
+                ModalAxisSizing::FillUpTo { max: None },
+                ModalAxisSizing::FillUpTo { max: None },
+            ),
+            None,
         )
     }
 
@@ -72,7 +109,8 @@ impl SlideTransition {
         duration_ms: u64,
         easing: MotionEasing,
         clamp_axes: (bool, bool),
-        preferred_max: (Option<f64>, Option<f64>),
+        axis_sizing: (ModalAxisSizing, ModalAxisSizing),
+        viewport_margin: Option<f64>,
     ) -> Self {
         Self {
             child: child.erased().to_pod(),
@@ -82,24 +120,35 @@ impl SlideTransition {
             exiting: false,
             easing,
             clamp_axes,
-            preferred_max,
+            axis_sizing,
+            viewport_margin,
         }
     }
 
-    /// Updates optional per-axis maximum card extents (used by modal dialogs/sheets).
+    /// Updates optional per-axis sizing constraints (used by modal dialogs/sheets).
     pub(crate) fn set_limits(
         this: &mut WidgetMut<'_, Self>,
         clamp_axes: (bool, bool),
-        preferred_max: (Option<f64>, Option<f64>),
+        axis_sizing: (ModalAxisSizing, ModalAxisSizing),
+        viewport_margin: Option<f64>,
     ) {
-        if this.widget.clamp_axes != clamp_axes || this.widget.preferred_max != preferred_max {
+        if this.widget.clamp_axes != clamp_axes
+            || this.widget.axis_sizing != axis_sizing
+            || this.widget.viewport_margin != viewport_margin
+        {
             this.widget.clamp_axes = clamp_axes;
-            this.widget.preferred_max = preferred_max;
+            this.widget.axis_sizing = axis_sizing;
+            this.widget.viewport_margin = viewport_margin;
             this.ctx.request_layout();
         }
     }
 
-    fn effective_axis_cap(avail: Option<Length>, clamp: bool, pref: Option<f64>) -> Option<f64> {
+    fn effective_axis_cap(
+        avail: Option<Length>,
+        clamp: bool,
+        pref: Option<f64>,
+        viewport_margin: Option<f64>,
+    ) -> Option<f64> {
         if !clamp {
             return match (avail, pref) {
                 (Some(a), Some(p)) => Some(p.min(a.get().max(0.0))),
@@ -108,7 +157,7 @@ impl SlideTransition {
         }
         avail.map_or(pref, |a| {
             let av = a.get().max(0.0);
-            let margin = if av <= 200.0 { 12.0 } else { 24.0 };
+            let margin = viewport_margin.unwrap_or_else(|| if av <= 200.0 { 12.0 } else { 24.0 });
             let cap = (av - margin).max(0.0);
             Some(pref.map_or(cap, |p| p.min(cap)))
         })
@@ -173,6 +222,53 @@ impl SlideTransition {
     }
 }
 
+impl SlideTransition {
+    fn resolve_horizontal(
+        &mut self,
+        ctx: &mut MeasureCtx<'_>,
+        avail_w: Option<Length>,
+        eff_cross_h: Option<Length>,
+    ) -> f64 {
+        let cap_w = Self::effective_axis_cap(
+            avail_w,
+            self.clamp_axes.0,
+            self.axis_sizing.0.max(),
+            self.viewport_margin,
+        );
+        match self.axis_sizing.0 {
+            ModalAxisSizing::FillUpTo { .. } => {
+                if let Some(w) = cap_w {
+                    w
+                } else {
+                    let child_ctx = opt_layout_size(None, eff_cross_h);
+                    ctx.compute_length(
+                        &mut self.child,
+                        LenDef::MaxContent,
+                        child_ctx,
+                        Axis::Horizontal,
+                        eff_cross_h,
+                    )
+                    .get()
+                }
+            }
+            ModalAxisSizing::FitContent { min, .. } => {
+                let child_ctx = opt_layout_size(None, eff_cross_h);
+                let nat_w = ctx
+                    .compute_length(
+                        &mut self.child,
+                        LenDef::MaxContent,
+                        child_ctx,
+                        Axis::Horizontal,
+                        eff_cross_h,
+                    )
+                    .get();
+                let eff_min = min.map_or(0.0, |m| cap_w.map_or(m, |c| m.min(c)));
+                cap_w.map_or_else(|| nat_w.max(eff_min), |c| nat_w.max(eff_min).min(c))
+            }
+        }
+    }
+}
+
 impl Widget for SlideTransition {
     type Action = NoAction;
 
@@ -222,8 +318,11 @@ impl Widget for SlideTransition {
         let cs = ctx.context_size();
         if !self.clamp_axes.0
             && !self.clamp_axes.1
-            && self.preferred_max.0.is_none()
-            && self.preferred_max.1.is_none()
+            && self.axis_sizing
+                == (
+                    ModalAxisSizing::FillUpTo { max: None },
+                    ModalAxisSizing::FillUpTo { max: None },
+                )
         {
             return ctx.redirect_measurement(&mut self.child, axis, cross_length);
         }
@@ -239,73 +338,70 @@ impl Widget for SlideTransition {
             (Axis::Horizontal, _) => cross_length.or_else(|| cs.length(Axis::Vertical)),
         };
 
-        let cap_w = Self::effective_axis_cap(avail_w, self.clamp_axes.0, self.preferred_max.0);
-        let cap_h = Self::effective_axis_cap(avail_h, self.clamp_axes.1, self.preferred_max.1);
+        let cap_w = Self::effective_axis_cap(
+            avail_w,
+            self.clamp_axes.0,
+            self.axis_sizing.0.max(),
+            self.viewport_margin,
+        );
+        let cap_h = Self::effective_axis_cap(
+            avail_h,
+            self.clamp_axes.1,
+            self.axis_sizing.1.max(),
+            self.viewport_margin,
+        );
 
         match axis {
             Axis::Horizontal => {
                 if matches!(len_req, LenReq::MinContent) && (self.clamp_axes.0 || cap_w.is_some()) {
                     return Length::ZERO;
                 }
-                let child_auto = if let Some(w) = cap_w {
-                    if self.preferred_max.0.is_some() {
-                        LenDef::Fixed(Length::px(w))
-                    } else {
-                        LenDef::FitContent(Length::px(w))
-                    }
-                } else {
-                    len_req.into()
-                };
-                let eff_cross = cap_h.map(Length::px).or(cross_length);
-                let child_ctx = opt_layout_size(cap_w.map(Length::px), eff_cross);
-                let measured = ctx.compute_length(
-                    &mut self.child,
-                    child_auto,
-                    child_ctx,
-                    Axis::Horizontal,
-                    eff_cross,
-                );
-                if let Some(w) = cap_w {
-                    if self.preferred_max.0.is_some() {
-                        Length::px(w)
-                    } else {
-                        Length::px(measured.get().min(w))
-                    }
-                } else {
-                    measured
-                }
+                let eff_cross_h = cap_h.map(Length::px).or(cross_length);
+                Length::px(self.resolve_horizontal(ctx, avail_w, eff_cross_h))
             }
             Axis::Vertical => {
                 if matches!(len_req, LenReq::MinContent) && (self.clamp_axes.1 || cap_h.is_some()) {
                     return Length::ZERO;
                 }
-                let eff_cross = cap_w.map(Length::px).or(cross_length);
-                let child_auto = if self.preferred_max.1.is_some()
+                let eff_w = cross_length.map_or_else(
+                    || {
+                        self.resolve_horizontal(
+                            ctx,
+                            cs.length(Axis::Horizontal),
+                            cap_h.map(Length::px),
+                        )
+                    },
+                    |cw| cap_w.map_or_else(|| cw.get(), |c| cw.get().min(c)),
+                );
+                let eff_cross = Some(Length::px(eff_w));
+                if matches!(self.axis_sizing.1, ModalAxisSizing::FillUpTo { .. })
                     && let Some(h) = cap_h
                 {
-                    LenDef::Fixed(Length::px(h))
-                } else if self.clamp_axes.1 {
+                    return Length::px(h);
+                }
+                let child_auto = if self.clamp_axes.1 || cap_h.is_some() {
                     LenDef::MaxContent
                 } else {
                     len_req.into()
                 };
                 let child_ctx = opt_layout_size(eff_cross, cap_h.map(Length::px));
-                let measured = ctx.compute_length(
-                    &mut self.child,
-                    child_auto,
-                    child_ctx,
-                    Axis::Vertical,
-                    eff_cross,
-                );
-                if let Some(h) = cap_h {
-                    if self.preferred_max.1.is_some() {
-                        Length::px(h)
-                    } else {
-                        Length::px(measured.get().min(h))
-                    }
-                } else {
-                    measured
-                }
+                let measured = ctx
+                    .compute_length(
+                        &mut self.child,
+                        child_auto,
+                        child_ctx,
+                        Axis::Vertical,
+                        eff_cross,
+                    )
+                    .get();
+                let eff_min = self
+                    .axis_sizing
+                    .1
+                    .min()
+                    .map_or(0.0, |m| cap_h.map_or(m, |c| m.min(c)));
+                Length::px(
+                    cap_h.map_or_else(|| measured.max(eff_min), |c| measured.max(eff_min).min(c)),
+                )
             }
         }
     }
@@ -497,28 +593,37 @@ mod tests {
     #[test]
     fn effective_axis_cap_respects_extreme_narrow_and_wide_bounds() {
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), true, Some(380.0)),
+            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), true, Some(380.0), None,),
             Some(148.0)
         );
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(1200.0)), true, Some(380.0)),
+            SlideTransition::effective_axis_cap(Some(Length::px(1200.0)), true, Some(380.0), None,),
             Some(380.0)
         );
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, Some(240.0)),
+            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, Some(240.0), None,),
             Some(160.0)
         );
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(1200.0)), false, Some(240.0)),
+            SlideTransition::effective_axis_cap(Some(Length::px(1200.0)), false, Some(240.0), None,),
             Some(240.0)
         );
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, None),
+            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, None, None),
             None
         );
         assert_eq!(
-            SlideTransition::effective_axis_cap(Some(Length::px(180.0)), true, None),
+            SlideTransition::effective_axis_cap(Some(Length::px(180.0)), true, None, None),
             Some(168.0)
+        );
+        assert_eq!(
+            SlideTransition::effective_axis_cap(
+                Some(Length::px(400.0)),
+                true,
+                Some(380.0),
+                Some(16.0),
+            ),
+            Some(380.0)
         );
     }
 }

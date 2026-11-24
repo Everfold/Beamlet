@@ -6,17 +6,18 @@ pub use crate::theme::{DesignLanguage, UiAccent, UiTheme, ui_scope};
 pub use crate::theme::{themed_window, themed_window_with_backdrop};
 pub use crate::{
     AdaptivePairView, AdaptivePairWidget, AnyWidgetView, BeveledBorder, BeveledBorderView,
-    Brightness, ClipBoxView, ClipBoxWidget, Color, ContextMenuHost, ContextMenuView,
-    ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
-    EscapeCatcher, FocusFrame, FocusFrameView, FontFamily, FontFamilyName, FontWeight,
-    GenericFamily, HoverTooltipHost, InputFocusStyle, InsertNewline, MotionDuration, MotionEasing,
-    NavIndicatorStyle, Pod, PopoverAnchorRect, PopoverAnchorView, PopoverAnchorWidget, RippleLayer,
-    RippleLayerView, SemanticPalette, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle,
-    TextAlign, TypeRole, TypeScale, UiClassExt, ViewCtx, WidgetView, WidgetViewSequence,
-    WindowBackdrop, WindowSizeClass, WrapState, WrapView, WrapWidget, adaptive_pair,
-    beveled_surface, build_default_properties, cached_default_properties, classes, clip_box,
-    current_spec, focus_frame, icons, memoize_with_spec, popover_anchor, popover_place,
-    ripple_layer, ui_icon, ui_transition, with_spec, wrap,
+    Brightness, ClipBoxView, ClipBoxWidget, Color, ConstrainedBox, ConstrainedBoxView,
+    ContextMenuHost, ContextMenuView, ControlBorderStyle, ControlMetrics, DesignSpec,
+    DialogActionOrder, ElevationLevel, EscapeCatcher, FocusFrame, FocusFrameView, FontFamily,
+    FontFamilyName, FontWeight, GenericFamily, HoverTooltipHost, InputFocusStyle, InsertNewline,
+    ModalAxisSizing, MotionDuration, MotionEasing, NavIndicatorStyle, Pod, PopoverAnchorRect,
+    PopoverAnchorView, PopoverAnchorWidget, RippleLayer, RippleLayerView, SemanticPalette,
+    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextAlign, TypeRole, TypeScale,
+    UiClassExt, ViewCtx, WidgetView, WidgetViewSequence, WindowBackdrop, WindowSizeClass,
+    WrapState, WrapView, WrapWidget, adaptive_pair, beveled_surface, build_default_properties,
+    cached_default_properties, classes, clip_box, constrained_box, current_spec, focus_frame,
+    icons, memoize_with_spec, popover_anchor, popover_place, ripple_layer, ui_icon, ui_transition,
+    with_spec, wrap,
 };
 
 #[cfg(feature = "winit")]
@@ -43,8 +44,8 @@ pub use brocado_fluent::{
 #[cfg(feature = "hig")]
 pub use brocado_hig::{
     HigAccent, HigTheme, MacosAlertDialog, disclosure_group, form_group, form_row, help_button,
-    hig_scope, inspector_panel, macos_alert_dialog, macos_toolbar, macos_toolbar_with_center,
-    path_control, popup_button, source_list_sidebar, stepper,
+    hig_scope, inspector_panel, inspector_panel_with_width, macos_alert_dialog, macos_toolbar,
+    macos_toolbar_with_center, path_control, popup_button, source_list_sidebar, stepper,
 };
 
 #[cfg(feature = "adwaita")]

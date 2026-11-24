@@ -1395,12 +1395,22 @@ mod tests {
             .unwrap();
         assert!(h_ov.state().overlays.show_basic_dialog);
         let dlg_tree = dump_layout_tree(&mut h_ov);
+        let dlg_card = find_first_with_type(&dlg_tree, "SlideTransition")
+            .expect("BasicDialog SlideTransition")
+            .children
+            .first()
+            .expect("BasicDialog card");
         let (cancel_btn, _) =
             find_ancestor_button_and_label(&dlg_tree, "取消").expect("'取消' button");
         let (ok_btn, _) = find_ancestor_button_and_label(&dlg_tree, "恢复").expect("'恢复' button");
+        let card_cx = dlg_card.rect.x + dlg_card.rect.width * 0.5;
+        let card_right = dlg_card.rect.x + dlg_card.rect.width;
         assert!(
-            cancel_btn.rect.x > 600.0 && ok_btn.rect.x > cancel_btn.rect.x,
-            "BasicDialog actions should align to trailing side at 1200x800: cancel={:?}, ok={:?}",
+            cancel_btn.rect.x + cancel_btn.rect.width * 0.5 > card_cx
+                && ok_btn.rect.x > cancel_btn.rect.x
+                && card_right - (ok_btn.rect.x + ok_btn.rect.width) <= 24.0,
+            "BasicDialog actions should align to trailing side of dialog card {:?}: cancel={:?}, ok={:?}",
+            dlg_card.rect,
             cancel_btn.rect,
             ok_btn.rect
         );
