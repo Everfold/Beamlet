@@ -329,13 +329,11 @@ impl Widget for SlideTransition {
 
         let avail_w = match (axis, len_req) {
             (Axis::Horizontal, LenReq::FitContent(s)) => Some(s),
-            (Axis::Horizontal, _) => cs.length(Axis::Horizontal),
-            (Axis::Vertical, _) => cross_length.or_else(|| cs.length(Axis::Horizontal)),
+            _ => cs.length(Axis::Horizontal),
         };
         let avail_h = match (axis, len_req) {
             (Axis::Vertical, LenReq::FitContent(s)) => Some(s),
-            (Axis::Vertical, _) => cs.length(Axis::Vertical),
-            (Axis::Horizontal, _) => cross_length.or_else(|| cs.length(Axis::Vertical)),
+            _ => cs.length(Axis::Vertical),
         };
 
         let cap_w = Self::effective_axis_cap(
@@ -356,7 +354,9 @@ impl Widget for SlideTransition {
                 if matches!(len_req, LenReq::MinContent) && (self.clamp_axes.0 || cap_w.is_some()) {
                     return Length::ZERO;
                 }
-                let eff_cross_h = cap_h.map(Length::px).or(cross_length);
+                let eff_cross_h = cross_length
+                    .map(|ch| cap_h.map_or(ch, |c| Length::px(ch.get().min(c))))
+                    .or_else(|| cap_h.map(Length::px));
                 Length::px(self.resolve_horizontal(ctx, avail_w, eff_cross_h))
             }
             Axis::Vertical => {
