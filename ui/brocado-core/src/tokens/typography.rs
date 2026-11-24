@@ -160,6 +160,30 @@ impl TypeScale {
         }
     }
 
+    /// Returns the Material Design 3 Expressive typography ramp with emphasized weights and
+    /// tightened display/headline tracking.
+    #[must_use]
+    pub const fn md3_expressive() -> Self {
+        Self {
+            display_large: TextStyleSpec::new(57.0, 64.0, -0.4, FontWeight::BOLD),
+            display_medium: TextStyleSpec::new(45.0, 52.0, -0.25, FontWeight::BOLD),
+            display_small: TextStyleSpec::new(36.0, 44.0, -0.15, FontWeight::SEMI_BOLD),
+            headline_large: TextStyleSpec::new(32.0, 40.0, -0.1, FontWeight::SEMI_BOLD),
+            headline_medium: TextStyleSpec::new(28.0, 36.0, 0.0, FontWeight::SEMI_BOLD),
+            headline_small: TextStyleSpec::new(24.0, 32.0, 0.0, FontWeight::SEMI_BOLD),
+            title_large: TextStyleSpec::new(22.0, 28.0, 0.0, FontWeight::SEMI_BOLD),
+            title_medium: TextStyleSpec::new(16.0, 24.0, 0.1, FontWeight::SEMI_BOLD),
+            title_small: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::SEMI_BOLD),
+            body_large: TextStyleSpec::new(16.0, 24.0, 0.5, FontWeight::NORMAL),
+            body_medium: TextStyleSpec::new(14.0, 20.0, 0.25, FontWeight::NORMAL),
+            body_small: TextStyleSpec::new(12.0, 16.0, 0.4, FontWeight::NORMAL),
+            label_large: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::SEMI_BOLD),
+            label_medium: TextStyleSpec::new(12.0, 16.0, 0.4, FontWeight::SEMI_BOLD),
+            label_small: TextStyleSpec::new(11.0, 16.0, 0.4, FontWeight::SEMI_BOLD),
+            font_family: None,
+        }
+    }
+
     /// Returns the Windows 11 / WinUI 3 Fluent 2 typography ramp (size, line height, tracking, weight).
     ///
     /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.

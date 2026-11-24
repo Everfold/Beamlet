@@ -29,9 +29,9 @@ pub use brocado_core::style_engine::{
 };
 pub use brocado_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
-    InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TextStyleSpec, TypeRole, TypeScale,
-    WindowBackdrop, WindowSizeClass,
+    InputFocusStyle, MotionDuration, MotionEasing, MotionScheme, NavIndicatorStyle,
+    SemanticPalette, ShortcutConvention, SpringSpec, StateFeedbackMode, TabIndicatorStyle,
+    TextStyleSpec, TypeRole, TypeScale, WindowBackdrop, WindowSizeClass,
 };
 pub use clamp::{AdwClamp, ClampView, bounded_clamp, clamp};
 pub use components::{

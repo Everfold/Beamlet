@@ -6,7 +6,7 @@ use masonry::peniko::Color;
 use masonry::properties::BoxShadow;
 
 use crate::foundation::state_layer::{blend_over, with_opacity};
-use crate::tokens::{Brightness, TypeScale, UiLocale};
+use crate::tokens::{Brightness, MotionScheme, TypeScale, UiLocale};
 
 /// Surface elevation levels (`Level0..Level5`) producing tonal fill & soft shadows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -379,6 +379,10 @@ pub struct DesignSpec {
     pub shortcut_convention: ShortcutConvention,
     /// Control and button border grammar (`BorderlessFlat`, `BeveledElevation`, etc.).
     pub control_border: ControlBorderStyle,
+    /// Spring physics personality (`Standard` vs Material 3 `Expressive`).
+    pub motion_scheme: MotionScheme,
+    /// Optional active/pressed button corner radius override (e.g. M3 Expressive pill -> `12px` morph).
+    pub active_button_radius: Option<f64>,
     /// Accessibility / preference switch disabling entrance slide/fade offsets and durations.
     pub reduced_motion: bool,
     /// 15-role typography ramp and optional font family.
@@ -506,6 +510,8 @@ impl DesignSpec {
             dialog_action_order: DialogActionOrder::PrimaryTrailing,
             shortcut_convention: ShortcutConvention::Control,
             control_border: ControlBorderStyle::UniformHairline,
+            motion_scheme: MotionScheme::Standard,
+            active_button_radius: None,
             reduced_motion: false,
             typography: TypeScale::baseline(),
             locale: UiLocale::default(),

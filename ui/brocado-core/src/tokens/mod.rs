@@ -11,7 +11,7 @@ pub use layout::{
     SPACE_32, WindowSizeClass,
 };
 pub use locale::UiLocale;
-pub use motion::{MotionDuration, MotionEasing};
+pub use motion::{MotionDuration, MotionEasing, MotionScheme, SpringSpec};
 pub use spec::{
     ControlBorderStyle, ControlMetrics, ControlVisualGrammar, DesignSpec, DialogActionOrder,
     ElevationLevel, InputFocusStyle, NavIndicatorStyle, SemanticPalette, ShortcutConvention,

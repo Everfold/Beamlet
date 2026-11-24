@@ -3,8 +3,8 @@
 use brocado_core::style_engine::scope::{UiScope, ui_scope};
 use brocado_core::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
-    NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeScale,
-    WindowBackdrop,
+    MotionScheme, NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle,
+    TypeScale, WindowBackdrop,
 };
 use masonry::core::FromDynWidget;
 use masonry::peniko::Color;
@@ -125,6 +125,8 @@ impl Md3Theme {
             dialog_action_order: DialogActionOrder::PrimaryTrailing,
             shortcut_convention: ShortcutConvention::Control,
             control_border: ControlBorderStyle::UniformHairline,
+            motion_scheme: MotionScheme::Standard,
+            active_button_radius: None,
             reduced_motion: self.reduced_motion,
             typography: self.typography.clone(),
             locale: Default::default(),

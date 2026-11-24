@@ -47,7 +47,7 @@ pub use style_engine::{
 };
 pub use tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
-    InputFocusStyle, MotionDuration, MotionEasing, NavIndicatorStyle, SemanticPalette,
-    ShortcutConvention, StateFeedbackMode, TabIndicatorStyle, TypeRole, TypeScale, UiLocale,
-    WindowBackdrop, WindowSizeClass,
+    InputFocusStyle, MotionDuration, MotionEasing, MotionScheme, NavIndicatorStyle,
+    SemanticPalette, ShortcutConvention, SpringSpec, StateFeedbackMode, TabIndicatorStyle,
+    TypeRole, TypeScale, UiLocale, WindowBackdrop, WindowSizeClass,
 };

@@ -158,6 +158,226 @@ fn solve_bezier_x(target_x: f64, x1: f64, x2: f64) -> f64 {
     mid
 }
 
+/// Underdamped / critically-damped / overdamped spring physics specification.
+///
+/// Used by Material 3 Expressive [`MotionScheme`] for spatial transitions (bounds, scale, morph,
+/// offset) and non-overshooting effects transitions (opacity, color).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpringSpec {
+    /// Damping ratio (`< 1.0` produces spatial overshoot/bounce; `1.0` is critically damped).
+    pub damping_ratio: f64,
+    /// Spring stiffness constant (`k > 0`).
+    pub stiffness: f64,
+}
+
+impl SpringSpec {
+    /// Constructs a [`SpringSpec`] clamped to physically valid positive parameters.
+    #[must_use]
+    pub const fn new(damping_ratio: f64, stiffness: f64) -> Self {
+        let zeta = if damping_ratio > 0.05 {
+            damping_ratio
+        } else {
+            0.05
+        };
+        let k = if stiffness > 1.0 { stiffness } else { 1.0 };
+        Self {
+            damping_ratio: zeta,
+            stiffness: k,
+        }
+    }
+
+    /// M3 Expressive fast spatial spring (snappy bounce for small buttons/toggles).
+    #[must_use]
+    pub const fn expressive_fast_spatial() -> Self {
+        Self::new(0.6, 800.0)
+    }
+
+    /// M3 Expressive default spatial spring (balanced overshoot for cards/panels).
+    #[must_use]
+    pub const fn expressive_default_spatial() -> Self {
+        Self::new(0.8, 380.0)
+    }
+
+    /// M3 Expressive slow spatial spring (sheets/full-screen containers).
+    #[must_use]
+    pub const fn expressive_slow_spatial() -> Self {
+        Self::new(0.8, 200.0)
+    }
+
+    /// M3 Expressive fast effects spring (no overshoot for hover/press tints & opacity).
+    #[must_use]
+    pub const fn expressive_fast_effects() -> Self {
+        Self::new(1.0, 3800.0)
+    }
+
+    /// M3 Expressive default effects spring (critically damped, zero overshoot).
+    #[must_use]
+    pub const fn expressive_default_effects() -> Self {
+        Self::new(1.0, 1600.0)
+    }
+
+    /// M3 Expressive slow effects spring (critically damped, zero overshoot).
+    #[must_use]
+    pub const fn expressive_slow_effects() -> Self {
+        Self::new(1.0, 800.0)
+    }
+
+    /// Standard fast spatial spring.
+    #[must_use]
+    pub const fn standard_fast_spatial() -> Self {
+        Self::new(0.9, 1400.0)
+    }
+
+    /// Standard default spatial spring.
+    #[must_use]
+    pub const fn standard_default_spatial() -> Self {
+        Self::new(0.9, 700.0)
+    }
+
+    /// Standard slow spatial spring.
+    #[must_use]
+    pub const fn standard_slow_spatial() -> Self {
+        Self::new(0.9, 300.0)
+    }
+
+    /// Standard fast effects spring.
+    #[must_use]
+    pub const fn standard_fast_effects() -> Self {
+        Self::new(1.0, 3800.0)
+    }
+
+    /// Standard default effects spring.
+    #[must_use]
+    pub const fn standard_default_effects() -> Self {
+        Self::new(1.0, 1600.0)
+    }
+
+    /// Standard slow effects spring.
+    #[must_use]
+    pub const fn standard_slow_effects() -> Self {
+        Self::new(1.0, 800.0)
+    }
+
+    /// Analytical displacement `x(t)` starting at `0.0` with unit equilibrium target `1.0`.
+    ///
+    /// Underdamped springs (`damping_ratio < 1.0`) may slightly overshoot `1.0` cleanly before
+    /// settling; critically damped / overdamped springs remain bounded in `0.0..=1.0`.
+    #[must_use]
+    pub fn sample(self, elapsed_secs: f64) -> f64 {
+        if elapsed_secs <= 0.0 || !elapsed_secs.is_finite() {
+            return 0.0;
+        }
+        let zeta = self.damping_ratio.max(0.05);
+        let omega0 = self.stiffness.max(1.0).sqrt();
+        let t = elapsed_secs;
+
+        if (zeta - 1.0).abs() < 1e-4 {
+            // Critically damped: 1 - e^(-w0*t) * (1 + w0*t)
+            let decay = (-omega0 * t).exp();
+            1.0 - decay * (1.0 + omega0 * t)
+        } else if zeta < 1.0 {
+            // Underdamped: 1 - e^(-zeta*w0*t) * (cos(wd*t) + (zeta/sqrt(1-zeta^2)) * sin(wd*t))
+            let sq = (1.0 - zeta * zeta).sqrt();
+            let wd = omega0 * sq;
+            let decay = (-zeta * omega0 * t).exp();
+            1.0 - decay * ((wd * t).cos() + (zeta / sq) * (wd * t).sin())
+        } else {
+            // Overdamped
+            let gamma = omega0 * (zeta * zeta - 1.0).sqrt();
+            let r1 = -zeta * omega0 + gamma;
+            let r2 = -zeta * omega0 - gamma;
+            let c1 = r2 / (r2 - r1);
+            let c2 = -r1 / (r2 - r1);
+            1.0 - c1 * (r1 * t).exp() - c2 * (r2 * t).exp()
+        }
+    }
+
+    /// Returns `true` once the analytical decay envelope has dropped below `1e-3` (capped at `1.5s`).
+    #[must_use]
+    pub fn is_settled(self, elapsed_secs: f64) -> bool {
+        if elapsed_secs >= 1.5 {
+            return true;
+        }
+        if elapsed_secs <= 0.0 {
+            return false;
+        }
+        let zeta = self.damping_ratio.max(0.05);
+        let omega0 = self.stiffness.max(1.0).sqrt();
+        let env_rate = if zeta <= 1.0 {
+            zeta * omega0
+        } else {
+            omega0 * (zeta - (zeta * zeta - 1.0).sqrt())
+        };
+        (-env_rate * elapsed_secs).exp() * (1.0 + omega0 * elapsed_secs) < 1e-3
+    }
+}
+
+/// Platform motion physics personality selector (`Standard` vs Material 3 `Expressive`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum MotionScheme {
+    /// Conservative critically- or near-critically-damped springs.
+    #[default]
+    Standard,
+    /// Material 3 Expressive bouncier spatial springs paired with overshoot-free effects springs.
+    Expressive,
+}
+
+impl MotionScheme {
+    /// Fast spatial spring (`0.6/800` for Expressive, `0.9/1400` for Standard).
+    #[must_use]
+    pub const fn fast_spatial(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_fast_spatial(),
+            Self::Expressive => SpringSpec::expressive_fast_spatial(),
+        }
+    }
+
+    /// Default spatial spring (`0.8/380` for Expressive, `0.9/700` for Standard).
+    #[must_use]
+    pub const fn default_spatial(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_default_spatial(),
+            Self::Expressive => SpringSpec::expressive_default_spatial(),
+        }
+    }
+
+    /// Slow spatial spring (`0.8/200` for Expressive, `0.9/300` for Standard).
+    #[must_use]
+    pub const fn slow_spatial(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_slow_spatial(),
+            Self::Expressive => SpringSpec::expressive_slow_spatial(),
+        }
+    }
+
+    /// Fast effects spring (critically damped, zero overshoot).
+    #[must_use]
+    pub const fn fast_effects(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_fast_effects(),
+            Self::Expressive => SpringSpec::expressive_fast_effects(),
+        }
+    }
+
+    /// Default effects spring (critically damped, zero overshoot).
+    #[must_use]
+    pub const fn default_effects(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_default_effects(),
+            Self::Expressive => SpringSpec::expressive_default_effects(),
+        }
+    }
+
+    /// Slow effects spring (critically damped, zero overshoot).
+    #[must_use]
+    pub const fn slow_effects(self) -> SpringSpec {
+        match self {
+            Self::Standard => SpringSpec::standard_slow_effects(),
+            Self::Expressive => SpringSpec::expressive_slow_effects(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

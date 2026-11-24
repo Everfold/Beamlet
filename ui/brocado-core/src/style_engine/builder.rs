@@ -35,6 +35,7 @@ fn insert_button_variant(
     tint: Color,
     border: Option<(Color, f64)>,
     radius: f64,
+    active_radius: Option<f64>,
     padding: Padding,
     dims: Option<Dimensions>,
     shadow: Option<BoxShadow>,
@@ -71,10 +72,11 @@ fn insert_button_variant(
         Selector::classes(&[class]).with_hovered(true),
         PropertySet::new().with(Background::Color(states.hover)),
     );
-    stack.push_layer(
-        Selector::classes(&[class]).with_active(true),
-        PropertySet::new().with(Background::Color(states.pressed)),
-    );
+    let mut active_set = PropertySet::new().with(Background::Color(states.pressed));
+    if let Some(r) = active_radius {
+        active_set = active_set.with(CornerRadius { radius: r.px() });
+    }
+    stack.push_layer(Selector::classes(&[class]).with_active(true), active_set);
     stack.push_layer(
         Selector::classes(&[class]).with_disabled(true),
         PropertySet::new().with(Background::Color(states.disabled)),
@@ -86,6 +88,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
     let p = &spec.palette;
     let m = &spec.metrics;
     let t = &spec.typography;
+    let morph = spec.active_button_radius;
     let eff_btn_h = m
         .button_height
         .max(f64::from(t.label_large.line_height) + 10.0);
@@ -109,6 +112,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_accent,
         None,
         m.button_radius,
+        morph,
         std_pad,
         btn_dims,
         None,
@@ -126,6 +130,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         secondary_border,
         m.button_radius,
+        morph,
         std_pad,
         btn_dims,
         None,
@@ -138,6 +143,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         Some((p.border, 1.0)),
         m.button_radius,
+        morph,
         std_pad,
         btn_dims,
         Some(spec.box_shadow(ElevationLevel::Level1)),
@@ -150,6 +156,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         Some((p.border_strong, 1.0)),
         m.button_radius,
+        morph,
         std_pad,
         btn_dims,
         None,
@@ -162,6 +169,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         None,
         m.button_radius,
+        morph,
         Padding::from_vh(0.px(), 10.px()),
         btn_dims,
         None,
@@ -193,6 +201,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_error,
         None,
         m.button_radius,
+        morph,
         std_pad,
         btn_dims,
         None,
@@ -208,6 +217,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_secondary,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -239,6 +249,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -251,6 +262,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_accent,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -263,6 +275,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -275,6 +288,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -287,6 +301,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_secondary,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -299,6 +314,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_secondary,
         Some((p.border_strong, 1.0)),
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -311,6 +327,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.inverse_on_surface,
         None,
         m.icon_btn_radius,
+        morph,
         icon_pad,
         icon_dims,
         None,
@@ -338,7 +355,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         ),
     ] {
         insert_button_variant(
-            &mut stack, cls, spec, bg, fg, None, 16.0, fab_pad, fab_dims, fab_shadow,
+            &mut stack, cls, spec, bg, fg, None, 16.0, None, fab_pad, fab_dims, fab_shadow,
         );
     }
 
@@ -352,6 +369,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         Some((p.border, 1.0)),
         m.chip_radius,
+        None,
         chip_pad,
         chip_dims,
         None,
@@ -364,6 +382,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         Some((p.border_strong, 1.0)),
         m.chip_radius,
+        None,
         chip_pad,
         chip_dims,
         None,
@@ -376,6 +395,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         None,
         m.chip_radius,
+        None,
         chip_pad,
         chip_dims,
         None,
@@ -388,6 +408,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         Some((p.border, 1.0)),
         m.chip_radius,
+        None,
         chip_pad,
         chip_dims,
         None,
@@ -400,6 +421,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_secondary,
         Some((p.border, 1.0)),
         m.chip_radius,
+        None,
         chip_pad,
         chip_dims,
         None,
@@ -413,6 +435,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         None,
         m.nav_pill_radius,
+        None,
         Padding::from_vh(6.px(), 10.px()),
         None,
         None,
@@ -425,6 +448,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         None,
         m.nav_pill_radius,
+        None,
         Padding::from_vh(6.px(), 10.px()),
         None,
         None,
@@ -438,6 +462,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         Some((p.border, 1.0)),
         m.button_radius,
+        None,
         Padding::from_vh(6.px(), 14.px()),
         None,
         None,
@@ -450,6 +475,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         Some((p.border_strong, 1.0)),
         m.button_radius,
+        None,
         Padding::from_vh(6.px(), 14.px()),
         None,
         None,
@@ -463,6 +489,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         None,
         m.nav_pill_radius,
+        None,
         Padding::from_vh(8.px(), 12.px()),
         None,
         None,
@@ -475,6 +502,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         None,
         m.nav_pill_radius,
+        None,
         Padding::from_vh(8.px(), 12.px()),
         None,
         None,
@@ -488,6 +516,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.text_primary,
         None,
         (m.menu_radius - 2.0).max(4.0),
+        None,
         Padding::from_vh(8.px(), 12.px()),
         None,
         None,
@@ -500,6 +529,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.on_secondary_container,
         None,
         (m.menu_radius - 2.0).max(4.0),
+        None,
         Padding::from_vh(8.px(), 12.px()),
         None,
         None,
@@ -513,6 +543,7 @@ fn configure_buttons(props: &mut DefaultProperties, spec: &DesignSpec) {
         p.accent,
         None,
         (m.button_radius - 2.0).max(4.0),
+        None,
         Padding::from_vh(8.px(), 12.px()),
         None,
         None,
