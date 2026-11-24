@@ -1,8 +1,7 @@
-//! Reusable cross-theme UI infrastructure: color blending, SVG icon cache, transitions,
+//! Reusable Material Design 3 Expressive UI infrastructure: color blending, SVG icon cache, transitions,
 //! Masonry class injection, and window overlay primitives.
 
 pub mod adaptive_pair;
-pub mod bevel;
 pub mod bounded;
 pub mod breakpoint;
 pub mod clamp;
@@ -19,7 +18,6 @@ pub mod transition;
 pub mod wrap;
 
 pub use adaptive_pair::{AdaptivePairView, AdaptivePairWidget, adaptive_pair};
-pub use bevel::{BeveledBorder, BeveledBorderView, beveled_surface};
 pub use bounded::{
     Bounded, BoundedAnyView, BoundedViewExt, BoundedX, BoundedXAnyView, BoundedXSeq, BoundedY,
     BoundedYSeq, ColumnView, ContainerView, FitAxis, HasMinAxis, RowView, ScrollAxis,

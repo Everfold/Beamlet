@@ -85,7 +85,7 @@ fn wrap_reflows_multiple_rows_and_fits_320px() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_s| {
             let items: Vec<_> = [
                 "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta",
@@ -143,7 +143,7 @@ fn split_view_lays_out_panes_and_resizes_on_drag() {
 
     let mut harness = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_s| {
             sized_box(
                 split_view(
@@ -209,7 +209,7 @@ fn text_area_inserts_newline_on_enter_and_submits_with_on_shift_enter() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |s| {
             flex_col((
                 text_area(s.enter_text.clone(), |st: &mut State, v| {
@@ -298,7 +298,7 @@ fn rich_prose_clicks_link_and_drags_selection() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_s| {
             sized_box(
                 rich_prose(vec![
@@ -367,7 +367,7 @@ fn context_menu_opens_on_secondary_click_selects_and_dismisses() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_s| {
             context_menu(
                 sized_box(label("Right-click surface")).padding(Padding::all(28.px())),
@@ -460,7 +460,7 @@ fn popover_anchor_opens_interactive_surface_and_dismisses() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |s| {
             let main = sized_box(popover_anchor(
                 primary_button("Toggle Popover", |st: &mut State| {
@@ -568,14 +568,11 @@ fn split_view_extreme_drag_cancel_asymmetric_mins_and_vertical() {
     let mut harness = build_ui_harness(
         State { dark: true },
         |s| {
-            UiTheme::new(
-                DesignLanguage::Md3,
-                if s.dark {
-                    Brightness::Dark
-                } else {
-                    Brightness::Light
-                },
-            )
+            if s.dark {
+                Theme::dark()
+            } else {
+                Theme::light()
+            }
         },
         |_s| {
             sized_box(
@@ -690,7 +687,7 @@ fn split_view_extreme_drag_cancel_asymmetric_mins_and_vertical() {
     struct NarrowSplitState;
     let mut tight_harness = build_ui_harness(
         NarrowSplitState,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             flex_col((
                 sized_box(
@@ -788,7 +785,7 @@ fn rich_prose_out_of_bounds_drag_and_narrow_wrap() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
+        |_| Theme::dark(),
         |_| {
             flex_col((sized_box(
                 rich_prose(vec![
@@ -859,7 +856,7 @@ fn text_area_has_visible_chrome_and_fits_tight_viewports() {
                 val: "Multi-line body content\nSecond line".to_owned(),
                 brightness,
             },
-            |s| UiTheme::new(DesignLanguage::Md3, s.brightness),
+            |s| Theme::light().with_brightness(s.brightness),
             |s| {
                 sized_box(
                     flex_col((
@@ -926,7 +923,7 @@ fn popover_and_context_menu_fit_extreme_narrow_and_short_viewports() {
 
     let mut harness = build_ui_harness(
         State::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |s| {
             let trigger = context_menu(
                 popover_anchor(
@@ -1028,7 +1025,7 @@ fn wrap_handles_extreme_narrow_120px_and_60px_without_overflow() {
     for container_w in [120.0_f64, 60.0_f64] {
         let mut harness = build_ui_harness(
             State { max_w: container_w },
-            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |_| Theme::light(),
             |s| {
                 let tags: Vec<_> = ["Alpha", "LongerChipLabel", "B", "Gamma"]
                     .into_iter()
@@ -1095,7 +1092,7 @@ fn scaffold_fab_and_toast_avoid_bottom_bar() {
 
     let mut harness = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             scaffold(label("Body"))
                 .top_bar(top_app_bar(TopAppBarVariant::Small, "App"))
@@ -1179,7 +1176,7 @@ fn adaptive_dialogs_locale_and_font_scale() {
                 time: TimeOfDay::new(9, 30),
             },
             |s| {
-                UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+                Theme::light()
                     .with_locale(UiLocale::zh_cn())
                     .with_font_scale(s.scale)
             },
@@ -1253,7 +1250,7 @@ fn adaptive_dialogs_locale_and_font_scale() {
             time: TimeOfDay::new(9, 30),
         },
         |s| {
-            UiTheme::new(DesignLanguage::Md3, Brightness::Light)
+            Theme::light()
                 .with_locale(UiLocale::zh_cn())
                 .with_font_scale(s.scale)
         },
@@ -1291,7 +1288,7 @@ fn sidebars_clamp_in_narrow_containers() {
 
     let mut drawer_narrow = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             navigation_drawer(
                 Some("Nav"),
@@ -1320,7 +1317,7 @@ fn sidebars_clamp_in_narrow_containers() {
 
     let mut drawer_desktop = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             let drawer = navigation_drawer(
                 Some("Nav"),
@@ -1371,7 +1368,7 @@ fn time_picker_dialog_has_no_phantom_bottom_whitespace() {
         State {
             time: TimeOfDay::new(16, 0),
         },
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |s| {
             let t = s.time;
             time_picker_dialog(t, |st: &mut State, new_t| st.time = new_t, |_| {}, |_| {}).boxed()
@@ -1406,7 +1403,7 @@ fn scroll_view_wheel_and_scrollbar_drag_update_viewport() {
     let make_harness = |visibility: ScrollBarVisibility| {
         let mut h = build_ui_harness(
             State { visibility },
-            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |_| Theme::light(),
             |s| {
                 scroll_view(
                     flex_col((
@@ -1506,7 +1503,7 @@ fn scroll_view_reserved_mode_reserves_track_width_and_applies_custom_style() {
     let make_harness = |style: ScrollBarStyle| {
         let mut h = build_ui_harness(
             State { style },
-            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |_| Theme::light(),
             |s| {
                 scroll_view(
                     flex_col((
@@ -1569,7 +1566,7 @@ fn scroll_view_shift_wheel_and_focus_pan_to_child() {
     // 1. Shift+Wheel scrolls horizontally when vertically constrained
     let mut h_horiz = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             scroll_view(sized_box(label("WideStart")).dims(Dimensions::fixed(900.px(), 60.px())))
                 .constrain_vertical(true)
@@ -1617,7 +1614,7 @@ fn scroll_view_shift_wheel_and_focus_pan_to_child() {
     // 2. Tab focus onto an offscreen button triggers RequestPanToChild into viewport
     let mut h_pan = build_ui_harness(
         State,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             scroll_view(
                 flex_col(vec![
@@ -1728,7 +1725,7 @@ fn compile_time_bounded_scaffold_zero_overflow_on_narrow_and_short_viewports() {
     for &(w, h) in &[(360_u32, 480_u32), (200_u32, 240_u32), (140_u32, 160_u32)] {
         let mut harness = build_ui_harness(
             BoundedState,
-            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |_| Theme::light(),
             |st| build_bounded_scene(st).boxed(),
             PreviewConfig {
                 width: w,
@@ -1758,7 +1755,7 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
     // 1. scroll_horizontal permits horizontal wheel scroll on a Bounded row while preserving Bounded
     let mut h_horiz = build_ui_harness(
         ParityState,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             bounded(scroll_horizontal(
                 row((
@@ -1814,7 +1811,7 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
     // 2. constrained_box max_width preserves BoundedX and caps card width cleanly
     let mut h_cbox = build_ui_harness(
         ParityState,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
+        |_| Theme::dark(),
         |_| {
             scroll_vertical(
                 constrained_box(bounded_card(
@@ -1859,7 +1856,7 @@ fn toast_action_and_close_buttons_render_focus_and_hover_feedback() {
         ToastFxState {
             toasts: initial_toasts,
         },
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |s| {
             let tst = toast_host(&s.toasts, |st: &mut ToastFxState| {
                 let _ = st.toasts.dismiss_current();
@@ -1938,7 +1935,7 @@ fn toast_action_and_close_buttons_render_focus_and_hover_feedback() {
 fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
     #[derive(Clone)]
     struct ToastMotionState {
-        theme: UiTheme,
+        theme: Theme,
         toasts: ToastHostState,
     }
 
@@ -1951,8 +1948,7 @@ fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
             false,
         );
         let state = ToastMotionState {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
-                .with_reduced_motion(reduced_motion),
+            theme: Theme::light().with_reduced_motion(reduced_motion),
             toasts,
         };
         let mut h = build_ui_harness(
@@ -2022,7 +2018,7 @@ fn toast_host_fades_in_and_out_and_respects_reduced_motion() {
 fn md3_expressive_button_morphs_corner_radius_on_press() {
     let mut h = build_ui_harness(
         0usize,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             flex_col(primary_button("Expressive", |clicks: &mut usize| {
                 *clicks += 1
@@ -2041,15 +2037,11 @@ fn md3_expressive_button_morphs_corner_radius_on_press() {
         .find_widget_ids("Button")
         .first()
         .expect("primary button widget must exist");
-    let spec = UiTheme::new(DesignLanguage::Md3, Brightness::Light).to_spec();
     let expected_rest = CornerRadius {
-        radius: spec.metrics.button_radius.px(),
+        radius: brocado::theme::metrics::BUTTON_RADIUS.px(),
     };
     let expected_active = CornerRadius {
-        radius: spec
-            .active_button_radius
-            .expect("MD3 Expressive spec must define active_button_radius")
-            .px(),
+        radius: brocado::theme::metrics::ACTIVE_BUTTON_RADIUS.px(),
     };
 
     assert_eq!(h.widget_prop::<CornerRadius>(btn_id), Some(expected_rest));
@@ -2107,7 +2099,7 @@ fn max_node_right(node: &LayoutNode) -> f64 {
 fn md3_expressive_components_layout_interaction_and_narrow_bounds() {
     let mut h = build_ui_harness(
         M3eDemoState::default(),
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |state| {
             scroll_vertical(
                 flex_col((
@@ -2223,19 +2215,16 @@ fn preview_harness_probes_resolved_props_cropped_widget_and_pixel_diff() {
     #[derive(Default)]
     struct ProbeState;
 
-    let theme = UiTheme::new(DesignLanguage::Md3, Brightness::Light);
-    let spec = theme.to_spec();
-    let expected_states = brocado::core_ui::foundation::resolve_interactive_colors(
-        spec.palette.accent,
-        spec.palette.on_accent,
-        spec.disabled_container(),
-        spec.brightness,
-        spec.feedback,
+    let theme = Theme::light();
+    let expected_states = brocado::foundation::resolve_interactive_colors(
+        theme.scheme.primary,
+        theme.scheme.on_primary,
+        theme.disabled_container(),
     );
 
     let mut harness = build_ui_harness(
         ProbeState,
-        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| Theme::light(),
         |_| {
             outlined_card(
                 column((primary_button("Save", |_| {}),))
@@ -2264,7 +2253,7 @@ fn preview_harness_probes_resolved_props_cropped_widget_and_pixel_diff() {
     let radius = harness
         .widget_prop::<CornerRadius>(btn_id)
         .expect("Button must resolve CornerRadius property");
-    assert!((radius.radius.get() - spec.metrics.button_radius).abs() < 1e-6);
+    assert!((radius.radius.get() - brocado::theme::metrics::BUTTON_RADIUS).abs() < 1e-6);
 
     let btn_rect = harness.widget_rect(btn_id).expect("Button rect missing");
     let rest_crop = harness

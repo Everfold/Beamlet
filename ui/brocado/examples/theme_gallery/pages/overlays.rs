@@ -49,9 +49,12 @@ pub fn overlays_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> 
     };
     let toast_btn = |lbl| {
         outlined_button(lbl, |s: &mut GalleryState| {
-            let theme_name = s.theme.language.label();
+            let mode = match s.theme.brightness {
+                Brightness::Light => "浅色",
+                Brightness::Dark => "深色",
+            };
             s.overlays.toasts.show(
-                format!("主题：{theme_name}"),
+                format!("主题：Material 3 Expressive ({mode})"),
                 Some("关闭"),
                 ToastDuration::Short,
                 true,

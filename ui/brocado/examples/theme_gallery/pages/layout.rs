@@ -51,21 +51,21 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
                     .cross_axis_alignment(CrossAxisAlignment::Start)
                     .gap(8.px()),
             ),
-            with_spec(move |spec: &DesignSpec, _| {
-                let p = &spec.palette;
+            with_theme(move |theme: &Theme, _| {
+                let s = &theme.scheme;
                 let cell = |title: &'static str, bg: masonry::peniko::Color| {
                     sized_box(clip_box(
                         title_small(title).line_breaking(LineBreaking::Clip),
                     ))
                     .padding(Padding::all(8.px()))
                     .background_color(bg)
-                    .border(p.border, 1.px())
-                    .corner_radius(spec.metrics.card_radius.px())
+                    .border(s.outline_variant, 1.px())
+                    .corner_radius(brocado::metrics::CARD_RADIUS.px())
                 };
                 flex_row((
-                    cell("1x", p.surface_container).flex(1.0),
-                    cell("2x", p.accent_container).flex(2.0),
-                    cell("1x", p.secondary_container).flex(1.0),
+                    cell("1x", s.surface_container).flex(1.0),
+                    cell("2x", s.primary_container).flex(2.0),
+                    cell("1x", s.secondary_container).flex(1.0),
                 ))
                 .cross_axis_alignment(cross_align)
                 .gap(gap_len)
@@ -140,7 +140,7 @@ pub fn layout_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + 
 
     let bevel_pair = || {
         (
-            beveled_surface(sized_box(body_small("BeveledBorder")).padding(Padding::all(14.px()))),
+            outlined_card(sized_box(body_small("OutlinedCard")).padding(Padding::all(14.px()))),
             sized_box(zstack((
                 surface_box(ElevationLevel::Level1, body_small("ZStack"))
                     .alignment(UnitPoint::TOP_LEFT),

@@ -12,8 +12,9 @@ use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, button, flex_row};
 
 use crate::components::typography::ui_label;
 use crate::foundation::{UiClassExt, WrapWidget, clip_box, icons, ui_icon, wrap};
-use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::{classes, with_theme};
+use crate::theme::Theme;
+use crate::tokens::TypeRole;
 
 /// Single-selection segmented button bar (option labels, active index).
 pub fn segmented_button<State: 'static, Action: 'static, F>(
@@ -26,8 +27,8 @@ where
 {
     let opts: Vec<ArcStr> = options.iter().map(|s| ArcStr::from(*s)).collect();
     let cb = Arc::new(on_select);
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let btns: Vec<Box<AnyWidgetView<State, Action>>> = opts
             .iter()
             .enumerate()
@@ -35,9 +36,9 @@ where
                 let active = i == selected;
                 let cb = cb.clone();
                 let fg = if active {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_primary
+                    s.on_surface
                 };
                 let ic = active.then(|| ui_icon(icons::CHECK, 15.0, fg));
                 let lbl = clip_box(
@@ -56,7 +57,7 @@ where
                             .cross_axis_alignment(CrossAxisAlignment::Center)
                             .gap(6.px()),
                     ),
-                    move |s: &mut State| cb(s, i),
+                    move |st: &mut State| cb(st, i),
                 )
                 .ui_class(cls)
                 .boxed()
@@ -82,17 +83,17 @@ where
         .map(|(s, on)| (ArcStr::from(*s), *on))
         .collect();
     let cb = Arc::new(on_toggle);
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let btns: Vec<Box<AnyWidgetView<State, Action>>> = opts
             .iter()
             .enumerate()
             .map(|(i, (text, active))| {
                 let cb = cb.clone();
                 let fg = if *active {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_primary
+                    s.on_surface
                 };
                 let ic = active.then(|| ui_icon(icons::CHECK, 15.0, fg));
                 let lbl = clip_box(
@@ -111,7 +112,7 @@ where
                             .cross_axis_alignment(CrossAxisAlignment::Center)
                             .gap(6.px()),
                     ),
-                    move |s: &mut State| cb(s, i),
+                    move |st: &mut State| cb(st, i),
                 )
                 .ui_class(cls)
                 .boxed()

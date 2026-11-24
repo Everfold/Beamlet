@@ -1,8 +1,8 @@
-//! Shared 15-role typography ramp, line-height/tracking tokens, and developer-configurable font fallback support.
+//! Material Design 3 Expressive 15-role typography ramp, line-height/tracking tokens, and developer-configurable font fallback support.
 //!
 //! By default, typography scales defer to the operating system's default UI font
 //! (`GenericFamily::SystemUi`) rather than hardcoding proprietary or locale-biased font stacks.
-//! Applications may override or extend the font family / fallback chain on [`TypeScale`] or `UiTheme`.
+//! Applications may override or extend the font family / fallback chain on [`TypeScale`] or [`Theme`](crate::theme::Theme).
 
 use std::borrow::Cow;
 
@@ -86,7 +86,7 @@ impl TextStyleSpec {
     }
 }
 
-/// Full 15-slot typography scale shared by [`DesignSpec`](crate::tokens::DesignSpec).
+/// Full 15-slot Material Design 3 Expressive typography scale used by [`Theme`](crate::theme::Theme).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeScale {
     /// Display large style.
@@ -124,46 +124,17 @@ pub struct TypeScale {
 
 impl Default for TypeScale {
     fn default() -> Self {
-        Self::baseline()
+        Self::expressive()
     }
 }
 
 impl TypeScale {
-    /// Returns the baseline Material Design 3 15-role typography ramp (`16sp`/`14sp` body).
-    #[must_use]
-    pub const fn baseline() -> Self {
-        Self::md3()
-    }
-
-    /// Returns the official Material Design 3 typography ramp (size, line height, tracking, weight).
+    /// Returns the Material Design 3 Expressive 15-role typography ramp with emphasized weights
+    /// and tightened display/headline tracking.
     ///
     /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
     #[must_use]
-    pub const fn md3() -> Self {
-        Self {
-            display_large: TextStyleSpec::new(57.0, 64.0, -0.25, FontWeight::NORMAL),
-            display_medium: TextStyleSpec::new(45.0, 52.0, 0.0, FontWeight::NORMAL),
-            display_small: TextStyleSpec::new(36.0, 44.0, 0.0, FontWeight::NORMAL),
-            headline_large: TextStyleSpec::new(32.0, 40.0, 0.0, FontWeight::NORMAL),
-            headline_medium: TextStyleSpec::new(28.0, 36.0, 0.0, FontWeight::NORMAL),
-            headline_small: TextStyleSpec::new(24.0, 32.0, 0.0, FontWeight::NORMAL),
-            title_large: TextStyleSpec::new(22.0, 28.0, 0.0, FontWeight::NORMAL),
-            title_medium: TextStyleSpec::new(16.0, 24.0, 0.15, FontWeight::MEDIUM),
-            title_small: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::MEDIUM),
-            body_large: TextStyleSpec::new(16.0, 24.0, 0.5, FontWeight::NORMAL),
-            body_medium: TextStyleSpec::new(14.0, 20.0, 0.25, FontWeight::NORMAL),
-            body_small: TextStyleSpec::new(12.0, 16.0, 0.4, FontWeight::NORMAL),
-            label_large: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::MEDIUM),
-            label_medium: TextStyleSpec::new(12.0, 16.0, 0.5, FontWeight::MEDIUM),
-            label_small: TextStyleSpec::new(11.0, 16.0, 0.5, FontWeight::MEDIUM),
-            font_family: None,
-        }
-    }
-
-    /// Returns the Material Design 3 Expressive typography ramp with emphasized weights and
-    /// tightened display/headline tracking.
-    #[must_use]
-    pub const fn md3_expressive() -> Self {
+    pub const fn expressive() -> Self {
         Self {
             display_large: TextStyleSpec::new(57.0, 64.0, -0.4, FontWeight::BOLD),
             display_medium: TextStyleSpec::new(45.0, 52.0, -0.25, FontWeight::BOLD),
@@ -180,143 +151,6 @@ impl TypeScale {
             label_large: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::SEMI_BOLD),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.4, FontWeight::SEMI_BOLD),
             label_small: TextStyleSpec::new(11.0, 16.0, 0.4, FontWeight::SEMI_BOLD),
-            font_family: None,
-        }
-    }
-
-    /// Returns the Windows 11 / WinUI 3 Fluent 2 typography ramp (size, line height, tracking, weight).
-    ///
-    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
-    #[must_use]
-    pub const fn fluent2() -> Self {
-        Self {
-            display_large: TextStyleSpec::new(68.0, 92.0, -0.5, FontWeight::SEMI_BOLD),
-            display_medium: TextStyleSpec::new(48.0, 60.0, -0.25, FontWeight::SEMI_BOLD),
-            display_small: TextStyleSpec::new(40.0, 52.0, 0.0, FontWeight::SEMI_BOLD),
-            headline_large: TextStyleSpec::new(32.0, 42.0, 0.0, FontWeight::SEMI_BOLD),
-            headline_medium: TextStyleSpec::new(28.0, 36.0, 0.0, FontWeight::SEMI_BOLD),
-            headline_small: TextStyleSpec::new(24.0, 32.0, 0.0, FontWeight::SEMI_BOLD),
-            title_large: TextStyleSpec::new(20.0, 28.0, 0.0, FontWeight::SEMI_BOLD),
-            title_medium: TextStyleSpec::new(16.0, 22.0, 0.0, FontWeight::SEMI_BOLD),
-            title_small: TextStyleSpec::new(14.0, 20.0, 0.0, FontWeight::SEMI_BOLD),
-            body_large: TextStyleSpec::new(18.0, 24.0, 0.0, FontWeight::NORMAL),
-            body_medium: TextStyleSpec::new(14.0, 20.0, 0.0, FontWeight::NORMAL),
-            body_small: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::NORMAL),
-            label_large: TextStyleSpec::new(14.0, 20.0, 0.0, FontWeight::MEDIUM),
-            label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::MEDIUM),
-            label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
-        }
-    }
-
-    /// Returns the Apple macOS HIG desktop typography ramp (`13pt` body baseline).
-    ///
-    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
-    #[must_use]
-    pub const fn macos_hig() -> Self {
-        Self {
-            display_large: TextStyleSpec::new(40.0, 48.0, -0.3, FontWeight::BOLD),
-            display_medium: TextStyleSpec::new(34.0, 41.0, -0.2, FontWeight::BOLD),
-            display_small: TextStyleSpec::new(28.0, 34.0, -0.1, FontWeight::BOLD),
-            headline_large: TextStyleSpec::new(26.0, 32.0, 0.0, FontWeight::BOLD),
-            headline_medium: TextStyleSpec::new(22.0, 26.0, 0.0, FontWeight::BOLD),
-            headline_small: TextStyleSpec::new(17.0, 22.0, 0.0, FontWeight::SEMI_BOLD),
-            title_large: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::SEMI_BOLD),
-            title_medium: TextStyleSpec::new(13.0, 16.0, 0.0, FontWeight::BOLD),
-            title_small: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::MEDIUM),
-            body_large: TextStyleSpec::new(13.0, 18.0, 0.0, FontWeight::NORMAL),
-            body_medium: TextStyleSpec::new(13.0, 16.0, 0.0, FontWeight::NORMAL),
-            body_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::NORMAL),
-            label_large: TextStyleSpec::new(13.0, 16.0, 0.0, FontWeight::MEDIUM),
-            label_medium: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            label_small: TextStyleSpec::new(10.0, 13.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
-        }
-    }
-
-    /// Returns the GNOME HIG / Libadwaita 1.x typography ramp (`15px`/`11pt` body baseline).
-    ///
-    /// Defaults to the OS system UI font (`GenericFamily::SystemUi`) unless overridden.
-    #[must_use]
-    pub const fn adwaita() -> Self {
-        Self {
-            display_large: TextStyleSpec::new(40.0, 48.0, -0.2, FontWeight::BOLD),
-            display_medium: TextStyleSpec::new(34.0, 42.0, -0.1, FontWeight::BOLD),
-            display_small: TextStyleSpec::new(28.0, 36.0, 0.0, FontWeight::BOLD),
-            headline_large: TextStyleSpec::new(27.0, 34.0, 0.0, FontWeight::BOLD),
-            headline_medium: TextStyleSpec::new(24.0, 30.0, 0.0, FontWeight::BOLD),
-            headline_small: TextStyleSpec::new(20.0, 26.0, 0.0, FontWeight::BOLD),
-            title_large: TextStyleSpec::new(20.0, 26.0, 0.0, FontWeight::SEMI_BOLD),
-            title_medium: TextStyleSpec::new(17.0, 22.0, 0.0, FontWeight::BOLD),
-            title_small: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::BOLD),
-            body_large: TextStyleSpec::new(15.0, 22.0, 0.0, FontWeight::NORMAL),
-            body_medium: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::NORMAL),
-            body_small: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::NORMAL),
-            label_large: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::SEMI_BOLD),
-            label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::BOLD),
-            label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
-        }
-    }
-
-    /// Returns a pointer-dense desktop ramp (e.g., `14px` for Fluent/Adwaita or `13px` for macOS HIG).
-    #[must_use]
-    pub fn compact_desktop(base_body_px: f32) -> Self {
-        let base = base_body_px.clamp(12.0, 16.0);
-        let lh = |sz: f32| (sz * 1.35).round();
-        let body_sm = (base - 2.0).max(11.0);
-        let lbl_sm = (base - 3.0).max(10.0);
-        Self {
-            display_large: TextStyleSpec::new(
-                base + 26.0,
-                lh(base + 26.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            display_medium: TextStyleSpec::new(
-                base + 18.0,
-                lh(base + 18.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            display_small: TextStyleSpec::new(
-                base + 12.0,
-                lh(base + 12.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            headline_large: TextStyleSpec::new(
-                base + 10.0,
-                lh(base + 10.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            headline_medium: TextStyleSpec::new(
-                base + 6.0,
-                lh(base + 6.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            headline_small: TextStyleSpec::new(
-                base + 4.0,
-                lh(base + 4.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            title_large: TextStyleSpec::new(base + 4.0, lh(base + 4.0), 0.0, FontWeight::SEMI_BOLD),
-            title_medium: TextStyleSpec::new(
-                base + 1.0,
-                lh(base + 1.0),
-                0.0,
-                FontWeight::SEMI_BOLD,
-            ),
-            title_small: TextStyleSpec::new(base, lh(base), 0.0, FontWeight::SEMI_BOLD),
-            body_large: TextStyleSpec::new(base, lh(base), 0.0, FontWeight::NORMAL),
-            body_medium: TextStyleSpec::new(base, lh(base), 0.0, FontWeight::NORMAL),
-            body_small: TextStyleSpec::new(body_sm, lh(body_sm), 0.0, FontWeight::NORMAL),
-            label_large: TextStyleSpec::new(base, lh(base), 0.0, FontWeight::MEDIUM),
-            label_medium: TextStyleSpec::new(body_sm, lh(body_sm), 0.0, FontWeight::MEDIUM),
-            label_small: TextStyleSpec::new(lbl_sm, lh(lbl_sm), 0.0, FontWeight::MEDIUM),
             font_family: None,
         }
     }
@@ -490,58 +324,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn official_type_scales_match_platform_metrics() {
-        let md3 = TypeScale::md3();
-        assert_eq!(md3.body_medium.font_size, 14.0);
-        assert_eq!(md3.body_medium.line_height, 20.0);
-        assert_eq!(md3.display_large.font_size, 57.0);
-        assert_eq!(md3.display_large.line_height, 64.0);
+    fn expressive_type_scale_matches_metrics_and_weights() {
+        let ramp = TypeScale::expressive();
+        assert_eq!(TypeScale::default(), ramp);
+        assert_eq!(ramp.body_medium.font_size, 14.0);
+        assert_eq!(ramp.body_medium.line_height, 20.0);
+        assert_eq!(ramp.display_large.font_size, 57.0);
+        assert_eq!(ramp.display_large.line_height, 64.0);
+        assert_eq!(ramp.display_large.weight, FontWeight::BOLD);
+        assert_eq!(ramp.display_medium.weight, FontWeight::BOLD);
+        assert_eq!(ramp.headline_large.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(ramp.title_medium.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(ramp.label_large.weight, FontWeight::SEMI_BOLD);
+        assert_eq!(ramp.body_medium.weight, FontWeight::NORMAL);
 
-        let fluent = TypeScale::fluent2();
-        assert_eq!(fluent.body_medium.font_size, 14.0);
-        assert_eq!(fluent.title_large.font_size, 20.0);
-        assert_eq!(fluent.display_large.font_size, 68.0);
-        assert_eq!(fluent.display_large.line_height, 92.0);
-
-        let hig = TypeScale::macos_hig();
-        assert_eq!(hig.body_medium.font_size, 13.0);
-        assert_eq!(hig.body_medium.line_height, 16.0);
-        assert_eq!(hig.label_small.font_size, 10.0);
-
-        let adw = TypeScale::adwaita();
-        assert_eq!(adw.body_medium.font_size, 15.0);
-        assert_eq!(adw.body_medium.line_height, 20.0);
-        assert_eq!(adw.headline_large.font_size, 27.0);
-
-        for ramp in [md3, fluent, hig, adw] {
-            for role in [
-                TypeRole::DisplayLarge,
-                TypeRole::HeadlineMedium,
-                TypeRole::TitleMedium,
-                TypeRole::BodyMedium,
-                TypeRole::LabelSmall,
-            ] {
-                let s = ramp.get(role);
-                assert!(s.line_height > s.font_size);
-            }
+        for role in [
+            TypeRole::DisplayLarge,
+            TypeRole::HeadlineMedium,
+            TypeRole::TitleMedium,
+            TypeRole::BodyMedium,
+            TypeRole::LabelSmall,
+        ] {
+            let s = ramp.get(role);
+            assert!(s.line_height > s.font_size);
         }
     }
 
     #[test]
-    fn type_scales_default_to_system_ui_and_allow_fallback_customization() {
+    fn type_scale_defaults_to_system_ui_and_allows_fallback_customization() {
         let system_ui = FontFamily::Single(FontFamilyName::Generic(GenericFamily::SystemUi));
-        for ramp in [
-            TypeScale::md3(),
-            TypeScale::fluent2(),
-            TypeScale::macos_hig(),
-            TypeScale::adwaita(),
-            TypeScale::compact_desktop(14.0),
-        ] {
-            assert!(ramp.font_family().is_none());
-            assert_eq!(ramp.resolved_font_family(), system_ui);
-        }
+        let ramp = TypeScale::expressive();
+        assert!(ramp.font_family().is_none());
+        assert_eq!(ramp.resolved_font_family(), system_ui);
 
-        let single = TypeScale::md3().with_font_stack("sans-serif");
+        let single = TypeScale::expressive().with_font_stack("sans-serif");
         assert_eq!(
             single.font_family(),
             Some(&FontFamily::Single(FontFamilyName::Generic(
@@ -550,7 +366,7 @@ mod tests {
         );
 
         let runtime_string = String::from(" 'Custom UI' , system-ui , \"Fallback Serif\" , serif ");
-        let list = TypeScale::fluent2().with_font_stack(&runtime_string);
+        let list = TypeScale::expressive().with_font_stack(&runtime_string);
         assert_eq!(
             list.font_family(),
             Some(&FontFamily::List(Cow::Owned(vec![
@@ -565,7 +381,7 @@ mod tests {
         assert!(cleared.font_family().is_none());
         assert_eq!(cleared.resolved_font_family(), system_ui);
 
-        let appended_default = TypeScale::adwaita()
+        let appended_default = TypeScale::expressive()
             .append_font_fallback(FontFamilyName::Named(Cow::Borrowed("AppFallback")));
         assert_eq!(
             appended_default.font_family(),
@@ -575,7 +391,7 @@ mod tests {
             ])))
         );
 
-        let appended_existing = TypeScale::macos_hig()
+        let appended_existing = TypeScale::expressive()
             .with_font_fallbacks([FontFamilyName::Named(Cow::Borrowed("AppPrimary"))])
             .append_font_fallback(FontFamilyName::Generic(GenericFamily::SansSerif));
         assert_eq!(
@@ -593,7 +409,7 @@ mod tests {
 
     #[test]
     fn type_scale_scaled_scales_sizes_and_line_heights() {
-        let base = TypeScale::md3().with_font_stack("sans-serif");
+        let base = TypeScale::expressive().with_font_stack("sans-serif");
         let scaled = base.clone().scaled(1.5);
         assert_eq!(
             scaled.body_medium.font_size,
@@ -609,26 +425,10 @@ mod tests {
         );
         assert_eq!(scaled.font_family(), base.font_family());
 
-        let clamped = TypeScale::md3().scaled(10.0);
+        let clamped = TypeScale::expressive().scaled(10.0);
         assert_eq!(
             clamped.body_medium.font_size,
             base.body_medium.font_size * 3.0
         );
-    }
-
-    #[test]
-    fn md3_expressive_type_scale_uses_emphasized_weights() {
-        let base = TypeScale::md3();
-        let exp = TypeScale::md3_expressive();
-        assert!(exp.font_family().is_none());
-        assert_eq!(exp.display_large.weight, FontWeight::BOLD);
-        assert_eq!(exp.display_medium.weight, FontWeight::BOLD);
-        assert_eq!(exp.headline_large.weight, FontWeight::SEMI_BOLD);
-        assert_eq!(exp.title_medium.weight, FontWeight::SEMI_BOLD);
-        assert_eq!(exp.label_large.weight, FontWeight::SEMI_BOLD);
-        assert_eq!(exp.body_medium.weight, FontWeight::NORMAL);
-        assert!(exp.display_large.weight > base.display_large.weight);
-        assert!(exp.headline_large.weight > base.headline_large.weight);
-        assert!(exp.label_large.weight > base.label_large.weight);
     }
 }

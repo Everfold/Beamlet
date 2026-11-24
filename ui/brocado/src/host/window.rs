@@ -2,12 +2,13 @@
 //!
 //! Upstream provenance: `PodWindow` and `DesktopWindow`'s `View<State, (), ViewCtx>` delegation
 //! to `MasonryRoot` are adapted from upstream `linebender/xilem` (`xilem/src/window_view.rs`,
-//! `PodWindow` / `WindowView`), extended with Brocado `DesignSpec`, `WindowBackdrop`, and OS theme polarity sync.
+//! `PodWindow` / `WindowView`), extended with Brocado [`Theme`] and OS theme polarity sync.
 
 use std::sync::Arc;
 
-use crate::style_engine::{cached_default_properties, ui_scope_arc};
-use crate::tokens::{Brightness, DesignSpec, WindowBackdrop};
+use crate::style_engine::{cached_default_properties, theme_scope_arc};
+use crate::theme::Theme;
+use crate::tokens::Brightness;
 use masonry::core::{DefaultProperties, FromDynWidget};
 use masonry::peniko::Color;
 use masonry::properties::Dimensions;
@@ -43,7 +44,6 @@ pub struct DesktopWindow<State: 'static> {
     pub(crate) id: WindowId,
     pub(crate) config: WindowConfig<State>,
     pub(crate) masonry_root: MasonryRoot<State>,
-    pub(crate) backdrop: WindowBackdrop,
     pub(crate) brightness: Option<Brightness>,
     pub(crate) base_color: Option<Color>,
     pub(crate) default_properties: Option<Arc<DefaultProperties>>,
@@ -56,7 +56,6 @@ impl<State: 'static> DesktopWindow<State> {
             id,
             config: WindowConfig::new(title),
             masonry_root: MasonryRoot::new(root_view),
-            backdrop: WindowBackdrop::Opaque,
             brightness: None,
             base_color: None,
             default_properties: None,
@@ -84,12 +83,6 @@ impl<State: 'static> DesktopWindow<State> {
         self
     }
 
-    /// Overrides the OS compositor [`WindowBackdrop`].
-    pub fn with_backdrop(mut self, backdrop: WindowBackdrop) -> Self {
-        self.backdrop = backdrop;
-        self
-    }
-
     /// Overrides the window surface clear color.
     pub fn with_base_color(mut self, color: Color) -> Self {
         self.base_color = Some(color);
@@ -114,12 +107,6 @@ impl<State: 'static> DesktopWindow<State> {
         &self.config
     }
 
-    /// Returns the requested [`WindowBackdrop`].
-    #[must_use]
-    pub const fn backdrop(&self) -> WindowBackdrop {
-        self.backdrop
-    }
-
     pub(crate) fn on_close_requested(&self, state: &mut State) {
         if let Some(cb) = &self.config.on_close {
             cb(state);
@@ -127,71 +114,42 @@ impl<State: 'static> DesktopWindow<State> {
     }
 }
 
-/// Resolves root surface fill color for `backdrop` (`window_bg` fallback on software/opaque surfaces).
-#[must_use]
-pub const fn resolve_window_backdrop_fill(spec: &DesignSpec, backdrop: WindowBackdrop) -> Color {
-    match backdrop {
-        WindowBackdrop::Opaque
-        | WindowBackdrop::Mica
-        | WindowBackdrop::MicaAlt
-        | WindowBackdrop::Acrylic
-        | WindowBackdrop::MacosVibrancy => spec.palette.window_bg,
-    }
-}
-
-/// Constructs a themed [`DesktopWindow`] synchronized with a shared [`Arc<DesignSpec>`] and
-/// explicit [`WindowBackdrop`].
-pub fn desktop_window_arc_with_backdrop<State: 'static, V>(
-    id: WindowId,
-    title: impl Into<String>,
-    spec: &Arc<DesignSpec>,
-    backdrop: WindowBackdrop,
-    child: V,
-) -> DesktopWindow<State>
-where
-    V: WidgetView<State>,
-    V::Widget: FromDynWidget,
-{
-    let bg = resolve_window_backdrop_fill(spec, backdrop);
-    let default_props = cached_default_properties(spec);
-    let root = sized_box(child)
-        .dims(Dimensions::STRETCH)
-        .background_color(bg);
-    let mut win = DesktopWindow::new(id, title, ui_scope_arc(spec.clone(), root))
-        .with_backdrop(backdrop)
-        .with_base_color(bg)
-        .with_default_properties(default_props);
-    win.brightness = Some(spec.brightness);
-    win
-}
-
-/// Constructs a themed [`DesktopWindow`] synchronized with a shared [`Arc<DesignSpec>`].
+/// Constructs a themed [`DesktopWindow`] synchronized with a shared [`Arc<Theme>`].
 pub fn desktop_window_arc<State: 'static, V>(
     id: WindowId,
     title: impl Into<String>,
-    spec: &Arc<DesignSpec>,
+    theme: &Arc<Theme>,
     child: V,
 ) -> DesktopWindow<State>
 where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    desktop_window_arc_with_backdrop(id, title, spec, spec.backdrop, child)
+    let bg = theme.scheme.surface;
+    let default_props = cached_default_properties(theme);
+    let root = sized_box(child)
+        .dims(Dimensions::STRETCH)
+        .background_color(bg);
+    let mut win = DesktopWindow::new(id, title, theme_scope_arc(theme.clone(), root))
+        .with_base_color(bg)
+        .with_default_properties(default_props);
+    win.brightness = Some(theme.brightness);
+    win
 }
 
-/// Constructs a themed [`DesktopWindow`] whose ambient [`DesignSpec`], Masonry `DefaultProperties`,
-/// OS theme polarity, and compositor [`WindowBackdrop`] stay synced with `spec`.
+/// Constructs a themed [`DesktopWindow`] whose ambient [`Theme`], Masonry `DefaultProperties`,
+/// and OS theme polarity stay synced with `theme`.
 pub fn desktop_window<State: 'static, V>(
     id: WindowId,
     title: impl Into<String>,
-    spec: &DesignSpec,
+    theme: &Theme,
     child: V,
 ) -> DesktopWindow<State>
 where
     V: WidgetView<State>,
     V::Widget: FromDynWidget,
 {
-    desktop_window_arc(id, title, &Arc::new(spec.clone()), child)
+    desktop_window_arc(id, title, &Arc::new(theme.clone()), child)
 }
 
 impl<State: 'static> ViewMarker for DesktopWindow<State> {}
@@ -202,9 +160,7 @@ impl<State: 'static> View<State, (), ViewCtx> for DesktopWindow<State> {
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let (InitialRootWidget(root_widget), view_state) = self.masonry_root.build(ctx, app_state);
-        let attrs = self
-            .config
-            .build_initial_attributes(self.backdrop, self.brightness);
+        let attrs = self.config.build_initial_attributes(self.brightness);
         let base_color = self.base_color.unwrap_or(BACKGROUND_COLOR);
         (
             PodWindow(

@@ -15,8 +15,9 @@ use crate::components::button::{
     class_button_teardown,
 };
 use crate::foundation::ui_icon;
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::DesignSpec;
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::ICON_BTN_SIZE;
 
 /// Visual emphasis style for [`UiIconButton`] and [`UiCustomIconButton`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -33,17 +34,17 @@ pub enum IconButtonVariant {
 }
 
 impl IconButtonVariant {
-    const fn resolve(self, selected: bool, spec: &DesignSpec) -> (&'static str, Color) {
-        let p = &spec.palette;
+    const fn resolve(self, selected: bool, theme: &Theme) -> (&'static str, Color) {
+        let s = &theme.scheme;
         match (self, selected) {
-            (Self::Standard, false) => (classes::ICON_BTN_STD, p.text_secondary),
-            (Self::Standard, true) => (classes::ICON_BTN_STD_SELECTED, p.accent),
-            (Self::Filled, true) => (classes::ICON_BTN_FILLED, p.on_accent),
-            (Self::Filled, false) => (classes::ICON_BTN_FILLED_UNSELECTED, p.accent),
-            (Self::Tonal, true) => (classes::ICON_BTN_TONAL, p.on_secondary_container),
-            (Self::Tonal, false) => (classes::ICON_BTN_TONAL_UNSELECTED, p.text_secondary),
-            (Self::Outlined, false) => (classes::ICON_BTN_OUTLINED, p.text_secondary),
-            (Self::Outlined, true) => (classes::ICON_BTN_OUTLINED_SELECTED, p.inverse_on_surface),
+            (Self::Standard, false) => (classes::ICON_BTN_STD, s.on_surface_variant),
+            (Self::Standard, true) => (classes::ICON_BTN_STD_SELECTED, s.primary),
+            (Self::Filled, true) => (classes::ICON_BTN_FILLED, s.on_primary),
+            (Self::Filled, false) => (classes::ICON_BTN_FILLED_UNSELECTED, s.primary),
+            (Self::Tonal, true) => (classes::ICON_BTN_TONAL, s.on_secondary_container),
+            (Self::Tonal, false) => (classes::ICON_BTN_TONAL_UNSELECTED, s.on_surface_variant),
+            (Self::Outlined, false) => (classes::ICON_BTN_OUTLINED, s.on_surface_variant),
+            (Self::Outlined, true) => (classes::ICON_BTN_OUTLINED_SELECTED, s.inverse_on_surface),
         }
     }
 
@@ -88,14 +89,14 @@ impl<State, Action> UiIconButton<State, Action> {
         self
     }
 
-    fn build_inner(&self, spec: &DesignSpec) -> (&'static str, Box<AnyWidgetView<State, Action>>)
+    fn build_inner(&self, theme: &Theme) -> (&'static str, Box<AnyWidgetView<State, Action>>)
     where
         State: 'static,
         Action: 'static,
     {
-        let (cls, active_fg) = self.variant.resolve(self.selected, spec);
-        let fg = spec.content_color(active_fg, self.disabled);
-        let icon_size = (spec.metrics.icon_btn_size * 0.55).clamp(16.0, 22.0);
+        let (cls, active_fg) = self.variant.resolve(self.selected, theme);
+        let fg = theme.content_color(active_fg, self.disabled);
+        let icon_size = (ICON_BTN_SIZE * 0.55).clamp(16.0, 22.0);
         (cls, ui_icon(self.svg_path, icon_size, fg).boxed())
     }
 }
@@ -111,8 +112,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiIconBut
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let (cls, inner) = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let (cls, inner) = self.build_inner(&theme);
         let (pod, child_state) = class_button_build(ctx, app_state, cls, self.disabled, &inner);
         (pod, (cls, inner, child_state))
     }
@@ -125,8 +126,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiIconBut
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let (next_cls, next_inner) = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let (next_cls, next_inner) = self.build_inner(&theme);
         class_button_rebuild(
             ctx,
             element,

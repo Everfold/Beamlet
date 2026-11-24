@@ -1,4 +1,4 @@
-//! Spec-colored horizontal, vertical, and inset dividers.
+//! Theme-colored horizontal, vertical, and inset dividers.
 
 use masonry::layout::AsUnit;
 use masonry::properties::Padding;
@@ -8,18 +8,18 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{divider_h, divider_v};
 
 use crate::foundation::{BoundedX, BoundedY};
-use crate::style_engine::with_spec;
+use crate::style_engine::with_theme;
 
-/// Full-bleed horizontal hairline divider colored by the active theme's `divider` token.
+/// Full-bleed horizontal hairline divider colored by the active theme's `outline_variant` token.
 pub fn horizontal_divider<State: 'static, Action: 'static>()
 -> impl WidgetView<State, Action, Widget = widgets::Divider> + BoundedX + BoundedY {
-    with_spec(|spec, _| divider_h().color(spec.palette.divider))
+    with_theme(|theme, _| divider_h().color(theme.scheme.outline_variant))
 }
 
-/// Full-height vertical hairline divider colored by the active theme's `divider` token.
+/// Full-height vertical hairline divider colored by the active theme's `outline_variant` token.
 pub fn vertical_divider<State: 'static, Action: 'static>()
 -> impl WidgetView<State, Action, Widget = widgets::Divider> + BoundedX + BoundedY {
-    with_spec(|spec, _| divider_v().color(spec.palette.divider))
+    with_theme(|theme, _| divider_v().color(theme.scheme.outline_variant))
 }
 
 /// Horizontal divider padded on the left/right edges.
@@ -27,12 +27,14 @@ pub fn inset_divider<State: 'static, Action: 'static>(
     left_inset: f64,
     right_inset: f64,
 ) -> impl WidgetView<State, Action, Widget = widgets::Divider> + BoundedX + BoundedY {
-    with_spec(move |spec, _| {
-        divider_h().color(spec.palette.divider).padding(Padding {
-            left: left_inset.px(),
-            right: right_inset.px(),
-            top: 0.px(),
-            bottom: 0.px(),
-        })
+    with_theme(move |theme, _| {
+        divider_h()
+            .color(theme.scheme.outline_variant)
+            .padding(Padding {
+                left: left_inset.px(),
+                right: right_inset.px(),
+                top: 0.px(),
+                bottom: 0.px(),
+            })
     })
 }

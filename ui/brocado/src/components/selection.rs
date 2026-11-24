@@ -33,30 +33,24 @@ use xilem_masonry::view::{
 use crate::components::typography::ui_label;
 use crate::foundation::state_layer::{blend_over, with_opacity};
 use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{
-    Brightness, ControlVisualGrammar, DesignSpec, MotionDuration, MotionEasing, TextStyleSpec,
-    TypeRole,
-};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::{CHECKBOX_RADIUS, SWITCH_HEIGHT, SWITCH_WIDTH};
+use crate::tokens::{MotionDuration, MotionEasing, TextStyleSpec, TypeRole};
 
 const SWITCH_ANIM_NS: u64 = MotionDuration::Short2.as_millis() * 1_000_000;
 
-/// Compact copyable visual snapshot extracted from [`DesignSpec`] for custom-painted controls.
+/// Compact copyable visual snapshot extracted from [`Theme`] for Material Design 3 selection controls.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ControlVisualTheme {
-    pub grammar: ControlVisualGrammar,
     pub accent: Color,
     pub on_accent: Color,
     pub surface: Color,
     pub surface_highest: Color,
-    pub border: Color,
     pub border_strong: Color,
     pub text_primary: Color,
-    pub text_secondary: Color,
     pub disabled_content: Color,
     pub disabled_container: Color,
-    pub shadow: Color,
-    pub brightness: Brightness,
     pub reduced_motion: bool,
     pub checkbox_radius: f64,
     pub switch_width: f64,
@@ -64,38 +58,27 @@ pub(crate) struct ControlVisualTheme {
 }
 
 impl ControlVisualTheme {
-    pub(crate) fn from_spec(spec: &DesignSpec) -> Self {
-        let p = &spec.palette;
-        let m = &spec.metrics;
+    pub(crate) fn from_theme(theme: &Theme) -> Self {
+        let s = &theme.scheme;
         Self {
-            grammar: spec.control_grammar(),
-            accent: p.accent,
-            on_accent: p.on_accent,
-            surface: p.surface,
-            surface_highest: p.surface_highest,
-            border: p.border,
-            border_strong: p.border_strong,
-            text_primary: p.text_primary,
-            text_secondary: p.text_secondary,
-            disabled_content: spec.disabled_content(),
-            disabled_container: spec.disabled_container(),
-            shadow: p.shadow,
-            brightness: spec.brightness,
-            reduced_motion: spec.reduced_motion,
-            checkbox_radius: m.checkbox_radius,
-            switch_width: m.switch_width,
-            switch_height: m.switch_height,
+            accent: s.primary,
+            on_accent: s.on_primary,
+            surface: s.surface,
+            surface_highest: s.surface_container_highest,
+            border_strong: s.outline,
+            text_primary: s.on_surface,
+            disabled_content: theme.disabled_content(),
+            disabled_container: theme.disabled_container(),
+            reduced_motion: theme.reduced_motion,
+            checkbox_radius: CHECKBOX_RADIUS,
+            switch_width: SWITCH_WIDTH,
+            switch_height: SWITCH_HEIGHT,
         }
     }
 
-    pub(crate) fn effective_accent(self, window_focused: bool, disabled: bool) -> Color {
+    pub(crate) fn effective_accent(self, disabled: bool) -> Color {
         if disabled {
             self.disabled_content
-        } else if self.grammar == ControlVisualGrammar::MacosHig && !window_focused {
-            match self.brightness {
-                Brightness::Light => Color::from_rgb8(0x9A, 0x9A, 0xA0),
-                Brightness::Dark => Color::from_rgb8(0x6E, 0x6E, 0x74),
-            }
         } else {
             self.accent
         }
@@ -110,15 +93,7 @@ impl ControlVisualTheme {
     }
 
     pub(crate) fn halo_color(self, accent: Color, active: bool) -> Color {
-        let alpha = match (self.grammar, active) {
-            (ControlVisualGrammar::Material3, true) => 0.14,
-            (ControlVisualGrammar::Material3, false) => 0.09,
-            (ControlVisualGrammar::Adwaita, true) => 0.14,
-            (ControlVisualGrammar::Adwaita, false) => 0.08,
-            (_, true) => 0.12,
-            (_, false) => 0.07,
-        };
-        with_opacity(accent, alpha)
+        with_opacity(accent, if active { 0.14 } else { 0.09 })
     }
 }
 
@@ -222,23 +197,13 @@ fn draw_focus_ring(
         return;
     }
     let halo = visual.accent;
-    if visual.grammar == ControlVisualGrammar::MacosHig {
-        let outer = rrect
-            .rect()
-            .inflate(2.0, 2.0)
-            .to_rounded_rect(rrect.radii().top_left + 2.0);
-        painter
-            .stroke(outer, &Stroke::new(3.0), with_opacity(halo, 0.35))
-            .draw();
-    } else {
-        let outer = rrect
-            .rect()
-            .inflate(1.5, 1.5)
-            .to_rounded_rect(rrect.radii().top_left + 1.5);
-        painter
-            .stroke(outer, &Stroke::new(1.5), with_opacity(halo, 0.85))
-            .draw();
-    }
+    let outer = rrect
+        .rect()
+        .inflate(1.5, 1.5)
+        .to_rounded_rect(rrect.radii().top_left + 1.5);
+    painter
+        .stroke(outer, &Stroke::new(1.5), with_opacity(halo, 0.85))
+        .draw();
 }
 
 /// Logical state of a tri-state checkbox.
@@ -290,13 +255,8 @@ impl UiCheckbox {
 
     fn set_visual(this: &mut WidgetMut<'_, Self>, visual: ControlVisualTheme) {
         if this.widget.visual != visual {
-            let layout_diff = this.widget.visual.grammar != visual.grammar;
             this.widget.visual = visual;
-            if layout_diff {
-                this.ctx.request_layout();
-            } else {
-                this.ctx.request_paint_only();
-            }
+            this.ctx.request_paint_only();
         }
     }
 
@@ -305,10 +265,7 @@ impl UiCheckbox {
     }
 
     fn box_side(&self) -> f64 {
-        match self.visual.grammar {
-            ControlVisualGrammar::MacosHig => 16.0,
-            _ => 18.0,
-        }
+        18.0
     }
 }
 
@@ -459,7 +416,7 @@ impl Widget for UiCheckbox {
         let box_rect = Rect::new(0.0, y0, side, y0 + side);
         let r = self.visual.checkbox_radius;
         let rrect = box_rect.to_rounded_rect(r);
-        let accent = self.visual.effective_accent(win_focused, disabled);
+        let accent = self.visual.effective_accent(disabled);
 
         if !disabled && (hovered || active) {
             let halo = box_rect.inflate(4.0, 4.0).to_rounded_rect(r + 4.0);
@@ -475,10 +432,6 @@ impl Widget for UiCheckbox {
                 accent
             };
             painter.fill(rrect, fill).draw();
-            if self.visual.grammar == ControlVisualGrammar::MacosHig && !disabled {
-                let border_c = blend_over(fill, Color::BLACK, 0.14);
-                painter.stroke(rrect, &Stroke::new(1.0), border_c).draw();
-            }
             let check_ink = if disabled {
                 self.visual.surface
             } else {
@@ -493,11 +446,7 @@ impl Widget for UiCheckbox {
             } else {
                 self.visual.surface
             };
-            let stroke_w = if self.visual.grammar == ControlVisualGrammar::Material3 {
-                2.0
-            } else {
-                1.5
-            };
+            let stroke_w = 2.0;
             let border_c = if disabled {
                 self.visual.disabled_content
             } else if hovered || active {
@@ -553,7 +502,7 @@ impl Widget for UiCheckbox {
     }
 }
 
-/// View creating a [`UiCheckbox`] styled dynamically from ambient [`DesignSpec`].
+/// View creating a [`UiCheckbox`] styled dynamically from ambient [`Theme`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callback")]
 pub struct UiCheckboxView<State, Action> {
@@ -581,10 +530,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     type ViewState = (TextStyleSpec, FontFamily<'static>, Color);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
-        let ts = spec.typography.get(TypeRole::BodyMedium);
-        let font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
+        let ts = theme.typography.get(TypeRole::BodyMedium);
+        let font = theme.typography.resolved_font_family();
         let color = visual.label_color(self.disabled);
         let lbl = prepare_label_pod(self.text.clone(), ts, &font, color);
         let pod = ctx.with_action_widget(|ctx| {
@@ -603,10 +552,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
-        let next_ts = spec.typography.get(TypeRole::BodyMedium);
-        let next_font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
+        let next_ts = theme.typography.get(TypeRole::BodyMedium);
+        let next_font = theme.typography.resolved_font_family();
         let next_color = visual.label_color(self.disabled);
 
         if prev.disabled != self.disabled {
@@ -681,32 +630,32 @@ where
 {
     let label_text = label_text.into();
     let cb = Arc::new(on_toggle);
-    crate::style_engine::with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    crate::style_engine::with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let next = match state {
             ToggleableState::Off | ToggleableState::Indeterminate => ToggleableState::On,
             ToggleableState::On => ToggleableState::Off,
         };
         let (box_bg, border_c, icon_opt) = match state {
-            ToggleableState::Off => (Color::TRANSPARENT, p.border_strong, None),
-            ToggleableState::On => (p.accent, p.accent, Some(icons::CHECK)),
+            ToggleableState::Off => (Color::TRANSPARENT, s.outline, None),
+            ToggleableState::On => (s.primary, s.primary, Some(icons::CHECK)),
             ToggleableState::Indeterminate => {
-                (p.accent, p.accent, Some(icons::INDETERMINATE_MINUS))
+                (s.primary, s.primary, Some(icons::INDETERMINATE_MINUS))
             }
         };
         let box_view = sized_box(
             icon_opt
-                .map(|path| ui_icon(path, 14.0, p.on_accent))
+                .map(|path| ui_icon(path, 14.0, s.on_primary))
                 .unwrap_or_else(|| ui_icon(icons::CHECK, 0.0, Color::TRANSPARENT)),
         )
         .dims(Dimensions::fixed(18.px(), 18.px()))
         .background_color(box_bg)
         .border(border_c, 2.px())
-        .corner_radius(spec.metrics.checkbox_radius.px());
+        .corner_radius(CHECKBOX_RADIUS.px());
 
         let text_view = clip_box(
             ui_label(TypeRole::BodyMedium, label_text.clone())
-                .color(p.text_primary)
+                .color(s.on_surface)
                 .line_breaking(LineBreaking::Clip),
         );
         let cb = cb.clone();
@@ -916,183 +865,75 @@ impl Widget for UiSwitch {
         let track_rect = Rect::new(0.0, 0.0, w, h);
         let track_rr = track_rect.to_rounded_rect(r);
         let t = self.anim_t.clamp(0.0, 1.0);
-        let accent = self.visual.effective_accent(win_focused, disabled);
+        let accent = self.visual.effective_accent(disabled);
 
-        match self.visual.grammar {
-            ControlVisualGrammar::Material3 => {
-                // MD3: off=surface_highest + 2px border_strong + 16px thumb; on=accent + 24px thumb + check
-                let track_bg = if disabled {
-                    self.visual.disabled_container
-                } else if t > 0.5 {
-                    if active {
-                        blend_over(accent, self.visual.on_accent, 0.12)
-                    } else {
-                        accent
-                    }
-                } else {
-                    self.visual.surface_highest
-                };
-                painter.fill(track_rr, track_bg).draw();
-                if t <= 0.5 || disabled {
-                    let b_col = if disabled {
-                        self.visual.disabled_content
-                    } else {
-                        self.visual.border_strong
-                    };
-                    painter
-                        .stroke(
-                            track_rect.inset(1.0).to_rounded_rect((r - 1.0).max(0.0)),
-                            &Stroke::new(2.0),
-                            b_col,
-                        )
-                        .draw();
-                }
-
-                let base_thumb_r = (8.0 + 4.0 * t).min(h * 0.42);
-                let thumb_r = if !disabled && active {
-                    (base_thumb_r + 2.0).min(h * 0.46)
-                } else {
-                    base_thumb_r
-                };
-                let margin = h * 0.5;
-                let cx = margin + (w - margin * 2.0) * t;
-                let cy = h * 0.5;
-
-                if !disabled && (hovered || active) {
-                    let halo = Circle::new(Point::new(cx, cy), (thumb_r + 6.0).min(h * 0.62));
-                    painter
-                        .fill(halo, self.visual.halo_color(accent, active))
-                        .draw();
-                }
-
-                let thumb_col = if disabled {
-                    if self.on {
-                        self.visual.surface
-                    } else {
-                        self.visual.disabled_content
-                    }
-                } else if t > 0.5 {
-                    self.visual.on_accent
-                } else {
-                    self.visual.border_strong
-                };
-                painter
-                    .fill(Circle::new(Point::new(cx, cy), thumb_r), thumb_col)
-                    .draw();
-                if !disabled && self.on && t > 0.65 {
-                    let check_box = Rect::new(
-                        cx - thumb_r * 0.55,
-                        cy - thumb_r * 0.55,
-                        cx + thumb_r * 0.55,
-                        cy + thumb_r * 0.55,
-                    );
-                    draw_checkmark(painter, check_box, accent, 1.6);
-                }
+        // MD3: off=surface_highest + 2px border_strong + 16px thumb; on=accent + 24px thumb + check
+        let track_bg = if disabled {
+            self.visual.disabled_container
+        } else if t > 0.5 {
+            if active {
+                blend_over(accent, self.visual.on_accent, 0.12)
+            } else {
+                accent
             }
-            ControlVisualGrammar::Fluent2 => {
-                // Fluent 2: 40x20, off=1px outlined track, on=solid accent, thumb stretches slightly on press
-                let track_bg = if disabled {
-                    self.visual.disabled_container
-                } else if t > 0.5 {
-                    if hovered {
-                        blend_over(accent, self.visual.on_accent, 0.08)
-                    } else {
-                        accent
-                    }
-                } else if hovered {
-                    blend_over(self.visual.surface, self.visual.text_primary, 0.04)
-                } else {
-                    Color::TRANSPARENT
-                };
-                painter.fill(track_rr, track_bg).draw();
-                if t <= 0.5 && !disabled {
-                    painter
-                        .stroke(
-                            track_rect.inset(0.5).to_rounded_rect((r - 0.5).max(0.0)),
-                            &Stroke::new(1.0),
-                            self.visual.border_strong,
-                        )
-                        .draw();
-                }
-                let thumb_h = if !disabled && hovered { 14.0 } else { 12.0 };
-                let thumb_w = if !disabled && active {
-                    thumb_h + 4.0
-                } else {
-                    thumb_h
-                };
-                let inset = (h - thumb_h) * 0.5;
-                let left = inset + (w - inset * 2.0 - thumb_w) * t;
-                let thumb_rect = Rect::new(left, inset, left + thumb_w, inset + thumb_h);
-                let thumb_col = if disabled {
-                    self.visual.disabled_content
-                } else if t > 0.5 {
-                    self.visual.on_accent
-                } else {
-                    self.visual.text_secondary
-                };
-                painter
-                    .fill(thumb_rect.to_rounded_rect(thumb_h * 0.5), thumb_col)
-                    .draw();
-            }
-            ControlVisualGrammar::MacosHig | ControlVisualGrammar::Adwaita => {
-                // HIG: crisp Aqua track + shadowed white thumb; Adwaita: flat tonal pill + clean white thumb
-                let off_bg = if disabled {
-                    self.visual.disabled_container
-                } else if self.visual.grammar == ControlVisualGrammar::Adwaita {
-                    with_opacity(self.visual.text_primary, if hovered { 0.24 } else { 0.18 })
-                } else {
-                    self.visual.surface_highest
-                };
-                let track_bg = if disabled {
-                    self.visual.disabled_container
-                } else if t > 0.5 {
-                    if hovered {
-                        blend_over(accent, self.visual.on_accent, 0.08)
-                    } else {
-                        accent
-                    }
-                } else {
-                    off_bg
-                };
-                painter.fill(track_rr, track_bg).draw();
-                if self.visual.grammar == ControlVisualGrammar::MacosHig && t <= 0.5 && !disabled {
-                    painter
-                        .stroke(
-                            track_rect.inset(0.5).to_rounded_rect((r - 0.5).max(0.0)),
-                            &Stroke::new(1.0),
-                            self.visual.border,
-                        )
-                        .draw();
-                }
+        } else {
+            self.visual.surface_highest
+        };
+        painter.fill(track_rr, track_bg).draw();
+        if t <= 0.5 || disabled {
+            let b_col = if disabled {
+                self.visual.disabled_content
+            } else {
+                self.visual.border_strong
+            };
+            painter
+                .stroke(
+                    track_rect.inset(1.0).to_rounded_rect((r - 1.0).max(0.0)),
+                    &Stroke::new(2.0),
+                    b_col,
+                )
+                .draw();
+        }
 
-                let thumb_r = (h * 0.5 - 2.5).max(5.0);
-                let margin = h * 0.5;
-                let cx = margin + (w - margin * 2.0) * t;
-                let cy = h * 0.5;
-                if self.visual.grammar == ControlVisualGrammar::MacosHig && !disabled {
-                    painter
-                        .fill(
-                            Circle::new(Point::new(cx, cy + 0.8), thumb_r),
-                            with_opacity(self.visual.shadow, 0.18),
-                        )
-                        .draw();
-                } else if !disabled && hovered {
-                    painter
-                        .fill(
-                            Circle::new(Point::new(cx, cy), thumb_r + 3.0),
-                            self.visual.halo_color(accent, active),
-                        )
-                        .draw();
-                }
-                let thumb_col = if disabled {
-                    self.visual.surface
-                } else {
-                    Color::WHITE
-                };
-                painter
-                    .fill(Circle::new(Point::new(cx, cy), thumb_r), thumb_col)
-                    .draw();
+        let base_thumb_r = (8.0 + 4.0 * t).min(h * 0.42);
+        let thumb_r = if !disabled && active {
+            (base_thumb_r + 2.0).min(h * 0.46)
+        } else {
+            base_thumb_r
+        };
+        let margin = h * 0.5;
+        let cx = margin + (w - margin * 2.0) * t;
+        let cy = h * 0.5;
+
+        if !disabled && (hovered || active) {
+            let halo = Circle::new(Point::new(cx, cy), (thumb_r + 6.0).min(h * 0.62));
+            painter
+                .fill(halo, self.visual.halo_color(accent, active))
+                .draw();
+        }
+
+        let thumb_col = if disabled {
+            if self.on {
+                self.visual.surface
+            } else {
+                self.visual.disabled_content
             }
+        } else if t > 0.5 {
+            self.visual.on_accent
+        } else {
+            self.visual.border_strong
+        };
+        painter
+            .fill(Circle::new(Point::new(cx, cy), thumb_r), thumb_col)
+            .draw();
+        if !disabled && self.on && t > 0.65 {
+            let check_box = Rect::new(
+                cx - thumb_r * 0.55,
+                cy - thumb_r * 0.55,
+                cx + thumb_r * 0.55,
+                cy + thumb_r * 0.55,
+            );
+            draw_checkmark(painter, check_box, accent, 1.6);
         }
 
         draw_focus_ring(
@@ -1131,7 +972,7 @@ impl Widget for UiSwitch {
     }
 }
 
-/// View creating a [`UiSwitch`] styled dynamically from ambient [`DesignSpec`].
+/// View creating a [`UiSwitch`] styled dynamically from ambient [`Theme`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callback")]
 pub struct UiSwitchView<State, Action> {
@@ -1156,8 +997,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSwitchV
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
         let pod = ctx.with_action_widget(|ctx| {
             let mut pod = ctx.create_pod(UiSwitch::new(self.on, visual));
             pod.new_widget.options.disabled = self.disabled;
@@ -1174,8 +1015,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSwitchV
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
         if prev.disabled != self.disabled {
             element.ctx.set_disabled(self.disabled);
         }
@@ -1252,13 +1093,8 @@ impl UiRadioButton {
 
     fn set_visual(this: &mut WidgetMut<'_, Self>, visual: ControlVisualTheme) {
         if this.widget.visual != visual {
-            let layout_diff = this.widget.visual.grammar != visual.grammar;
             this.widget.visual = visual;
-            if layout_diff {
-                this.ctx.request_layout();
-            } else {
-                this.ctx.request_paint_only();
-            }
+            this.ctx.request_paint_only();
         }
     }
 
@@ -1267,10 +1103,7 @@ impl UiRadioButton {
     }
 
     fn ring_dia(&self) -> f64 {
-        match self.visual.grammar {
-            ControlVisualGrammar::MacosHig => 16.0,
-            _ => 20.0,
-        }
+        20.0
     }
 }
 
@@ -1418,7 +1251,7 @@ impl Widget for UiRadioButton {
         let dia = self.ring_dia();
         let outer_r = dia * 0.5;
         let center = Point::new(outer_r, ctx.content_box().size().height * 0.5);
-        let accent = self.visual.effective_accent(win_focused, disabled);
+        let accent = self.visual.effective_accent(disabled);
 
         if !disabled && (hovered || active) {
             painter
@@ -1429,71 +1262,26 @@ impl Widget for UiRadioButton {
                 .draw();
         }
 
-        match self.visual.grammar {
-            ControlVisualGrammar::Fluent2 | ControlVisualGrammar::MacosHig => {
-                if self.selected {
-                    painter.fill(Circle::new(center, outer_r), accent).draw();
-                    let inner_r = if self.visual.grammar == ControlVisualGrammar::MacosHig {
-                        3.0
-                    } else if active && !disabled {
-                        5.0
-                    } else if hovered && !disabled {
-                        4.5
-                    } else {
-                        4.0
-                    };
-                    let dot_col = if disabled {
-                        self.visual.surface
-                    } else {
-                        self.visual.on_accent
-                    };
-                    painter.fill(Circle::new(center, inner_r), dot_col).draw();
-                } else {
-                    let bg = if disabled {
-                        self.visual.disabled_container
-                    } else {
-                        self.visual.surface
-                    };
-                    let b_col = if disabled {
-                        self.visual.disabled_content
-                    } else if hovered {
-                        self.visual.text_primary
-                    } else {
-                        self.visual.border_strong
-                    };
-                    painter.fill(Circle::new(center, outer_r), bg).draw();
-                    painter
-                        .stroke(
-                            Circle::new(center, outer_r - 0.75),
-                            &Stroke::new(1.5),
-                            b_col,
-                        )
-                        .draw();
-                }
-            }
-            ControlVisualGrammar::Material3 | ControlVisualGrammar::Adwaita => {
-                let ring_col = if disabled {
-                    self.visual.disabled_content
-                } else if self.selected {
-                    accent
-                } else if hovered {
-                    self.visual.text_primary
-                } else {
-                    self.visual.border_strong
-                };
-                painter
-                    .stroke(
-                        Circle::new(center, outer_r - 1.0),
-                        &Stroke::new(2.0),
-                        ring_col,
-                    )
-                    .draw();
-                if self.selected {
-                    painter
-                        .fill(Circle::new(center, outer_r * 0.5), ring_col)
-                        .draw();
-                }
-            }
+        let ring_col = if disabled {
+            self.visual.disabled_content
+        } else if self.selected {
+            accent
+        } else if hovered {
+            self.visual.text_primary
+        } else {
+            self.visual.border_strong
+        };
+        painter
+            .stroke(
+                Circle::new(center, outer_r - 1.0),
+                &Stroke::new(2.0),
+                ring_col,
+            )
+            .draw();
+        if self.selected {
+            painter
+                .fill(Circle::new(center, outer_r * 0.5), ring_col)
+                .draw();
         }
 
         if ctx.is_focus_target() && win_focused {
@@ -1563,10 +1351,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRadio<S
     type ViewState = (TextStyleSpec, FontFamily<'static>, Color);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
-        let ts = spec.typography.get(TypeRole::BodyMedium);
-        let font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
+        let ts = theme.typography.get(TypeRole::BodyMedium);
+        let font = theme.typography.resolved_font_family();
         let color = visual.label_color(self.disabled);
         let lbl = prepare_label_pod(self.text.clone(), ts, &font, color);
         let pod = ctx.with_action_widget(|ctx| {
@@ -1585,10 +1373,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRadio<S
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
-        let next_ts = spec.typography.get(TypeRole::BodyMedium);
-        let next_font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
+        let next_ts = theme.typography.get(TypeRole::BodyMedium);
+        let next_font = theme.typography.resolved_font_family();
         let next_color = visual.label_color(self.disabled);
 
         if prev.disabled != self.disabled {
@@ -1910,158 +1698,56 @@ impl Widget for UiSlider {
         let usable = (size.width - pad * 2.0).max(1.0);
         let tx = pad + frac * usable;
         let cy = size.height * 0.5;
-        let accent = self.visual.effective_accent(win_focused, disabled);
+        let accent = self.visual.effective_accent(disabled);
         let inactive_col = if disabled {
             self.visual.disabled_container
         } else {
             self.visual.surface_highest
         };
 
-        match self.visual.grammar {
-            ControlVisualGrammar::Material3 => {
-                // MD3 Expressive slider: 8px active/inactive track with gap + 4px stop dot + vertical pill thumb
-                let track_h = 8.0;
-                let y0 = cy - track_h * 0.5;
-                let gap = 5.0;
-                let left_end = (tx - gap).max(pad);
-                if left_end > pad + 1.0 {
-                    let act =
-                        Rect::new(pad, y0, left_end, y0 + track_h).to_rounded_rect(track_h * 0.5);
-                    painter.fill(act, accent).draw();
-                }
-                let right_start = (tx + gap).min(size.width - pad);
-                let right_end = size.width - pad;
-                if right_end > right_start + 1.0 {
-                    let inact = Rect::new(right_start, y0, right_end, y0 + track_h)
-                        .to_rounded_rect(track_h * 0.5);
-                    painter.fill(inact, inactive_col).draw();
-                    if right_end - tx > 8.0 {
-                        painter
-                            .fill(Circle::new(Point::new(right_end - 4.0, cy), 2.0), accent)
-                            .draw();
-                    }
-                }
-                let thumb_w = if active { 4.0 } else { 5.0 };
-                let thumb_h = 24.0;
-                if !disabled && (hovered || active) {
-                    let halo = Rect::new(
-                        tx - thumb_w * 0.5 - 4.0,
-                        cy - thumb_h * 0.5 - 2.0,
-                        tx + thumb_w * 0.5 + 4.0,
-                        cy + thumb_h * 0.5 + 2.0,
-                    )
-                    .to_rounded_rect(6.0);
-                    painter
-                        .fill(halo, self.visual.halo_color(accent, active))
-                        .draw();
-                }
-                let handle = Rect::new(
-                    tx - thumb_w * 0.5,
-                    cy - thumb_h * 0.5,
-                    tx + thumb_w * 0.5,
-                    cy + thumb_h * 0.5,
-                )
-                .to_rounded_rect(thumb_w * 0.5);
-                painter.fill(handle, accent).draw();
-            }
-            ControlVisualGrammar::Fluent2 => {
-                // Fluent 2: 4px track + dual-layer concentric white outer & dynamic accent inner thumb
-                let track_h = 4.0;
-                let y0 = cy - track_h * 0.5;
+        // MD3 Expressive slider: 8px active/inactive track with gap + 4px stop dot + vertical pill thumb
+        let track_h = 8.0;
+        let y0 = cy - track_h * 0.5;
+        let gap = 5.0;
+        let left_end = (tx - gap).max(pad);
+        if left_end > pad + 1.0 {
+            let act = Rect::new(pad, y0, left_end, y0 + track_h).to_rounded_rect(track_h * 0.5);
+            painter.fill(act, accent).draw();
+        }
+        let right_start = (tx + gap).min(size.width - pad);
+        let right_end = size.width - pad;
+        if right_end > right_start + 1.0 {
+            let inact =
+                Rect::new(right_start, y0, right_end, y0 + track_h).to_rounded_rect(track_h * 0.5);
+            painter.fill(inact, inactive_col).draw();
+            if right_end - tx > 8.0 {
                 painter
-                    .fill(
-                        Rect::new(pad, y0, size.width - pad, y0 + track_h).to_rounded_rect(2.0),
-                        inactive_col,
-                    )
-                    .draw();
-                if tx > pad {
-                    painter
-                        .fill(
-                            Rect::new(pad, y0, tx, y0 + track_h).to_rounded_rect(2.0),
-                            accent,
-                        )
-                        .draw();
-                }
-                let thumb_c = Point::new(tx, cy);
-                painter
-                    .fill(Circle::new(thumb_c, 9.0), self.visual.surface)
-                    .draw();
-                painter
-                    .stroke(
-                        Circle::new(thumb_c, 9.0),
-                        &Stroke::new(1.0),
-                        self.visual.border_strong,
-                    )
-                    .draw();
-                let inner_r = if disabled {
-                    4.0
-                } else if active {
-                    3.8
-                } else if hovered {
-                    5.8
-                } else {
-                    4.8
-                };
-                painter.fill(Circle::new(thumb_c, inner_r), accent).draw();
-            }
-            ControlVisualGrammar::MacosHig | ControlVisualGrammar::Adwaita => {
-                let track_h = 4.0;
-                let y0 = cy - track_h * 0.5;
-                painter
-                    .fill(
-                        Rect::new(pad, y0, size.width - pad, y0 + track_h).to_rounded_rect(2.0),
-                        inactive_col,
-                    )
-                    .draw();
-                if tx > pad {
-                    painter
-                        .fill(
-                            Rect::new(pad, y0, tx, y0 + track_h).to_rounded_rect(2.0),
-                            accent,
-                        )
-                        .draw();
-                }
-                let thumb_r = if self.visual.grammar == ControlVisualGrammar::Adwaita {
-                    9.5
-                } else {
-                    8.5
-                };
-                let thumb_c = Point::new(tx, cy);
-                if !disabled
-                    && self.visual.grammar == ControlVisualGrammar::Adwaita
-                    && (hovered || active)
-                {
-                    painter
-                        .fill(
-                            Circle::new(thumb_c, thumb_r + 3.5),
-                            self.visual.halo_color(accent, active),
-                        )
-                        .draw();
-                } else if self.visual.grammar == ControlVisualGrammar::MacosHig && !disabled {
-                    painter
-                        .fill(
-                            Circle::new(Point::new(tx, cy + 1.0), thumb_r),
-                            with_opacity(self.visual.shadow, 0.20),
-                        )
-                        .draw();
-                }
-                let thumb_fill = if disabled {
-                    self.visual.surface_highest
-                } else {
-                    Color::WHITE
-                };
-                painter
-                    .fill(Circle::new(thumb_c, thumb_r), thumb_fill)
-                    .draw();
-                painter
-                    .stroke(
-                        Circle::new(thumb_c, thumb_r),
-                        &Stroke::new(1.0),
-                        self.visual.border_strong,
-                    )
+                    .fill(Circle::new(Point::new(right_end - 4.0, cy), 2.0), accent)
                     .draw();
             }
         }
+        let thumb_w = if active { 4.0 } else { 5.0 };
+        let thumb_h = 24.0;
+        if !disabled && (hovered || active) {
+            let halo = Rect::new(
+                tx - thumb_w * 0.5 - 4.0,
+                cy - thumb_h * 0.5 - 2.0,
+                tx + thumb_w * 0.5 + 4.0,
+                cy + thumb_h * 0.5 + 2.0,
+            )
+            .to_rounded_rect(6.0);
+            painter
+                .fill(halo, self.visual.halo_color(accent, active))
+                .draw();
+        }
+        let handle = Rect::new(
+            tx - thumb_w * 0.5,
+            cy - thumb_h * 0.5,
+            tx + thumb_w * 0.5,
+            cy + thumb_h * 0.5,
+        )
+        .to_rounded_rect(thumb_w * 0.5);
+        painter.fill(handle, accent).draw();
 
         if ctx.is_focus_target() && win_focused {
             painter
@@ -2140,8 +1826,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSliderV
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
         let pod = ctx.with_action_widget(|ctx| {
             let mut pod = ctx.create_pod(UiSlider::new(
                 self.min, self.max, self.value, self.step, visual,
@@ -2160,8 +1846,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSliderV
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
         if prev.disabled != self.disabled {
             element.ctx.set_disabled(self.disabled);
         }

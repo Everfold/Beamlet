@@ -1,4 +1,4 @@
-//! Cross-theme primary, secondary, and scrollable tabs honoring [`TabIndicatorStyle`].
+//! Material Design 3 primary, secondary, and scrollable tabs.
 
 use std::sync::Arc;
 
@@ -18,13 +18,14 @@ use xilem_masonry::view::{
 use crate::components::divider::horizontal_divider;
 use crate::components::typography::ui_label;
 use crate::foundation::{ScrollBarVisibility, UiClassExt, clip_box, scroll_view};
-use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, TabIndicatorStyle, TypeRole};
+use crate::style_engine::{classes, with_theme};
+use crate::theme::Theme;
+use crate::tokens::TypeRole;
 
 fn render_tabs<State: 'static, Action: 'static, F>(
     titles: Vec<ArcStr>,
     selected: usize,
-    force_underline: Option<f64>,
+    indicator_height: f64,
     scrollable: bool,
     on_select: F,
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> + use<State, Action, F>
@@ -32,12 +33,8 @@ where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let cb = Arc::new(on_select);
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
-        let indicator = match force_underline {
-            Some(h) => TabIndicatorStyle::Underline { height: h },
-            None => spec.tab_indicator,
-        };
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
 
         let items: Vec<AnyFlexChild<State, Action>> = titles
             .iter()
@@ -45,7 +42,11 @@ where
             .map(|(i, title)| {
                 let active = i == selected;
                 let cb = cb.clone();
-                let ink = if active { p.accent } else { p.text_secondary };
+                let ink = if active {
+                    s.primary
+                } else {
+                    s.on_surface_variant
+                };
                 let lbl = clip_box(
                     ui_label(TypeRole::TitleSmall, title.clone())
                         .color(ink)
@@ -53,84 +54,28 @@ where
                 );
                 let narrow_pad = Padding::from_vh(8.px(), 4.px());
 
-                match indicator {
-                    TabIndicatorStyle::Underline { height } => {
-                        let ind_color = if active { p.accent } else { Color::TRANSPARENT };
-                        let bar = sized_box(label(""))
-                            .dims(
-                                Dimensions::height(height.px())
-                                    .with_width(masonry::layout::Dim::Stretch),
-                            )
-                            .background_color(ind_color);
-                        let btn =
-                            button(lbl, move |s: &mut State| cb(s, i)).ui_class(classes::TAB_ITEM);
-                        let btn: Box<AnyWidgetView<State, Action>> = if !scrollable {
-                            btn.padding(narrow_pad).boxed()
-                        } else {
-                            btn.boxed()
-                        };
-                        let col =
-                            flex_col((btn, bar)).cross_axis_alignment(CrossAxisAlignment::Stretch);
-                        if scrollable {
-                            col.into_any_flex()
-                        } else {
-                            AnyFlexChild::Item(col.boxed().flex(1.0))
-                        }
-                    }
-                    TabIndicatorStyle::ShortPill => {
-                        let bar = if active {
-                            sized_box(label(""))
-                                .dims(Dimensions::fixed(24.px(), 3.px()))
-                                .background_color(p.accent)
-                                .corner_radius(999.px())
-                        } else {
-                            sized_box(label(""))
-                                .dims(Dimensions::fixed(24.px(), 3.px()))
-                                .background_color(Color::TRANSPARENT)
-                                .corner_radius(999.px())
-                        };
-                        let btn = button(
-                            clip_box(
-                                flex_col((lbl, bar))
-                                    .cross_axis_alignment(CrossAxisAlignment::Center)
-                                    .gap(4.px()),
-                            ),
-                            move |s: &mut State| cb(s, i),
-                        )
-                        .ui_class(classes::TAB_ITEM);
-                        if scrollable {
-                            btn.into_any_flex()
-                        } else {
-                            AnyFlexChild::Item(btn.padding(narrow_pad).boxed().flex(1.0))
-                        }
-                    }
-                    TabIndicatorStyle::SegmentedThumb => {
-                        let bg = if active {
-                            p.surface
-                        } else {
-                            Color::TRANSPARENT
-                        };
-                        let btn = button(
-                            clip_box(
-                                ui_label(TypeRole::TitleSmall, title.clone())
-                                    .color(if active {
-                                        p.text_primary
-                                    } else {
-                                        p.text_secondary
-                                    })
-                                    .line_breaking(LineBreaking::Clip),
-                            ),
-                            move |s: &mut State| cb(s, i),
-                        )
-                        .ui_class(classes::TAB_ITEM)
-                        .background_color(bg)
-                        .corner_radius((spec.metrics.button_radius - 1.0).max(4.0).px());
-                        if scrollable {
-                            btn.into_any_flex()
-                        } else {
-                            AnyFlexChild::Item(btn.padding(narrow_pad).boxed().flex(1.0))
-                        }
-                    }
+                let ind_color = if active {
+                    s.primary
+                } else {
+                    Color::TRANSPARENT
+                };
+                let bar = sized_box(label(""))
+                    .dims(
+                        Dimensions::height(indicator_height.px())
+                            .with_width(masonry::layout::Dim::Stretch),
+                    )
+                    .background_color(ind_color);
+                let btn = button(lbl, move |st: &mut State| cb(st, i)).ui_class(classes::TAB_ITEM);
+                let btn: Box<AnyWidgetView<State, Action>> = if !scrollable {
+                    btn.padding(narrow_pad).boxed()
+                } else {
+                    btn.boxed()
+                };
+                let col = flex_col((btn, bar)).cross_axis_alignment(CrossAxisAlignment::Stretch);
+                if scrollable {
+                    col.into_any_flex()
+                } else {
+                    AnyFlexChild::Item(col.boxed().flex(1.0))
                 }
             })
             .collect();
@@ -140,18 +85,9 @@ where
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(4.px());
 
-        let container: Box<AnyWidgetView<State, Action>> =
-            if matches!(indicator, TabIndicatorStyle::SegmentedThumb) {
-                sized_box(strip)
-                    .padding(Padding::all(3.px()))
-                    .background_color(p.surface_highest)
-                    .corner_radius((spec.metrics.button_radius + 2.0).px())
-                    .boxed()
-            } else {
-                flex_col((strip, horizontal_divider()))
-                    .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                    .boxed()
-            };
+        let container: Box<AnyWidgetView<State, Action>> = flex_col((strip, horizontal_divider()))
+            .cross_axis_alignment(CrossAxisAlignment::Stretch)
+            .boxed();
 
         let inner = if scrollable {
             scroll_view(container)
@@ -165,7 +101,7 @@ where
     })
 }
 
-/// Primary tab strip adapting to the active theme's [`TabIndicatorStyle`].
+/// Primary Material Design 3 tab strip (`3px` underline indicator).
 pub fn tabs<State: 'static, Action: 'static, T: Into<ArcStr> + Clone, F>(
     titles: &[T],
     selected: usize,
@@ -175,7 +111,7 @@ where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(list, selected, None, false, on_select)
+    render_tabs(list, selected, 3.0, false, on_select)
 }
 
 /// Secondary hairline-underline tab strip (`2px` indicator).
@@ -188,7 +124,7 @@ where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(list, selected, Some(2.0), false, on_select)
+    render_tabs(list, selected, 2.0, false, on_select)
 }
 
 /// Horizontally scrollable tab strip for many destinations.
@@ -201,5 +137,5 @@ where
     F: Fn(&mut State, usize) -> Action + Send + Sync + 'static,
 {
     let list: Vec<ArcStr> = titles.iter().cloned().map(Into::into).collect();
-    render_tabs(list, selected, None, true, on_select)
+    render_tabs(list, selected, 3.0, true, on_select)
 }

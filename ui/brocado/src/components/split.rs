@@ -26,13 +26,13 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
 use crate::foundation::with_opacity;
-use crate::style_engine::current_spec_arc;
-use crate::tokens::{ControlVisualGrammar, DesignSpec};
+use crate::style_engine::current_theme_arc;
+use crate::theme::Theme;
 
 const SPLIT_CHILD1_ID: ViewId = ViewId::new(0x5549_3450);
 const SPLIT_CHILD2_ID: ViewId = ViewId::new(0x5549_3451);
 
-/// Platform grammar styling for [`UiSplitWidget`].
+/// Material Design 3 splitter styling for [`UiSplitWidget`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SplitVisualTheme {
     bar_thickness: f64,
@@ -46,21 +46,17 @@ struct SplitVisualTheme {
 }
 
 impl SplitVisualTheme {
-    fn from_spec(spec: &DesignSpec) -> Self {
-        let p = &spec.palette;
-        let (bar_thickness, min_bar_area, solid) = match spec.control_grammar() {
-            ControlVisualGrammar::MacosHig | ControlVisualGrammar::Adwaita => (2.0, 8.0, true),
-            ControlVisualGrammar::Material3 | ControlVisualGrammar::Fluent2 => (4.0, 10.0, false),
-        };
+    fn from_theme(theme: &Theme) -> Self {
+        let s = &theme.scheme;
         Self {
-            bar_thickness,
-            min_bar_area,
-            solid,
-            idle_color: p.border_strong,
-            hover_color: p.text_secondary,
-            active_color: p.accent,
-            disabled_color: with_opacity(p.divider, 0.5),
-            track_color: p.divider,
+            bar_thickness: 4.0,
+            min_bar_area: 10.0,
+            solid: false,
+            idle_color: s.outline,
+            hover_color: s.on_surface_variant,
+            active_color: s.primary,
+            disabled_color: with_opacity(s.outline_variant, 0.5),
+            track_color: s.outline_variant,
         }
     }
 }
@@ -763,8 +759,8 @@ where
     type ViewState = (A::ViewState, B::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let visual = SplitVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let visual = SplitVisualTheme::from_theme(&theme);
         let (child1, st1) = ctx.with_id(SPLIT_CHILD1_ID, |ctx| self.first.build(ctx, app_state));
         let (child2, st2) = ctx.with_id(SPLIT_CHILD2_ID, |ctx| self.second.build(ctx, app_state));
         let pod = ctx.create_pod(UiSplitWidget::new(
@@ -787,8 +783,8 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        UiSplitWidget::set_visual(&mut element, SplitVisualTheme::from_spec(&spec));
+        let theme = current_theme_arc(ctx);
+        UiSplitWidget::set_visual(&mut element, SplitVisualTheme::from_theme(&theme));
 
         if prev.axis != self.axis {
             element.widget.split_axis = self.axis;

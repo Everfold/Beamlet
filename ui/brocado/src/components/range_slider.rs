@@ -8,7 +8,7 @@ use masonry::accesskit::{Node, Orientation, Role};
 use masonry::core::{
     AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx, PointerButton,
     PointerButtonEvent, PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef, Property,
-    RegisterCtx, TextEvent, Update, UpdateCtx, UsesProperty, Widget, WidgetMut,
+    RegisterCtx, Update, UpdateCtx, UsesProperty, Widget, WidgetMut,
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Circle, Point, Rect, Size, Stroke};
@@ -20,8 +20,8 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 
 use crate::components::selection::ControlVisualTheme;
-use crate::foundation::state_layer::with_opacity;
-use crate::tokens::{ControlVisualGrammar, DesignSpec};
+use crate::style_engine::current_theme_arc;
+use crate::theme::Theme;
 
 /// Emitted by [`RangeSliderWidget`] whenever either thumb moves.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -70,9 +70,7 @@ impl RangeSliderWidget {
             end: e,
             step: step.filter(|v| *v > 0.0),
             active_thumb: None,
-            visual: ControlVisualTheme::from_spec(&DesignSpec::neutral_fallback(
-                crate::tokens::Brightness::Light,
-            )),
+            visual: ControlVisualTheme::from_theme(&Theme::light()),
         }
     }
 
@@ -182,17 +180,6 @@ impl Widget for RangeSliderWidget {
         }
     }
 
-    fn on_text_event(
-        &mut self,
-        ctx: &mut EventCtx<'_>,
-        _props: &mut PropertiesMut<'_>,
-        event: &TextEvent,
-    ) {
-        if matches!(event, TextEvent::WindowFocusChange(_)) {
-            ctx.request_paint_only();
-        }
-    }
-
     fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: TypeId) {
         TrackThickness::prop_changed(ctx, property_type);
         ThumbColor::prop_changed(ctx, property_type);
@@ -287,16 +274,13 @@ impl Widget for RangeSliderWidget {
         painter: &mut Painter<'_>,
     ) {
         let disabled = ctx.is_disabled();
-        let win_focused = ctx.is_window_focused();
         let cache = ctx.property_cache();
         let track_color = props.get::<TrackColor>(cache);
         let thumb_color = props.get::<ThumbColor>(cache).0;
         let track_h = props.get::<TrackThickness>(cache).0.get().max(4.0);
         let thumb_r = props.get::<ThumbRadius>(cache).0.get().max(8.0);
-        let accent = if disabled
-            || (self.visual.grammar == ControlVisualGrammar::MacosHig && !win_focused)
-        {
-            self.visual.effective_accent(win_focused, disabled)
+        let accent = if disabled {
+            self.visual.disabled_content
         } else {
             thumb_color
         };
@@ -317,13 +301,7 @@ impl Widget for RangeSliderWidget {
         } else {
             track_color.inactive
         };
-        let active_track_col = if disabled
-            || (self.visual.grammar == ControlVisualGrammar::MacosHig && !win_focused)
-        {
-            accent
-        } else {
-            track_color.active
-        };
+        let active_track_col = if disabled { accent } else { track_color.active };
 
         let full_track = Rect::new(thumb_r, track_y, size.width - thumb_r, track_y + track_h)
             .to_rounded_rect(track_h / 2.0);
@@ -335,7 +313,7 @@ impl Widget for RangeSliderWidget {
             painter.fill(active_track, active_track_col).draw();
         }
 
-        if self.visual.grammar == ControlVisualGrammar::Material3 && !disabled {
+        if !disabled {
             painter
                 .fill(Circle::new(Point::new(thumb_r + 2.0, cy), 2.0), accent)
                 .draw();
@@ -357,58 +335,16 @@ impl Widget for RangeSliderWidget {
                     )
                     .draw();
             }
-            match self.visual.grammar {
-                ControlVisualGrammar::Material3 => {
-                    let r = if is_thumb_active {
-                        thumb_r + 1.5
-                    } else {
-                        thumb_r
-                    };
-                    let circle = Circle::new(Point::new(tx, cy), r);
-                    painter.fill(circle, accent).draw();
-                    painter
-                        .stroke(circle, &Stroke::new(1.5), Color::WHITE.with_alpha(0.85))
-                        .draw();
-                }
-                ControlVisualGrammar::Fluent2 => {
-                    let c = Point::new(tx, cy);
-                    painter
-                        .fill(Circle::new(c, thumb_r), self.visual.surface)
-                        .draw();
-                    painter
-                        .stroke(
-                            Circle::new(c, thumb_r),
-                            &Stroke::new(1.0),
-                            self.visual.border_strong,
-                        )
-                        .draw();
-                    painter
-                        .fill(
-                            Circle::new(c, if is_thumb_active { 4.0 } else { 5.0 }),
-                            accent,
-                        )
-                        .draw();
-                }
-                ControlVisualGrammar::MacosHig | ControlVisualGrammar::Adwaita => {
-                    let c = Point::new(tx, cy);
-                    if self.visual.grammar == ControlVisualGrammar::MacosHig && !disabled {
-                        painter
-                            .fill(
-                                Circle::new(Point::new(tx, cy + 1.0), thumb_r),
-                                with_opacity(self.visual.shadow, 0.20),
-                            )
-                            .draw();
-                    }
-                    painter.fill(Circle::new(c, thumb_r), Color::WHITE).draw();
-                    painter
-                        .stroke(
-                            Circle::new(c, thumb_r),
-                            &Stroke::new(1.0),
-                            self.visual.border_strong,
-                        )
-                        .draw();
-                }
-            }
+            let r = if is_thumb_active {
+                thumb_r + 1.5
+            } else {
+                thumb_r
+            };
+            let circle = Circle::new(Point::new(tx, cy), r);
+            painter.fill(circle, accent).draw();
+            painter
+                .stroke(circle, &Stroke::new(1.5), Color::WHITE.with_alpha(0.85))
+                .draw();
         }
     }
 
@@ -468,19 +404,19 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for RangeSlid
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let p = &spec.palette;
-        let visual = ControlVisualTheme::from_spec(&spec);
+        let theme = current_theme_arc(ctx);
+        let s = &theme.scheme;
+        let visual = ControlVisualTheme::from_theme(&theme);
         let pod = ctx.with_action_widget(|ctx| {
             let mut widget =
                 RangeSliderWidget::new(self.min, self.max, self.start, self.end, self.step);
             widget.visual = visual;
             let mut pod = ctx.create_pod(widget);
             pod.new_widget.properties.insert(TrackColor {
-                active: p.accent,
-                inactive: p.surface_highest,
+                active: s.primary,
+                inactive: s.surface_container_highest,
             });
-            pod.new_widget.properties.insert(ThumbColor(p.accent));
+            pod.new_widget.properties.insert(ThumbColor(s.primary));
             pod.new_widget
                 .properties
                 .insert(TrackThickness(Length::px(4.0)));
@@ -500,17 +436,17 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for RangeSlid
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let visual = ControlVisualTheme::from_spec(&spec);
-        let p = &spec.palette;
+        let theme = current_theme_arc(ctx);
+        let visual = ControlVisualTheme::from_theme(&theme);
+        let s = &theme.scheme;
         let next_track = TrackColor {
-            active: p.accent,
-            inactive: p.surface_highest,
+            active: s.primary,
+            inactive: s.surface_container_highest,
         };
         if element.get_prop::<TrackColor>() != &next_track {
             element.insert_prop(next_track);
         }
-        let next_thumb = ThumbColor(p.accent);
+        let next_thumb = ThumbColor(s.primary);
         if element.get_prop::<ThumbColor>() != &next_thumb {
             element.insert_prop(next_thumb);
         }

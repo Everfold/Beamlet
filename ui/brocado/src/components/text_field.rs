@@ -24,8 +24,10 @@ use crate::foundation::{
     ScrollBarVisibility, UiClassExt, clip_box, constrained_box, focus_frame, icons, scroll_view,
     ui_icon,
 };
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{ControlVisualGrammar, DesignSpec, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::INPUT_PAD_H;
+use crate::tokens::TypeRole;
 
 /// Text field surface variant.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -55,7 +57,6 @@ type TextFieldFlex<State, Action> = Prop<
     Gap,
     Flex<
         (
-            Option<UiLabel<State, Action>>,
             Box<AnyWidgetView<State, Action>>,
             Option<Box<AnyWidgetView<State, Action>>>,
         ),
@@ -142,39 +143,34 @@ impl<State, Action> UiTextField<State, Action> {
         self
     }
 
-    fn build_flex(&self, spec: &DesignSpec) -> TextFieldFlex<State, Action>
+    fn build_flex(&self, theme: &Theme) -> TextFieldFlex<State, Action>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
-        let m = &spec.metrics;
+        let s = &theme.scheme;
         let is_error = self.error_text.is_some();
-        let is_md3_floating =
-            spec.control_grammar() == ControlVisualGrammar::Material3 && self.label_text.is_some();
+        let is_floating = self.label_text.is_some();
         let base_class = match self.variant {
             TextFieldVariant::Outlined => classes::TEXT_FIELD_OUTLINED,
             TextFieldVariant::Filled => classes::TEXT_FIELD_FILLED,
         };
 
         let label_color = if is_error {
-            p.error
+            s.error
         } else {
-            spec.content_color(p.text_secondary, self.disabled)
+            theme.content_color(s.on_surface_variant, self.disabled)
         };
-        let top_label = (!is_md3_floating)
-            .then(|| build_top_label(spec, self.label_text.as_ref(), label_color))
-            .flatten();
 
-        let style = spec.typography.get(TypeRole::BodyMedium);
+        let style = theme.typography.get(TypeRole::BodyMedium);
         let on_change = self.on_change.clone();
-        let mut ti = text_input(self.value.clone(), move |s: &mut State, txt: String| {
-            on_change(s, txt)
+        let mut ti = text_input(self.value.clone(), move |st: &mut State, txt: String| {
+            on_change(st, txt)
         })
         .text_size(style.font_size)
         .weight(style.weight)
-        .text_color(spec.content_color(p.text_primary, self.disabled))
-        .font(spec.typography.resolved_font_family())
+        .text_color(theme.content_color(s.on_surface, self.disabled))
+        .font(theme.typography.resolved_font_family())
         .disabled(self.disabled);
 
         if let Some(ph) = &self.placeholder {
@@ -186,7 +182,7 @@ impl<State, Action> UiTextField<State, Action> {
             || self.trailing_action.is_some();
 
         let make_row_inner = |ti_view: Box<AnyWidgetView<State, Action>>| {
-            let sub_ink = spec.content_color(p.text_secondary, self.disabled);
+            let sub_ink = theme.content_color(s.on_surface_variant, self.disabled);
             let prefix = self.prefix_text.as_ref().map(|t| {
                 ui_label(TypeRole::BodyMedium, t.clone())
                     .line_height(TEXT_INPUT_LINE_HEIGHT)
@@ -202,14 +198,14 @@ impl<State, Action> UiTextField<State, Action> {
             let trail = self.trailing_action.as_ref().map(|(icon, cb)| {
                 let cb = cb.clone();
                 button(
-                    ui_icon(icon, 16.0, if is_error { p.error } else { sub_ink }),
-                    move |s: &mut State| cb(s),
+                    ui_icon(icon, 16.0, if is_error { s.error } else { sub_ink }),
+                    move |st: &mut State| cb(st),
                 )
                 .disabled(self.disabled)
                 .ui_class(classes::ICON_BTN_STD)
             });
             let trail_err = if is_error && trail.is_none() {
-                Some(ui_icon(icons::ERROR_CIRCLE, 16.0, p.error))
+                Some(ui_icon(icons::ERROR_CIRCLE, 16.0, s.error))
             } else {
                 None
             };
@@ -222,9 +218,9 @@ impl<State, Action> UiTextField<State, Action> {
                 .gap(6.px())
         };
 
-        let frame_slot: Box<AnyWidgetView<State, Action>> = if is_md3_floating {
+        let frame_slot: Box<AnyWidgetView<State, Action>> = if is_floating {
             let float_lbl = build_floating_label(
-                spec,
+                theme,
                 self.label_text.clone(),
                 self.value.is_empty(),
                 is_error,
@@ -245,7 +241,7 @@ impl<State, Action> UiTextField<State, Action> {
                         .gap(2.px())
                         .ui_class(classes::TEXT_FIELD_FILLED)
                         .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
-                        .padding(Padding::from_vh(7.px(), m.input_pad_h.px()))
+                        .padding(Padding::from_vh(7.px(), INPUT_PAD_H.px()))
                         .boxed();
                     focus_frame(container).error(is_error).boxed()
                 }
@@ -260,7 +256,7 @@ impl<State, Action> UiTextField<State, Action> {
                             .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
                             .boxed()
                     };
-                    wrap_outlined_floating_notch(p.surface, input_widget, float_lbl, is_error)
+                    wrap_outlined_floating_notch(s.surface, input_widget, float_lbl, is_error)
                 }
             }
         } else {
@@ -278,14 +274,14 @@ impl<State, Action> UiTextField<State, Action> {
         };
 
         let bottom_row = build_bottom_row(
-            spec,
+            theme,
             self.error_text.as_ref(),
             self.supporting_text.as_ref(),
             self.value.chars().count(),
             self.max_chars,
         );
 
-        flex_col((top_label, frame_slot, bottom_row))
+        flex_col((frame_slot, bottom_row))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px())
     }
@@ -301,8 +297,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextFie
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let flex = self.build_flex(&theme);
         let (pod, st) = flex.build(ctx, app_state);
         (pod, (flex, st))
     }
@@ -315,8 +311,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextFie
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_flex = self.build_flex(&theme);
         next_flex.rebuild(prev_flex, st, ctx, element, app_state);
         *prev_flex = next_flex;
     }
@@ -365,7 +361,7 @@ where
     }
 }
 
-/// Outlined text field driven by [`DesignSpec`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
+/// Outlined text field driven by [`Theme`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn text_field<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,
@@ -376,7 +372,7 @@ where
     make_tf(TextFieldVariant::Outlined, value, on_change)
 }
 
-/// Filled tonal container text field driven by [`DesignSpec`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
+/// Filled tonal container text field driven by [`Theme`] and wrapped in a reactive [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn filled_text_field<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,
@@ -387,29 +383,21 @@ where
     make_tf(TextFieldVariant::Filled, value, on_change)
 }
 
-fn build_top_label<State: 'static, Action: 'static>(
-    _spec: &DesignSpec,
-    label_text: Option<&ArcStr>,
-    label_color: masonry::peniko::Color,
-) -> Option<UiLabel<State, Action>> {
-    label_text.map(|t| ui_label(TypeRole::LabelMedium, t.clone()).color(label_color))
-}
-
 fn build_floating_label<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    theme: &Theme,
     label_text: Option<ArcStr>,
     is_empty: bool,
     is_error: bool,
     disabled: bool,
     label_color: masonry::peniko::Color,
 ) -> UiLabel<State, Action> {
-    let p = &spec.palette;
+    let s = &theme.scheme;
     let float_text = label_text.unwrap_or_default();
     ui_label(TypeRole::LabelSmall, float_text)
         .color(if is_error {
-            p.error
+            s.error
         } else if !is_empty {
-            spec.content_color(p.accent, disabled)
+            theme.content_color(s.primary, disabled)
         } else {
             label_color
         })
@@ -436,13 +424,13 @@ fn wrap_outlined_floating_notch<State: 'static, Action: 'static>(
 }
 
 fn build_bottom_row<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    theme: &Theme,
     error_text: Option<&ArcStr>,
     supporting_text: Option<&ArcStr>,
     char_count: usize,
     max_chars: Option<usize>,
 ) -> Option<Box<AnyWidgetView<State, Action>>> {
-    let p = &spec.palette;
+    let s = &theme.scheme;
     let is_error = error_text.is_some();
     let msg_text = error_text.or(supporting_text);
     let counter_text = max_chars.map(|max| format!("{char_count}/{max}"));
@@ -452,12 +440,16 @@ fn build_bottom_row<State: 'static, Action: 'static>(
     }
 
     let msg_view = msg_text.map(|t| {
-        let c = if is_error { p.error } else { p.text_secondary };
+        let c = if is_error {
+            s.error
+        } else {
+            s.on_surface_variant
+        };
         ui_label(TypeRole::BodySmall, t.clone()).color(c)
     });
     let cnt_view = counter_text.map(|txt| {
         ui_label(TypeRole::LabelSmall, txt)
-            .color(p.text_secondary)
+            .color(s.on_surface_variant)
             .line_breaking(LineBreaking::Clip)
     });
 
@@ -571,41 +563,36 @@ impl<State, Action> UiTextArea<State, Action> {
         self
     }
 
-    fn build_flex(&self, spec: &DesignSpec) -> TextFieldFlex<State, Action>
+    fn build_flex(&self, theme: &Theme) -> TextFieldFlex<State, Action>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
-        let m = &spec.metrics;
+        let s = &theme.scheme;
         let is_error = self.error_text.is_some();
-        let is_md3_floating =
-            spec.control_grammar() == ControlVisualGrammar::Material3 && self.label_text.is_some();
+        let is_floating = self.label_text.is_some();
         let base_class = match self.variant {
             TextFieldVariant::Outlined => classes::TEXT_FIELD_OUTLINED,
             TextFieldVariant::Filled => classes::TEXT_FIELD_FILLED,
         };
 
         let label_color = if is_error {
-            p.error
+            s.error
         } else {
-            spec.content_color(p.text_secondary, self.disabled)
+            theme.content_color(s.on_surface_variant, self.disabled)
         };
-        let top_label = (!is_md3_floating)
-            .then(|| build_top_label(spec, self.label_text.as_ref(), label_color))
-            .flatten();
 
-        let style = spec.typography.get(TypeRole::BodyMedium);
+        let style = theme.typography.get(TypeRole::BodyMedium);
         let on_change = self.on_change.clone();
-        let mut ti = text_input(self.value.clone(), move |s: &mut State, txt: String| {
-            on_change(s, txt)
+        let mut ti = text_input(self.value.clone(), move |st: &mut State, txt: String| {
+            on_change(st, txt)
         })
         .insert_newline(self.insert_newline)
         .clip(false)
         .text_size(style.font_size)
         .weight(style.weight)
-        .text_color(spec.content_color(p.text_primary, self.disabled))
-        .font(spec.typography.resolved_font_family())
+        .text_color(theme.content_color(s.on_surface, self.disabled))
+        .font(theme.typography.resolved_font_family())
         .disabled(self.disabled);
 
         if let Some(ph) = &self.placeholder {
@@ -613,11 +600,11 @@ impl<State, Action> UiTextArea<State, Action> {
         }
         if let Some(on_submit) = &self.on_submit {
             let on_submit = on_submit.clone();
-            ti = ti.on_enter(move |s: &mut State, txt: String| on_submit(s, txt));
+            ti = ti.on_enter(move |st: &mut State, txt: String| on_submit(st, txt));
         }
         if let Some(on_cancel) = &self.on_cancel {
             let on_cancel = on_cancel.clone();
-            ti = ti.on_cancel(move |s: &mut State, txt: String| on_cancel(s, txt));
+            ti = ti.on_cancel(move |st: &mut State, txt: String| on_cancel(st, txt));
         }
 
         let bounded_portal = constrained_box(
@@ -629,9 +616,9 @@ impl<State, Action> UiTextArea<State, Action> {
         .min_height(self.min_height)
         .max_height(self.max_height);
 
-        let frame_slot: Box<AnyWidgetView<State, Action>> = if is_md3_floating {
+        let frame_slot: Box<AnyWidgetView<State, Action>> = if is_floating {
             let float_lbl = build_floating_label(
-                spec,
+                theme,
                 self.label_text.clone(),
                 self.value.is_empty(),
                 is_error,
@@ -645,7 +632,7 @@ impl<State, Action> UiTextArea<State, Action> {
                         .gap(4.px())
                         .ui_class(classes::TEXT_FIELD_FILLED)
                         .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
-                        .padding(Padding::from_vh(8.px(), m.input_pad_h.px()))
+                        .padding(Padding::from_vh(8.px(), INPUT_PAD_H.px()))
                         .boxed();
                     focus_frame(container).error(is_error).boxed()
                 }
@@ -655,7 +642,7 @@ impl<State, Action> UiTextArea<State, Action> {
                         .ui_class(base_class)
                         .ui_class_if(is_error, classes::TEXT_FIELD_ERROR)
                         .boxed();
-                    wrap_outlined_floating_notch(p.surface, input_widget, float_lbl, is_error)
+                    wrap_outlined_floating_notch(s.surface, input_widget, float_lbl, is_error)
                 }
             }
         } else {
@@ -668,14 +655,14 @@ impl<State, Action> UiTextArea<State, Action> {
         };
 
         let bottom_row = build_bottom_row(
-            spec,
+            theme,
             self.error_text.as_ref(),
             self.supporting_text.as_ref(),
             self.value.chars().count(),
             self.max_chars,
         );
 
-        flex_col((top_label, frame_slot, bottom_row))
+        flex_col((frame_slot, bottom_row))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px())
     }
@@ -691,8 +678,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextAre
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let flex = self.build_flex(&theme);
         let (pod, st) = flex.build(ctx, app_state);
         (pod, (flex, st))
     }
@@ -705,8 +692,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiTextAre
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_flex = self.build_flex(&theme);
         next_flex.rebuild(prev_flex, st, ctx, element, app_state);
         *prev_flex = next_flex;
     }
@@ -757,7 +744,7 @@ where
     }
 }
 
-/// Outlined multi-line text area driven by [`DesignSpec`] with scrollable vertical auto-growth and [`FocusFrame`](crate::foundation::FocusFrame).
+/// Outlined multi-line text area driven by [`Theme`] with scrollable vertical auto-growth and [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn text_area<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,
@@ -768,7 +755,7 @@ where
     make_ta(TextFieldVariant::Outlined, value, on_change)
 }
 
-/// Filled tonal multi-line text area driven by [`DesignSpec`] with scrollable vertical auto-growth and [`FocusFrame`](crate::foundation::FocusFrame).
+/// Filled tonal multi-line text area driven by [`Theme`] with scrollable vertical auto-growth and [`FocusFrame`](crate::foundation::FocusFrame).
 pub fn filled_text_area<State: 'static, Action: 'static, F>(
     value: impl Into<String>,
     on_change: F,

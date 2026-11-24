@@ -1,9 +1,8 @@
-//! Design system token protocols: locale, motion, layout, typography, and `DesignSpec`.
+//! Material Design 3 Expressive token primitives: layout, locale, motion, and typography.
 
 pub mod layout;
 pub mod locale;
 pub mod motion;
-pub mod spec;
 pub mod typography;
 
 pub use layout::{
@@ -11,10 +10,5 @@ pub use layout::{
     SPACE_32, WindowSizeClass,
 };
 pub use locale::UiLocale;
-pub use motion::{MotionDuration, MotionEasing, MotionScheme, SpringSpec};
-pub use spec::{
-    ControlBorderStyle, ControlMetrics, ControlVisualGrammar, DesignSpec, DialogActionOrder,
-    ElevationLevel, InputFocusStyle, NavIndicatorStyle, SemanticPalette, ShortcutConvention,
-    StateFeedbackMode, TabIndicatorStyle, WindowBackdrop,
-};
+pub use motion::{MotionDuration, MotionEasing, SpringSpec};
 pub use typography::{TextStyleSpec, TypeRole, TypeScale};

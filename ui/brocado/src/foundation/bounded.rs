@@ -281,7 +281,6 @@ use crate::components::text_field::{UiTextArea, UiTextField};
 use crate::components::toast::UiToastHost;
 use crate::components::typography::{UiLabel, UiProse};
 use crate::foundation::adaptive_pair::AdaptivePairView;
-use crate::foundation::bevel::BeveledBorderView;
 use crate::foundation::class_view::WithClass;
 use crate::foundation::clip_box::ClipBoxView;
 use crate::foundation::constrained_box::ConstrainedBoxView;
@@ -294,7 +293,7 @@ use crate::foundation::ripple::RippleLayerView;
 use crate::foundation::scroll_view::{ScrollBarStyle, ScrollView};
 use crate::foundation::transition::UiTransition;
 use crate::foundation::wrap::WrapView;
-use crate::style_engine::scope::{MemoizeWithSpec, UiScope, WithSpec};
+use crate::style_engine::scope::{MemoizeWithTheme, ThemeScope, WithTheme};
 
 // ---------------------------------------------------------------------------
 // Marker traits
@@ -1183,7 +1182,6 @@ impl_passthrough_bounded!(
     WithClass,
     FocusFrameView,
     RippleLayerView,
-    BeveledBorderView,
     UiTransition,
     EscapeCatcherView,
     HoverTooltipView,
@@ -1196,14 +1194,14 @@ impl_passthrough_bounded!(
     UiCustomIconButton,
 );
 
-impl<State, Action, V: BoundedX> BoundedX for UiScope<State, Action, V> {}
-impl<State, Action, V: BoundedY> BoundedY for UiScope<State, Action, V> {}
+impl<State, Action, V: BoundedX> BoundedX for ThemeScope<State, Action, V> {}
+impl<State, Action, V: BoundedY> BoundedY for ThemeScope<State, Action, V> {}
 
-impl<State, Action, F, V: BoundedX> BoundedX for WithSpec<State, Action, F, V> {}
-impl<State, Action, F, V: BoundedY> BoundedY for WithSpec<State, Action, F, V> {}
+impl<State, Action, F, V: BoundedX> BoundedX for WithTheme<State, Action, F, V> {}
+impl<State, Action, F, V: BoundedY> BoundedY for WithTheme<State, Action, F, V> {}
 
-impl<State, Action, Data, F, V: BoundedX> BoundedX for MemoizeWithSpec<State, Action, Data, F, V> {}
-impl<State, Action, Data, F, V: BoundedY> BoundedY for MemoizeWithSpec<State, Action, Data, F, V> {}
+impl<State, Action, Data, F, V: BoundedX> BoundedX for MemoizeWithTheme<State, Action, Data, F, V> {}
+impl<State, Action, Data, F, V: BoundedY> BoundedY for MemoizeWithTheme<State, Action, Data, F, V> {}
 
 // Brocado multi-line wrapping text / lists: horizontally safe, vertically expandable.
 impl<State, Action> BoundedX for UiLabel<State, Action> {}

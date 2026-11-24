@@ -1,4 +1,4 @@
-//! Built-in multi-theme scene catalog and snapshot/preview orchestration helpers.
+//! Built-in Material 3 Expressive scene catalog and snapshot/preview orchestration helpers.
 
 use anyhow::bail;
 use brocado::prelude::*;
@@ -18,7 +18,7 @@ use brocado_preview::inspect::{
     A11yIssue, ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree,
 };
 
-use super::{build_ui_harness, lint_spec_contrast, lint_ui_accessibility, lint_ui_layout};
+use super::{build_ui_harness, lint_theme_contrast, lint_ui_accessibility, lint_ui_layout};
 
 /// Metadata describing a built-in preview scene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,15 +45,15 @@ pub const ALL_SCENES: &[SceneInfo] = &[
     },
     SceneInfo {
         id: "tokens",
-        description: "DesignSpec 15-role typography ramp, status/surface swatches, metrics",
+        description: "Material 3 Expressive 15-role typography ramp, color scheme swatches, metrics",
     },
     SceneInfo {
         id: "platform-native",
-        description: "MD3, Windows Fluent, macOS HIG, and GNOME Adwaita signature widgets",
+        description: "Material 3 Expressive signature FABs, docked toolbars, and progress shapes",
     },
     SceneInfo {
         id: "workspace",
-        description: "Authentic 4-platform native desktop workspace shells + searchable workbench",
+        description: "Material 3 Expressive desktop workspace shell + searchable workbench",
     },
 ];
 
@@ -66,7 +66,7 @@ pub struct SceneOutput {
     pub tree: LayoutNode,
     /// Automated geometry lint findings.
     pub layout_issues: Vec<LayoutIssue>,
-    /// Automated WCAG 2.1 color contrast findings on active `DesignSpec`.
+    /// Automated WCAG 2.1 color contrast findings on active `Theme`.
     pub contrast_issues: Vec<ContrastIssue>,
     /// Automated AccessKit accessibility findings.
     pub a11y_issues: Vec<A11yIssue>,
@@ -75,8 +75,8 @@ pub struct SceneOutput {
 /// Shared mutable state driving all built-in preview scenes.
 #[derive(Clone, Debug)]
 pub struct SceneState {
-    /// Active multi-theme configuration.
-    pub theme: UiTheme,
+    /// Active Material 3 Expressive theme configuration.
+    pub theme: Theme,
     /// Selected workspace tab index (`0..=5`).
     pub active_tab: usize,
     /// Shared click counter.
@@ -140,7 +140,7 @@ pub struct SceneState {
 impl SceneState {
     /// Creates default state initialized with `theme`.
     #[must_use]
-    pub fn with_theme(theme: UiTheme) -> Self {
+    pub fn with_theme(theme: Theme) -> Self {
         Self {
             theme,
             active_tab: 0,
@@ -479,57 +479,68 @@ fn render_overlays_page(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>
 }
 
 fn swatch<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    theme: &Theme,
     name: &'static str,
     fill: Color,
     ink: Color,
 ) -> Box<AnyWidgetView<State, Action>> {
     sized_box(
-        spec.typography
+        theme
+            .typography
             .style_label(TypeRole::LabelSmall, label(name))
             .color(ink),
     )
     .padding(Padding::from_vh(8.px(), 10.px()))
     .background_color(fill)
-    .border(spec.palette.border, 1.px())
+    .border(theme.scheme.outline_variant, 1.px())
     .corner_radius(6.px())
     .dims(Dimensions::fixed(155.px(), 38.px()))
     .boxed()
 }
 
 fn render_tokens_page() -> Box<AnyWidgetView<SceneState>> {
-    let swatches = with_spec(|spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    let swatches = with_theme(|theme: &Theme, _| {
+        let s = &theme.scheme;
         flex_col((
             flex_row((
-                swatch(spec, "accent", p.accent, p.on_accent),
+                swatch(theme, "primary", s.primary, s.on_primary),
                 swatch(
-                    spec,
-                    "accent_container",
-                    p.accent_container,
-                    p.on_accent_container,
+                    theme,
+                    "primary_container",
+                    s.primary_container,
+                    s.on_primary_container,
                 ),
-                swatch(spec, "secondary", p.secondary, p.on_secondary),
+                swatch(theme, "secondary", s.secondary, s.on_secondary),
                 swatch(
-                    spec,
+                    theme,
                     "secondary_container",
-                    p.secondary_container,
-                    p.on_secondary_container,
+                    s.secondary_container,
+                    s.on_secondary_container,
                 ),
             ))
             .gap(8.px()),
             flex_row((
-                swatch(spec, "success", p.success, p.on_success),
-                swatch(spec, "warning", p.warning, p.on_warning),
-                swatch(spec, "error", p.error, p.on_error),
-                swatch(spec, "window_bg", p.window_bg, p.text_primary),
+                swatch(theme, "success", s.success, s.on_success),
+                swatch(theme, "warning", s.warning, s.on_warning),
+                swatch(theme, "error", s.error, s.on_error),
+                swatch(theme, "surface", s.surface, s.on_surface),
             ))
             .gap(8.px()),
             flex_row((
-                swatch(spec, "surface_low", p.surface_low, p.text_primary),
-                swatch(spec, "surface", p.surface, p.text_primary),
-                swatch(spec, "surface_high", p.surface_high, p.text_primary),
-                swatch(spec, "header_bar_bg", p.header_bar_bg, p.text_primary),
+                swatch(theme, "surface_low", s.surface_container_low, s.on_surface),
+                swatch(theme, "surface_ctr", s.surface_container, s.on_surface),
+                swatch(
+                    theme,
+                    "surface_high",
+                    s.surface_container_high,
+                    s.on_surface,
+                ),
+                swatch(
+                    theme,
+                    "surface_highest",
+                    s.surface_container_highest,
+                    s.on_surface,
+                ),
             ))
             .gap(8.px()),
         ))
@@ -554,7 +565,7 @@ fn render_tokens_page() -> Box<AnyWidgetView<SceneState>> {
     );
 
     flex_col((
-        headline_small("DesignSpec Tokens & Semantics"),
+        headline_small("Material 3 Expressive Tokens & Semantics"),
         filled_card(swatches),
         ramp,
     ))
@@ -742,7 +753,7 @@ fn workspace_body(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
                     ui_icon(
                         if active { icons::STAR } else { icons::FOLDER },
                         18.0,
-                        state.theme.to_spec().palette.accent,
+                        state.theme.scheme.primary,
                     ),
                     flex_col((title_small(*title), body_small(*desc)))
                         .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -790,64 +801,60 @@ fn render_workspace_scene(state: &mut SceneState) -> Box<AnyWidgetView<SceneStat
         NavDestination::new("Native", icons::PALETTE),
     ];
 
-    match state.theme.language {
-        DesignLanguage::Md3 => {
-            let rail = navigation_rail_with_fab(
-                Some(small_fab(
-                    icons::ADD,
-                    FabColor::Tertiary,
-                    |s: &mut SceneState| {
-                        s.click_count += 1;
-                    },
-                )),
-                &dests,
-                state.active_tab,
-                |s: &mut SceneState, i| s.active_tab = i,
-            );
-            let bar = top_app_bar_slots(
-                TopAppBarVariant::Small,
-                "Beamlet Material 3",
-                None,
-                vec![
-                    icon_button(icons::PALETTE, |s: &mut SceneState| {
-                        s.theme.toggle_brightness();
-                    })
-                    .boxed(),
-                ],
-            );
-            let main = flex_col((bar, horizontal_divider(), workspace_body(state).flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Stretch);
-            let dock = flex_row((
-                floating_toolbar(vec![
-                    icon_button(icons::EDIT, |s: &mut SceneState| s.click_count += 1).boxed(),
-                    icon_button(icons::TUNE, |s: &mut SceneState| s.click_count += 1).boxed(),
-                ]),
-                extended_fab(
-                    icons::ADD,
-                    "New Action",
-                    FabColor::Primary,
-                    |s: &mut SceneState| {
-                        s.click_count += 1;
-                    },
-                ),
-            ))
-            .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(10.px())
-            .dims(Dimensions::MAX)
-            .boxed();
-            wrap_overlays(
-                state,
-                flex_row((rail, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch),
-                Some(dock),
-            )
-        }
-    }
+    let rail = navigation_rail_with_fab(
+        Some(small_fab(
+            icons::ADD,
+            FabColor::Tertiary,
+            |s: &mut SceneState| {
+                s.click_count += 1;
+            },
+        )),
+        &dests,
+        state.active_tab,
+        |s: &mut SceneState, i| s.active_tab = i,
+    );
+    let bar = top_app_bar_slots(
+        TopAppBarVariant::Small,
+        "Beamlet Material 3",
+        None,
+        vec![
+            icon_button(icons::PALETTE, |s: &mut SceneState| {
+                s.theme.toggle_brightness();
+            })
+            .boxed(),
+        ],
+    );
+    let main = flex_col((bar, horizontal_divider(), workspace_body(state).flex(1.0)))
+        .cross_axis_alignment(CrossAxisAlignment::Stretch);
+    let dock = flex_row((
+        floating_toolbar(vec![
+            icon_button(icons::EDIT, |s: &mut SceneState| s.click_count += 1).boxed(),
+            icon_button(icons::TUNE, |s: &mut SceneState| s.click_count += 1).boxed(),
+        ]),
+        extended_fab(
+            icons::ADD,
+            "New Action",
+            FabColor::Primary,
+            |s: &mut SceneState| {
+                s.click_count += 1;
+            },
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .gap(10.px())
+    .dims(Dimensions::MAX)
+    .boxed();
+    wrap_overlays(
+        state,
+        flex_row((rail, main.flex(1.0))).cross_axis_alignment(CrossAxisAlignment::Stretch),
+        Some(dock),
+    )
 }
 
 /// Builds a standalone [`PreviewHarness`] initialized to `scene_id` and `theme`.
 pub fn build_scene_harness(
     scene_id: &str,
-    theme: UiTheme,
+    theme: Theme,
     config: PreviewConfig,
 ) -> anyhow::Result<PreviewHarness<SceneState>> {
     let logic: fn(&mut SceneState) -> Box<AnyWidgetView<SceneState>> = match scene_id {
@@ -896,7 +903,7 @@ pub fn build_scene_harness(
 /// `AnimateMs` step was passed), rasterizes pixels, dumps geometry, and runs layout + contrast lints.
 pub fn run_scene_preview(
     scene_id: &str,
-    theme: UiTheme,
+    theme: Theme,
     config: PreviewConfig,
     steps: &[PreviewStep],
 ) -> anyhow::Result<SceneOutput> {
@@ -908,7 +915,7 @@ pub fn run_scene_preview(
     let image = harness.render_image();
     let tree = dump_layout_tree(&mut harness);
     let layout_issues = lint_ui_layout(&tree, harness.viewport());
-    let contrast_issues = lint_spec_contrast(&harness.state().theme.to_spec());
+    let contrast_issues = lint_theme_contrast(&harness.state().theme);
     let a11y_issues = lint_ui_accessibility(&mut harness);
     Ok(SceneOutput {
         image,

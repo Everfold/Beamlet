@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use brocado::prelude::{Brightness, DesignLanguage, ToggleableState, UiTheme};
+use brocado::prelude::{Brightness, Theme, ToggleableState, seeds};
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
 use brocado_preview::inspect::{IssueSeverity, LayoutNode, dump_layout_tree};
 
@@ -11,16 +11,12 @@ mod preview_support;
 
 use preview_support::scenes::{ALL_SCENES, SceneState, build_scene_harness};
 use preview_support::{
-    build_ui_harness, lint_spec_contrast, lint_ui_accessibility, lint_ui_layout,
+    build_ui_harness, lint_theme_contrast, lint_ui_accessibility, lint_ui_layout,
 };
 
-fn default_harness(scene_id: &str, language: DesignLanguage) -> PreviewHarness<SceneState> {
-    build_scene_harness(
-        scene_id,
-        UiTheme::new(language, Brightness::Light),
-        PreviewConfig::default(),
-    )
-    .expect("scene harness should build")
+fn default_harness(scene_id: &str) -> PreviewHarness<SceneState> {
+    build_scene_harness(scene_id, Theme::light(), PreviewConfig::default())
+        .expect("scene harness should build")
 }
 
 fn assert_healthy(harness: &mut PreviewHarness<SceneState>, ctx_label: &str) {
@@ -44,7 +40,7 @@ fn assert_healthy(harness: &mut PreviewHarness<SceneState>, ctx_label: &str) {
         a11y_errors.is_empty(),
         "accessibility errors in {ctx_label}: {a11y_errors:#?}"
     );
-    let contrast = lint_spec_contrast(&harness.state().theme.to_spec());
+    let contrast = lint_theme_contrast(&harness.state().theme);
     assert!(
         contrast.is_empty(),
         "contrast issues in {ctx_label}: {contrast:#?}"
@@ -103,18 +99,18 @@ fn collect_slide_card_heights(node: &LayoutNode, out: &mut Vec<f64>) {
 
 #[test]
 fn audit_overview_all_controls_across_all_themes() {
-    for &lang in &DesignLanguage::ALL {
-        let mut h = default_harness("overview", lang);
+    {
+        let mut h = default_harness("overview");
 
         let before = h.state().click_count;
         for lbl in ["Primary", "Secondary", "Elevated", "Outlined", "Subtle"] {
             h.run_step(&PreviewStep::ClickLabel(lbl.to_owned()))
-                .unwrap_or_else(|e| panic!("[{lang:?}] clicking {lbl}: {e}"));
+                .unwrap_or_else(|e| panic!("[Md3] clicking {lbl}: {e}"));
         }
         assert_eq!(
             h.state().click_count,
             before + 5,
-            "[{lang:?}] standard buttons should increment click_count"
+            "[Md3] standard buttons should increment click_count"
         );
 
         let disabled_before = h.state().click_count;
@@ -123,14 +119,14 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().click_count,
             disabled_before,
-            "[{lang:?}] disabled button must not fire callback"
+            "[Md3] disabled button must not fire callback"
         );
 
         h.run_step(&PreviewStep::ClickLabel("Delete".to_owned()))
             .unwrap();
         assert!(
             h.state().show_destructive_dialog,
-            "[{lang:?}] Delete button should open destructive dialog"
+            "[Md3] Delete button should open destructive dialog"
         );
         h.run_steps(&[
             PreviewStep::HoverType {
@@ -142,7 +138,7 @@ fn audit_overview_all_controls_across_all_themes() {
         .unwrap();
         assert!(
             !h.state().show_destructive_dialog,
-            "[{lang:?}] Escape should close destructive dialog"
+            "[Md3] Escape should close destructive dialog"
         );
 
         let icon_ids = find_buttons_without_label(&mut h);
@@ -150,7 +146,7 @@ fn audit_overview_all_controls_across_all_themes() {
         // click the first 5 (icon actions row).
         assert!(
             icon_ids.len() >= 9,
-            "[{lang:?}] expected >= 9 icon buttons in overview, got {}",
+            "[Md3] expected >= 9 icon buttons in overview, got {}",
             icon_ids.len()
         );
         let icon_before = h.state().click_count;
@@ -165,30 +161,30 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().click_count,
             icon_before + 5,
-            "[{lang:?}] all 5 icon buttons should fire"
+            "[Md3] all 5 icon buttons should fire"
         );
 
         // Primary tabs
         h.run_step(&PreviewStep::ClickLabel("Appearance".to_owned()))
             .unwrap();
-        assert_eq!(h.state().selected_tab, 1, "[{lang:?}] primary tab -> 1");
+        assert_eq!(h.state().selected_tab, 1, "[Md3] primary tab -> 1");
         h.run_step(&PreviewStep::ClickLabel("Shortcuts".to_owned()))
             .unwrap();
-        assert_eq!(h.state().selected_tab, 2, "[{lang:?}] primary tab -> 2");
+        assert_eq!(h.state().selected_tab, 2, "[Md3] primary tab -> 2");
         h.run_step(&PreviewStep::ClickLabel("General".to_owned()))
             .unwrap();
-        assert_eq!(h.state().selected_tab, 0, "[{lang:?}] primary tab -> 0");
+        assert_eq!(h.state().selected_tab, 0, "[Md3] primary tab -> 0");
 
         // Secondary tabs
         h.run_step(&PreviewStep::ClickLabel("Changelog".to_owned()))
             .unwrap();
-        assert_eq!(h.state().secondary_tab, 2, "[{lang:?}] secondary tab -> 2");
+        assert_eq!(h.state().secondary_tab, 2, "[Md3] secondary tab -> 2");
         h.run_step(&PreviewStep::ClickLabel("Overview".to_owned()))
             .unwrap();
-        assert_eq!(h.state().secondary_tab, 0, "[{lang:?}] secondary tab -> 0");
+        assert_eq!(h.state().secondary_tab, 0, "[Md3] secondary tab -> 0");
         h.run_step(&PreviewStep::ClickLabel("Spec".to_owned()))
             .unwrap();
-        assert_eq!(h.state().secondary_tab, 1, "[{lang:?}] secondary tab -> 1");
+        assert_eq!(h.state().secondary_tab, 1, "[Md3] secondary tab -> 1");
 
         // Multi-choice segmented buttons: initial [true, false, true]
         for lbl in ["Bold", "Italic", "Code"] {
@@ -198,7 +194,7 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().multi_seg_mask,
             [false, true, false],
-            "[{lang:?}] segmented buttons should toggle independently"
+            "[Md3] segmented buttons should toggle independently"
         );
 
         // Chips: Assist, Filter A, Suggestion, Input chip body, and remove button
@@ -212,7 +208,7 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().click_count,
             chip_before + 3,
-            "[{lang:?}] assist/suggestion/input chip clicks should fire"
+            "[Md3] assist/suggestion/input chip clicks should fire"
         );
 
         let flag0 = h.state().chip_flags[0];
@@ -221,7 +217,7 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().chip_flags[0],
             !flag0,
-            "[{lang:?}] Filter A chip should toggle"
+            "[Md3] Filter A chip should toggle"
         );
 
         // Last icon-only button in overview belongs to the last removable input chip ("Adwaita").
@@ -238,17 +234,17 @@ fn audit_overview_all_controls_across_all_themes() {
         assert_eq!(
             h.state().tags.len(),
             tags_before - 1,
-            "[{lang:?}] chip remove button should remove tag"
+            "[Md3] chip remove button should remove tag"
         );
 
-        assert_healthy(&mut h, &format!("overview/{lang:?}"));
+        assert_healthy(&mut h, "overview/Md3");
     }
 }
 
 #[test]
 fn audit_inputs_all_controls_across_all_themes() {
-    for &lang in &DesignLanguage::ALL {
-        let mut h = default_harness("inputs", lang);
+    {
+        let mut h = default_harness("inputs");
 
         // 1. SearchBar + dynamic Clear icon button
         h.run_steps(&[
@@ -262,12 +258,12 @@ fn audit_inputs_all_controls_across_all_themes() {
         assert_eq!(
             h.state().search_query,
             "beam",
-            "[{lang:?}] search bar should record typed text"
+            "[Md3] search bar should record typed text"
         );
         let clear_btns = find_buttons_without_label(&mut h);
         assert!(
             !clear_btns.is_empty(),
-            "[{lang:?}] non-empty search bar should show clear button"
+            "[Md3] non-empty search bar should show clear button"
         );
         let clear_wid = h
             .find_widget_ids("Button")
@@ -277,7 +273,7 @@ fn audit_inputs_all_controls_across_all_themes() {
         h.click_widget_id(clear_wid);
         assert!(
             h.state().search_query.is_empty(),
-            "[{lang:?}] clicking search clear button should clear query"
+            "[Md3] clicking search clear button should clear query"
         );
 
         // 2. Outlined TextField & Validation TextField
@@ -291,7 +287,7 @@ fn audit_inputs_all_controls_across_all_themes() {
         .unwrap();
         assert!(
             h.state().text_value.contains('!'),
-            "[{lang:?}] Workspace Name text_field should update on TypeText"
+            "[Md3] Workspace Name text_field should update on TypeText"
         );
 
         h.run_steps(&[
@@ -304,18 +300,18 @@ fn audit_inputs_all_controls_across_all_themes() {
         .unwrap();
         assert!(
             h.state().email_value.contains('x'),
-            "[{lang:?}] filled_text_field should update on TypeText"
+            "[Md3] filled_text_field should update on TypeText"
         );
 
         // 3. Checkbox
         let cb_ids = h.find_widget_ids("Checkbox");
-        assert!(!cb_ids.is_empty(), "[{lang:?}] Checkbox should exist");
+        assert!(!cb_ids.is_empty(), "[Md3] Checkbox should exist");
         let init_agree = h.state().agree_terms;
         h.click_widget_id(cb_ids[0]);
         assert_eq!(
             h.state().agree_terms,
             !init_agree,
-            "[{lang:?}] Checkbox should toggle"
+            "[Md3] Checkbox should toggle"
         );
         h.click_widget_id(cb_ids[0]);
         assert_eq!(h.state().agree_terms, init_agree);
@@ -327,40 +323,36 @@ fn audit_inputs_all_controls_across_all_themes() {
         assert_eq!(
             h.state().tri_state,
             ToggleableState::On,
-            "[{lang:?}] tri_state_checkbox should transition Indeterminate -> On"
+            "[Md3] tri_state_checkbox should transition Indeterminate -> On"
         );
         h.run_step(&PreviewStep::ClickLabel("Group Sync".to_owned()))
             .unwrap();
         assert_eq!(
             h.state().tri_state,
             ToggleableState::Off,
-            "[{lang:?}] tri_state_checkbox should transition On -> Off"
+            "[Md3] tri_state_checkbox should transition On -> Off"
         );
 
         // 5. Switch
         let sw_ids = h.find_widget_ids("Switch");
-        assert!(!sw_ids.is_empty(), "[{lang:?}] Switch should exist");
+        assert!(!sw_ids.is_empty(), "[Md3] Switch should exist");
         let init_sw = h.state().switch_on;
         h.click_widget_id(sw_ids[0]);
-        assert_eq!(
-            h.state().switch_on,
-            !init_sw,
-            "[{lang:?}] Switch should toggle"
-        );
+        assert_eq!(h.state().switch_on, !init_sw, "[Md3] Switch should toggle");
 
         // 6. Radio buttons
         h.run_step(&PreviewStep::ClickLabel("Compact Desktop".to_owned()))
             .unwrap();
-        assert_eq!(h.state().radio_choice, 1, "[{lang:?}] radio -> 1");
+        assert_eq!(h.state().radio_choice, 1, "[Md3] radio -> 1");
         h.run_step(&PreviewStep::ClickLabel("Standard Density".to_owned()))
             .unwrap();
-        assert_eq!(h.state().radio_choice, 0, "[{lang:?}] radio -> 0");
+        assert_eq!(h.state().radio_choice, 0, "[Md3] radio -> 0");
 
         // 7. Slider drag
         h.drag_type("Slider", 0, (0.45, 0.5), (0.85, 0.5)).unwrap();
         assert!(
             h.state().slider_val > 0.65,
-            "[{lang:?}] slider drag right should increase slider_val (got {})",
+            "[Md3] slider drag right should increase slider_val (got {})",
             h.state().slider_val
         );
 
@@ -373,28 +365,28 @@ fn audit_inputs_all_controls_across_all_themes() {
         assert_ne!(
             h.state().range_val,
             before_range,
-            "[{lang:?}] RangeSlider drag should update range_val"
+            "[Md3] RangeSlider drag should update range_val"
         );
 
         // 9. Select dropdown open -> choose item -> close
         assert!(!h.state().select_open);
         h.run_step(&PreviewStep::ClickLabel("Force Light".to_owned()))
             .unwrap();
-        assert!(h.state().select_open, "[{lang:?}] select should open");
-        assert_healthy(&mut h, &format!("inputs/{lang:?}/select-open"));
+        assert!(h.state().select_open, "[Md3] select should open");
+        assert_healthy(&mut h, "inputs/Md3/select-open");
         h.run_step(&PreviewStep::ClickLabel("Force Dark".to_owned()))
             .unwrap();
         assert_eq!(h.state().select_index, 2);
-        assert!(!h.state().select_open, "[{lang:?}] select should close");
+        assert!(!h.state().select_open, "[Md3] select should close");
 
-        assert_healthy(&mut h, &format!("inputs/{lang:?}"));
+        assert_healthy(&mut h, "inputs/Md3");
     }
 }
 
 #[test]
 fn audit_overlays_and_pickers_across_all_themes() {
-    for &lang in &DesignLanguage::ALL {
-        let mut h = default_harness("overlays", lang);
+    {
+        let mut h = default_harness("overlays");
 
         // 1. Basic dialog: Cancel, Reset, Escape, and Scrim click; verify compact height!
         h.run_step(&PreviewStep::ClickLabel("Open Basic Dialog".to_owned()))
@@ -406,9 +398,9 @@ fn audit_overlays_and_pickers_across_all_themes() {
         collect_slide_card_heights(&tree, &mut heights);
         assert!(
             heights.iter().any(|&ht| ht > 120.0 && ht < 420.0),
-            "[{lang:?}] basic dialog card height should be compact (<420px), got {heights:?}"
+            "[Md3] basic dialog card height should be compact (<420px), got {heights:?}"
         );
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/basic-dialog"));
+        assert_healthy(&mut h, "overlays/Md3/basic-dialog");
         h.run_step(&PreviewStep::ClickLabel("Cancel".to_owned()))
             .unwrap();
         assert!(!h.state().show_basic_dialog);
@@ -436,14 +428,14 @@ fn audit_overlays_and_pickers_across_all_themes() {
         h.click_point(10.0, 10.0);
         assert!(
             !h.state().show_basic_dialog,
-            "[{lang:?}] clicking scrim at (10,10) should dismiss modal"
+            "[Md3] clicking scrim at (10,10) should dismiss modal"
         );
 
         // 2. Destructive dialog
         h.run_step(&PreviewStep::ClickLabel("Destructive Dialog".to_owned()))
             .unwrap();
         assert!(h.state().show_destructive_dialog);
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/destructive-dialog"));
+        assert_healthy(&mut h, "overlays/Md3/destructive-dialog");
         h.run_step(&PreviewStep::ClickLabel("Delete".to_owned()))
             .unwrap();
         assert!(!h.state().show_destructive_dialog);
@@ -452,7 +444,7 @@ fn audit_overlays_and_pickers_across_all_themes() {
         h.run_step(&PreviewStep::ClickLabel("Bottom Sheet".to_owned()))
             .unwrap();
         assert!(h.state().show_bottom_sheet);
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/bottom-sheet"));
+        assert_healthy(&mut h, "overlays/Md3/bottom-sheet");
         h.run_step(&PreviewStep::ClickLabel("Close Sheet".to_owned()))
             .unwrap();
         assert!(!h.state().show_bottom_sheet);
@@ -466,9 +458,9 @@ fn audit_overlays_and_pickers_across_all_themes() {
         let sheet_issues = lint_ui_layout(&sheet_tree, h.viewport());
         assert!(
             sheet_issues.is_empty(),
-            "[{lang:?}] side sheet should have 0 lint errors & warnings, got: {sheet_issues:#?}"
+            "[Md3] side sheet should have 0 lint errors & warnings, got: {sheet_issues:#?}"
         );
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/side-sheet"));
+        assert_healthy(&mut h, "overlays/Md3/side-sheet");
         h.run_step(&PreviewStep::ClickLabel("Close Drawer".to_owned()))
             .unwrap();
         assert!(!h.state().show_side_sheet);
@@ -478,20 +470,20 @@ fn audit_overlays_and_pickers_across_all_themes() {
             .unwrap();
         assert!(
             h.state().toasts.current().is_some(),
-            "[{lang:?}] Show Toast should enqueue toast"
+            "[Md3] Show Toast should enqueue toast"
         );
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/toast-visible"));
+        assert_healthy(&mut h, "overlays/Md3/toast-visible");
         h.run_step(&PreviewStep::ClickLabel("Dismiss".to_owned()))
             .unwrap();
         assert!(
             h.state().toasts.current().is_none(),
-            "[{lang:?}] Toast action button should dismiss toast"
+            "[Md3] Toast action button should dismiss toast"
         );
 
         // 6. Inline DatePicker day select & next month
         h.run_step(&PreviewStep::ClickLabel("15".to_owned()))
             .unwrap();
-        assert_eq!(h.state().selected_date.day, 15, "[{lang:?}] day -> 15");
+        assert_eq!(h.state().selected_date.day, 15, "[Md3] day -> 15");
         let icon_btns = find_buttons_without_label(&mut h);
         // Header prev/next month are first 2 icon buttons inside DatePicker.
         assert!(icon_btns.len() >= 2);
@@ -504,7 +496,7 @@ fn audit_overlays_and_pickers_across_all_themes() {
         assert_eq!(
             h.state().selected_date.month,
             12,
-            "[{lang:?}] next month arrow should advance 11 -> 12"
+            "[Md3] next month arrow should advance 11 -> 12"
         );
 
         // 7. Date dialog
@@ -517,9 +509,9 @@ fn audit_overlays_and_pickers_across_all_themes() {
         collect_slide_card_heights(&date_tree, &mut date_heights);
         assert!(
             date_heights.iter().any(|&ht| ht > 200.0 && ht < 540.0),
-            "[{lang:?}] date dialog card height should be compact (<540px), got {date_heights:?}"
+            "[Md3] date dialog card height should be compact (<540px), got {date_heights:?}"
         );
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/date-dialog"));
+        assert_healthy(&mut h, "overlays/Md3/date-dialog");
         h.run_step(&PreviewStep::ClickLabel("OK".to_owned()))
             .unwrap();
         assert!(!h.state().show_date_dialog);
@@ -527,10 +519,10 @@ fn audit_overlays_and_pickers_across_all_themes() {
         // 8. Inline TimePicker AM / PM + hour/minute steppers
         h.run_step(&PreviewStep::ClickLabel("AM".to_owned()))
             .unwrap();
-        assert!(h.state().selected_time.hour < 12, "[{lang:?}] AM toggle");
+        assert!(h.state().selected_time.hour < 12, "[Md3] AM toggle");
         h.run_step(&PreviewStep::ClickLabel("PM".to_owned()))
             .unwrap();
-        assert!(h.state().selected_time.hour >= 12, "[{lang:?}] PM toggle");
+        assert!(h.state().selected_time.hour >= 12, "[Md3] PM toggle");
         let hour_before = h.state().selected_time.hour;
         let tp_icons = find_buttons_without_label(&mut h);
         // DatePicker (2) + TimePicker (4) = 6 icon-only buttons -> index 2 is hour +1
@@ -548,14 +540,14 @@ fn audit_overlays_and_pickers_across_all_themes() {
         assert_eq!(
             h.state().selected_time.hour,
             (hour_before + 1) % 24,
-            "[{lang:?}] TimePicker hour+1 button"
+            "[Md3] TimePicker hour+1 button"
         );
 
         // 9. Time dialog
         h.run_step(&PreviewStep::ClickLabel("Time Dialog".to_owned()))
             .unwrap();
         assert!(h.state().show_time_dialog);
-        assert_healthy(&mut h, &format!("overlays/{lang:?}/time-dialog"));
+        assert_healthy(&mut h, "overlays/Md3/time-dialog");
         h.run_step(&PreviewStep::ClickLabel("Cancel".to_owned()))
             .unwrap();
         assert!(!h.state().show_time_dialog);
@@ -564,8 +556,8 @@ fn audit_overlays_and_pickers_across_all_themes() {
 
 #[test]
 fn audit_platform_native_all_suites() {
-    for &lang in &DesignLanguage::ALL {
-        let mut h = default_harness("platform-native", lang);
+    {
+        let mut h = default_harness("platform-native");
 
         // MD3: Extended FAB + Floating Toolbar Publish + FAB icon buttons
         let clicks_before = h.state().click_count;
@@ -576,7 +568,7 @@ fn audit_platform_native_all_suites() {
         assert_eq!(
             h.state().click_count,
             clicks_before + 2,
-            "[{lang:?}] MD3 Compose/Publish"
+            "[Md3] MD3 Compose/Publish"
         );
         let icon_btns = find_buttons_without_label(&mut h);
         // First 5 icon-only buttons belong to small_fab, fab, large_fab, and toolbar copy/share
@@ -592,16 +584,16 @@ fn audit_platform_native_all_suites() {
         assert_eq!(
             h.state().click_count,
             clicks_before + 7,
-            "[{lang:?}] MD3 FAB sizes + toolbar icons"
+            "[Md3] MD3 FAB sizes + toolbar icons"
         );
 
-        assert_healthy(&mut h, &format!("platform-native/{lang:?}"));
+        assert_healthy(&mut h, "platform-native/Md3");
     }
 }
 
 #[test]
 fn audit_workspaces_md3() {
-    let mut h = default_harness("workspace", DesignLanguage::Md3);
+    let mut h = default_harness("workspace");
     h.run_step(&PreviewStep::ClickLabel("Tokens".to_owned()))
         .unwrap();
     assert_eq!(h.state().active_tab, 2);
@@ -618,11 +610,11 @@ fn audit_workspaces_md3() {
 #[test]
 fn audit_desktop_all_scenes_themes_brightness() {
     for scene in ALL_SCENES {
-        for &lang in &DesignLanguage::ALL {
+        {
             for brightness in [Brightness::Light, Brightness::Dark] {
                 let mut h = build_scene_harness(
                     scene.id,
-                    UiTheme::new(lang, brightness),
+                    Theme::from_seed(seeds::PURPLE, brightness),
                     PreviewConfig::default(),
                 )
                 .expect("scene builds");
@@ -631,13 +623,13 @@ fn audit_desktop_all_scenes_themes_brightness() {
                 let issues = lint_ui_layout(&tree, h.viewport());
                 assert!(
                     issues.is_empty(),
-                    "desktop matrix expected 0 layout issues for {}/{lang:?}/{brightness:?}, got: {issues:#?}",
+                    "desktop matrix expected 0 layout issues for {}/Md3/{brightness:?}, got: {issues:#?}",
                     scene.id
                 );
-                let contrast = lint_spec_contrast(&h.state().theme.to_spec());
+                let contrast = lint_theme_contrast(&h.state().theme);
                 assert!(
                     contrast.is_empty(),
-                    "desktop matrix expected 0 contrast issues for {}/{lang:?}/{brightness:?}, got: {contrast:#?}",
+                    "desktop matrix expected 0 contrast issues for {}/Md3/{brightness:?}, got: {contrast:#?}",
                     scene.id
                 );
             }
@@ -656,12 +648,12 @@ fn audit_toast_host_without_outer_max_dims_stays_compact() {
 
     #[derive(Clone)]
     struct ToastMountState {
-        theme: UiTheme,
+        theme: Theme,
         toasts: ToastHostState,
     }
 
     let initial = ToastMountState {
-        theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        theme: Theme::light(),
         toasts: ToastHostState::new(),
     };
 
@@ -740,8 +732,8 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
             .find_map(find_first_focus_frame_and_text_area)
     }
 
-    for &lang in &DesignLanguage::ALL {
-        let mut h = default_harness("inputs", lang);
+    {
+        let mut h = default_harness("inputs");
 
         for stage in ["placeholder", "typed"] {
             if stage == "typed" {
@@ -760,7 +752,7 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
                 .expect("search bar FocusFrame and TextArea present");
             assert!(
                 area_rect.height < frame_rect.height,
-                "[{lang:?} {stage}] TextArea height ({}) must be strictly smaller than FocusFrame height ({})",
+                "[Md3 {stage}] TextArea height ({}) must be strictly smaller than FocusFrame height ({})",
                 area_rect.height,
                 frame_rect.height
             );
@@ -768,9 +760,9 @@ fn audit_search_bar_text_vertically_centered_across_all_themes() {
             let area_cy = area_rect.y + area_rect.height * 0.5;
             assert!(
                 (area_cy - frame_cy).abs() <= 2.0,
-                "[{lang:?} {stage}] search TextArea center y ({area_cy:.2}) must match FocusFrame center y ({frame_cy:.2}) within 2px (frame={frame_rect:?}, area={area_rect:?})"
+                "[Md3 {stage}] search TextArea center y ({area_cy:.2}) must match FocusFrame center y ({frame_cy:.2}) within 2px (frame={frame_rect:?}, area={area_rect:?})"
             );
-            assert_healthy(&mut h, &format!("search_bar_center/{lang:?}/{stage}"));
+            assert_healthy(&mut h, &format!("search_bar_center/Md3/{stage}"));
         }
     }
 }
@@ -785,7 +777,7 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
 
     #[derive(Clone)]
     struct ControlStressState {
-        theme: UiTheme,
+        theme: Theme,
         sw_disabled: bool,
         cb_disabled: bool,
         radio_idx: usize,
@@ -794,9 +786,9 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
         disabled_clicks: u32,
     }
 
-    for &lang in &DesignLanguage::ALL {
+    {
         let initial = ControlStressState {
-            theme: UiTheme::new(lang, Brightness::Light),
+            theme: Theme::light(),
             sw_disabled: true,
             cb_disabled: true,
             radio_idx: 0,
@@ -875,7 +867,7 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
         assert_eq!(
             h.state().disabled_clicks,
             0,
-            "[{lang:?}] disabled custom controls must never fire callbacks"
+            "[Md3] disabled custom controls must never fire callbacks"
         );
         assert_eq!(h.state().radio_idx, 0);
 
@@ -883,13 +875,13 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
         h.drag_type("UiSlider", 0, (0.5, 0.5), (-0.5, 0.5)).unwrap();
         assert!(
             (h.state().slider_val - 0.0).abs() < 1e-6,
-            "[{lang:?}] out-of-bounds left drag should clamp to 0.0 (got {})",
+            "[Md3] out-of-bounds left drag should clamp to 0.0 (got {})",
             h.state().slider_val
         );
         h.drag_type("UiSlider", 0, (0.05, 0.5), (1.5, 0.5)).unwrap();
         assert!(
             (h.state().slider_val - 1.0).abs() < 1e-6,
-            "[{lang:?}] out-of-bounds right drag should clamp to 1.0 (got {})",
+            "[Md3] out-of-bounds right drag should clamp to 1.0 (got {})",
             h.state().slider_val
         );
 
@@ -900,7 +892,7 @@ fn audit_phase2_custom_controls_disabled_bounds_and_drag() {
             h.state().range_val.0 <= h.state().range_val.1
                 && h.state().range_val.0 >= 0.0
                 && h.state().range_val.1 <= 100.0,
-            "[{lang:?}] range slider bounds invariant violated: {:?}",
+            "[Md3] range slider bounds invariant violated: {:?}",
             h.state().range_val
         );
     }
@@ -919,7 +911,7 @@ fn audit_phase3_breakpoint_bin_and_dialog() {
 
     #[derive(Clone)]
     struct ResponsiveState {
-        theme: UiTheme,
+        theme: Theme,
         tab: usize,
         toggle: bool,
         show_alert: bool,
@@ -935,7 +927,7 @@ fn audit_phase3_breakpoint_bin_and_dialog() {
         };
         build_ui_harness(
             ResponsiveState {
-                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+                theme: Theme::light(),
                 tab: 0,
                 toggle: false,
                 show_alert: false,
@@ -1074,7 +1066,7 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
     use xilem_masonry::view::{CrossAxisAlignment, flex_col};
 
     struct Phase4State {
-        theme: UiTheme,
+        theme: Theme,
         clicks: usize,
         outlined: String,
         filled: String,
@@ -1083,8 +1075,7 @@ fn audit_phase4_md3_fixed_colors_ripple_and_text_field() {
     let build = |reduced_motion: bool| {
         build_ui_harness(
             Phase4State {
-                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
-                    .with_reduced_motion(reduced_motion),
+                theme: Theme::light().with_reduced_motion(reduced_motion),
                 clicks: 0,
                 outlined: String::new(),
                 filled: String::new(),
@@ -1183,7 +1174,7 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
 
     // 1. Modal Focus Trap, Instant Escape (without manual FocusType), & Double-Escape safety
     struct ModalTrapState {
-        theme: UiTheme,
+        theme: Theme,
         dialog_open: bool,
         menu_open: bool,
         menu_choice: Option<usize>,
@@ -1197,8 +1188,7 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
     let build_harness = |reduced_motion: bool| {
         build_ui_harness(
             ModalTrapState {
-                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light)
-                    .with_reduced_motion(reduced_motion),
+                theme: Theme::light().with_reduced_motion(reduced_motion),
                 dialog_open: false,
                 menu_open: false,
                 menu_choice: None,
@@ -1486,14 +1476,14 @@ fn audit_phase6_accessibility_keyboard_and_reduced_motion() {
 }
 
 #[test]
-fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_change() {
+fn memoize_with_theme_skips_unrelated_rebuilds_and_updates_on_data_or_theme_change() {
     use brocado::prelude::*;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use xilem_masonry::view::{flex_col, label};
 
     struct MemoState {
-        theme: UiTheme,
+        theme: Theme,
         unrelated: u32,
         memo_key: String,
         rebuilds: Arc<AtomicUsize>,
@@ -1502,7 +1492,7 @@ fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_chang
     let rebuilds = Arc::new(AtomicUsize::new(0));
     let mut h = build_ui_harness(
         MemoState {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            theme: Theme::light(),
             unrelated: 0,
             memo_key: "Alpha".to_owned(),
             rebuilds: rebuilds.clone(),
@@ -1513,9 +1503,9 @@ fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_chang
             let counter = s.rebuilds.clone();
             flex_col((
                 label(format!("unrelated={}", s.unrelated)),
-                memoize_with_spec(key, move |spec, data| {
+                memoize_with_theme(key, move |theme, data| {
                     counter.fetch_add(1, Ordering::SeqCst);
-                    label(format!("{}:{data}", spec.name))
+                    label(format!("{:?}:{data}", theme.brightness))
                 }),
             ))
             .boxed()
@@ -1549,7 +1539,7 @@ fn memoize_with_spec_skips_unrelated_rebuilds_and_updates_on_data_or_theme_chang
     assert_eq!(rebuilds.load(Ordering::SeqCst), 2);
 
     // Switch theme brightness: subtree MUST rebuild even though memo_key is unchanged.
-    h.state_mut().theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark);
+    h.state_mut().theme = Theme::dark();
     h.rebuild();
     assert_eq!(rebuilds.load(Ordering::SeqCst), 3);
 }
@@ -1571,12 +1561,12 @@ fn virtual_list_mounts_only_visible_window_for_ten_thousand_items() {
     use xilem_masonry::view::{label, sized_box};
 
     struct ListState {
-        theme: UiTheme,
+        theme: Theme,
     }
 
     let mut h = build_ui_harness(
         ListState {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            theme: Theme::light(),
         },
         |s| s.theme.clone(),
         |_| {
@@ -1622,14 +1612,14 @@ fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
     use xilem_masonry::view::flex_col;
 
     struct QaState {
-        theme: UiTheme,
+        theme: Theme,
         clicks: u32,
         toggled: bool,
     }
 
     let mut h = build_ui_harness(
         QaState {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            theme: Theme::light(),
             clicks: 0,
             toggled: false,
         },
@@ -1678,7 +1668,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
 
     #[derive(Clone)]
     struct StressState {
-        theme: UiTheme,
+        theme: Theme,
         seg: usize,
         tab: usize,
         checked: bool,
@@ -1696,7 +1686,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
         toasts: ToastHostState,
     }
 
-    for lang in DesignLanguage::ALL {
+    {
         let mut init_toasts = ToastHostState::new();
         init_toasts.show(
             "SupercalifragilisticToastMessage",
@@ -1706,7 +1696,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
         );
         let mut h = build_ui_harness(
             StressState {
-                theme: UiTheme::new(lang, Brightness::Light),
+                theme: Theme::light(),
                 seg: 0,
                 tab: 0,
                 checked: true,
@@ -1861,7 +1851,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                 .collect();
             assert!(
                 errors.is_empty(),
-                "[{lang:?}@{w}x{ht}] ASCII 160px stress errors/overflows: {errors:#?}"
+                "[Md3@{w}x{ht}] ASCII 160px stress errors/overflows: {errors:#?}"
             );
             let a11y_issues = lint_ui_accessibility(&mut h);
             let a11y_errors: Vec<_> = a11y_issues
@@ -1870,7 +1860,7 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                 .collect();
             assert!(
                 a11y_errors.is_empty(),
-                "[{lang:?}@{w}x{ht}] ASCII stress a11y errors: {a11y_errors:#?}"
+                "[Md3@{w}x{ht}] ASCII stress a11y errors: {a11y_errors:#?}"
             );
         }
     }

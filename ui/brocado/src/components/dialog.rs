@@ -23,9 +23,8 @@ use crate::foundation::overlay::{
     modal_shell_rebuild, modal_shell_teardown,
 };
 use crate::foundation::{BoundedX, ui_icon, wrap};
-use crate::style_engine::classes;
-use crate::style_engine::current_spec_arc;
-use crate::tokens::{DialogActionOrder, MotionDuration, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::tokens::{MotionDuration, TypeRole};
 
 /// Callback invoked when a dialog closes via scrim, Escape, or action buttons.
 pub type DialogCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
@@ -277,51 +276,39 @@ impl<State, Action> BasicDialog<State, Action> {
         self
     }
 
-    fn build_content(&self, spec: &crate::tokens::DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_content(&self, theme: &crate::theme::Theme) -> Box<AnyWidgetView<State, Action>>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
-        let icon_color = if self.destructive { p.error } else { p.accent };
+        let s = &theme.scheme;
+        let icon_color = if self.destructive { s.error } else { s.primary };
         let ic = self.icon.map(|path| ui_icon(path, 24.0, icon_color));
-        let title_v = ui_label(TypeRole::HeadlineSmall, self.title.clone()).color(p.text_primary);
-        let body_v = ui_label(TypeRole::BodyMedium, self.body.clone()).color(p.text_secondary);
+        let title_v = ui_label(TypeRole::HeadlineSmall, self.title.clone()).color(s.on_surface);
+        let body_v = ui_label(TypeRole::BodyMedium, self.body.clone()).color(s.on_surface_variant);
 
         let on_dismiss = self.on_dismiss.clone();
         let on_confirm = self.on_confirm.clone();
         let cancel_btn = self
             .dismiss_text
             .as_ref()
-            .map(|txt| subtle_button(txt.clone(), move |s: &mut State| on_dismiss(s)).boxed());
+            .map(|txt| subtle_button(txt.clone(), move |st: &mut State| on_dismiss(st)).boxed());
         let confirm_btn = if self.destructive {
-            destructive_button(self.confirm_text.clone(), move |s: &mut State| {
-                on_confirm(s)
+            destructive_button(self.confirm_text.clone(), move |st: &mut State| {
+                on_confirm(st)
             })
             .boxed()
         } else {
-            primary_button(self.confirm_text.clone(), move |s: &mut State| {
-                on_confirm(s)
+            primary_button(self.confirm_text.clone(), move |st: &mut State| {
+                on_confirm(st)
             })
             .boxed()
         };
-        let ordered_btns: Vec<Box<AnyWidgetView<State, Action>>> = match spec.dialog_action_order {
-            DialogActionOrder::PrimaryLeading => {
-                let mut v = vec![confirm_btn];
-                if let Some(c) = cancel_btn {
-                    v.push(c);
-                }
-                v
-            }
-            DialogActionOrder::PrimaryTrailing => {
-                let mut v = Vec::new();
-                if let Some(c) = cancel_btn {
-                    v.push(c);
-                }
-                v.push(confirm_btn);
-                v
-            }
-        };
+        let mut ordered_btns = Vec::new();
+        if let Some(c) = cancel_btn {
+            ordered_btns.push(c);
+        }
+        ordered_btns.push(confirm_btn);
         let actions = wrap(ordered_btns)
             .main_axis_alignment(MainAxisAlignment::End)
             .cross_axis_alignment(CrossAxisAlignment::Center)
@@ -349,8 +336,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let content = self.build_content(&spec);
+        let theme = current_theme_arc(ctx);
+        let content = self.build_content(&theme);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             width: self.width,
@@ -377,8 +364,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for BasicDial
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_content = self.build_content(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_content = self.build_content(&theme);
         let cfg = ModalShellConfig {
             class: classes::DIALOG_SURFACE,
             width: self.width,

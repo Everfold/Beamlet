@@ -17,8 +17,9 @@ use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, flex_row};
 
 use crate::components::typography::ui_label;
 use crate::foundation::{clip_box, ui_icon};
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::tokens::TypeRole;
 
 const BUTTON_CONTENT_VIEW_ID: ViewId = ViewId::new(0x5549_3701);
 
@@ -171,7 +172,7 @@ pub(crate) fn class_button_message<
     }
 }
 
-/// Multi-theme button view reading typography and colors from [`DesignSpec`] while exposing `Pod<widgets::Button>` directly.
+/// Theme-styled button view reading typography and colors from [`Theme`] while exposing `Pod<widgets::Button>` directly.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(missing_debug_implementations, reason = "Contains closure callback")]
 pub struct UiButton<State, Action> {
@@ -202,20 +203,20 @@ impl<State, Action> UiButton<State, Action> {
         self
     }
 
-    fn build_inner(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_inner(&self, theme: &Theme) -> Box<AnyWidgetView<State, Action>>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
+        let s = &theme.scheme;
         let active_fg = match self.variant {
-            ButtonVariant::Primary => p.on_accent,
-            ButtonVariant::Secondary => p.on_secondary_container,
-            ButtonVariant::Elevated | ButtonVariant::Subtle => p.accent,
-            ButtonVariant::Outlined => p.text_primary,
-            ButtonVariant::Destructive => p.on_error,
+            ButtonVariant::Primary => s.on_primary,
+            ButtonVariant::Secondary => s.on_secondary_container,
+            ButtonVariant::Elevated | ButtonVariant::Subtle => s.primary,
+            ButtonVariant::Outlined => s.on_surface,
+            ButtonVariant::Destructive => s.on_error,
         };
-        let fg = spec.content_color(active_fg, self.disabled);
+        let fg = theme.content_color(active_fg, self.disabled);
         let lbl = clip_box(
             ui_label(TypeRole::LabelLarge, self.text.clone())
                 .color(fg)
@@ -247,8 +248,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiButton<
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let inner = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let inner = self.build_inner(&theme);
         let (pod, child_state) = class_button_build(
             ctx,
             app_state,
@@ -267,8 +268,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiButton<
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_inner = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_inner = self.build_inner(&theme);
         class_button_rebuild(
             ctx,
             element,

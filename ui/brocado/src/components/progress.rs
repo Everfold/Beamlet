@@ -1,4 +1,4 @@
-//! Determinate & indeterminate linear and circular progress indicators driven by [`DesignSpec`](crate::tokens::DesignSpec).
+//! Determinate & indeterminate linear and circular progress indicators driven by [`Theme`](crate::theme::Theme).
 
 use std::any::TypeId;
 use std::f64::consts::TAU;
@@ -193,13 +193,13 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
+        let theme = crate::style_engine::current_theme_arc(ctx);
         let mut widget = LinearProgressWidget::new(self.progress);
-        widget.reduced_motion = spec.reduced_motion;
+        widget.reduced_motion = theme.reduced_motion;
         let mut pod = ctx.create_pod(widget);
         pod.new_widget.properties.insert(TrackColor {
-            active: spec.palette.accent,
-            inactive: spec.palette.secondary_container,
+            active: theme.scheme.primary,
+            inactive: theme.scheme.secondary_container,
         });
         (pod, ())
     }
@@ -212,7 +212,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+        let reduced = crate::style_engine::current_theme_arc(ctx).reduced_motion;
         LinearProgressWidget::set_reduced_motion(&mut element, reduced);
         LinearProgressWidget::set_progress(&mut element, self.progress);
     }
@@ -358,13 +358,13 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx>
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
+        let theme = crate::style_engine::current_theme_arc(ctx);
         let mut pod = ctx.create_pod(DeterminateCircularWidget {
             progress: self.progress.clamp(0.0, 1.0),
         });
         pod.new_widget.properties.insert(TrackColor {
-            active: spec.palette.accent,
-            inactive: spec.palette.secondary_container,
+            active: theme.scheme.primary,
+            inactive: theme.scheme.secondary_container,
         });
         (pod, ())
     }

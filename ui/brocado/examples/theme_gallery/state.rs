@@ -230,7 +230,7 @@ impl Default for PerfLabState {
 pub struct GalleryState {
     pub window_id: WindowId,
     pub running: bool,
-    pub theme: UiTheme,
+    pub theme: Theme,
     pub active_tab: GalleryTab,
     pub accent_menu_open: bool,
     pub layout: LayoutLabState,
@@ -245,7 +245,7 @@ impl Default for GalleryState {
         Self {
             window_id: WindowId::next(),
             running: true,
-            theme: UiTheme::native_light(),
+            theme: Theme::light(),
             active_tab: GalleryTab::Components,
             accent_menu_open: false,
             layout: LayoutLabState::default(),

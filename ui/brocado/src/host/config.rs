@@ -2,11 +2,11 @@
 //!
 //! Upstream provenance: reactive vs initial `WindowAttributes` diffing structure is adapted from
 //! upstream `linebender/xilem` (`xilem/src/window_options.rs`, `WindowOptions`), extended with
-//! Brocado `WindowChrome`, `WindowBackdrop` translucency, `Brightness` theme sync, and `raw_attributes` hook.
+//! Brocado `WindowChrome`, `Brightness` theme sync, and `raw_attributes` hook.
 
 use std::sync::Arc;
 
-use crate::tokens::{Brightness, WindowBackdrop};
+use crate::tokens::Brightness;
 use masonry_winit::winit::dpi::{Position, Size};
 use masonry_winit::winit::window::{
     Cursor, Icon, Theme as WinitTheme, Window as WinitWindow, WindowAttributes, WindowButtons,
@@ -200,7 +200,7 @@ impl<State> WindowConfig<State> {
         self
     }
 
-    /// Explicitly sets an OS Winit window theme override (`Light` / `Dark`), overriding `DesignSpec` polarity.
+    /// Explicitly sets an OS Winit window theme override (`Light` / `Dark`), overriding [`Theme`](crate::theme::Theme) polarity.
     #[must_use]
     pub const fn with_theme_override(mut self, theme: Option<WinitTheme>) -> Self {
         self.theme_override = theme;
@@ -224,16 +224,10 @@ impl<State> WindowConfig<State> {
         self
     }
 
-    /// Builds initial [`WindowAttributes`] incorporating chrome, backdrop transparency, and theme.
+    /// Builds initial [`WindowAttributes`] incorporating chrome, transparency, and theme.
     #[must_use]
-    pub fn build_initial_attributes(
-        &self,
-        backdrop: WindowBackdrop,
-        brightness: Option<Brightness>,
-    ) -> WindowAttributes {
-        let transparent = self
-            .transparent
-            .unwrap_or_else(|| backdrop.is_translucent());
+    pub fn build_initial_attributes(&self, brightness: Option<Brightness>) -> WindowAttributes {
+        let transparent = self.transparent.unwrap_or(false);
         let resolved_theme = self
             .theme_override
             .or_else(|| brightness.map(brightness_to_winit_theme));

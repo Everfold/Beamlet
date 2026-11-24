@@ -17,8 +17,10 @@ use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, button, flex_row, si
 
 use crate::components::typography::ui_label;
 use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::{CHIP_HEIGHT, CHIP_RADIUS};
+use crate::tokens::TypeRole;
 
 const CHIP_CHILD_VIEW_ID: ViewId = ViewId::new(0x5549_3710);
 
@@ -69,25 +71,25 @@ impl<State, Action> UiChip<State, Action> {
         self
     }
 
-    fn build_inner(&self, spec: &DesignSpec) -> Box<AnyWidgetView<State, Action>>
+    fn build_inner(&self, theme: &Theme) -> Box<AnyWidgetView<State, Action>>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
+        let s = &theme.scheme;
         let (cls, active_fg) = match self.kind {
-            ChipKind::Assist => (classes::CHIP_ASSIST, p.text_primary),
+            ChipKind::Assist => (classes::CHIP_ASSIST, s.on_surface),
             ChipKind::Filter => {
                 if self.selected {
-                    (classes::CHIP_FILTER_SELECTED, p.on_secondary_container)
+                    (classes::CHIP_FILTER_SELECTED, s.on_secondary_container)
                 } else {
-                    (classes::CHIP_FILTER, p.text_primary)
+                    (classes::CHIP_FILTER, s.on_surface)
                 }
             }
-            ChipKind::Input => (classes::CHIP_INPUT, p.text_primary),
-            ChipKind::Suggestion => (classes::CHIP_SUGGESTION, p.text_secondary),
+            ChipKind::Input => (classes::CHIP_INPUT, s.on_surface),
+            ChipKind::Suggestion => (classes::CHIP_SUGGESTION, s.on_surface_variant),
         };
-        let fg = spec.content_color(active_fg, self.disabled);
+        let fg = theme.content_color(active_fg, self.disabled);
         let lead = match (self.kind, self.selected, self.leading_icon) {
             (ChipKind::Filter, true, _) => Some(ui_icon(icons::CHECK, 16.0, fg)),
             (_, _, Some(icon)) => Some(ui_icon(icon, 16.0, fg)),
@@ -102,7 +104,7 @@ impl<State, Action> UiChip<State, Action> {
 
         if let Some(on_rem) = &self.on_remove {
             let on_rem = on_rem.clone();
-            let inner_h = (spec.metrics.chip_height - 4.0).max(20.0);
+            let inner_h = (CHIP_HEIGHT - 4.0).max(20.0);
             let main_chip = button(
                 clip_box(
                     flex_row((lead, lbl.flex(1.0)))
@@ -116,7 +118,7 @@ impl<State, Action> UiChip<State, Action> {
             .padding(Padding::from_vh(2.px(), 6.px()))
             .dims(Dimensions::height(inner_h.px()));
 
-            let btn_sz = (spec.metrics.chip_height - 6.0).clamp(18.0, 24.0);
+            let btn_sz = (CHIP_HEIGHT - 6.0).clamp(18.0, 24.0);
             let close_btn = button(ui_icon(icons::CLOSE, 13.0, fg), move |state: &mut State| {
                 on_rem(state)
             })
@@ -125,18 +127,18 @@ impl<State, Action> UiChip<State, Action> {
             .dims(Dimensions::fixed(btn_sz.px(), btn_sz.px()));
 
             let (chip_bg, chip_border) = match self.kind {
-                ChipKind::Filter if self.selected => (p.secondary_container, None),
+                ChipKind::Filter if self.selected => (s.secondary_container, None),
                 ChipKind::Filter => (
                     masonry::peniko::Color::TRANSPARENT,
-                    Some(spec.content_color(p.border_strong, self.disabled)),
+                    Some(theme.content_color(s.outline, self.disabled)),
                 ),
                 ChipKind::Input => (
-                    p.surface_container,
-                    Some(spec.content_color(p.border, self.disabled)),
+                    s.surface_container,
+                    Some(theme.content_color(s.outline_variant, self.disabled)),
                 ),
                 ChipKind::Assist | ChipKind::Suggestion => (
                     masonry::peniko::Color::TRANSPARENT,
-                    Some(spec.content_color(p.border, self.disabled)),
+                    Some(theme.content_color(s.outline_variant, self.disabled)),
                 ),
             };
             let (border_color, border_w) = match chip_border {
@@ -150,9 +152,9 @@ impl<State, Action> UiChip<State, Action> {
             ))
             .background_color(chip_bg)
             .border(border_color, border_w)
-            .corner_radius(spec.metrics.chip_radius.px())
+            .corner_radius(CHIP_RADIUS.px())
             .padding(Padding::from_vh(0.px(), 4.px()))
-            .dims(Dimensions::height(spec.metrics.chip_height.px()))
+            .dims(Dimensions::height(CHIP_HEIGHT.px()))
             .boxed()
         } else {
             button(
@@ -180,8 +182,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiChip<St
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let inner = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let inner = self.build_inner(&theme);
         let (child_pod, child_state) =
             ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| inner.build(ctx, app_state));
         let mut pod = ctx.create_pod(widgets::SizedBox::new(child_pod.new_widget.erased()));
@@ -197,8 +199,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiChip<St
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_inner = self.build_inner(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_inner = self.build_inner(&theme);
         let mut child_dyn =
             widgets::SizedBox::child_mut(&mut element).expect("UiChip SizedBox always has child");
         ctx.with_id(CHIP_CHILD_VIEW_ID, |ctx| {

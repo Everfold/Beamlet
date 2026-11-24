@@ -23,8 +23,8 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
-use crate::style_engine::scope::current_spec_arc;
-use crate::tokens::{DesignSpec, ElevationLevel};
+use crate::style_engine::current_theme_arc;
+use crate::theme::{ElevationLevel, Theme};
 
 const TOOLTIP_CHILD_ID: ViewId = ViewId::new(0x5549_3410);
 
@@ -570,7 +570,7 @@ pub struct HoverTooltipView<V, State, Action> {
     /// Target widget view that displays a tooltip when hovered.
     pub child: V,
     /// Theme-aware tooltip spec constructor.
-    pub spec_builder: Arc<dyn Fn(&DesignSpec) -> TooltipContentSpec + Send + Sync>,
+    pub spec_builder: Arc<dyn Fn(&Theme) -> TooltipContentSpec + Send + Sync>,
     /// Optional maximum tooltip width override in logical pixels.
     pub max_width: Option<f64>,
     /// Optional hover dwell delay override in milliseconds.
@@ -592,8 +592,8 @@ impl<V, State, Action> HoverTooltipView<V, State, Action> {
         self
     }
 
-    fn resolve_spec(&self, theme_spec: &DesignSpec) -> TooltipContentSpec {
-        let mut s = (self.spec_builder)(theme_spec);
+    fn resolve_spec(&self, theme: &Theme) -> TooltipContentSpec {
+        let mut s = (self.spec_builder)(theme);
         if let Some(mw) = self.max_width {
             s.max_width = mw;
         }
@@ -616,8 +616,8 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec_theme = current_spec_arc(ctx);
-        let tip_spec = self.resolve_spec(&spec_theme);
+        let theme = current_theme_arc(ctx);
+        let tip_spec = self.resolve_spec(&theme);
         let (child_pod, child_state) =
             ctx.with_id(TOOLTIP_CHILD_ID, |ctx| self.child.build(ctx, app_state));
         let pod = ctx.create_pod(HoverTooltipHost::new(child_pod.new_widget, tip_spec));
@@ -632,8 +632,8 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec_theme = current_spec_arc(ctx);
-        HoverTooltipHost::set_spec(&mut element, self.resolve_spec(&spec_theme));
+        let theme = current_theme_arc(ctx);
+        HoverTooltipHost::set_spec(&mut element, self.resolve_spec(&theme));
         let mut child = HoverTooltipHost::child_mut(&mut element);
         ctx.with_id(TOOLTIP_CHILD_ID, |ctx| {
             self.child

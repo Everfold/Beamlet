@@ -17,23 +17,23 @@ fn destinations() -> [NavDestination; 5] {
 }
 
 fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use<> {
-    let accent_idx = UiAccent::PRESETS
+    let seed_idx = seeds::PRESETS
         .iter()
-        .position(|a| *a == state.theme.accent)
+        .position(|(_, color)| *color == state.theme.seed)
         .unwrap_or(0);
-    let accent_labels = ["默认", "蓝", "青", "绿", "紫", "粉", "橙", "红"];
+    let seed_labels = ["紫", "蓝", "青", "绿", "粉", "橙", "红", "靛"];
     let is_dark = state.theme.brightness == Brightness::Dark;
-    let is_hc = state.theme.high_contrast;
+    let is_hc = state.theme.contrast == ContrastLevel::High;
     let is_rm = state.theme.reduced_motion;
 
     let sel = |open: bool| {
         select(
-            &accent_labels,
-            accent_idx,
+            &seed_labels,
+            seed_idx,
             open,
             |s: &mut GalleryState| s.accent_menu_open = !s.accent_menu_open,
             |s: &mut GalleryState, idx| {
-                s.theme.accent = UiAccent::PRESETS[idx];
+                s.theme = s.theme.clone().with_seed(seeds::PRESETS[idx].1);
                 s.accent_menu_open = false;
             },
             |s: &mut GalleryState| s.accent_menu_open = false,
@@ -43,7 +43,8 @@ fn switcher_bar(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         s.theme.toggle_brightness();
     });
     let hc_chip = filter_chip("高对比", is_hc, |s: &mut GalleryState| {
-        s.theme.high_contrast = !s.theme.high_contrast;
+        let next = s.theme.contrast != ContrastLevel::High;
+        s.theme = s.theme.clone().with_high_contrast(next);
     });
     let rm_chip = filter_chip("减动效", is_rm, |s: &mut GalleryState| {
         s.theme.reduced_motion = !s.theme.reduced_motion;

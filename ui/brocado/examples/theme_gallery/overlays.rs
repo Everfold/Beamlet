@@ -18,10 +18,10 @@ pub fn wrap_with_overlays<V: WidgetView<GalleryState>>(
     let dialog_overlay = state.overlays.show_basic_dialog.then(|| {
         basic_dialog(
             "重置主题设置？",
-            "恢复默认设计语言与强调色。",
+            "恢复默认种子色与明暗模式。",
             "恢复",
             |s: &mut GalleryState| {
-                s.theme = UiTheme::native_light();
+                s.theme = Theme::light();
                 s.overlays.show_basic_dialog = false;
             },
             |s: &mut GalleryState| s.overlays.show_basic_dialog = false,

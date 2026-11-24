@@ -17,7 +17,7 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
 use crate::foundation::bounded::{HasMinAxis, UnminAxis};
-use crate::style_engine::current_spec_arc;
+use crate::style_engine::current_theme_arc;
 use crate::tokens::TypeRole;
 
 /// Masonry single-child layout constraint box supporting `min_width`, `max_width`,
@@ -349,7 +349,7 @@ impl<V, State, Action, MinX, MinY> ConstrainedBoxView<V, State, Action, MinX, Mi
         }
     }
 
-    /// Derives minimum height from `max(floor, spec.typography.get(role).line_height + extra_pad)`
+    /// Derives minimum height from `max(floor, theme.typography.get(role).line_height + extra_pad)`
     /// (transitions `MinY` to [`HasMinAxis`]).
     pub fn min_height_from_role(
         self,
@@ -385,8 +385,8 @@ impl<V, State, Action, MinX, MinY> ConstrainedBoxView<V, State, Action, MinX, Mi
         let role_h = self
             .min_height_role
             .map_or(0.0, |(role, extra_pad, floor)| {
-                let spec = current_spec_arc(ctx);
-                floor.max(f64::from(spec.typography.get(role).line_height) + extra_pad)
+                let theme = current_theme_arc(ctx);
+                floor.max(f64::from(theme.typography.get(role).line_height) + extra_pad)
             });
         self.min_height.max(role_h)
     }

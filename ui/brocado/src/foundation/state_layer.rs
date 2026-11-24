@@ -1,9 +1,9 @@
-//! Alpha blending and interactive state-color synthesis across `StateFeedbackMode`s.
+//! Alpha blending and Material Design 3 state-layer color synthesis.
 
 use masonry::palette::css::TRANSPARENT;
 use masonry::peniko::Color;
 
-use crate::tokens::{Brightness, StateFeedbackMode};
+use crate::theme::metrics::{HOVER_ALPHA, PRESS_ALPHA};
 
 /// Returns `color` with its alpha multiplied by `alpha` (`0.0..=1.0`).
 #[must_use]
@@ -51,53 +51,18 @@ pub struct InteractiveColors {
     pub disabled: Color,
 }
 
-/// Computes `(rest, hover, pressed, disabled)` fill colors for a control under `mode`.
+/// Computes `(rest, hover, pressed, disabled)` fill colors using Material 3 state-layer opacities
+/// (`HOVER_ALPHA = 8%`, `PRESS_ALPHA = 12%`).
 #[must_use]
 pub fn resolve_interactive_colors(
     base: Color,
     state_tint: Color,
     disabled_bg: Color,
-    brightness: Brightness,
-    mode: StateFeedbackMode,
 ) -> InteractiveColors {
-    let neutral_overlay = match brightness {
-        Brightness::Light => Color::BLACK,
-        Brightness::Dark => Color::WHITE,
-    };
-    let (hover, pressed) = match mode {
-        StateFeedbackMode::TintedStateLayer {
-            hover_alpha,
-            press_alpha,
-        } => (
-            blend_over(base, state_tint, hover_alpha),
-            blend_over(base, state_tint, press_alpha),
-        ),
-        StateFeedbackMode::SubtleSurfaceAndBorder => {
-            let subtle = match brightness {
-                Brightness::Light => Color::from_rgb8(0x00, 0x00, 0x00),
-                Brightness::Dark => Color::from_rgb8(0xFF, 0xFF, 0xFF),
-            };
-            (
-                blend_over(base, subtle, 0.04),
-                blend_over(base, subtle, 0.09),
-            )
-        }
-        StateFeedbackMode::CrispShadowAndRing => (
-            blend_over(base, neutral_overlay, 0.06),
-            blend_over(base, neutral_overlay, 0.14),
-        ),
-        StateFeedbackMode::AlphaOverlay {
-            hover_alpha,
-            press_alpha,
-        } => (
-            blend_over(base, neutral_overlay, hover_alpha),
-            blend_over(base, neutral_overlay, press_alpha),
-        ),
-    };
     InteractiveColors {
         rest: base,
-        hover,
-        pressed,
+        hover: blend_over(base, state_tint, HOVER_ALPHA as f32),
+        pressed: blend_over(base, state_tint, PRESS_ALPHA as f32),
         disabled: disabled_bg,
     }
 }
@@ -120,17 +85,8 @@ mod tests {
 
     #[test]
     fn resolve_interactive_colors_produces_distinct_states() {
-        let mode = StateFeedbackMode::TintedStateLayer {
-            hover_alpha: 0.08,
-            press_alpha: 0.12,
-        };
-        let colors = resolve_interactive_colors(
-            Color::WHITE,
-            Color::BLACK,
-            Color::from_rgba8(0, 0, 0, 30),
-            Brightness::Light,
-            mode,
-        );
+        let colors =
+            resolve_interactive_colors(Color::WHITE, Color::BLACK, Color::from_rgba8(0, 0, 0, 30));
         assert_ne!(colors.rest, colors.hover);
         assert_ne!(colors.hover, colors.pressed);
     }

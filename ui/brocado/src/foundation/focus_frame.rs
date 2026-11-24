@@ -1,15 +1,14 @@
-//! Reactive focus indicator frame rendering platform-authentic focus rings, halos, and bottom accent bars.
+//! Reactive focus indicator frame rendering Material 3 2px focus outlines.
 
 use std::marker::PhantomData;
 
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
-    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
-    PropertiesMut, PropertiesRef, RegisterCtx, TextEvent, Update, UpdateCtx, Widget, WidgetId,
-    WidgetMut, WidgetPod,
+    AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PropertiesMut,
+    PropertiesRef, RegisterCtx, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
-use masonry::kurbo::{Axis, Point, Rect, Size, Stroke};
+use masonry::kurbo::{Axis, Point, Size, Stroke};
 use masonry::layout::{LenReq, Length};
 use masonry::peniko::Color;
 use tracing::{Span, trace_span};
@@ -18,18 +17,15 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
-use crate::foundation::state_layer::with_opacity;
-use crate::style_engine::current_spec_arc;
-use crate::tokens::InputFocusStyle;
+use crate::style_engine::current_theme_arc;
+use crate::theme::metrics::INPUT_RADIUS;
 
 const FOCUS_FRAME_CHILD_ID: ViewId = ViewId::new(0x5549_3601);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct FocusFrameConfig {
-    style: InputFocusStyle,
     radius: f64,
     accent_color: Color,
-    rest_bottom_color: Color,
     error_color: Option<Color>,
 }
 
@@ -72,17 +68,6 @@ impl Widget for FocusFrame {
 
     fn register_children(&mut self, ctx: &mut RegisterCtx<'_>) {
         ctx.register_child(&mut self.child);
-    }
-
-    fn on_text_event(
-        &mut self,
-        ctx: &mut EventCtx<'_>,
-        _props: &mut PropertiesMut<'_>,
-        event: &TextEvent,
-    ) {
-        if matches!(event, TextEvent::WindowFocusChange(_)) {
-            ctx.request_post_paint();
-        }
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
@@ -133,48 +118,11 @@ impl Widget for FocusFrame {
         let show_active = self.focused || self.config.error_color.is_some();
         let radius = self.config.radius.max(0.0);
 
-        match self.config.style {
-            InputFocusStyle::Outline2px => {
-                if show_active {
-                    let rrect = rect.inset(1.0).to_rounded_rect((radius - 1.0).max(0.0));
-                    painter
-                        .stroke(rrect, &Stroke::new(2.0), active_color)
-                        .draw();
-                }
-            }
-            InputFocusStyle::BottomAccentLine2px => {
-                let (bar_h, col) = if show_active {
-                    (2.0, active_color)
-                } else {
-                    (1.0, self.config.rest_bottom_color)
-                };
-                if rect.height() > bar_h {
-                    let bar = Rect::new(rect.x0 + 1.0, rect.y1 - bar_h, rect.x1 - 1.0, rect.y1)
-                        .to_rounded_rect(1.0);
-                    painter.fill(bar, col).draw();
-                }
-            }
-            InputFocusStyle::OuterHalo3px => {
-                let window_focused = ctx.is_window_focused();
-                if self.focused && window_focused {
-                    let outer = rect.inflate(1.5, 1.5).to_rounded_rect(radius + 1.5);
-                    painter
-                        .stroke(outer, &Stroke::new(3.0), with_opacity(active_color, 0.32))
-                        .draw();
-                    let inner = rect.inset(0.5).to_rounded_rect((radius - 0.5).max(0.0));
-                    painter
-                        .stroke(inner, &Stroke::new(1.0), active_color)
-                        .draw();
-                } else if self.config.error_color.is_some() {
-                    let inner = rect.inset(0.5).to_rounded_rect((radius - 0.5).max(0.0));
-                    let edge_col = if window_focused {
-                        active_color
-                    } else {
-                        with_opacity(active_color, 0.6)
-                    };
-                    painter.stroke(inner, &Stroke::new(1.0), edge_col).draw();
-                }
-            }
+        if show_active {
+            let rrect = rect.inset(1.0).to_rounded_rect((radius - 1.0).max(0.0));
+            painter
+                .stroke(rrect, &Stroke::new(2.0), active_color)
+                .draw();
         }
     }
 
@@ -204,22 +152,14 @@ impl Widget for FocusFrame {
 #[derive(Debug)]
 pub struct FocusFrameView<V, State, Action> {
     child: V,
-    style: Option<InputFocusStyle>,
     radius: Option<f64>,
     accent_color: Option<Color>,
-    rest_bottom_color: Option<Color>,
     is_error: bool,
     error_color: Option<Color>,
     phantom: PhantomData<fn(&mut State) -> Action>,
 }
 
 impl<V, State, Action> FocusFrameView<V, State, Action> {
-    /// Overrides the focus ring / accent bar strategy from the active [`DesignSpec`](crate::tokens::DesignSpec).
-    pub fn style(mut self, style: InputFocusStyle) -> Self {
-        self.style = Some(style);
-        self
-    }
-
     /// Overrides the focus stroke corner radius in logical pixels.
     pub fn radius(mut self, radius: f64) -> Self {
         self.radius = Some(radius);
@@ -229,12 +169,6 @@ impl<V, State, Action> FocusFrameView<V, State, Action> {
     /// Overrides the active focus highlight color.
     pub fn accent(mut self, color: Color) -> Self {
         self.accent_color = Some(color);
-        self
-    }
-
-    /// Overrides the resting bottom border tint when [`InputFocusStyle::BottomAccentLine2px`] is active.
-    pub fn rest_bottom_color(mut self, color: Color) -> Self {
-        self.rest_bottom_color = Some(color);
         self
     }
 
@@ -252,29 +186,25 @@ impl<V, State, Action> FocusFrameView<V, State, Action> {
     }
 
     fn resolve_config(&self, ctx: &ViewCtx) -> FocusFrameConfig {
-        let spec = current_spec_arc(ctx);
+        let theme = current_theme_arc(ctx);
         FocusFrameConfig {
-            style: self.style.unwrap_or(spec.input_focus),
-            radius: self.radius.unwrap_or(spec.metrics.input_radius),
-            accent_color: self.accent_color.unwrap_or(spec.palette.accent),
-            rest_bottom_color: self.rest_bottom_color.unwrap_or(spec.palette.border_strong),
+            radius: self.radius.unwrap_or(INPUT_RADIUS),
+            accent_color: self.accent_color.unwrap_or(theme.scheme.primary),
             error_color: self
                 .is_error
-                .then(|| self.error_color.unwrap_or(spec.palette.error)),
+                .then(|| self.error_color.unwrap_or(theme.scheme.error)),
         }
     }
 }
 
-/// Wraps `child` with a reactive [`FocusFrame`] honoring [`InputFocusStyle`] on actual keyboard focus.
+/// Wraps `child` with a reactive [`FocusFrame`] rendering Material 3 `2px` focus outlines on keyboard focus.
 pub fn focus_frame<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
 ) -> FocusFrameView<V, State, Action> {
     FocusFrameView {
         child,
-        style: None,
         radius: None,
         accent_color: None,
-        rest_bottom_color: None,
         is_error: false,
         error_color: None,
         phantom: PhantomData,

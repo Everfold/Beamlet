@@ -18,7 +18,9 @@ use crate::foundation::overlay::{
 };
 use crate::foundation::{UiClassExt, clip_box, icons, ui_icon};
 use crate::style_engine::classes;
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::theme::Theme;
+use crate::theme::metrics::MENU_RADIUS;
+use crate::tokens::TypeRole;
 
 /// Menu entry description consumed by [`dropdown_menu`] and [`select`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -96,8 +98,8 @@ impl MenuEntry {
     }
 }
 
-fn build_popup_spec(spec: &DesignSpec, entries: &[MenuEntry], min_width: f64) -> PopupLayerSpec {
-    let p = &spec.palette;
+fn build_popup_spec(theme: &Theme, entries: &[MenuEntry], min_width: f64) -> PopupLayerSpec {
+    let s = &theme.scheme;
     let mut item_idx = 0usize;
     let mapped = entries
         .iter()
@@ -113,9 +115,9 @@ fn build_popup_spec(spec: &DesignSpec, entries: &[MenuEntry], min_width: f64) ->
                 let idx = item_idx;
                 item_idx += 1;
                 let active_fg = if *selected {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_primary
+                    s.on_surface
                 };
                 PopupEntrySpec::Item {
                     action_idx: idx,
@@ -124,7 +126,7 @@ fn build_popup_spec(spec: &DesignSpec, entries: &[MenuEntry], min_width: f64) ->
                     trailing_text: trailing_text.clone(),
                     selected: *selected,
                     disabled: *disabled,
-                    fg: spec.content_color(active_fg, *disabled),
+                    fg: theme.content_color(active_fg, *disabled),
                     class: if *selected {
                         classes::MENU_ITEM_SELECTED
                     } else {
@@ -138,14 +140,14 @@ fn build_popup_spec(spec: &DesignSpec, entries: &[MenuEntry], min_width: f64) ->
     PopupLayerSpec {
         min_width,
         max_width: (min_width * 2.0).max(280.0),
-        surface_bg: p.surface_high,
-        shadow_color: p.shadow,
-        corner_radius: spec.metrics.menu_radius,
-        divider_color: p.divider,
+        surface_bg: s.surface_container_high,
+        shadow_color: s.shadow,
+        corner_radius: MENU_RADIUS,
+        divider_color: s.outline_variant,
         padding_v: 6.0,
         padding_h: 6.0,
         header: None,
-        font_family: spec.typography.resolved_font_family(),
+        font_family: theme.typography.resolved_font_family(),
         entries: mapped,
     }
 }
@@ -169,7 +171,7 @@ where
         trigger,
         open,
         offset: Vec2::new(0.0, 4.0),
-        spec_builder: Arc::new(move |spec| build_popup_spec(spec, &entries, 180.0)),
+        spec_builder: Arc::new(move |theme| build_popup_spec(theme, &entries, 180.0)),
         max_width: None,
         on_select: Arc::new(on_select),
         on_dismiss: Arc::new(on_dismiss),
@@ -177,7 +179,7 @@ where
     }
 }
 
-/// Spec-styled exposed dropdown select trigger + anchored popup option list.
+/// Theme-styled exposed dropdown select trigger + anchored popup option list.
 pub fn select<State, Action, OnToggle, OnSelect, OnDismiss>(
     options: &[&str],
     selected: usize,
@@ -212,11 +214,11 @@ where
         .collect();
     let on_toggle = Arc::new(on_toggle);
 
-    let trigger = crate::style_engine::with_spec(move |spec: &DesignSpec, _| {
+    let trigger = crate::style_engine::with_theme(move |theme: &Theme, _| {
         let on_t = on_toggle.clone();
         let lbl = clip_box(
             ui_label(TypeRole::BodyMedium, current.clone())
-                .color(spec.palette.text_primary)
+                .color(theme.scheme.on_surface)
                 .line_breaking(LineBreaking::Clip),
         );
         let chevron = ui_icon(
@@ -226,7 +228,7 @@ where
                 icons::ARROW_DROP_DOWN
             },
             16.0,
-            spec.palette.text_secondary,
+            theme.scheme.on_surface_variant,
         );
         button(
             clip_box(
@@ -235,7 +237,7 @@ where
                     .gap(8.px()),
             )
             .fill_available(true),
-            move |s: &mut State| on_t(s),
+            move |st: &mut State| on_t(st),
         )
         .ui_class(classes::BTN_OUTLINED)
     });
@@ -258,7 +260,7 @@ where
 {
     ContextMenuView {
         target,
-        spec_builder: Arc::new(move |spec| build_popup_spec(spec, &entries, 180.0)),
+        spec_builder: Arc::new(move |theme| build_popup_spec(theme, &entries, 180.0)),
         on_select: Arc::new(on_select),
         on_dismiss: None,
         phantom: PhantomData,

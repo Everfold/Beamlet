@@ -168,7 +168,8 @@ pub fn components_page(state: &mut GalleryState) -> impl WidgetView<GalleryState
                 s.components.chip_flags[1] = !s.components.chip_flags[1];
             }),
             suggestion_chip("高对比", |s: &mut GalleryState| {
-                s.theme.high_contrast = !s.theme.high_contrast;
+                let next = s.theme.contrast != ContrastLevel::High;
+                s.theme = s.theme.clone().with_high_contrast(next);
             }),
         )
     };

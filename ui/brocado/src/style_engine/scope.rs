@@ -1,4 +1,4 @@
-//! Headless theme environment scope (`ui_scope`) and reactive spec helpers.
+//! Headless theme environment scope (`theme_scope`) and reactive theme helpers.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -9,86 +9,85 @@ use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::{Pod, ViewCtx, WidgetView};
 
 use crate::style_engine::build_default_properties;
-use crate::tokens::{Brightness, DesignSpec};
+use crate::theme::Theme;
 
 thread_local! {
-    static SPEC_STACK: RefCell<Vec<Arc<DesignSpec>>> = const { RefCell::new(Vec::new()) };
+    static THEME_STACK: RefCell<Vec<Arc<Theme>>> = const { RefCell::new(Vec::new()) };
 }
 
-struct SpecGuard;
+struct ThemeGuard;
 
-impl SpecGuard {
-    fn push(spec: Arc<DesignSpec>) -> Self {
-        SPEC_STACK.with(|stack| stack.borrow_mut().push(spec));
+impl ThemeGuard {
+    fn push(theme: Arc<Theme>) -> Self {
+        THEME_STACK.with(|stack| stack.borrow_mut().push(theme));
         Self
     }
 }
 
-impl Drop for SpecGuard {
+impl Drop for ThemeGuard {
     fn drop(&mut self) {
-        SPEC_STACK.with(|stack| {
+        THEME_STACK.with(|stack| {
             let _ = stack.borrow_mut().pop();
         });
     }
 }
 
-type DefaultPropsCache = Vec<(DesignSpec, Arc<DefaultProperties>)>;
+type DefaultPropsCache = Vec<(Theme, Arc<DefaultProperties>)>;
 
 static DEFAULT_PROPS_CACHE: LazyLock<Mutex<DefaultPropsCache>> =
     LazyLock::new(|| Mutex::new(Vec::new()));
 
-/// Returns a cached [`Arc<DefaultProperties>`] for `spec`, preserving `Arc::ptr_eq` across
-/// rebuilds when `spec` has not changed while producing a fresh `Arc` on theme changes.
+/// Returns a cached [`Arc<DefaultProperties>`] for `theme`, preserving `Arc::ptr_eq` across
+/// rebuilds when `theme` has not changed while producing a fresh `Arc` on theme changes.
 #[must_use]
-pub fn cached_default_properties(spec: &DesignSpec) -> Arc<DefaultProperties> {
+pub fn cached_default_properties(theme: &Theme) -> Arc<DefaultProperties> {
     let mut cache = DEFAULT_PROPS_CACHE
         .lock()
         .expect("default properties cache mutex poisoned");
-    if let Some((_, props)) = cache.iter().find(|(cached_spec, _)| cached_spec == spec) {
+    if let Some((_, props)) = cache.iter().find(|(cached_theme, _)| cached_theme == theme) {
         return props.clone();
     }
-    let props = Arc::new(build_default_properties(spec));
+    let props = Arc::new(build_default_properties(theme));
     if cache.len() >= 16 {
         cache.remove(0);
     }
-    cache.push((spec.clone(), props.clone()));
+    cache.push((theme.clone(), props.clone()));
     props
 }
 
-static FALLBACK_LIGHT_SPEC: LazyLock<Arc<DesignSpec>> =
-    LazyLock::new(|| Arc::new(DesignSpec::neutral_fallback(Brightness::Light)));
+static FALLBACK_LIGHT_THEME: LazyLock<Arc<Theme>> = LazyLock::new(|| Arc::new(Theme::light()));
 
-/// Reads a shared `Arc` handle to the ambient [`DesignSpec`] from the active [`ui_scope`]
-/// stack without deep-cloning `DesignSpec`, falling back to a cached neutral fallback.
+/// Reads a shared `Arc` handle to the ambient [`Theme`] from the active [`theme_scope`]
+/// stack without deep-cloning [`Theme`], falling back to [`Theme::light()`].
 #[must_use]
-pub fn current_spec_arc(_ctx: &ViewCtx) -> Arc<DesignSpec> {
-    SPEC_STACK.with(|stack| {
+pub fn current_theme_arc(_ctx: &ViewCtx) -> Arc<Theme> {
+    THEME_STACK.with(|stack| {
         stack
             .borrow()
             .last()
-            .map_or_else(|| FALLBACK_LIGHT_SPEC.clone(), Arc::clone)
+            .map_or_else(|| FALLBACK_LIGHT_THEME.clone(), Arc::clone)
     })
 }
 
-/// Reads the ambient [`DesignSpec`] from the active [`ui_scope`] stack, falling back to
-/// [`DesignSpec::neutral_fallback`] if no enclosing [`ui_scope`] exists.
+/// Reads the ambient [`Theme`] from the active [`theme_scope`] stack, falling back to
+/// [`Theme::light()`] if no enclosing [`theme_scope`] exists.
 #[must_use]
-pub fn current_spec(ctx: &ViewCtx) -> DesignSpec {
-    (*current_spec_arc(ctx)).clone()
+pub fn current_theme(ctx: &ViewCtx) -> Theme {
+    (*current_theme_arc(ctx)).clone()
 }
 
-/// View created by [`ui_scope`] pushing an [`Arc<DesignSpec>`] around child build and rebuild.
+/// View created by [`theme_scope_arc`] pushing an [`Arc<Theme>`] around child build and rebuild.
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
-pub struct UiScope<State, Action, V> {
-    spec: Arc<DesignSpec>,
+pub struct ThemeScope<State, Action, V> {
+    theme: Arc<Theme>,
     child: V,
     phantom: PhantomData<fn(&mut State) -> Action>,
 }
 
-impl<State, Action, V> ViewMarker for UiScope<State, Action, V> {}
+impl<State, Action, V> ViewMarker for ThemeScope<State, Action, V> {}
 
-impl<State, Action, V> View<State, Action, ViewCtx> for UiScope<State, Action, V>
+impl<State, Action, V> View<State, Action, ViewCtx> for ThemeScope<State, Action, V>
 where
     State: 'static,
     Action: 'static,
@@ -99,7 +98,7 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let _guard = SpecGuard::push(self.spec.clone());
+        let _guard = ThemeGuard::push(self.theme.clone());
         self.child.build(ctx, app_state)
     }
 
@@ -111,7 +110,7 @@ where
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let _guard = SpecGuard::push(self.spec.clone());
+        let _guard = ThemeGuard::push(self.theme.clone());
         self.child
             .rebuild(&prev.child, view_state, ctx, element, app_state);
     }
@@ -136,66 +135,54 @@ where
     }
 }
 
-/// Wraps `child` inside a Brocado [`DesignSpec`] environment scope using a pre-allocated [`Arc<DesignSpec>`].
-pub fn ui_scope_arc<State: 'static, Action: 'static, V>(
-    spec: Arc<DesignSpec>,
+/// Wraps `child` inside a Brocado [`Theme`] environment scope using a pre-allocated [`Arc<Theme>`].
+pub fn theme_scope_arc<State: 'static, Action: 'static, V>(
+    theme: Arc<Theme>,
     child: V,
-) -> UiScope<State, Action, V>
+) -> ThemeScope<State, Action, V>
 where
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
-    UiScope {
-        spec,
+    ThemeScope {
+        theme,
         child,
         phantom: PhantomData,
     }
 }
 
-/// Wraps `child` inside a Brocado [`DesignSpec`] environment scope supporting live updates.
-pub fn ui_scope<State: 'static, Action: 'static, V>(
-    spec: DesignSpec,
-    child: V,
-) -> UiScope<State, Action, V>
-where
-    V: WidgetView<State, Action>,
-    V::Widget: FromDynWidget,
-{
-    ui_scope_arc(Arc::new(spec), child)
-}
-
-/// Creates a lazily evaluated view that reads the active [`DesignSpec`] on every build/rebuild.
-pub fn with_spec<State, Action, F, V>(builder: F) -> WithSpec<State, Action, F, V>
+/// Creates a lazily evaluated view that reads the active [`Theme`] on every build/rebuild.
+pub fn with_theme<State, Action, F, V>(builder: F) -> WithTheme<State, Action, F, V>
 where
     State: 'static,
     Action: 'static,
-    F: Fn(&DesignSpec, &mut State) -> V + Send + Sync + 'static,
+    F: Fn(&Theme, &mut State) -> V + Send + Sync + 'static,
     V: WidgetView<State, Action>,
 {
-    WithSpec {
+    WithTheme {
         builder,
         phantom: PhantomData,
     }
 }
 
-/// Memoizes a theme-aware subtree by both `data` (`PartialEq`) and the ambient [`DesignSpec`].
+/// Memoizes a theme-aware subtree by both `data` (`PartialEq`) and the ambient [`Theme`].
 ///
 /// Rebuilds of enclosing views are skipped completely (neither `builder` nor child `rebuild`
-/// runs) unless `data` changes, the enclosing `DesignSpec` changes, or a descendant explicitly
+/// runs) unless `data` changes, the enclosing `Theme` changes, or a descendant explicitly
 /// requested a rebuild via `MessageResult::RequestRebuild`.
-pub fn memoize_with_spec<State, Action, Data, F, V>(
+pub fn memoize_with_theme<State, Action, Data, F, V>(
     data: Data,
     builder: F,
-) -> MemoizeWithSpec<State, Action, Data, F, V>
+) -> MemoizeWithTheme<State, Action, Data, F, V>
 where
     State: 'static,
     Action: 'static,
     Data: PartialEq + Send + Sync + 'static,
-    F: Fn(&DesignSpec, &Data) -> V + Send + Sync + 'static,
+    F: Fn(&Theme, &Data) -> V + Send + Sync + 'static,
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
-    MemoizeWithSpec {
+    MemoizeWithTheme {
         data,
         builder,
         phantom: PhantomData,
@@ -204,53 +191,53 @@ where
 
 type StatePhantom<State, Action, V> = PhantomData<fn(&mut State) -> (Action, V)>;
 
-/// View created by [`memoize_with_spec`].
+/// View created by [`memoize_with_theme`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(
     missing_debug_implementations,
     reason = "Contains closure trait generic"
 )]
-pub struct MemoizeWithSpec<State, Action, Data, F, V> {
+pub struct MemoizeWithTheme<State, Action, Data, F, V> {
     data: Data,
     builder: F,
     phantom: StatePhantom<State, Action, V>,
 }
 
-impl<State, Action, Data, F, V> ViewMarker for MemoizeWithSpec<State, Action, Data, F, V> {}
+impl<State, Action, Data, F, V> ViewMarker for MemoizeWithTheme<State, Action, Data, F, V> {}
 
 #[doc(hidden)]
 #[expect(
     missing_debug_implementations,
-    reason = "Internal ViewState for MemoizeWithSpec"
+    reason = "Internal ViewState for MemoizeWithTheme"
 )]
-pub struct MemoizeWithSpecState<V, VState> {
-    spec: Arc<DesignSpec>,
+pub struct MemoizeWithThemeState<V, VState> {
+    theme: Arc<Theme>,
     view: V,
     view_state: VState,
     dirty: bool,
 }
 
 impl<State, Action, Data, F, V> View<State, Action, ViewCtx>
-    for MemoizeWithSpec<State, Action, Data, F, V>
+    for MemoizeWithTheme<State, Action, Data, F, V>
 where
     State: 'static,
     Action: 'static,
     Data: PartialEq + Send + Sync + 'static,
-    F: Fn(&DesignSpec, &Data) -> V + Send + Sync + 'static,
+    F: Fn(&Theme, &Data) -> V + Send + Sync + 'static,
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
     type Element = Pod<V::Widget>;
-    type ViewState = MemoizeWithSpecState<V, V::ViewState>;
+    type ViewState = MemoizeWithThemeState<V, V::ViewState>;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let view = (self.builder)(&spec, &self.data);
+        let theme = current_theme_arc(ctx);
+        let view = (self.builder)(&theme, &self.data);
         let (el, view_state) = view.build(ctx, app_state);
         (
             el,
-            MemoizeWithSpecState {
-                spec,
+            MemoizeWithThemeState {
+                theme,
                 view,
                 view_state,
                 dirty: false,
@@ -266,14 +253,14 @@ where
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let next_spec = current_spec_arc(ctx);
-        let spec_unchanged =
-            Arc::ptr_eq(&view_state.spec, &next_spec) || *view_state.spec == *next_spec;
+        let next_theme = current_theme_arc(ctx);
+        let theme_unchanged =
+            Arc::ptr_eq(&view_state.theme, &next_theme) || *view_state.theme == *next_theme;
         let dirty = std::mem::take(&mut view_state.dirty);
-        if !dirty && spec_unchanged && prev.data == self.data {
+        if !dirty && theme_unchanged && prev.data == self.data {
             return;
         }
-        let next_view = (self.builder)(&next_spec, &self.data);
+        let next_view = (self.builder)(&next_theme, &self.data);
         next_view.rebuild(
             &view_state.view,
             &mut view_state.view_state,
@@ -281,7 +268,7 @@ where
             element,
             app_state,
         );
-        view_state.spec = next_spec;
+        view_state.theme = next_theme;
         view_state.view = next_view;
     }
 
@@ -314,55 +301,55 @@ where
     }
 }
 
-/// View created by [`with_spec`].
+/// View created by [`with_theme`].
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[expect(
     missing_debug_implementations,
     reason = "Contains closure trait generic"
 )]
-pub struct WithSpec<State, Action, F, V> {
+pub struct WithTheme<State, Action, F, V> {
     builder: F,
     phantom: StatePhantom<State, Action, V>,
 }
 
-impl<State, Action, F, V> ViewMarker for WithSpec<State, Action, F, V> {}
+impl<State, Action, F, V> ViewMarker for WithTheme<State, Action, F, V> {}
 
-impl<State, Action, F, V> View<State, Action, ViewCtx> for WithSpec<State, Action, F, V>
+impl<State, Action, F, V> View<State, Action, ViewCtx> for WithTheme<State, Action, F, V>
 where
     State: 'static,
     Action: 'static,
-    F: Fn(&DesignSpec, &mut State) -> V + Send + Sync + 'static,
+    F: Fn(&Theme, &mut State) -> V + Send + Sync + 'static,
     V: WidgetView<State, Action>,
     V::Widget: FromDynWidget,
 {
     type Element = Pod<V::Widget>;
-    type ViewState = (Arc<DesignSpec>, V, V::ViewState);
+    type ViewState = (Arc<Theme>, V, V::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let view = (self.builder)(&spec, app_state);
+        let theme = current_theme_arc(ctx);
+        let view = (self.builder)(&theme, app_state);
         let (el, state) = view.build(ctx, app_state);
-        (el, (spec, view, state))
+        (el, (theme, view, state))
     }
 
     fn rebuild(
         &self,
         _prev: &Self,
-        (prev_spec, prev_view, view_state): &mut Self::ViewState,
+        (prev_theme, prev_view, view_state): &mut Self::ViewState,
         ctx: &mut ViewCtx,
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let next_spec = current_spec_arc(ctx);
-        let next_view = (self.builder)(&next_spec, app_state);
+        let next_theme = current_theme_arc(ctx);
+        let next_view = (self.builder)(&next_theme, app_state);
         next_view.rebuild(prev_view, view_state, ctx, element, app_state);
-        *prev_spec = next_spec;
+        *prev_theme = next_theme;
         *prev_view = next_view;
     }
 
     fn teardown(
         &self,
-        (_spec, prev_view, view_state): &mut Self::ViewState,
+        (_theme, prev_view, view_state): &mut Self::ViewState,
         ctx: &mut ViewCtx,
         element: Mut<'_, Self::Element>,
     ) {
@@ -371,7 +358,7 @@ where
 
     fn message(
         &self,
-        (_spec, prev_view, view_state): &mut Self::ViewState,
+        (_theme, prev_view, view_state): &mut Self::ViewState,
         message: &mut MessageCtx,
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
@@ -383,40 +370,40 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tokens::Brightness;
 
-    fn read_stack_spec() -> DesignSpec {
-        SPEC_STACK.with(|stack| {
-            stack.borrow().last().map_or_else(
-                || DesignSpec::neutral_fallback(Brightness::Light),
-                |s| (**s).clone(),
-            )
+    fn read_stack_theme() -> Theme {
+        THEME_STACK.with(|stack| {
+            stack
+                .borrow()
+                .last()
+                .map_or_else(Theme::light, |t| (**t).clone())
         })
     }
 
     #[test]
-    fn spec_stack_nests_and_restores_on_drop() {
-        assert_eq!(read_stack_spec().brightness, Brightness::Light);
-        let dark = Arc::new(DesignSpec::neutral_fallback(Brightness::Dark));
-        let outer = SpecGuard::push(dark);
-        assert_eq!(read_stack_spec().brightness, Brightness::Dark);
+    fn theme_stack_nests_and_restores_on_drop() {
+        assert_eq!(read_stack_theme().brightness, Brightness::Light);
+        let dark = Arc::new(Theme::dark());
+        let outer = ThemeGuard::push(dark);
+        assert_eq!(read_stack_theme().brightness, Brightness::Dark);
 
         {
-            let mut inner_spec = DesignSpec::neutral_fallback(Brightness::Light);
-            inner_spec.name = "Nested";
-            let _inner = SpecGuard::push(Arc::new(inner_spec));
-            assert_eq!(read_stack_spec().name, "Nested");
-            assert_eq!(read_stack_spec().brightness, Brightness::Light);
+            let inner_theme = Theme::light().with_seed(crate::theme::seeds::TEAL);
+            let _inner = ThemeGuard::push(Arc::new(inner_theme.clone()));
+            assert_eq!(read_stack_theme().seed, crate::theme::seeds::TEAL);
+            assert_eq!(read_stack_theme().brightness, Brightness::Light);
         }
 
-        assert_eq!(read_stack_spec().brightness, Brightness::Dark);
+        assert_eq!(read_stack_theme().brightness, Brightness::Dark);
         drop(outer);
-        assert_eq!(read_stack_spec().brightness, Brightness::Light);
+        assert_eq!(read_stack_theme().brightness, Brightness::Light);
     }
 
     #[test]
-    fn cached_default_properties_reuses_arc_for_equal_spec() {
-        let light = DesignSpec::neutral_fallback(Brightness::Light);
-        let dark = DesignSpec::neutral_fallback(Brightness::Dark);
+    fn cached_default_properties_reuses_arc_for_equal_theme() {
+        let light = Theme::light();
+        let dark = Theme::dark();
         let a = cached_default_properties(&light);
         let b = cached_default_properties(&light);
         let c = cached_default_properties(&dark);
@@ -426,13 +413,11 @@ mod tests {
 
     #[test]
     fn cached_default_properties_enforces_lru_capacity_bound() {
-        let mut first = DesignSpec::neutral_fallback(Brightness::Light);
-        first.metrics.button_height = 500.0;
+        let first = Theme::light().with_font_scale(1.01);
         let first_arc = cached_default_properties(&first);
 
-        for idx in 1..=20 {
-            let mut other = DesignSpec::neutral_fallback(Brightness::Light);
-            other.metrics.button_height = 500.0 + f64::from(idx);
+        for idx in 2_u16..=22 {
+            let other = Theme::light().with_font_scale(1.0 + f32::from(idx) * 0.01);
             let _ = cached_default_properties(&other);
         }
 
@@ -445,7 +430,7 @@ mod tests {
             "cache exceeded capacity bound 16: {cache_len}"
         );
 
-        // First entry must have been evicted by 20 subsequent distinct inserts.
+        // First entry must have been evicted by subsequent distinct inserts.
         let reloaded = cached_default_properties(&first);
         assert!(!Arc::ptr_eq(&first_arc, &reloaded));
     }

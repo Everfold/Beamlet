@@ -1,4 +1,4 @@
-//! Spec-driven cross-theme component suite consuming ambient [`DesignSpec`](crate::tokens::DesignSpec).
+//! Material Design 3 Expressive component suite consuming ambient [`Theme`](crate::theme::Theme).
 
 pub mod badge;
 pub mod button;
@@ -7,6 +7,7 @@ pub mod chip;
 pub mod date_time;
 pub mod dialog;
 pub mod divider;
+pub mod expressive;
 pub mod icon_button;
 pub mod list;
 pub mod menu;
@@ -42,6 +43,13 @@ pub use date_time::{
 };
 pub use dialog::{basic_dialog, bounded_dialog, dialog};
 pub use divider::{horizontal_divider, inset_divider, vertical_divider};
+pub use expressive::{
+    FabColor, FabMenuItem, FabSize, FloatingToolbarVariant, TopAppBarVariant, UiWavyLinearProgress,
+    WavyLinearProgressWidget, bottom_app_bar, button_group, center_aligned_top_app_bar,
+    extended_fab, fab, fab_menu, floating_toolbar, floating_toolbar_with_variant, large_fab,
+    large_top_app_bar, medium_top_app_bar, navigation_rail_with_fab, sized_fab, small_fab,
+    split_button, top_app_bar, top_app_bar_slots, wavy_linear_progress,
+};
 pub use icon_button::{
     IconButtonVariant, UiCustomIconButton, UiIconButton, filled_icon_button, icon_button,
     icon_button_view, outlined_icon_button, tonal_icon_button,

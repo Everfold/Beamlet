@@ -28,8 +28,9 @@ use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 
 use crate::foundation::with_opacity;
-use crate::style_engine::current_spec_arc;
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::current_theme_arc;
+use crate::theme::Theme;
+use crate::tokens::TypeRole;
 
 /// Inline styling attributes for a [`TextSpan`].
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -233,14 +234,14 @@ struct RichLayoutConfig {
 
 fn compile_rich_config(
     raw_spans: &[TextSpan],
-    spec: &DesignSpec,
+    theme: &Theme,
     role: TypeRole,
     color_override: Option<Color>,
     selectable: bool,
 ) -> RichLayoutConfig {
-    let p = &spec.palette;
-    let ts = spec.typography.get(role);
-    let base_fg = color_override.unwrap_or(p.text_primary);
+    let s = &theme.scheme;
+    let ts = theme.typography.get(role);
+    let base_fg = color_override.unwrap_or(s.on_surface);
     let mut brushes = vec![Brush::Solid(base_fg)];
     let mut full_text = String::new();
     let mut resolved = Vec::with_capacity(raw_spans.len());
@@ -256,9 +257,9 @@ fn compile_rich_config(
         let fg = if let Some(c) = span.style.color {
             c
         } else if span.style.link_id.is_some() {
-            p.accent
+            s.primary
         } else if span.style.code {
-            p.text_primary
+            s.on_surface
         } else {
             base_fg
         };
@@ -274,7 +275,7 @@ fn compile_rich_config(
         let resolved_bg = span.style.bg.or_else(|| {
             span.style
                 .code
-                .then(|| with_opacity(p.surface_container, 0.85))
+                .then(|| with_opacity(s.surface_container, 0.85))
         });
 
         resolved.push(ResolvedSpan {
@@ -292,8 +293,8 @@ fn compile_rich_config(
         base_size: ts.font_size,
         base_weight: ts.weight,
         base_line_height: ts.line_height,
-        base_font: spec.typography.resolved_font_family(),
-        selection_color: with_opacity(p.accent, 0.25),
+        base_font: theme.typography.resolved_font_family(),
+        selection_color: with_opacity(s.primary, 0.25),
         selectable,
     }
 }
@@ -773,10 +774,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRichPro
     type ViewState = ();
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
+        let theme = current_theme_arc(ctx);
         let cfg = compile_rich_config(
             &self.spans,
-            &spec,
+            &theme,
             self.role,
             self.color_override,
             self.selectable,
@@ -795,10 +796,10 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiRichPro
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
+        let theme = current_theme_arc(ctx);
         let cfg = compile_rich_config(
             &self.spans,
-            &spec,
+            &theme,
             self.role,
             self.color_override,
             self.selectable,

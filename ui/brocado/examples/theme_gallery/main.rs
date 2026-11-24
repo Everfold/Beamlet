@@ -1,4 +1,4 @@
-//! Multi-theme showcase gallery entrypoint and automated headless audit.
+//! Material 3 Expressive showcase gallery entrypoint and automated headless audit.
 
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
@@ -28,12 +28,15 @@ fn main() {
     AppRunner::new(initial, |state: &mut GalleryState| {
         let wid = state.window_id;
         let theme = state.theme.clone();
-        let title = format!("Brocado ({})", theme.language.label());
         let view = app_view(state);
-        std::iter::once(themed_window(wid, title, &theme, view).with_config(|cfg| {
-            cfg.on_close(|s: &mut GalleryState| s.running = false)
-                .with_initial_inner_size(LogicalSize::new(1200.0, 800.0))
-        }))
+        std::iter::once(
+            themed_window(wid, "Brocado — Material 3 Expressive", &theme, view).with_config(
+                |cfg| {
+                    cfg.on_close(|s: &mut GalleryState| s.running = false)
+                        .with_initial_inner_size(LogicalSize::new(1200.0, 800.0))
+                },
+            ),
+        )
     })
     .with_default_properties(initial_props)
     .run()
@@ -57,26 +60,25 @@ mod tests {
     use super::*;
     use state::GalleryTab;
 
-    fn effective_test_theme(theme: &UiTheme, fallback: &Option<FontFamily<'static>>) -> UiTheme {
-        match (&theme.font_family, fallback) {
-            (None, Some(ff)) => theme.clone().with_font_family(ff.clone()),
-            _ => theme.clone(),
+    fn effective_test_theme(theme: &Theme, fallback: &Option<FontFamily<'static>>) -> Theme {
+        match fallback {
+            Some(ff) => theme.clone().with_font_family(ff.clone()),
+            None => theme.clone(),
         }
     }
 
-    fn make_gallery_harness(lang: DesignLanguage, tab: GalleryTab) -> PreviewHarness<GalleryState> {
-        make_gallery_harness_with(lang, Brightness::Light, tab, 1200, 800)
+    fn make_gallery_harness(tab: GalleryTab) -> PreviewHarness<GalleryState> {
+        make_gallery_harness_with(Brightness::Light, tab, 1200, 800)
     }
 
     fn make_gallery_harness_with(
-        lang: DesignLanguage,
         brightness: Brightness,
         tab: GalleryTab,
         width: u32,
         height: u32,
     ) -> PreviewHarness<GalleryState> {
         let mut initial = GalleryState::default();
-        initial.theme = UiTheme::new(lang, brightness);
+        initial.theme = Theme::from_seed(seeds::PURPLE, brightness);
         initial.active_tab = tab;
 
         let test_font_fallback: std::rc::Rc<RefCell<Option<FontFamily<'static>>>> =
@@ -84,35 +86,34 @@ mod tests {
         let hook_fallback = test_font_fallback.clone();
         let view_fallback = test_font_fallback.clone();
 
-        let initial_spec = initial.theme.to_spec();
+        let initial_theme = initial.theme.clone();
         let initial_props = initial.theme.default_properties();
-        let last_spec = RefCell::new(initial_spec.clone());
+        let last_theme = RefCell::new(initial_theme);
 
         let mut cfg = PreviewConfig {
             width,
             height,
             ..PreviewConfig::default()
         };
-        cfg.background = initial_spec.palette.window_bg;
+        cfg.background = initial.theme.scheme.surface;
 
         let mut h = PreviewHarness::with_dynamic_properties(
             initial,
             initial_props,
             move |s| {
                 let eff = effective_test_theme(&s.theme, &hook_fallback.borrow());
-                let next_spec = eff.to_spec();
-                let mut prev = last_spec.borrow_mut();
-                if next_spec != *prev {
-                    *prev = next_spec.clone();
-                    Some(cached_default_properties(&next_spec))
+                let mut prev = last_theme.borrow_mut();
+                if eff != *prev {
+                    *prev = eff.clone();
+                    Some(cached_default_properties(&eff))
                 } else {
                     None
                 }
             },
             move |s| {
                 let eff = effective_test_theme(&s.theme, &view_fallback.borrow());
-                let bg = eff.to_spec().palette.window_bg;
-                ui_scope(
+                let bg = eff.scheme.surface;
+                theme_scope(
                     &eff,
                     sized_box(app_view(s))
                         .dims(Dimensions::STRETCH)
@@ -154,6 +155,7 @@ mod tests {
                 "UiRadioButton",
                 "RangeSliderWidget",
                 "LinearProgressWidget",
+                "WavyLinearProgressWidget",
                 "DeterminateCircularWidget",
             ])
             .with_overflow_containers([
@@ -170,6 +172,7 @@ mod tests {
                 "UiRadioButton",
                 "RangeSliderWidget",
                 "LinearProgressWidget",
+                "WavyLinearProgressWidget",
                 "DeterminateCircularWidget",
             ])
             .with_dialog_types(["EscapeCatcher"]);
@@ -313,20 +316,18 @@ mod tests {
     #[test]
     fn gallery_all_tabs_and_themes_pass_layout_and_a11y_audit() {
         let (layout_cfg, a11y_cfg) = gallery_lint_configs();
-        for lang in DesignLanguage::ALL {
-            for tab in GalleryTab::ALL {
-                let mut h = make_gallery_harness(lang, tab);
-                let overflows = audit_snapshot(
-                    &mut h,
-                    &layout_cfg,
-                    &a11y_cfg,
-                    &format!("{lang:?}/{tab:?}@1200x800"),
-                );
-                assert!(
-                    overflows.is_empty(),
-                    "[{lang:?}/{tab:?}@1200x800] unexpected overflow warnings: {overflows:#?}"
-                );
-            }
+        for tab in GalleryTab::ALL {
+            let mut h = make_gallery_harness(tab);
+            let overflows = audit_snapshot(
+                &mut h,
+                &layout_cfg,
+                &a11y_cfg,
+                &format!("Md3/{tab:?}@1200x800"),
+            );
+            assert!(
+                overflows.is_empty(),
+                "[Md3/{tab:?}@1200x800] unexpected overflow warnings: {overflows:#?}"
+            );
         }
     }
 
@@ -351,20 +352,18 @@ mod tests {
         ];
 
         let mut all_overflows = Vec::new();
-        for lang in DesignLanguage::ALL {
-            for tab in GalleryTab::ALL {
-                let mut h = make_gallery_harness(lang, tab);
-                for &(w, height) in &viewports {
-                    h.resize(w, height);
-                    let overflows = audit_snapshot(
-                        &mut h,
-                        &layout_cfg,
-                        &a11y_cfg,
-                        &format!("{lang:?}/{tab:?}@{w}x{height}"),
-                    );
-                    if !overflows.is_empty() {
-                        all_overflows.push((lang, tab, w, height, overflows));
-                    }
+        for tab in GalleryTab::ALL {
+            let mut h = make_gallery_harness(tab);
+            for &(w, height) in &viewports {
+                h.resize(w, height);
+                let overflows = audit_snapshot(
+                    &mut h,
+                    &layout_cfg,
+                    &a11y_cfg,
+                    &format!("Md3/{tab:?}@{w}x{height}"),
+                );
+                if !overflows.is_empty() {
+                    all_overflows.push((tab, w, height, overflows));
                 }
             }
         }
@@ -376,16 +375,16 @@ mod tests {
 
     #[test]
     fn gallery_all_pages_interactive_events_match_targets() {
-        let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+        let mut h = make_gallery_harness(GalleryTab::Components);
         h.settle_animations();
 
-        // 1. Switcher bar: dark mode, reduced motion, accent select, theme switching
+        // 1. Switcher bar: dark mode, reduced motion, accent select, high contrast
         assert_eq!(h.state().theme.brightness, Brightness::Light);
-        h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
+        h.run_step(&PreviewStep::ClickLabel("紫".into())).unwrap();
         assert_eq!(count_layer_type(&mut h, "PopupLayer"), 1);
         assert_visual_invariants(&mut h, "Top accent select open");
         h.run_step(&PreviewStep::ClickLabel("蓝".into())).unwrap();
-        assert_eq!(h.state().theme.accent, UiAccent::PRESETS[1]);
+        assert_eq!(h.state().theme.seed, seeds::PRESETS[1].1);
         assert_eq!(count_layer_type(&mut h, "PopupLayer"), 0);
 
         h.run_step(&PreviewStep::ClickLabel("深色".into())).unwrap();
@@ -395,10 +394,10 @@ mod tests {
         assert!(h.state().theme.reduced_motion);
         h.run_step(&PreviewStep::ClickLabel("高对比".into()))
             .unwrap();
-        assert!(h.state().theme.high_contrast);
+        assert_eq!(h.state().theme.contrast, ContrastLevel::High);
         h.run_step(&PreviewStep::ClickLabel("高对比".into()))
             .unwrap();
-        assert!(!h.state().theme.high_contrast);
+        assert_eq!(h.state().theme.contrast, ContrastLevel::Standard);
 
         // 2. Components page: buttons, disabled no-op, destructive dialog + Escape,
         //    checkbox/switch/radio/sliders/tabs/chips
@@ -577,7 +576,7 @@ mod tests {
                 .unmemoized_builds
                 .load(std::sync::atomic::Ordering::Relaxed)
                 >= unmemo_after_mount + 2,
-            "unmemoized with_spec must rebuild on unrelated ticks"
+            "unmemoized with_theme must rebuild on unrelated ticks"
         );
         assert_eq!(
             h.state()
@@ -585,7 +584,7 @@ mod tests {
                 .memoized_builds
                 .load(std::sync::atomic::Ordering::Relaxed),
             memo_after_mount,
-            "memoize_with_spec must NOT rebuild on unrelated ticks"
+            "memoize_with_theme must NOT rebuild on unrelated ticks"
         );
 
         h.run_step(&PreviewStep::ClickLabel("切换 Key".into()))
@@ -597,7 +596,7 @@ mod tests {
                 .memoized_builds
                 .load(std::sync::atomic::Ordering::Relaxed),
             memo_after_mount + 2,
-            "memoize_with_spec must rebuild when memo_tag changes (wide + narrow shell branches)"
+            "memoize_with_theme must rebuild when memo_tag changes (wide + narrow shell branches)"
         );
 
         h.run_step(&PreviewStep::ClickLabel("#5000".into()))
@@ -803,7 +802,7 @@ mod tests {
             ("时间弹窗", "09_md3_time_dialog.png"),
             ("轻提示", "10_md3_toast.png"),
         ] {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.run_step(&PreviewStep::ClickLabel(lbl.into())).unwrap();
             save(&mut h, file, &mut issues);
         }
@@ -812,74 +811,64 @@ mod tests {
             ("悬停提示", "11_md3_plain_tooltip.png"),
             ("富提示", "12_md3_rich_tooltip.png"),
         ] {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.run_step(&PreviewStep::HoverLabel(lbl.into())).unwrap();
             save(&mut h, file, &mut issues);
         }
 
         // 13 & 17: MD3 Components + open select
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+            let mut h = make_gallery_harness(GalleryTab::Components);
             save(&mut h, "17_md3_components.png", &mut issues);
             h.run_step(&PreviewStep::ClickLabel("浅色".into())).unwrap();
             save(&mut h, "13_md3_select_open.png", &mut issues);
         }
 
         // 19-24: Narrow & short responsive screenshots (360x640, 320x480, 640x360)
-        for (lang, tab, w, height, file) in [
+        for (tab, w, height, file) in [
             (
-                DesignLanguage::Md3,
                 GalleryTab::Components,
                 360,
                 640,
                 "19_narrow_360x640_md3_components.png",
             ),
             (
-                DesignLanguage::Md3,
                 GalleryTab::Layout,
                 360,
                 640,
                 "20_narrow_360x640_md3_layout.png",
             ),
+            (GalleryTab::Lab, 360, 640, "21_narrow_360x640_md3_lab.png"),
             (
-                DesignLanguage::Md3,
-                GalleryTab::Lab,
-                360,
-                640,
-                "21_narrow_360x640_md3_lab.png",
-            ),
-            (
-                DesignLanguage::Md3,
                 GalleryTab::Native,
                 360,
                 640,
                 "22_narrow_360x640_md3_native.png",
             ),
             (
-                DesignLanguage::Md3,
                 GalleryTab::Overlays,
                 640,
                 360,
                 "24_short_640x360_md3_overlays.png",
             ),
         ] {
-            let mut h = make_gallery_harness(lang, tab);
+            let mut h = make_gallery_harness(tab);
             h.resize(w, height);
             save(&mut h, file, &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
-            h.run_step(&PreviewStep::ClickLabel("默认".into())).unwrap();
+            let mut h = make_gallery_harness(GalleryTab::Components);
+            h.run_step(&PreviewStep::ClickLabel("紫".into())).unwrap();
             save(&mut h, "25_md3_accent_select_open.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
                 .unwrap();
             save(&mut h, "26_md3_popover_open.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.settle_animations();
             let host_id = *h
                 .find_widget_ids("ContextMenuHost")
@@ -895,24 +884,18 @@ mod tests {
             save(&mut h, "27_md3_context_menu_open.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness_with(
-                DesignLanguage::Md3,
-                Brightness::Dark,
-                GalleryTab::Layout,
-                1180,
-                800,
-            );
+            let mut h = make_gallery_harness_with(Brightness::Dark, GalleryTab::Layout, 1180, 800);
             save(&mut h, "28_md3_dark_layout_split.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.resize(320, 480);
             h.run_step(&PreviewStep::ClickLabel("交互气泡".into()))
                 .unwrap();
             save(&mut h, "29_narrow_320x480_md3_popover.png", &mut issues);
         }
         {
-            let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+            let mut h = make_gallery_harness(GalleryTab::Components);
             h.settle_animations();
             if let Some(&ta_id) = h.find_widget_ids("TextArea").get(2) {
                 h.inner_harness_mut().scroll_into_view(ta_id);
@@ -935,33 +918,29 @@ mod tests {
     fn gallery_extreme_narrow_160px_overlays_and_interactions() {
         let (layout_cfg, a11y_cfg) = gallery_lint_configs();
 
-        // 1. Platform alert dialogs across all 4 design languages at 160x480
-        for lang in DesignLanguage::ALL {
-            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+        // 1. Platform alert dialog at 160x480
+        {
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             if !h.register_system_cjk_fallback().is_empty() {
                 let tree = dump_layout_tree(&mut h);
                 let cn_lbl = find_first_label_rect(&tree, "原生警告")
                     .expect("expected Chinese label '原生警告' in Overlays tab");
                 assert!(
                     cn_lbl.2 > 0.0 && cn_lbl.3 > 0.0,
-                    "[{lang:?}] expected non-zero shaped CJK label dimensions, got {cn_lbl:?}"
+                    "expected non-zero shaped CJK label dimensions, got {cn_lbl:?}"
                 );
             }
             h.resize(160, 480);
             h.run_step(&PreviewStep::ClickLabel("原生警告".into()))
                 .unwrap();
             assert!(h.state().overlays.show_platform_alert);
-            let overflows = audit_snapshot(
-                &mut h,
-                &layout_cfg,
-                &a11y_cfg,
-                &format!("160x480/{lang:?}/platform_alert"),
-            );
+            let overflows =
+                audit_snapshot(&mut h, &layout_cfg, &a11y_cfg, "160x480/Md3/platform_alert");
             assert!(
                 overflows.is_empty(),
-                "[{lang:?}] platform_alert overflow at 160px: {overflows:#?}"
+                "platform_alert overflow at 160px: {overflows:#?}"
             );
-            assert_visual_invariants(&mut h, &format!("160x480/{lang:?}/platform_alert"));
+            assert_visual_invariants(&mut h, "160x480/Md3/platform_alert");
             let before = h.state().components.click_count;
             h.run_step(&PreviewStep::ClickLabel("确定".into())).unwrap();
             assert!(!h.state().overlays.show_platform_alert);
@@ -969,7 +948,7 @@ mod tests {
         }
 
         // 2. All MD3 modal overlays (dialogs, sheets, date/time pickers) at 160x480
-        let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+        let mut h = make_gallery_harness(GalleryTab::Overlays);
         h.resize(160, 480);
         let modals: &[(&str, fn(&GalleryState) -> bool)] = &[
             ("基础弹窗", |s| s.overlays.show_basic_dialog),
@@ -1030,10 +1009,10 @@ mod tests {
         assert_visual_invariants(&mut h, "160x480/Md3/toast");
 
         // 4. Select dropdown on Components tab at 160x480
-        let mut h_comp = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+        let mut h_comp = make_gallery_harness(GalleryTab::Components);
         h_comp.resize(160, 480);
         h_comp
-            .run_step(&PreviewStep::ClickLabel("默认".into()))
+            .run_step(&PreviewStep::ClickLabel("紫".into()))
             .unwrap();
         assert_eq!(count_layer_type(&mut h_comp, "PopupLayer"), 1);
         let sel_ov = audit_snapshot(&mut h_comp, &layout_cfg, &a11y_cfg, "160x480/Md3/select");
@@ -1042,7 +1021,7 @@ mod tests {
         h_comp
             .run_step(&PreviewStep::ClickLabel("蓝".into()))
             .unwrap();
-        assert_eq!(h_comp.state().theme.accent, UiAccent::PRESETS[1]);
+        assert_eq!(h_comp.state().theme.seed, seeds::PRESETS[1].1);
         assert_eq!(count_layer_type(&mut h_comp, "PopupLayer"), 0);
     }
 
@@ -1109,12 +1088,12 @@ mod tests {
     #[test]
     fn gallery_normal_size_alignment_centering_and_events() {
         // 1. Components tab @ 1200x800: rich_prose link click, prefix/badge vertical centering, select trigger alignment
-        let mut h = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Components);
+        let mut h = make_gallery_harness(GalleryTab::Components);
         h.settle_animations();
         let tree = dump_layout_tree(&mut h);
 
-        // Select trigger ("默认") should keep label left and chevron Svg right (not centered together)
-        if let Some((btn_node, lbl_node)) = find_ancestor_button_and_label(&tree, "默认")
+        // Select trigger ("紫") should keep label left and chevron Svg right (not centered together)
+        if let Some((btn_node, lbl_node)) = find_ancestor_button_and_label(&tree, "紫")
             && let Some(svg_node) = find_first_with_type(btn_node, "Svg")
         {
             assert!(
@@ -1124,7 +1103,8 @@ mod tests {
                 lbl_node.rect
             );
             assert!(
-                svg_node.rect.x > btn_node.rect.x + btn_node.rect.width * 0.55,
+                svg_node.rect.x + svg_node.rect.width * 0.5
+                    > btn_node.rect.x + btn_node.rect.width * 0.55,
                 "select chevron should stay near trailing edge: btn={:?}, svg={:?}",
                 btn_node.rect,
                 svg_node.rect
@@ -1199,7 +1179,7 @@ mod tests {
         );
 
         // 2. Tooltips @ 1200x800: compact bounds, inside viewport, survive internal move, dismiss on leave
-        let mut h_ov = make_gallery_harness(DesignLanguage::Md3, GalleryTab::Overlays);
+        let mut h_ov = make_gallery_harness(GalleryTab::Overlays);
         for (btn_lbl, expect_rich) in [("悬停提示", false), ("富提示", true)] {
             h_ov.run_step(&PreviewStep::HoverLabel(btn_lbl.into()))
                 .unwrap();
@@ -1418,54 +1398,26 @@ mod tests {
                 .expect("write 160 audit png");
         };
 
-        for (lang, tab, file) in [
-            (
-                DesignLanguage::Md3,
-                GalleryTab::Components,
-                "01_160_md3_components.png",
-            ),
-            (
-                DesignLanguage::Md3,
-                GalleryTab::Layout,
-                "02_160_md3_layout.png",
-            ),
-            (
-                DesignLanguage::Md3,
-                GalleryTab::Overlays,
-                "03_160_md3_overlays.png",
-            ),
-            (
-                DesignLanguage::Md3,
-                GalleryTab::Native,
-                "04_160_md3_native.png",
-            ),
-            (DesignLanguage::Md3, GalleryTab::Lab, "15_160_md3_lab.png"),
+        for (tab, file) in [
+            (GalleryTab::Components, "01_160_md3_components.png"),
+            (GalleryTab::Layout, "02_160_md3_layout.png"),
+            (GalleryTab::Overlays, "03_160_md3_overlays.png"),
+            (GalleryTab::Native, "04_160_md3_native.png"),
+            (GalleryTab::Lab, "15_160_md3_lab.png"),
         ] {
-            let mut h = make_gallery_harness(lang, tab);
+            let mut h = make_gallery_harness(tab);
             h.resize(160, 480);
             save(&mut h, file, &mut issues);
         }
 
-        for (lang, btn, file) in [
-            (
-                DesignLanguage::Md3,
-                "基础弹窗",
-                "08_160_md3_basic_dialog.png",
-            ),
-            (
-                DesignLanguage::Md3,
-                "日期弹窗",
-                "11_160_md3_date_picker.png",
-            ),
-            (
-                DesignLanguage::Md3,
-                "时间弹窗",
-                "12_160_md3_time_picker.png",
-            ),
-            (DesignLanguage::Md3, "侧抽屉", "13_160_md3_side_sheet.png"),
-            (DesignLanguage::Md3, "轻提示", "14_160_md3_toast.png"),
+        for (btn, file) in [
+            ("基础弹窗", "08_160_md3_basic_dialog.png"),
+            ("日期弹窗", "11_160_md3_date_picker.png"),
+            ("时间弹窗", "12_160_md3_time_picker.png"),
+            ("侧抽屉", "13_160_md3_side_sheet.png"),
+            ("轻提示", "14_160_md3_toast.png"),
         ] {
-            let mut h = make_gallery_harness(lang, GalleryTab::Overlays);
+            let mut h = make_gallery_harness(GalleryTab::Overlays);
             h.resize(160, 480);
             h.run_step(&PreviewStep::ClickLabel(btn.into())).unwrap();
             save(&mut h, file, &mut issues);

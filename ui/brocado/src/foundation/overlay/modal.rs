@@ -18,7 +18,7 @@ use crate::foundation::ScrollViewWidget;
 use crate::foundation::overlay::focus_bridge::collect_modal_focusables;
 use crate::foundation::overlay::{EscapeCatcher, EscapePressed, ui_scrim};
 use crate::foundation::transition::{ModalAxisSizing, SlideTransition};
-use crate::style_engine::current_spec_arc;
+use crate::style_engine::current_theme_arc;
 use crate::tokens::{MotionDuration, MotionEasing};
 
 const MODAL_SCRIM_ID: ViewId = ViewId::new(0x5549_3430);
@@ -129,7 +129,7 @@ where
     card.properties.insert(limits.card_dims);
     card.properties.insert(config.padding);
 
-    let reduced_motion = current_spec_arc(ctx).reduced_motion;
+    let reduced_motion = current_theme_arc(ctx).reduced_motion;
     let (enter_offset, duration_ms) = if reduced_motion {
         (Vec2::ZERO, 0)
     } else {

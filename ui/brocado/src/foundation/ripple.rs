@@ -19,8 +19,8 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
 use crate::foundation::state_layer::with_opacity;
-use crate::style_engine::current_spec_arc;
-use crate::tokens::StateFeedbackMode;
+use crate::style_engine::current_theme_arc;
+use crate::theme::metrics::BUTTON_RADIUS;
 
 const RIPPLE_CHILD_ID: ViewId = ViewId::new(0x5549_3610);
 const RIPPLE_DURATION_SECS: f64 = 0.28;
@@ -235,18 +235,16 @@ impl<V, State, Action> RippleLayerView<V, State, Action> {
     }
 
     fn resolve_config(&self, ctx: &ViewCtx) -> RippleConfig {
-        let spec = current_spec_arc(ctx);
+        let theme = current_theme_arc(ctx);
         RippleConfig {
-            enabled: matches!(spec.feedback, StateFeedbackMode::TintedStateLayer { .. })
-                && !spec.reduced_motion,
-            tint: self.tint.unwrap_or(spec.palette.accent),
-            radius: self.radius.unwrap_or(spec.metrics.button_radius),
+            enabled: !theme.reduced_motion,
+            tint: self.tint.unwrap_or(theme.scheme.primary),
+            radius: self.radius.unwrap_or(BUTTON_RADIUS),
         }
     }
 }
 
-/// Wraps `child` with a Material Design 3 clipped ink [`RippleLayer`] when [`StateFeedbackMode::TintedStateLayer`]
-/// is active and `reduced_motion` is `false`.
+/// Wraps `child` with a Material Design 3 clipped ink [`RippleLayer`] when `reduced_motion` is `false`.
 pub fn ripple_layer<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
 ) -> RippleLayerView<V, State, Action> {

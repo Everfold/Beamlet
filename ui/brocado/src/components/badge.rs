@@ -1,4 +1,4 @@
-//! Notification dot and counter badges styled from [`DesignSpec`](crate::tokens::DesignSpec).
+//! Notification dot and counter badges styled from [`Theme`](crate::theme::Theme).
 
 use masonry::core::ArcStr;
 use masonry::layout::UnitPoint;
@@ -10,7 +10,7 @@ use xilem_masonry::view::{ZStackExt, badged_optional, label, sized_box, zstack};
 
 use crate::components::typography::ui_label;
 use crate::foundation::UiClassExt;
-use crate::style_engine::{classes, with_spec};
+use crate::style_engine::{classes, with_theme};
 use crate::tokens::TypeRole;
 
 /// Returns a small status dot badge (`6×6`).
@@ -24,10 +24,10 @@ pub fn large_badge<State: 'static, Action: 'static>(
     text: impl Into<ArcStr>,
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let text = text.into();
-    with_spec(move |spec, _| {
+    with_theme(move |theme, _| {
         let txt = ui_label(TypeRole::LabelSmall, text.clone())
             .line_height(LineHeight::MetricsRelative(1.0))
-            .color(spec.palette.on_error)
+            .color(theme.scheme.on_error)
             .line_breaking(LineBreaking::Clip)
             .alignment(UnitPoint::CENTER);
         sized_box(zstack((txt,))).ui_class(classes::BADGE_LARGE)

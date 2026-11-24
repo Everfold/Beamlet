@@ -30,8 +30,8 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 
 use crate::foundation::icon::cached_icon_tree;
-use crate::style_engine::scope::current_spec_arc;
-use crate::tokens::{DesignSpec, ElevationLevel};
+use crate::style_engine::current_theme_arc;
+use crate::theme::{ElevationLevel, Theme};
 
 const POPUP_TRIGGER_ID: ViewId = ViewId::new(0x5549_3420);
 
@@ -847,7 +847,7 @@ pub struct AnchoredPopupView<TriggerV, State, Action> {
     /// Spatial offset relative to the trigger's bottom-left anchor point.
     pub offset: Vec2,
     /// Theme-aware popup spec constructor.
-    pub spec_builder: Arc<dyn Fn(&DesignSpec) -> PopupLayerSpec + Send + Sync>,
+    pub spec_builder: Arc<dyn Fn(&Theme) -> PopupLayerSpec + Send + Sync>,
     /// Optional maximum popup width override in logical pixels.
     pub max_width: Option<f64>,
     /// Selection callback invoked with clicked item's `action_idx`.
@@ -865,8 +865,8 @@ impl<TriggerV, State, Action> AnchoredPopupView<TriggerV, State, Action> {
         self
     }
 
-    fn resolve_spec(&self, spec_theme: &DesignSpec) -> PopupLayerSpec {
-        let mut popup_spec = (self.spec_builder)(spec_theme);
+    fn resolve_spec(&self, theme: &Theme) -> PopupLayerSpec {
+        let mut popup_spec = (self.spec_builder)(theme);
         if let Some(mw) = self.max_width {
             popup_spec.max_width = mw.max(popup_spec.min_width);
         }
@@ -887,8 +887,8 @@ where
     type ViewState = TriggerV::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec_theme = current_spec_arc(ctx);
-        let popup_spec = self.resolve_spec(&spec_theme);
+        let theme = current_theme_arc(ctx);
+        let popup_spec = self.resolve_spec(&theme);
         let (trigger_pod, trigger_state) =
             ctx.with_id(POPUP_TRIGGER_ID, |ctx| self.trigger.build(ctx, app_state));
         let pod = ctx.with_action_widget(|ctx| {
@@ -922,8 +922,8 @@ where
                 );
             });
         }
-        let spec_theme = current_spec_arc(ctx);
-        let popup_spec = self.resolve_spec(&spec_theme);
+        let theme = current_theme_arc(ctx);
+        let popup_spec = self.resolve_spec(&theme);
         AnchoredPopupHost::sync(&mut element, self.open, self.offset, popup_spec);
     }
 
@@ -1216,7 +1216,7 @@ pub struct ContextMenuView<TargetV, State, Action> {
     /// Wrapped target subtree that opens the context menu on secondary click.
     pub target: TargetV,
     /// Theme-aware popup spec constructor.
-    pub spec_builder: Arc<dyn Fn(&DesignSpec) -> PopupLayerSpec + Send + Sync>,
+    pub spec_builder: Arc<dyn Fn(&Theme) -> PopupLayerSpec + Send + Sync>,
     /// Selection callback invoked with clicked item's `action_idx`.
     pub on_select: PopupSelectCallback<State, Action>,
     /// Optional dismiss callback invoked when dismissed without selecting an item.
@@ -1249,8 +1249,8 @@ where
     type ViewState = TargetV::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec_theme = current_spec_arc(ctx);
-        let popup_spec = (self.spec_builder)(&spec_theme);
+        let theme = current_theme_arc(ctx);
+        let popup_spec = (self.spec_builder)(&theme);
         let (target_pod, target_state) =
             ctx.with_id(CONTEXT_TARGET_ID, |ctx| self.target.build(ctx, app_state));
         let pod = ctx.with_action_widget(|ctx| {
@@ -1274,8 +1274,8 @@ where
                     .rebuild(&prev.target, view_state, ctx, target.downcast(), app_state);
             });
         }
-        let spec_theme = current_spec_arc(ctx);
-        let popup_spec = (self.spec_builder)(&spec_theme);
+        let theme = current_theme_arc(ctx);
+        let popup_spec = (self.spec_builder)(&theme);
         element.widget.spec = popup_spec;
     }
 

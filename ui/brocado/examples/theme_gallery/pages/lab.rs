@@ -1,8 +1,9 @@
-//! Incremental rebuild (`memoize_with_spec`), 10k-row `virtual_list`, and `DesignSpec` inspector.
+//! Incremental rebuild (`memoize_with_theme`), 10k-row `virtual_list`, and [`Theme`] inspector.
 
 use std::sync::atomic::Ordering;
 
 use brocado::components::typography::ui_label;
+use brocado::metrics::{BUTTON_HEIGHT, BUTTON_RADIUS};
 use brocado::prelude::*;
 use masonry::layout::AsUnit;
 use masonry::peniko::Color;
@@ -14,7 +15,7 @@ use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, sized
 use crate::state::GalleryState;
 
 fn swatch<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    theme: &Theme,
     name: &'static str,
     fill: Color,
     ink: Color,
@@ -26,7 +27,7 @@ fn swatch<State: 'static, Action: 'static>(
     ))
     .padding(Padding::from_vh(8.px(), 6.px()))
     .background_color(fill)
-    .border(spec.palette.border, 1.px())
+    .border(theme.scheme.outline_variant, 1.px())
     .corner_radius(6.px())
     .dims(Dimensions::height(36.px()))
 }
@@ -37,24 +38,24 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
     let unmemo_counter = state.perf.unmemoized_builds.clone();
     let memo_counter = state.perf.memoized_builds.clone();
 
-    let unmemoized_panel = with_spec(move |spec: &DesignSpec, _| {
+    let unmemoized_panel = with_theme(move |theme: &Theme, _| {
         let count = unmemo_counter.fetch_add(1, Ordering::Relaxed) + 1;
         outlined_card(
             flex_col((
-                title_small("with_spec"),
-                body_medium(format!("重建：{count} ({})", spec.name)),
+                title_small("with_theme"),
+                body_medium(format!("重建：{count} ({:?})", theme.brightness)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px()),
         )
     });
 
-    let memoized_panel = memoize_with_spec(memo_tag, move |spec: &DesignSpec, tag| {
+    let memoized_panel = memoize_with_theme(memo_tag, move |theme: &Theme, tag| {
         let count = memo_counter.fetch_add(1, Ordering::Relaxed) + 1;
         elevated_card(
             flex_col((
-                title_small("memoize_with_spec"),
-                body_medium(format!("重建：{count} · {tag} ({})", spec.name)),
+                title_small("memoize_with_theme"),
+                body_medium(format!("重建：{count} · {tag} ({:?})", theme.brightness)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(4.px()),
@@ -87,7 +88,7 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
 
     let incremental_lab = elevated_card(
         flex_col((
-            title_medium("memoize_with_spec"),
+            title_medium("memoize_with_theme"),
             breakpoint_bin(
                 420.0,
                 flex_row((btn_inc(), btn_key(), btn_reset()))
@@ -162,67 +163,66 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         .gap(10.px()),
     );
 
-    let spec_card = filled_card(with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
-        let m = &spec.metrics;
+    let spec_card = filled_card(with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let semantic_wide = flex_row((
-            swatch(spec, "accent", p.accent, p.on_accent).flex(1.0),
+            swatch(theme, "primary", s.primary, s.on_primary).flex(1.0),
             swatch(
-                spec,
+                theme,
                 "secondary",
-                p.secondary_container,
-                p.on_secondary_container,
+                s.secondary_container,
+                s.on_secondary_container,
             )
             .flex(1.0),
-            swatch(spec, "success", p.success, p.on_success).flex(1.0),
-            swatch(spec, "warning", p.warning, p.on_warning).flex(1.0),
-            swatch(spec, "error", p.error, p.on_error).flex(1.0),
+            swatch(theme, "success", s.success, s.on_success).flex(1.0),
+            swatch(theme, "warning", s.warning, s.on_warning).flex(1.0),
+            swatch(theme, "error", s.error, s.on_error).flex(1.0),
         ))
         .gap(8.px());
 
         let semantic_narrow = flex_col((
             flex_row((
-                swatch(spec, "accent", p.accent, p.on_accent).flex(1.0),
+                swatch(theme, "primary", s.primary, s.on_primary).flex(1.0),
                 swatch(
-                    spec,
+                    theme,
                     "secondary",
-                    p.secondary_container,
-                    p.on_secondary_container,
+                    s.secondary_container,
+                    s.on_secondary_container,
                 )
                 .flex(1.0),
             ))
             .gap(6.px()),
             flex_row((
-                swatch(spec, "success", p.success, p.on_success).flex(1.0),
-                swatch(spec, "warning", p.warning, p.on_warning).flex(1.0),
+                swatch(theme, "success", s.success, s.on_success).flex(1.0),
+                swatch(theme, "warning", s.warning, s.on_warning).flex(1.0),
             ))
             .gap(6.px()),
-            swatch(spec, "error", p.error, p.on_error),
+            swatch(theme, "error", s.error, s.on_error),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(6.px());
 
         let surface_wide = flex_row((
-            swatch(spec, "window_bg", p.window_bg, p.text_primary).flex(1.0),
-            swatch(spec, "surface_low", p.surface_low, p.text_primary).flex(1.0),
-            swatch(spec, "surface", p.surface, p.text_primary).flex(1.0),
-            swatch(spec, "surface_high", p.surface_high, p.text_primary).flex(1.0),
-            swatch(spec, "header_bar", p.header_bar_bg, p.text_primary).flex(1.0),
+            swatch(theme, "surface", s.surface, s.on_surface).flex(1.0),
+            swatch(theme, "low", s.surface_container_low, s.on_surface).flex(1.0),
+            swatch(theme, "container", s.surface_container, s.on_surface).flex(1.0),
+            swatch(theme, "high", s.surface_container_high, s.on_surface).flex(1.0),
+            swatch(theme, "highest", s.surface_container_highest, s.on_surface).flex(1.0),
         ))
         .gap(8.px());
 
         let surface_narrow = flex_col((
             flex_row((
-                swatch(spec, "window_bg", p.window_bg, p.text_primary).flex(1.0),
-                swatch(spec, "surface_low", p.surface_low, p.text_primary).flex(1.0),
+                swatch(theme, "surface", s.surface, s.on_surface).flex(1.0),
+                swatch(theme, "low", s.surface_container_low, s.on_surface).flex(1.0),
             ))
             .gap(6.px()),
             flex_row((
-                swatch(spec, "surface", p.surface, p.text_primary).flex(1.0),
-                swatch(spec, "surface_high", p.surface_high, p.text_primary).flex(1.0),
+                swatch(theme, "container", s.surface_container, s.on_surface).flex(1.0),
+                swatch(theme, "high", s.surface_container_high, s.on_surface).flex(1.0),
             ))
             .gap(6.px()),
-            swatch(spec, "header_bar", p.header_bar_bg, p.text_primary),
+            swatch(theme, "highest", s.surface_container_highest, s.on_surface),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(6.px());
@@ -249,17 +249,17 @@ pub fn lab_page(state: &mut GalleryState) -> impl WidgetView<GalleryState> + use
         .run_gap(6.px());
 
         flex_col((
-            title_medium("DesignSpec"),
+            title_medium("Material 3 Expressive Theme"),
             flex_col((
                 body_small(format!(
-                    "{} · {:?} · {:?}",
-                    spec.name, spec.brightness, spec.backdrop,
+                    "M3 Expressive · {:?} · {:?}",
+                    theme.brightness, theme.contrast,
                 )),
                 body_small(format!(
                     "btn={}px / r={}px · 快捷键={}",
-                    m.button_height,
-                    m.button_radius,
-                    spec.shortcut_convention.format_primary("S"),
+                    BUTTON_HEIGHT,
+                    BUTTON_RADIUS,
+                    format_shortcut_primary("S"),
                 )),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Start)

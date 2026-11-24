@@ -17,12 +17,12 @@ use image::ImageFormat;
 mod preview_support;
 
 use preview_support::scenes::{ALL_SCENES, SceneOutput, build_scene_harness, run_scene_preview};
-use preview_support::{lint_spec_contrast, lint_ui_accessibility, lint_ui_layout};
+use preview_support::{lint_theme_contrast, lint_ui_accessibility, lint_ui_layout};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "ui_preview",
-    about = "Render Brocado scenes offline to PNG + Layout JSON/Tree + Lint diagnostics"
+    about = "Render Brocado Material 3 Expressive scenes offline to PNG + Layout JSON/Tree + Lint diagnostics"
 )]
 struct Cli {
     /// List available preview scene IDs and exit.
@@ -33,17 +33,17 @@ struct Cli {
     #[arg(long, default_value = "workspace")]
     scene: String,
 
-    /// Theme selector ("md3" or "all").
-    #[arg(long, default_value = "all")]
-    themes: String,
+    /// Seed color preset (purple, blue, teal, green, pink, orange, red, indigo) or #RRGGBB hex.
+    #[arg(long, default_value = "purple")]
+    seed: String,
 
     /// Comma-separated brightness modes: light, dark, or "all".
     #[arg(long, default_value = "light")]
     brightness: String,
 
-    /// Enable high-contrast mode.
-    #[arg(long)]
-    high_contrast: bool,
+    /// Contrast tier: standard, medium, or high.
+    #[arg(long, default_value = "standard")]
+    contrast: String,
 
     /// Viewport preset (compact, medium, desktop) or WxH pixels (e.g. 1180x800).
     #[arg(long, default_value = "1180x800")]
@@ -117,20 +117,33 @@ fn parse_scenes(spec: &str) -> anyhow::Result<Vec<&'static str>> {
     Ok(out)
 }
 
-fn parse_themes(spec: &str) -> anyhow::Result<Vec<(DesignLanguage, &'static str)>> {
-    if spec.eq_ignore_ascii_case("all") {
-        return Ok(vec![(DesignLanguage::Md3, "md3")]);
+fn parse_seed(raw: &str) -> anyhow::Result<(Color, String)> {
+    let trimmed = raw.trim();
+    if let Some((name, color)) = seeds::PRESETS
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(trimmed))
+    {
+        return Ok((*color, name.to_ascii_lowercase()));
     }
-    let mut out = Vec::new();
-    for raw in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-        let pair = match raw.to_ascii_lowercase().as_str() {
-            "md3" => (DesignLanguage::Md3, "md3"),
-            other => bail!("unknown theme '{other}' (expected md3 or all)"),
-        };
-        out.push(pair);
+    let hex = trimmed.trim_start_matches('#');
+    if hex.len() == 6
+        && let Ok(val) = u32::from_str_radix(hex, 16)
+    {
+        let r = ((val >> 16) & 0xFF) as u8;
+        let g = ((val >> 8) & 0xFF) as u8;
+        let b = (val & 0xFF) as u8;
+        return Ok((Color::from_rgb8(r, g, b), format!("seed_{hex}")));
     }
-    anyhow::ensure!(!out.is_empty(), "at least one theme is required");
-    Ok(out)
+    bail!("unknown seed '{raw}' (expected preset name like purple/teal/blue or #RRGGBB hex)")
+}
+
+fn parse_contrast(raw: &str) -> anyhow::Result<(ContrastLevel, &'static str)> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "standard" => Ok((ContrastLevel::Standard, "")),
+        "medium" => Ok((ContrastLevel::Medium, "_mc")),
+        "high" => Ok((ContrastLevel::High, "_hc")),
+        other => bail!("unknown contrast '{other}' (expected standard, medium, or high)"),
+    }
 }
 
 fn parse_brightness(spec: &str) -> anyhow::Result<Vec<(Brightness, &'static str)>> {
@@ -166,7 +179,8 @@ fn main() -> anyhow::Result<()> {
 
     let (width, height) = parse_size(&cli.size)?;
     let scenes = parse_scenes(&cli.scene)?;
-    let themes = parse_themes(&cli.themes)?;
+    let (seed_color, seed_slug) = parse_seed(&cli.seed)?;
+    let (contrast, hc_suffix) = parse_contrast(&cli.contrast)?;
     let modes = parse_brightness(&cli.brightness)?;
     let steps: Vec<PreviewStep> = cli
         .steps
@@ -188,113 +202,109 @@ fn main() -> anyhow::Result<()> {
     let mut report_entries = Vec::new();
 
     for scene_id in &scenes {
-        for (lang, lang_slug) in &themes {
-            for (brightness, bright_slug) in &modes {
-                let mut theme = UiTheme::new(*lang, *brightness);
-                theme.high_contrast = cli.high_contrast;
-                let hc_suffix = if cli.high_contrast { "_hc" } else { "" };
-                let bright_label = format!("{bright_slug}{hc_suffix}");
-                let base_name = format!("{scene_id}_{lang_slug}_{bright_label}");
+        for (brightness, bright_slug) in &modes {
+            let theme = Theme::from_seed(seed_color, *brightness).with_contrast(contrast);
+            let bright_label = format!("{bright_slug}{hc_suffix}");
+            let base_name = format!("{scene_id}_{seed_slug}_{bright_label}");
 
-                let t0 = Instant::now();
-                let output = if cli.no_settle {
-                    let mut h = build_scene_harness(scene_id, theme, config)?;
-                    h.run_steps(&steps)?;
-                    let image = h.render_image();
-                    let tree = brocado_preview::inspect::dump_layout_tree(&mut h);
-                    let layout_issues = lint_ui_layout(&tree, h.viewport());
-                    let contrast_issues = lint_spec_contrast(&h.state().theme.to_spec());
-                    let a11y_issues = lint_ui_accessibility(&mut h);
-                    SceneOutput {
-                        image,
-                        tree,
-                        layout_issues,
-                        contrast_issues,
-                        a11y_issues,
-                    }
-                } else {
-                    run_scene_preview(scene_id, theme, config, &steps)?
-                };
-                let elapsed_ms = t0.elapsed().as_millis();
-
-                let image_filename = format!("{base_name}.png");
-                let png_path = cli.out.join(&image_filename);
-                output
-                    .image
-                    .save_with_format(&png_path, ImageFormat::Png)
-                    .with_context(|| format!("failed saving {}", png_path.display()))?;
-
-                let tree_text = if cli.dump_tree {
-                    let text = format_tree_text(&output.tree);
-                    let tree_path = cli.out.join(format!("{base_name}.tree.txt"));
-                    let json_path = cli.out.join(format!("{base_name}.layout.json"));
-                    fs::write(&tree_path, &text)?;
-                    fs::write(&json_path, serde_json::to_string_pretty(&output.tree)?)?;
-                    Some(text)
-                } else {
-                    None
-                };
-
-                let err_count = output
-                    .layout_issues
-                    .iter()
-                    .filter(|i| i.severity == IssueSeverity::Error)
-                    .count();
-                let warn_count = output.layout_issues.len() - err_count;
-                let contrast_count = output.contrast_issues.len();
-                let a11y_count = output.a11y_issues.len();
-
-                println!(
-                    "[preview] {} ({}ms) -> layout: {} errors / {} warnings, contrast: {} issues, a11y: {} issues",
-                    png_path.display(),
-                    elapsed_ms,
-                    err_count,
-                    warn_count,
-                    contrast_count,
-                    a11y_count,
-                );
-
-                if cli.lint || cli.fail_on_lint {
-                    for issue in &output.layout_issues {
-                        println!(
-                            "  [layout:{:?}:{}] {}",
-                            issue.severity, issue.kind, issue.message
-                        );
-                    }
-                    for issue in &output.contrast_issues {
-                        println!(
-                            "  [contrast] {} = {:.2}:1 (< {:.2}:1)",
-                            issue.pair, issue.ratio, issue.minimum
-                        );
-                    }
-                    for issue in &output.a11y_issues {
-                        println!(
-                            "  [a11y:{:?}:{}] {}",
-                            issue.severity, issue.kind, issue.message
-                        );
-                    }
+            let t0 = Instant::now();
+            let output = if cli.no_settle {
+                let mut h = build_scene_harness(scene_id, theme, config)?;
+                h.run_steps(&steps)?;
+                let image = h.render_image();
+                let tree = brocado_preview::inspect::dump_layout_tree(&mut h);
+                let layout_issues = lint_ui_layout(&tree, h.viewport());
+                let contrast_issues = lint_theme_contrast(&h.state().theme);
+                let a11y_issues = lint_ui_accessibility(&mut h);
+                SceneOutput {
+                    image,
+                    tree,
+                    layout_issues,
+                    contrast_issues,
+                    a11y_issues,
                 }
+            } else {
+                run_scene_preview(scene_id, theme, config, &steps)?
+            };
+            let elapsed_ms = t0.elapsed().as_millis();
 
-                if cli.fail_on_lint {
-                    total_lint_failures += err_count + contrast_count + a11y_count;
+            let image_filename = format!("{base_name}.png");
+            let png_path = cli.out.join(&image_filename);
+            output
+                .image
+                .save_with_format(&png_path, ImageFormat::Png)
+                .with_context(|| format!("failed saving {}", png_path.display()))?;
+
+            let tree_text = if cli.dump_tree {
+                let text = format_tree_text(&output.tree);
+                let tree_path = cli.out.join(format!("{base_name}.tree.txt"));
+                let json_path = cli.out.join(format!("{base_name}.layout.json"));
+                fs::write(&tree_path, &text)?;
+                fs::write(&json_path, serde_json::to_string_pretty(&output.tree)?)?;
+                Some(text)
+            } else {
+                None
+            };
+
+            let err_count = output
+                .layout_issues
+                .iter()
+                .filter(|i| i.severity == IssueSeverity::Error)
+                .count();
+            let warn_count = output.layout_issues.len() - err_count;
+            let contrast_count = output.contrast_issues.len();
+            let a11y_count = output.a11y_issues.len();
+
+            println!(
+                "[preview] {} ({}ms) -> layout: {} errors / {} warnings, contrast: {} issues, a11y: {} issues",
+                png_path.display(),
+                elapsed_ms,
+                err_count,
+                warn_count,
+                contrast_count,
+                a11y_count,
+            );
+
+            if cli.lint || cli.fail_on_lint {
+                for issue in &output.layout_issues {
+                    println!(
+                        "  [layout:{:?}:{}] {}",
+                        issue.severity, issue.kind, issue.message
+                    );
                 }
-
-                report_entries.push(PreviewReportEntry {
-                    name: base_name,
-                    scene: (*scene_id).to_string(),
-                    theme: lang_slug.to_string(),
-                    brightness: bright_label,
-                    viewport: (width, height),
-                    scale_factor: cli.scale,
-                    elapsed_ms,
-                    image_path: image_filename,
-                    diff_image_path: None,
-                    layout_issues: output.layout_issues,
-                    contrast_issues: output.contrast_issues,
-                    a11y_issues: output.a11y_issues,
-                    tree_text,
-                });
+                for issue in &output.contrast_issues {
+                    println!(
+                        "  [contrast] {} = {:.2}:1 (< {:.2}:1)",
+                        issue.pair, issue.ratio, issue.minimum
+                    );
+                }
+                for issue in &output.a11y_issues {
+                    println!(
+                        "  [a11y:{:?}:{}] {}",
+                        issue.severity, issue.kind, issue.message
+                    );
+                }
             }
+
+            if cli.fail_on_lint {
+                total_lint_failures += err_count + contrast_count + a11y_count;
+            }
+
+            report_entries.push(PreviewReportEntry {
+                name: base_name,
+                scene: (*scene_id).to_string(),
+                theme: seed_slug.clone(),
+                brightness: bright_label,
+                viewport: (width, height),
+                scale_factor: cli.scale,
+                elapsed_ms,
+                image_path: image_filename,
+                diff_image_path: None,
+                layout_issues: output.layout_issues,
+                contrast_issues: output.contrast_issues,
+                a11y_issues: output.a11y_issues,
+                tree_text,
+            });
         }
     }
 

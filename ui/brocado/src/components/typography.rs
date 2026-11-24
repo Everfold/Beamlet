@@ -1,4 +1,4 @@
-//! Typographic text components bound to the active [`DesignSpec`](crate::tokens::DesignSpec) scale.
+//! Typographic text components bound to the active [`Theme`](crate::theme::Theme) scale.
 
 use std::marker::PhantomData;
 
@@ -12,10 +12,10 @@ use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 
-use crate::style_engine::current_spec_arc;
+use crate::style_engine::current_theme_arc;
 use crate::tokens::{TextStyleSpec, TypeRole};
 
-/// Label view styled via a semantic [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
+/// Label view styled via a semantic [`TypeRole`] from the active [`Theme`](crate::theme::Theme).
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
 pub struct UiLabel<State, Action> {
@@ -61,15 +61,15 @@ impl<State, Action> UiLabel<State, Action> {
     }
 
     fn resolved_style(&self, ctx: &ViewCtx) -> (TextStyleSpec, FontFamily<'static>, LineHeight) {
-        let spec = current_spec_arc(ctx);
-        let mut style = spec.typography.get(self.role);
+        let theme = current_theme_arc(ctx);
+        let mut style = theme.typography.get(self.role);
         if let Some(w) = self.weight {
             style.weight = w;
         }
         let lh = self
             .line_height
             .unwrap_or(LineHeight::Absolute(style.line_height));
-        (style, spec.typography.resolved_font_family(), lh)
+        (style, theme.typography.resolved_font_family(), lh)
     }
 }
 
@@ -190,7 +190,7 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiLabel<S
     }
 }
 
-/// Creates a semantic label styled using `role` from the active [`DesignSpec`](crate::tokens::DesignSpec).
+/// Creates a semantic label styled using `role` from the active [`Theme`](crate::theme::Theme).
 pub fn ui_label<State: 'static, Action: 'static>(
     role: TypeRole,
     text: impl Into<ArcStr>,
@@ -207,7 +207,7 @@ pub fn ui_label<State: 'static, Action: 'static>(
     }
 }
 
-/// Multi-line wrapping prose view styled via [`TypeRole`] from the active [`DesignSpec`](crate::tokens::DesignSpec).
+/// Multi-line wrapping prose view styled via [`TypeRole`] from the active [`Theme`](crate::theme::Theme).
 #[must_use = "View values do nothing unless provided to Brocado."]
 #[derive(Debug)]
 pub struct UiProse<State, Action> {
@@ -232,9 +232,9 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<S
     type ViewState = (ArcStr, TextStyleSpec, FontFamily<'static>, Option<Color>);
 
     fn build(&self, ctx: &mut ViewCtx, _app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let style = spec.typography.get(self.role);
-        let font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let style = theme.typography.get(self.role);
+        let font = theme.typography.resolved_font_family();
         let text_area = widgets::TextArea::new_immutable(&self.text)
             .with_style(StyleProperty::FontSize(style.font_size))
             .with_style(StyleProperty::FontWeight(style.weight))
@@ -262,9 +262,9 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiProse<S
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_style = spec.typography.get(self.role);
-        let next_font = spec.typography.resolved_font_family();
+        let theme = current_theme_arc(ctx);
+        let next_style = theme.typography.get(self.role);
+        let next_font = theme.typography.resolved_font_family();
 
         let mut text_area = widgets::Prose::text_mut(&mut element);
         if *prev_color != self.color {

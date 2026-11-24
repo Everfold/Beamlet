@@ -1,17 +1,10 @@
-//! Perceptual OKLCH dynamic Material Design 3 `ColorScheme` generator and contrast helpers.
+//! Perceptual OKLCH dynamic Material Design 3 Expressive `ColorScheme` generator and contrast helpers.
 
-use crate::tokens::{Brightness, SemanticPalette};
+use crate::tokens::Brightness;
 use masonry::peniko::Color;
 
-/// Material Design 3 color expression variant.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Md3ColorVariant {
-    /// Original Material 3 tonal chroma profile.
-    Baseline,
-    /// Material 3 Expressive higher-chroma, expanded-hue tonal profile.
-    #[default]
-    Expressive,
-}
+/// Default Material 3 seed color (`#6750A4`).
+pub const DEFAULT_SEED: Color = Color::from_rgb8(0x67, 0x50, 0xA4);
 
 /// Accessibility contrast tier for dynamic Material 3 palettes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -25,7 +18,7 @@ pub enum ContrastLevel {
     High,
 }
 
-/// Material Design 3 semantic color roles derived from an arbitrary seed color via OKLCH.
+/// Material Design 3 Expressive semantic color roles derived from an arbitrary seed color via OKLCH.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ColorScheme {
     /// Polarity (Light or Dark).
@@ -80,6 +73,14 @@ pub struct ColorScheme {
     pub on_tertiary_fixed: Color,
     /// Lower-emphasis ink painted on tertiary fixed containers.
     pub on_tertiary_fixed_variant: Color,
+    /// Positive / completion status color.
+    pub success: Color,
+    /// Ink painted on [`success`](Self::success).
+    pub on_success: Color,
+    /// Caution / warning status color.
+    pub warning: Color,
+    /// Ink painted on [`warning`](Self::warning).
+    pub on_warning: Color,
     /// Validation / destructive error color.
     pub error: Color,
     /// Ink painted on [`error`](Self::error).
@@ -122,55 +123,15 @@ impl ColorScheme {
     /// Generates a Material 3 Expressive color scheme from `seed`, `brightness`, and `contrast`.
     #[must_use]
     pub fn from_seed(seed: Color, brightness: Brightness, contrast: ContrastLevel) -> Self {
-        Self::from_seed_with_variant(seed, brightness, contrast, Md3ColorVariant::Expressive)
-    }
-
-    /// Generates a Material 3 color scheme for the explicit [`Md3ColorVariant`].
-    #[must_use]
-    pub fn from_seed_with_variant(
-        seed: Color,
-        brightness: Brightness,
-        contrast: ContrastLevel,
-        variant: Md3ColorVariant,
-    ) -> Self {
         let (_, seed_c, hue) = srgb_to_oklch(seed);
-        let (
-            c_primary,
-            c_secondary,
-            c_tertiary,
-            hue_tertiary,
-            c_neutral,
-            c_neutral_var,
-            container_chroma_scale,
-            light_tone_shift,
-        ) = match variant {
-            Md3ColorVariant::Baseline => {
-                let c_primary = seed_c.clamp(0.11, 0.22);
-                (
-                    c_primary,
-                    (c_primary * 0.40).clamp(0.03, 0.08),
-                    (c_primary * 0.72).clamp(0.06, 0.16),
-                    (hue + 60.0).rem_euclid(360.0),
-                    (c_primary * 0.08).clamp(0.008, 0.025),
-                    (c_primary * 0.14).clamp(0.014, 0.045),
-                    1.0,
-                    0.0,
-                )
-            }
-            Md3ColorVariant::Expressive => {
-                let c_primary = (seed_c * 1.18).clamp(0.13, 0.24);
-                (
-                    c_primary,
-                    (c_primary * 0.50).clamp(0.045, 0.10),
-                    (c_primary * 0.85).clamp(0.08, 0.20),
-                    (hue + 75.0).rem_euclid(360.0),
-                    (c_primary * 0.09).clamp(0.010, 0.028),
-                    (c_primary * 0.16).clamp(0.016, 0.050),
-                    1.22,
-                    0.03,
-                )
-            }
-        };
+        let c_primary = (seed_c * 1.18).clamp(0.13, 0.24);
+        let c_secondary = (c_primary * 0.50).clamp(0.045, 0.10);
+        let c_tertiary = (c_primary * 0.85).clamp(0.08, 0.20);
+        let hue_tertiary = (hue + 75.0).rem_euclid(360.0);
+        let c_neutral = (c_primary * 0.09).clamp(0.010, 0.028);
+        let c_neutral_var = (c_primary * 0.16).clamp(0.016, 0.050);
+        let container_chroma_scale = 1.22;
+        let light_tone_shift = 0.03;
 
         let boost: f64 = match contrast {
             ContrastLevel::Standard => 0.0,
@@ -191,6 +152,10 @@ impl ColorScheme {
             on_tertiary,
             tertiary_container,
             on_tertiary_container,
+            success,
+            on_success,
+            warning,
+            on_warning,
             error,
             on_error,
             error_container,
@@ -233,6 +198,10 @@ impl ColorScheme {
                     hue_tertiary,
                 ),
                 oklch((0.24 - boost).max(0.10), c_tertiary * 0.85, hue_tertiary),
+                Color::from_rgb8(0x1B, 0x6E, 0x2D),
+                Color::WHITE,
+                Color::from_rgb8(0x8C, 0x50, 0x00),
+                Color::WHITE,
                 oklch((0.51 - boost).max(0.34), 0.18, 25.0),
                 Color::WHITE,
                 oklch(0.92, 0.05, 25.0),
@@ -271,6 +240,10 @@ impl ColorScheme {
                 ),
                 oklch(0.36, c_tertiary * 0.65, hue_tertiary),
                 oklch(0.92, c_tertiary * 0.40, hue_tertiary),
+                Color::from_rgb8(0x78, 0xDC, 0x77),
+                Color::from_rgb8(0x00, 0x39, 0x0F),
+                Color::from_rgb8(0xFF, 0xB9, 0x51),
+                Color::from_rgb8(0x47, 0x2A, 0x00),
                 oklch((0.77 + boost * 0.5).min(0.90), 0.14, 25.0),
                 oklch(0.22, 0.12, 25.0),
                 oklch(0.36, 0.13, 25.0),
@@ -334,6 +307,10 @@ impl ColorScheme {
             tertiary_fixed_dim,
             on_tertiary_fixed,
             on_tertiary_fixed_variant,
+            success,
+            on_success,
+            warning,
+            on_warning,
             error,
             on_error,
             error_container,
@@ -355,79 +332,16 @@ impl ColorScheme {
         }
     }
 
-    /// Baseline Material 3 light scheme from Material purple seed `#6750A4`.
+    /// Default Material 3 Expressive light scheme from [`DEFAULT_SEED`] (`#6750A4`).
     #[must_use]
-    pub fn baseline_light() -> Self {
-        Self::from_seed(
-            Color::from_rgb8(0x67, 0x50, 0xA4),
-            Brightness::Light,
-            ContrastLevel::Standard,
-        )
+    pub fn light() -> Self {
+        Self::from_seed(DEFAULT_SEED, Brightness::Light, ContrastLevel::Standard)
     }
 
-    /// Baseline Material 3 dark scheme from Material purple seed `#6750A4`.
+    /// Default Material 3 Expressive dark scheme from [`DEFAULT_SEED`] (`#6750A4`).
     #[must_use]
-    pub fn baseline_dark() -> Self {
-        Self::from_seed(
-            Color::from_rgb8(0x67, 0x50, 0xA4),
-            Brightness::Dark,
-            ContrastLevel::Standard,
-        )
-    }
-
-    /// Converts this MD3 scheme into the cross-theme [`SemanticPalette`].
-    #[must_use]
-    pub fn to_semantic_palette(&self) -> SemanticPalette {
-        let (success, on_success, warning, on_warning) = match self.brightness {
-            Brightness::Light => (
-                Color::from_rgb8(0x1B, 0x6E, 0x2D),
-                Color::WHITE,
-                Color::from_rgb8(0x8C, 0x50, 0x00),
-                Color::WHITE,
-            ),
-            Brightness::Dark => (
-                Color::from_rgb8(0x78, 0xDC, 0x77),
-                Color::from_rgb8(0x00, 0x39, 0x0F),
-                Color::from_rgb8(0xFF, 0xB9, 0x51),
-                Color::from_rgb8(0x47, 0x2A, 0x00),
-            ),
-        };
-        SemanticPalette {
-            accent: self.primary,
-            on_accent: self.on_primary,
-            accent_container: self.primary_container,
-            on_accent_container: self.on_primary_container,
-            secondary: self.secondary,
-            on_secondary: self.on_secondary,
-            secondary_container: self.secondary_container,
-            on_secondary_container: self.on_secondary_container,
-            tertiary_container: self.tertiary_container,
-            on_tertiary_container: self.on_tertiary_container,
-            window_bg: self.surface,
-            surface: self.surface,
-            surface_low: self.surface_container_low,
-            surface_container: self.surface_container,
-            surface_high: self.surface_container_high,
-            surface_highest: self.surface_container_highest,
-            header_bar_bg: self.surface_container,
-            sidebar_bg: self.surface_container_low,
-            popup_bg: self.surface_container_high,
-            text_primary: self.on_surface,
-            text_secondary: self.on_surface_variant,
-            border: self.outline_variant,
-            border_strong: self.outline,
-            divider: self.outline_variant,
-            success,
-            on_success,
-            warning,
-            on_warning,
-            error: self.error,
-            on_error: self.on_error,
-            inverse_surface: self.inverse_surface,
-            inverse_on_surface: self.inverse_on_surface,
-            scrim: self.scrim,
-            shadow: self.shadow,
-        }
+    pub fn dark() -> Self {
+        Self::from_seed(DEFAULT_SEED, Brightness::Dark, ContrastLevel::Standard)
     }
 }
 
@@ -527,15 +441,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn baseline_light_and_dark_meet_wcag_aa() {
-        let light = ColorScheme::baseline_light();
-        let dark = ColorScheme::baseline_dark();
+    fn default_light_and_dark_meet_wcag_aa() {
+        let light = ColorScheme::light();
+        let dark = ColorScheme::dark();
 
         assert!(contrast_ratio(light.on_surface, light.surface) >= 4.5);
         assert!(contrast_ratio(light.on_primary, light.primary) >= 4.5);
         assert!(contrast_ratio(light.on_error, light.error) >= 4.5);
+        assert!(contrast_ratio(light.on_success, light.success) >= 4.5);
+        assert!(contrast_ratio(light.on_warning, light.warning) >= 4.5);
         assert!(contrast_ratio(dark.on_surface, dark.surface) >= 4.5);
         assert!(contrast_ratio(dark.on_primary, dark.primary) >= 4.5);
+        assert!(contrast_ratio(dark.on_success, dark.success) >= 4.5);
+        assert!(contrast_ratio(dark.on_warning, dark.warning) >= 4.5);
     }
 
     #[test]
@@ -600,38 +518,18 @@ mod tests {
     }
 
     #[test]
-    fn expressive_palette_boosts_chroma_and_meets_wcag_aa() {
+    fn expressive_palette_meets_wcag_aa_across_seeds_and_tiers() {
         let seeds = [
-            Color::from_rgb8(0x67, 0x50, 0xA4),
+            DEFAULT_SEED,
             Color::from_rgb8(0x00, 0x6A, 0x60),
             Color::from_rgb8(0x33, 0x66, 0xCC),
         ];
 
         for seed in seeds {
-            let base = ColorScheme::from_seed_with_variant(
-                seed,
-                Brightness::Light,
-                ContrastLevel::Standard,
-                Md3ColorVariant::Baseline,
-            );
-            let exp = ColorScheme::from_seed_with_variant(
-                seed,
-                Brightness::Light,
-                ContrastLevel::Standard,
-                Md3ColorVariant::Expressive,
-            );
-            assert!(
-                oklch_chroma(exp.primary_container) > oklch_chroma(base.primary_container),
-                "expressive primary_container chroma should exceed baseline for {seed:?}"
-            );
-            assert!(
-                oklch_chroma(exp.secondary) >= oklch_chroma(base.secondary),
-                "expressive secondary chroma should meet or exceed baseline"
-            );
-            assert!(
-                oklch_chroma(exp.tertiary) >= oklch_chroma(base.tertiary),
-                "expressive tertiary chroma should meet or exceed baseline"
-            );
+            let exp = ColorScheme::from_seed(seed, Brightness::Light, ContrastLevel::Standard);
+            assert!(oklch_chroma(exp.primary_container) > 0.05);
+            assert!(oklch_chroma(exp.secondary) >= 0.04);
+            assert!(oklch_chroma(exp.tertiary) >= 0.07);
 
             for brightness in [Brightness::Light, Brightness::Dark] {
                 for contrast in [
@@ -639,12 +537,7 @@ mod tests {
                     ContrastLevel::Medium,
                     ContrastLevel::High,
                 ] {
-                    let scheme = ColorScheme::from_seed_with_variant(
-                        seed,
-                        brightness,
-                        contrast,
-                        Md3ColorVariant::Expressive,
-                    );
+                    let scheme = ColorScheme::from_seed(seed, brightness, contrast);
                     assert!(contrast_ratio(scheme.on_primary, scheme.primary) >= 4.5);
                     assert!(contrast_ratio(scheme.on_surface, scheme.surface) >= 4.5);
                     assert!(contrast_ratio(scheme.on_secondary, scheme.secondary) >= 4.5);

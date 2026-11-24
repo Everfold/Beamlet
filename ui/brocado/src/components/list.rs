@@ -21,12 +21,14 @@ use xilem_masonry::view::{
 use crate::components::divider::horizontal_divider;
 use crate::components::typography::ui_label;
 use crate::foundation::{UiClassExt, adaptive_pair};
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::NAV_PILL_RADIUS;
+use crate::tokens::TypeRole;
 
 /// Slot view factory stored in [`UiListItem`].
 pub type ListSlotFactory<State, Action> =
-    Arc<dyn Fn(&DesignSpec) -> Box<AnyWidgetView<State, Action>> + Send + Sync>;
+    Arc<dyn Fn(&Theme) -> Box<AnyWidgetView<State, Action>> + Send + Sync>;
 
 /// List click handler type.
 pub type ListClickCallback<State, Action> = Arc<dyn Fn(&mut State) -> Action + Send + Sync>;
@@ -71,24 +73,24 @@ impl<State, Action> UiListItem<State, Action> {
     /// Attaches an arbitrary leading slot view.
     pub fn leading<F, V>(mut self, f: F) -> Self
     where
-        F: Fn(&DesignSpec) -> V + Send + Sync + 'static,
+        F: Fn(&Theme) -> V + Send + Sync + 'static,
         V: WidgetView<State, Action>,
         State: 'static,
         Action: 'static,
     {
-        self.leading = Some(Arc::new(move |spec| f(spec).boxed()));
+        self.leading = Some(Arc::new(move |theme| f(theme).boxed()));
         self
     }
 
     /// Attaches an arbitrary trailing slot view.
     pub fn trailing<F, V>(mut self, f: F) -> Self
     where
-        F: Fn(&DesignSpec) -> V + Send + Sync + 'static,
+        F: Fn(&Theme) -> V + Send + Sync + 'static,
         V: WidgetView<State, Action>,
         State: 'static,
         Action: 'static,
     {
-        self.trailing = Some(Arc::new(move |spec| f(spec).boxed()));
+        self.trailing = Some(Arc::new(move |theme| f(theme).boxed()));
         self
     }
 
@@ -104,21 +106,21 @@ impl<State, Action> UiListItem<State, Action> {
         self
     }
 
-    fn build_flex(&self, spec: &DesignSpec) -> ListOuterFlex<State, Action>
+    fn build_flex(&self, theme: &Theme) -> ListOuterFlex<State, Action>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
+        let s = &theme.scheme;
         let ink = if self.selected {
-            p.on_secondary_container
+            s.on_secondary_container
         } else {
-            p.text_primary
+            s.on_surface
         };
         let sub_ink = if self.selected {
-            p.on_secondary_container
+            s.on_secondary_container
         } else {
-            p.text_secondary
+            s.on_surface_variant
         };
 
         let overline = self
@@ -134,8 +136,8 @@ impl<State, Action> UiListItem<State, Action> {
         let text_col = flex_col((overline, head, supporting))
             .cross_axis_alignment(CrossAxisAlignment::Start)
             .gap(2.px());
-        let lead = self.leading.as_ref().map(|f| f(spec));
-        let trail = self.trailing.as_ref().map(|f| f(spec));
+        let lead = self.leading.as_ref().map(|f| f(theme));
+        let trail = self.trailing.as_ref().map(|f| f(theme));
 
         let row: Box<AnyWidgetView<State, Action>> = if let Some(trail) = trail {
             adaptive_pair(
@@ -167,13 +169,13 @@ impl<State, Action> UiListItem<State, Action> {
                 .boxed()
         } else {
             let bg = if self.selected {
-                p.secondary_container
+                s.secondary_container
             } else {
                 Color::TRANSPARENT
             };
             row.padding(Padding::from_vh(8.px(), 12.px()))
                 .background_color(bg)
-                .corner_radius(spec.metrics.nav_pill_radius.px())
+                .corner_radius(NAV_PILL_RADIUS.px())
                 .boxed()
         };
 
@@ -192,8 +194,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiListIte
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let flex = self.build_flex(&theme);
         let (pod, st) = flex.build(ctx, app_state);
         (pod, (flex, st))
     }
@@ -206,8 +208,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiListIte
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_flex = self.build_flex(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_flex = self.build_flex(&theme);
         next_flex.rebuild(prev_flex, st, ctx, element, app_state);
         *prev_flex = next_flex;
     }

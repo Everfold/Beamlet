@@ -3,7 +3,7 @@
 //! Upstream provenance: Viewport range clamping (`compute_pan_range`), `measure` semantics,
 //! and normalized scrollbar thumb/track math follow upstream Linebender Masonry
 //! (`masonry/src/widgets/{portal,scroll_bar}.rs`), adapted into a non-generic widget driven
-//! by [`ScrollBarStyle`] properties and Brocado [`DesignSpec`] tokens.
+//! by [`ScrollBarStyle`] properties and Brocado [`Theme`](crate::theme::Theme) tokens.
 
 use std::any::TypeId;
 use std::marker::PhantomData;
@@ -28,7 +28,7 @@ use xilem_masonry::{Pod, ViewCtx, WidgetView};
 
 use crate::foundation::bounded::{FitAxis, ScrollAxis};
 use crate::foundation::state_layer::with_opacity;
-use crate::tokens::{ControlVisualGrammar, DesignSpec};
+use crate::theme::Theme;
 
 const SCROLL_LINE_STEP: f64 = 120.0;
 const SCROLLBAR_FADE_MS: f64 = 160.0;
@@ -49,7 +49,7 @@ pub enum ScrollBarVisibility {
 
 /// Visual and behavioral style properties for [`ScrollViewWidget`] and [`UiScrollBar`].
 ///
-/// Register via Masonry `DefaultProperties` (automatically configured per [`DesignSpec`]) or
+/// Register via Masonry `DefaultProperties` (automatically configured per [`Theme`]) or
 /// override on a specific [`ScrollView`] with [`ScrollView::scrollbar_style`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollBarStyle {
@@ -109,71 +109,24 @@ impl Default for ScrollBarStyle {
 }
 
 impl ScrollBarStyle {
-    /// Derives the platform-idiomatic [`ScrollBarStyle`] for `spec`.
+    /// Derives the Material Design 3 [`ScrollBarStyle`] for `theme`.
     #[must_use]
-    pub fn from_spec(spec: &DesignSpec) -> Self {
-        let p = &spec.palette;
-        match spec.control_grammar() {
-            ControlVisualGrammar::MacosHig => Self {
-                visibility: ScrollBarVisibility::OverlayAutoHide,
-                thumb_color: with_opacity(p.text_primary, 0.34),
-                thumb_hover_color: with_opacity(p.text_primary, 0.52),
-                thumb_active_color: with_opacity(p.text_primary, 0.70),
-                track_color: None,
-                track_border_color: None,
-                thickness: 6.0,
-                hover_thickness: 8.0,
-                padding: 2.0,
-                corner_radius: 999.0,
-                min_thumb_length: 32.0,
-                auto_hide_delay_ms: 800,
-                reduced_motion: spec.reduced_motion,
-            },
-            ControlVisualGrammar::Fluent2 => Self {
-                visibility: ScrollBarVisibility::OverlayAutoHide,
-                thumb_color: with_opacity(p.text_secondary, 0.44),
-                thumb_hover_color: with_opacity(p.text_secondary, 0.64),
-                thumb_active_color: with_opacity(p.text_secondary, 0.82),
-                track_color: Some(with_opacity(p.surface_highest, 0.74)),
-                track_border_color: Some(with_opacity(p.border, 0.45)),
-                thickness: 4.0,
-                hover_thickness: 10.0,
-                padding: 2.0,
-                corner_radius: 999.0,
-                min_thumb_length: 32.0,
-                auto_hide_delay_ms: 800,
-                reduced_motion: spec.reduced_motion,
-            },
-            ControlVisualGrammar::Adwaita => Self {
-                visibility: ScrollBarVisibility::OverlayAutoHide,
-                thumb_color: with_opacity(p.text_primary, 0.28),
-                thumb_hover_color: with_opacity(p.text_primary, 0.48),
-                thumb_active_color: with_opacity(p.text_primary, 0.68),
-                track_color: Some(with_opacity(p.surface_high, 0.55)),
-                track_border_color: None,
-                thickness: 6.0,
-                hover_thickness: 9.0,
-                padding: 2.0,
-                corner_radius: 999.0,
-                min_thumb_length: 32.0,
-                auto_hide_delay_ms: 800,
-                reduced_motion: spec.reduced_motion,
-            },
-            ControlVisualGrammar::Material3 => Self {
-                visibility: ScrollBarVisibility::OverlayAutoHide,
-                thumb_color: with_opacity(p.text_secondary, 0.38),
-                thumb_hover_color: with_opacity(p.text_secondary, 0.58),
-                thumb_active_color: with_opacity(p.text_secondary, 0.78),
-                track_color: Some(with_opacity(p.surface_highest, 0.45)),
-                track_border_color: None,
-                thickness: 6.0,
-                hover_thickness: 10.0,
-                padding: 2.0,
-                corner_radius: 999.0,
-                min_thumb_length: 32.0,
-                auto_hide_delay_ms: 800,
-                reduced_motion: spec.reduced_motion,
-            },
+    pub fn from_theme(theme: &Theme) -> Self {
+        let s = &theme.scheme;
+        Self {
+            visibility: ScrollBarVisibility::OverlayAutoHide,
+            thumb_color: with_opacity(s.on_surface_variant, 0.38),
+            thumb_hover_color: with_opacity(s.on_surface_variant, 0.58),
+            thumb_active_color: with_opacity(s.on_surface_variant, 0.78),
+            track_color: Some(with_opacity(s.surface_container_highest, 0.45)),
+            track_border_color: None,
+            thickness: 6.0,
+            hover_thickness: 10.0,
+            padding: 2.0,
+            corner_radius: 999.0,
+            min_thumb_length: 32.0,
+            auto_hide_delay_ms: 800,
+            reduced_motion: theme.reduced_motion,
         }
     }
 
@@ -809,7 +762,7 @@ impl ScrollViewWidget {
         self
     }
 
-    /// Applies an explicit [`ScrollBarStyle`] override instead of inheriting from [`DesignSpec`].
+    /// Applies an explicit [`ScrollBarStyle`] override instead of inheriting from [`Theme`].
     #[must_use]
     pub fn with_style(mut self, style: ScrollBarStyle) -> Self {
         self.style_override = Some(style);
@@ -1847,7 +1800,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokens::{Brightness, ControlBorderStyle};
 
     #[test]
     fn pan_range_handles_containment_and_edges() {
@@ -1858,25 +1810,13 @@ mod tests {
     }
 
     #[test]
-    fn scrollbar_style_from_spec_covers_all_grammars_and_polarities() {
-        let borders = [
-            ControlBorderStyle::UniformHairline,
-            ControlBorderStyle::BeveledElevation,
-            ControlBorderStyle::CrispElevation,
-            ControlBorderStyle::BorderlessFlat,
-        ];
-        for brightness in [Brightness::Light, Brightness::Dark] {
-            for border in borders {
-                let mut spec = DesignSpec::neutral_fallback(brightness);
-                spec.control_border = border;
-                let style = ScrollBarStyle::from_spec(&spec);
-                assert!(style.thumb_color.components[3] > 0.1);
-                assert!(style.thumb_hover_color.components[3] > style.thumb_color.components[3]);
-                assert!(
-                    style.thumb_active_color.components[3] > style.thumb_hover_color.components[3]
-                );
-                assert!(style.reserved_size() >= style.hover_thickness);
-            }
+    fn scrollbar_style_from_theme_covers_light_and_dark() {
+        for theme in [Theme::light(), Theme::dark()] {
+            let style = ScrollBarStyle::from_theme(&theme);
+            assert!(style.thumb_color.components[3] > 0.1);
+            assert!(style.thumb_hover_color.components[3] > style.thumb_color.components[3]);
+            assert!(style.thumb_active_color.components[3] > style.thumb_hover_color.components[3]);
+            assert!(style.reserved_size() >= style.hover_thickness);
         }
     }
 

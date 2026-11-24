@@ -1,6 +1,6 @@
 //! Localization tokens for built-in calendar, time, dialog, and search controls.
 //!
-//! [`DesignSpec`](crate::tokens::DesignSpec) defaults to [`UiLocale::english()`], while applications
+//! [`Theme`](crate::theme::Theme) defaults to [`UiLocale::english()`], while applications
 //! can supply [`UiLocale::zh_cn()`] or customize any month, weekday, meridian, or button copy.
 
 use masonry::core::ArcStr;

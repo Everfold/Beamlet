@@ -27,10 +27,10 @@ use xilem_masonry::view::{CrossAxisAlignment, button, flex_row, sized_box};
 use crate::components::typography::ui_label;
 use crate::foundation::overlay::empty_slot;
 use crate::foundation::{UiClassExt, adaptive_pair, clip_box, focus_frame, icons, ui_icon};
-use crate::style_engine::{classes, current_spec_arc, with_spec};
-use crate::tokens::{
-    DesignSpec, ElevationLevel, InputFocusStyle, MotionDuration, MotionEasing, TypeRole,
-};
+use crate::style_engine::{classes, current_theme_arc, with_theme};
+use crate::theme::metrics::{BUTTON_RADIUS, ICON_BTN_RADIUS};
+use crate::theme::{ElevationLevel, Theme};
+use crate::tokens::{MotionDuration, MotionEasing, TypeRole};
 
 /// Auto-dismiss duration presets for [`ToastData`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -139,9 +139,9 @@ pub fn toast<State: 'static, Action: 'static>(
     on_dismiss: Option<ToastCallback<State, Action>>,
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let data = data.clone();
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
-        let msg = ui_label(TypeRole::BodyMedium, data.message.clone()).color(p.inverse_on_surface);
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
+        let msg = ui_label(TypeRole::BodyMedium, data.message.clone()).color(s.inverse_on_surface);
 
         let act_btn = data
             .action_label
@@ -151,16 +151,15 @@ pub fn toast<State: 'static, Action: 'static>(
                 let cb = cb.clone();
                 let action_lbl = clip_box(
                     ui_label(TypeRole::LabelLarge, lbl.clone())
-                        .color(p.accent_container)
+                        .color(s.primary_container)
                         .line_breaking(LineBreaking::Clip),
                 );
                 focus_frame(
-                    button(action_lbl, move |s: &mut State| cb(s))
+                    button(action_lbl, move |st: &mut State| cb(st))
                         .ui_class(classes::TOAST_ACTION_BTN),
                 )
-                .style(InputFocusStyle::Outline2px)
-                .accent(p.accent_container)
-                .radius(spec.metrics.button_radius)
+                .accent(s.primary_container)
+                .radius(BUTTON_RADIUS)
             });
         let close_btn = if data.with_close
             && let Some(cb) = &on_dismiss
@@ -169,14 +168,13 @@ pub fn toast<State: 'static, Action: 'static>(
             Some(
                 focus_frame(
                     button(
-                        ui_icon(icons::CLOSE, 16.0, p.inverse_on_surface),
-                        move |s| cb(s),
+                        ui_icon(icons::CLOSE, 16.0, s.inverse_on_surface),
+                        move |st| cb(st),
                     )
                     .ui_class(classes::TOAST_CLOSE_BTN),
                 )
-                .style(InputFocusStyle::Outline2px)
-                .accent(p.inverse_on_surface)
-                .radius(spec.metrics.icon_btn_radius),
+                .accent(s.inverse_on_surface)
+                .radius(ICON_BTN_RADIUS),
             )
         } else {
             None
@@ -201,9 +199,9 @@ pub fn toast<State: 'static, Action: 'static>(
 
         sized_box(inner)
             .dims(Dimensions::new(Dim::FitContent, Dim::MaxContent))
-            .background_color(p.inverse_surface)
-            .corner_radius(spec.metrics.button_radius.max(8.0).px())
-            .box_shadow(spec.box_shadow(ElevationLevel::Level3))
+            .background_color(s.inverse_surface)
+            .corner_radius(BUTTON_RADIUS.max(8.0).px())
+            .box_shadow(theme.box_shadow(ElevationLevel::Level3))
     })
 }
 
@@ -229,8 +227,8 @@ const TOAST_CHILD_ID: ViewId = ViewId::new(0x5549_3450);
 const TOAST_ENTER_OFFSET_Y: f64 = 12.0;
 const TOAST_EXIT_OFFSET_Y: f64 = 8.0;
 
-fn toast_motion_durations_ns(spec: &DesignSpec) -> (u64, u64) {
-    if spec.reduced_motion {
+fn toast_motion_durations_ns(theme: &Theme) -> (u64, u64) {
+    if theme.reduced_motion {
         (0, 0)
     } else {
         (
@@ -521,8 +519,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHo
     type ViewState = UiToastHostViewState<State, Action>;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let (enter_ns, exit_ns) = toast_motion_durations_ns(&spec);
+        let theme = current_theme_arc(ctx);
+        let (enter_ns, exit_ns) = toast_motion_durations_ns(&theme);
         let view = self.child_view(None);
         let (child_pod, child_state) =
             ctx.with_id(TOAST_CHILD_ID, |ctx| view.build(ctx, app_state));
@@ -555,8 +553,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiToastHo
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let (enter_ns, exit_ns) = toast_motion_durations_ns(&spec);
+        let theme = current_theme_arc(ctx);
+        let (enter_ns, exit_ns) = toast_motion_durations_ns(&theme);
         element.widget.enter_duration_ns = enter_ns;
         element.widget.exit_duration_ns = exit_ns;
 

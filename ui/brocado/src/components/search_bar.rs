@@ -16,8 +16,10 @@ use xilem_masonry::view::{CrossAxisAlignment, FlexExt, button, flex_row, text_in
 use crate::foundation::{
     FocusFrame, FocusFrameView, UiClassExt, WithClass, focus_frame, icons, ui_icon,
 };
-use crate::style_engine::{classes, current_spec_arc};
-use crate::tokens::{DesignSpec, TypeRole};
+use crate::style_engine::{classes, current_theme_arc};
+use crate::theme::Theme;
+use crate::theme::metrics::SEARCH_RADIUS;
+use crate::tokens::TypeRole;
 
 /// Callback invoked when the search query text changes.
 pub type SearchChangeCallback<State, Action> =
@@ -40,7 +42,7 @@ pub struct UiSearchBar<State, Action> {
 }
 
 impl<State, Action> UiSearchBar<State, Action> {
-    /// Overrides the placeholder string (defaults to `spec.locale.search_placeholder`).
+    /// Overrides the placeholder string (defaults to `theme.locale.search_placeholder`).
     pub fn placeholder(mut self, text: impl Into<ArcStr>) -> Self {
         self.placeholder = Some(text.into());
         self
@@ -55,36 +57,36 @@ impl<State, Action> UiSearchBar<State, Action> {
         self
     }
 
-    fn build_frame(&self, spec: &DesignSpec) -> SearchBarFrame<State, Action>
+    fn build_frame(&self, theme: &Theme) -> SearchBarFrame<State, Action>
     where
         State: 'static,
         Action: 'static,
     {
-        let p = &spec.palette;
-        let m = &spec.metrics;
-        let style = spec.typography.get(TypeRole::BodyMedium);
+        let s = &theme.scheme;
+        let style = theme.typography.get(TypeRole::BodyMedium);
         let on_change = self.on_change.clone();
 
-        let ti = text_input(self.query.clone(), move |s: &mut State, val: String| {
-            on_change(s, val)
+        let ti = text_input(self.query.clone(), move |st: &mut State, val: String| {
+            on_change(st, val)
         })
         .placeholder(
             self.placeholder
                 .clone()
-                .unwrap_or_else(|| spec.locale.search_placeholder.clone()),
+                .unwrap_or_else(|| theme.locale.search_placeholder.clone()),
         )
         .text_size(style.font_size)
         .weight(style.weight)
-        .text_color(p.text_primary)
-        .font(spec.typography.resolved_font_family());
+        .text_color(s.on_surface)
+        .font(theme.typography.resolved_font_family());
         let clear_btn = if !self.query.is_empty()
             && let Some(on_clear) = &self.on_clear
         {
             let on_clear = on_clear.clone();
             Some(
-                button(ui_icon(icons::CLOSE, 16.0, p.text_secondary), move |s| {
-                    on_clear(s)
-                })
+                button(
+                    ui_icon(icons::CLOSE, 16.0, s.on_surface_variant),
+                    move |st| on_clear(st),
+                )
                 .ui_class(classes::ICON_BTN_STD),
             )
         } else {
@@ -92,7 +94,7 @@ impl<State, Action> UiSearchBar<State, Action> {
         };
 
         let inner = flex_row((
-            ui_icon(icons::SEARCH, 18.0, p.text_secondary),
+            ui_icon(icons::SEARCH, 18.0, s.on_surface_variant),
             ti.ui_class(classes::TEXT_FIELD_FLUSH).flex(1.0),
             clear_btn,
         ))
@@ -102,7 +104,7 @@ impl<State, Action> UiSearchBar<State, Action> {
         .boxed();
 
         focus_frame(inner)
-            .radius(m.search_radius)
+            .radius(SEARCH_RADIUS)
             .ui_class(classes::SEARCH_BAR)
     }
 }
@@ -117,8 +119,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSearchB
     );
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = current_spec_arc(ctx);
-        let frame = self.build_frame(&spec);
+        let theme = current_theme_arc(ctx);
+        let frame = self.build_frame(&theme);
         let (pod, st) = frame.build(ctx, app_state);
         (pod, (frame, st))
     }
@@ -131,8 +133,8 @@ impl<State: 'static, Action: 'static> View<State, Action, ViewCtx> for UiSearchB
         element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = current_spec_arc(ctx);
-        let next_frame = self.build_frame(&spec);
+        let theme = current_theme_arc(ctx);
+        let next_frame = self.build_frame(&theme);
         next_frame.rebuild(prev_frame, st, ctx, element, app_state);
         *prev_frame = next_frame;
     }

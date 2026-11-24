@@ -74,13 +74,8 @@ impl Default for NotesApp {
 }
 
 impl NotesApp {
-    fn current_theme(&self) -> Md3Theme {
-        let contrast = if self.high_contrast {
-            ContrastLevel::High
-        } else {
-            ContrastLevel::Standard
-        };
-        Md3Theme::from_seed(self.seed, self.brightness).with_contrast(self.seed, contrast)
+    fn current_theme(&self) -> Theme {
+        Theme::from_seed(self.seed, self.brightness).with_high_contrast(self.high_contrast)
     }
 }
 
@@ -299,12 +294,12 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
 
 fn main() {
     let initial = NotesApp::default();
-    let props = brocado::build_default_properties(&initial.current_theme().to_spec());
+    let props = brocado::build_default_properties(&initial.current_theme());
     AppRunner::new(initial, |state: &mut NotesApp| {
-        let spec = state.current_theme().to_spec();
+        let theme = state.current_theme();
         let wid = state.window_id;
         std::iter::once(
-            desktop_window(wid, "Material Design 3 笔记", &spec, app_view(state)).with_config(
+            desktop_window(wid, "Material Design 3 笔记", &theme, app_view(state)).with_config(
                 |cfg| {
                     cfg.on_close(|s: &mut NotesApp| s.running = false)
                         .with_initial_inner_size(LogicalSize::new(1040.0, 740.0))

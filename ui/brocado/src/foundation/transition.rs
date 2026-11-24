@@ -525,7 +525,7 @@ where
     type ViewState = V::ViewState;
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+        let reduced = crate::style_engine::current_theme_arc(ctx).reduced_motion;
         let (offset, duration_ms) = if reduced {
             (Vec2::ZERO, 0)
         } else {
@@ -550,7 +550,7 @@ where
         app_state: &mut State,
     ) {
         if self.key != prev.key {
-            let reduced = crate::style_engine::current_spec_arc(ctx).reduced_motion;
+            let reduced = crate::style_engine::current_theme_arc(ctx).reduced_motion;
             let (offset, duration_ms) = if reduced {
                 (Vec2::ZERO, 0)
             } else {

@@ -3,8 +3,7 @@
 //! Upstream provenance: replaces upstream `linebender/xilem` (`xilem/src/lib.rs`) as Brocado's
 //! desktop launcher shell, building directly on upstream `masonry_winit` while adapting driver
 //! and window lifecycle patterns from `linebender/xilem` (`xilem/src/{app,driver,window_options,window_view}.rs`)
-//! with direct control over [`WindowChrome`], compositor [`WindowBackdrop`](crate::tokens::WindowBackdrop) hints,
-//! raw Winit attributes, and reactive [`DesktopWindow`] lifecycles.
+//! with direct control over [`WindowChrome`], raw Winit attributes, and reactive [`DesktopWindow`] lifecycles.
 
 pub mod config;
 pub mod driver;
@@ -19,14 +18,12 @@ pub use masonry_winit::app::{
 };
 pub use masonry_winit::winit;
 pub use runner::{AppRunner, AppState, ExitOnClose};
-pub use window::{
-    DesktopWindow, PodWindow, desktop_window, desktop_window_arc, desktop_window_arc_with_backdrop,
-    resolve_window_backdrop_fill,
-};
+pub use window::{DesktopWindow, PodWindow, desktop_window, desktop_window_arc};
 
 #[cfg(test)]
 mod tests {
-    use crate::tokens::{Brightness, DesignSpec, WindowBackdrop};
+    use crate::theme::Theme;
+    use crate::tokens::Brightness;
     use masonry::dpi::LogicalSize;
     use masonry_winit::winit::window::Theme as WinitTheme;
     use xilem_masonry::view::label;
@@ -41,39 +38,35 @@ mod tests {
     }
 
     #[test]
-    fn backdrop_drives_initial_transparency_and_can_be_overridden() {
+    fn window_config_applies_transparency_chrome_and_brightness() {
         let cfg: WindowConfig<()> = WindowConfig::new("Demo")
             .with_chrome(WindowChrome::Borderless)
             .with_initial_inner_size(LogicalSize::new(960.0, 640.0));
 
-        let opaque_attrs =
-            cfg.build_initial_attributes(WindowBackdrop::Opaque, Some(Brightness::Light));
-        assert!(!opaque_attrs.transparent);
-        assert!(!opaque_attrs.decorations);
-        assert_eq!(opaque_attrs.title, "Demo");
-        assert_eq!(opaque_attrs.preferred_theme, Some(WinitTheme::Light));
+        let attrs = cfg.build_initial_attributes(Some(Brightness::Light));
+        assert!(!attrs.transparent);
+        assert!(!attrs.decorations);
+        assert_eq!(attrs.title, "Demo");
+        assert_eq!(attrs.preferred_theme, Some(WinitTheme::Light));
 
-        let mica_attrs = cfg.build_initial_attributes(WindowBackdrop::Mica, Some(Brightness::Dark));
-        assert!(mica_attrs.transparent);
-        assert_eq!(mica_attrs.preferred_theme, Some(WinitTheme::Dark));
-
-        let forced_opaque = WindowConfig::<()>::new("Override")
-            .with_transparent(false)
-            .build_initial_attributes(WindowBackdrop::Acrylic, Some(Brightness::Light));
-        assert!(!forced_opaque.transparent);
+        let forced_transparent = WindowConfig::<()>::new("Override")
+            .with_transparent(true)
+            .build_initial_attributes(Some(Brightness::Dark));
+        assert!(forced_transparent.transparent);
+        assert_eq!(forced_transparent.preferred_theme, Some(WinitTheme::Dark));
     }
 
     #[test]
     fn raw_attributes_hook_runs_at_initial_build() {
         let cfg: WindowConfig<()> = WindowConfig::new("Custom")
             .with_raw_attributes(|attrs| attrs.with_title("HookedTitle").with_resizable(false));
-        let attrs = cfg.build_initial_attributes(WindowBackdrop::Opaque, None);
+        let attrs = cfg.build_initial_attributes(None);
         assert_eq!(attrs.title, "HookedTitle");
         assert!(!attrs.resizable);
     }
 
     #[test]
-    fn desktop_window_attaches_spec_default_properties_and_backdrop() {
+    fn desktop_window_attaches_theme_default_properties() {
         struct State {
             running: bool,
         }
@@ -83,11 +76,9 @@ mod tests {
             }
         }
 
-        let spec = DesignSpec::neutral_fallback(Brightness::Dark);
-        let mut win = desktop_window::<State, _>(WindowId::next(), "Host", &spec, label("Body"))
-            .with_chrome(WindowChrome::UnifiedTitleBar)
-            .with_backdrop(WindowBackdrop::MacosVibrancy);
-        assert_eq!(win.backdrop(), WindowBackdrop::MacosVibrancy);
+        let theme = Theme::dark();
+        let mut win = desktop_window::<State, _>(WindowId::next(), "Host", &theme, label("Body"))
+            .with_chrome(WindowChrome::UnifiedTitleBar);
         assert_eq!(win.config().chrome, WindowChrome::UnifiedTitleBar);
         assert!(win.default_properties.is_some());
 

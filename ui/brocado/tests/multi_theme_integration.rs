@@ -1,4 +1,4 @@
-//! End-to-end headless integration tests verifying all 4 design languages, live theme switching,
+//! End-to-end headless integration tests verifying Material 3 Expressive themes, live theme switching,
 //! custom widgets (`RangeSlider`, `DatePicker`, `TimePicker`), `EscapeCatcher`, and `LayerStack` overlays.
 
 use std::fmt::Debug;
@@ -41,38 +41,37 @@ type RootViewState<State> = <Box<AnyWidgetView<State>> as View<State, (), ViewCt
 
 struct BrocadoHarness<State: 'static> {
     state: State,
-    theme_fn: fn(&State) -> UiTheme,
+    theme_fn: fn(&State) -> Theme,
     logic: fn(&mut State) -> Box<AnyWidgetView<State>>,
     view_ctx: ViewCtx,
     current_view: Box<AnyWidgetView<State>>,
     view_state: RootViewState<State>,
-    last_spec: DesignSpec,
+    last_theme: Theme,
     harness: TestHarness<Passthrough>,
 }
 
 impl<State: 'static> BrocadoHarness<State> {
     fn new(
         mut state: State,
-        theme_fn: fn(&State) -> UiTheme,
+        theme_fn: fn(&State) -> Theme,
         logic: fn(&mut State) -> Box<AnyWidgetView<State>>,
         size: (u32, u32),
     ) -> Self {
         let rt = Arc::new(tokio::runtime::Runtime::new().expect("tokio test runtime"));
         let mut view_ctx = ViewCtx::new(Arc::new(NoopRawProxy), rt);
         let theme = theme_fn(&state);
-        let spec = theme.to_spec();
-        let scoped_view = ui_scope(
+        let scoped_view = theme_scope(
             &theme,
             sized_box(logic(&mut state))
                 .dims(Dimensions::STRETCH)
-                .background_color(spec.palette.window_bg),
+                .background_color(theme.scheme.surface),
         )
         .boxed();
 
         let (pod, view_state) = scoped_view.build(&mut view_ctx, &mut state);
         let params = TestHarnessParams::default()
             .with_size(PhysicalSize::new(size.0, size.1))
-            .with_background(spec.palette.window_bg)
+            .with_background(theme.scheme.surface)
             .with_padding(0);
         let harness = TestHarness::create_with(theme.default_properties(), pod.new_widget, params);
 
@@ -83,24 +82,23 @@ impl<State: 'static> BrocadoHarness<State> {
             view_ctx,
             current_view: scoped_view,
             view_state,
-            last_spec: spec,
+            last_theme: theme,
             harness,
         }
     }
 
     fn rebuild(&mut self) {
         let theme = (self.theme_fn)(&self.state);
-        let next_spec = theme.to_spec();
-        if next_spec != self.last_spec {
-            let props = cached_default_properties(&next_spec);
+        if theme != self.last_theme {
+            let props = cached_default_properties(&theme);
             self.harness.render_root().set_default_properties(props);
-            self.last_spec = next_spec.clone();
+            self.last_theme = theme.clone();
         }
-        let next_view = ui_scope(
+        let next_view = theme_scope(
             &theme,
             sized_box((self.logic)(&mut self.state))
                 .dims(Dimensions::STRETCH)
-                .background_color(next_spec.palette.window_bg),
+                .background_color(theme.scheme.surface),
         )
         .boxed();
 
@@ -148,7 +146,7 @@ impl<State: 'static> BrocadoHarness<State> {
 }
 
 struct MatrixState {
-    theme: UiTheme,
+    theme: Theme,
     checked: bool,
     switch_on: bool,
     text: String,
@@ -165,7 +163,7 @@ struct MatrixState {
 impl Default for MatrixState {
     fn default() -> Self {
         Self {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            theme: Theme::light(),
             checked: true,
             switch_on: true,
             text: "Query".to_string(),
@@ -234,12 +232,12 @@ fn find_first_widget_id_by_type_name(
 }
 
 #[test]
-fn all_eight_theme_polarities_render_distinct_non_blank_frames() {
-    let mut rendered: Vec<(DesignLanguage, Brightness, Vec<u8>)> = Vec::new();
-    for lang in DesignLanguage::ALL {
+fn m3_seed_and_brightness_polarities_render_distinct_non_blank_frames() {
+    let mut rendered: Vec<(Color, Brightness, Vec<u8>)> = Vec::new();
+    for seed in [seeds::PURPLE, seeds::TEAL] {
         for brightness in [Brightness::Light, Brightness::Dark] {
             let st = MatrixState {
-                theme: UiTheme::new(lang, brightness),
+                theme: Theme::from_seed(seed, brightness),
                 ..Default::default()
             };
             let mut app =
@@ -250,13 +248,13 @@ fn all_eight_theme_polarities_render_distinct_non_blank_frames() {
             let has_non_bg = chunks.iter().any(|&px| px != first);
             assert!(
                 has_non_bg,
-                "rendered frame for {lang:?} / {brightness:?} should not be uniform blank"
+                "rendered frame for {seed:?} / {brightness:?} should not be uniform blank"
             );
-            rendered.push((lang, brightness, bytes));
+            rendered.push((seed, brightness, bytes));
         }
     }
 
-    assert_eq!(rendered.len(), DesignLanguage::ALL.len() * 2);
+    assert_eq!(rendered.len(), 4);
     for i in 0..rendered.len() {
         for j in (i + 1)..rendered.len() {
             assert_ne!(
@@ -278,18 +276,17 @@ fn live_runtime_theme_hot_switch_updates_single_tree_cleanly() {
     );
     let md3_light = app.render_bytes();
 
-    app.state.theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark);
+    app.state.theme = Theme::dark();
     app.rebuild();
     let md3_dark = app.render_bytes();
     assert_ne!(md3_light, md3_dark);
 
-    app.state.theme =
-        UiTheme::new(DesignLanguage::Md3, Brightness::Light).with_accent(UiAccent::Teal);
+    app.state.theme = Theme::light().with_seed(seeds::TEAL);
     app.rebuild();
     let md3_teal = app.render_bytes();
     assert_ne!(md3_dark, md3_teal);
 
-    app.state.theme = UiTheme::new(DesignLanguage::Md3, Brightness::Dark).with_high_contrast(true);
+    app.state.theme = Theme::dark().with_high_contrast(true);
     app.rebuild();
     let md3_hc = app.render_bytes();
     assert_ne!(md3_teal, md3_hc);
@@ -528,17 +525,17 @@ fn all_four_platform_signature_suites_build_and_render() {
         |s| s.theme.clone(),
         |_| {
             flex_col((
-                brocado::md3::top_app_bar_slots(
+                top_app_bar_slots(
                     TopAppBarVariant::CenterAligned,
                     "MD3 Signature",
                     None,
                     vec![],
                 ),
                 flex_row((
-                    brocado::md3::fab(icons::ADD, FabColor::Primary, |st: &mut MatrixState| {
+                    fab(icons::ADD, FabColor::Primary, |st: &mut MatrixState| {
                         st.clicks += 1;
                     }),
-                    brocado::md3::extended_fab(
+                    extended_fab(
                         icons::EDIT,
                         "Compose",
                         FabColor::Secondary,
@@ -546,21 +543,19 @@ fn all_four_platform_signature_suites_build_and_render() {
                     ),
                 ))
                 .gap(8.px()),
-                brocado::md3::split_button(
+                split_button(
                     "Save",
                     |st: &mut MatrixState| st.clicks += 1,
                     |st: &mut MatrixState| st.clicks += 1,
                 ),
-                brocado::md3::button_group(
-                    &["Day", "Week", "Month"],
-                    0,
-                    |st: &mut MatrixState, _| st.clicks += 1,
-                ),
-                brocado::md3::floating_toolbar_with_variant(
+                button_group(&["Day", "Week", "Month"], 0, |st: &mut MatrixState, _| {
+                    st.clicks += 1
+                }),
+                floating_toolbar_with_variant(
                     FloatingToolbarVariant::Vibrant,
                     vec![primary_button("Action", |st: &mut MatrixState| st.clicks += 1).boxed()],
                 ),
-                brocado::md3::wavy_linear_progress(Some(0.6)),
+                wavy_linear_progress(Some(0.6)),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(8.px())
@@ -577,10 +572,9 @@ fn all_four_platform_signature_suites_build_and_render() {
 
 #[test]
 fn focus_frame_reacts_to_real_focus_changes() {
-    let lang = DesignLanguage::Md3;
     {
         let st = MatrixState {
-            theme: UiTheme::new(lang, Brightness::Light),
+            theme: Theme::light(),
             ..Default::default()
         };
         let mut app = BrocadoHarness::new(
@@ -598,7 +592,7 @@ fn focus_frame_reacts_to_real_focus_changes() {
         let root = app.harness.render_root().get_layer_root(0);
         assert!(
             find_first_widget_id_by_type_name(&root, "FocusFrame").is_some(),
-            "TextField must expose FocusFrame in {lang:?}"
+            "TextField must expose FocusFrame"
         );
         let area_id =
             find_first_widget_id_by_type_name(&root, "TextArea").expect("TextArea child exists");
@@ -607,61 +601,57 @@ fn focus_frame_reacts_to_real_focus_changes() {
         let after = app.render_bytes();
         assert_ne!(
             before, after,
-            "FocusFrame must visibly update rendered pixels when focused for {lang:?}"
+            "FocusFrame must visibly update rendered pixels when focused"
         );
     }
 }
 
 #[test]
-fn dialog_action_order_follows_platform_convention() {
-    fn button_x_positions(lang: DesignLanguage) -> (f64, f64) {
-        let initial = MatrixState {
-            theme: UiTheme::new(lang, Brightness::Light),
-            ..Default::default()
-        };
-        let mut app = BrocadoHarness::new(
-            initial,
-            |s| s.theme.clone(),
-            |_| {
-                basic_dialog(
-                    "Apply Changes",
-                    "Confirm action order.",
-                    "Confirm",
-                    |_: &mut MatrixState| {},
-                    |_: &mut MatrixState| {},
-                )
-                .dismiss_text("Cancel")
-                .boxed()
-            },
-            (500, 320),
-        );
-        let _ = app.render_bytes();
+fn dialog_action_order_follows_md3_convention() {
+    let initial = MatrixState {
+        theme: Theme::light(),
+        ..Default::default()
+    };
+    let mut app = BrocadoHarness::new(
+        initial,
+        |s| s.theme.clone(),
+        |_| {
+            basic_dialog(
+                "Apply Changes",
+                "Confirm action order.",
+                "Confirm",
+                |_: &mut MatrixState| {},
+                |_: &mut MatrixState| {},
+            )
+            .dismiss_text("Cancel")
+            .boxed()
+        },
+        (500, 320),
+    );
+    let _ = app.render_bytes();
 
-        let root = app.harness.render_root().get_layer_root(0);
-        let confirm_id = find_button_with_label(&root, "Confirm").expect("Confirm button");
-        let cancel_id = find_button_with_label(&root, "Cancel").expect("Cancel button");
+    let root = app.harness.render_root().get_layer_root(0);
+    let confirm_id = find_button_with_label(&root, "Confirm").expect("Confirm button");
+    let cancel_id = find_button_with_label(&root, "Cancel").expect("Cancel button");
 
-        let confirm_x = (app
-            .harness
-            .get_widget_with_id(confirm_id)
-            .ctx()
-            .window_transform()
-            * Point::ORIGIN)
-            .x;
-        let cancel_x = (app
-            .harness
-            .get_widget_with_id(cancel_id)
-            .ctx()
-            .window_transform()
-            * Point::ORIGIN)
-            .x;
-        (confirm_x, cancel_x)
-    }
+    let confirm_x = (app
+        .harness
+        .get_widget_with_id(confirm_id)
+        .ctx()
+        .window_transform()
+        * Point::ORIGIN)
+        .x;
+    let cancel_x = (app
+        .harness
+        .get_widget_with_id(cancel_id)
+        .ctx()
+        .window_transform()
+        * Point::ORIGIN)
+        .x;
 
-    let (md3_confirm_x, md3_cancel_x) = button_x_positions(DesignLanguage::Md3);
     assert!(
-        md3_cancel_x < md3_confirm_x,
-        "MD3 must place Cancel ({md3_cancel_x}) left of Confirm ({md3_confirm_x})"
+        cancel_x < confirm_x,
+        "MD3 must place Cancel ({cancel_x}) left of Confirm ({confirm_x})"
     );
 }
 
@@ -752,7 +742,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
     {
         let mut app = BrocadoHarness::new(
             MatrixState {
-                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+                theme: Theme::light(),
                 ..Default::default()
             },
             |s| s.theme.clone(),
@@ -797,13 +787,13 @@ fn aligned_platform_signature_components_build_interact_and_render() {
     // 2) Clamp centering & capping under Material 3 Expressive
     {
         struct ClampState {
-            theme: UiTheme,
+            theme: Theme,
             tab: usize,
             sw: bool,
         }
         let mut app = BrocadoHarness::new(
             ClampState {
-                theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+                theme: Theme::light(),
                 tab: 0,
                 sw: true,
             },
@@ -868,13 +858,13 @@ fn aligned_platform_signature_components_build_interact_and_render() {
 #[test]
 fn destructive_button_and_dialog_apply_error_semantics_and_fire_actions() {
     struct DestructState {
-        theme: UiTheme,
+        theme: Theme,
         dialog_open: bool,
         confirmed: bool,
     }
     let mut app = BrocadoHarness::new(
         DestructState {
-            theme: UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            theme: Theme::light(),
             dialog_open: false,
             confirmed: false,
         },

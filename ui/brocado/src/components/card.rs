@@ -8,7 +8,8 @@ use xilem_masonry::WidgetView;
 
 use crate::foundation::{BoundedX, ContainerView, UiClassExt, WithClass, container};
 use crate::style_engine::classes;
-use crate::tokens::{DesignSpec, ElevationLevel};
+use crate::theme::ElevationLevel;
+use crate::theme::metrics::CARD_RADIUS;
 
 /// Cross-theme card surface variants.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -91,7 +92,7 @@ pub struct SurfaceBox<V, State, Action> {
 }
 
 impl<V, State, Action> SurfaceBox<V, State, Action> {
-    /// Overrides the corner radius (defaults to `spec.metrics.card_radius`).
+    /// Overrides the corner radius (defaults to [`CARD_RADIUS`](crate::theme::metrics::CARD_RADIUS)).
     pub fn radius(mut self, radius: f64) -> Self {
         self.radius = Some(radius);
         self
@@ -121,12 +122,12 @@ where
         ctx: &mut xilem_masonry::ViewCtx,
         app_state: &mut State,
     ) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let p = &spec.palette;
-        let bg = self.elevation.tinted_surface(p.surface, p.accent);
-        let rad = self.radius.unwrap_or(spec.metrics.card_radius);
+        let theme = crate::style_engine::current_theme_arc(ctx);
+        let s = &theme.scheme;
+        let bg = self.elevation.tinted_surface(s.surface, s.primary);
+        let rad = self.radius.unwrap_or(CARD_RADIUS);
         let pad = self.padding.unwrap_or(12.0);
-        let shadow = spec.box_shadow(self.elevation);
+        let shadow = theme.box_shadow(self.elevation);
         let (child_pod, child_state) = self.child.build(ctx, app_state);
         let mut pod = ctx.create_pod(masonry::widgets::SizedBox::new(
             child_pod.new_widget.erased(),
@@ -148,12 +149,12 @@ where
         mut element: xilem_core::Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let p = &spec.palette;
-        let bg = self.elevation.tinted_surface(p.surface, p.accent);
-        let rad = self.radius.unwrap_or(spec.metrics.card_radius);
+        let theme = crate::style_engine::current_theme_arc(ctx);
+        let s = &theme.scheme;
+        let bg = self.elevation.tinted_surface(s.surface, s.primary);
+        let rad = self.radius.unwrap_or(CARD_RADIUS);
         let pad = self.padding.unwrap_or(12.0);
-        let shadow = spec.box_shadow(self.elevation);
+        let shadow = theme.box_shadow(self.elevation);
         let id = element.id();
         if *prev_bg != bg {
             ctx.mark_prop_changed::<Background>(id);
@@ -217,7 +218,6 @@ pub fn surface_box<State: 'static, Action: 'static, V: WidgetView<State, Action>
     elevation: ElevationLevel,
     child: V,
 ) -> SurfaceBox<V, State, Action> {
-    let _ = DesignSpec::neutral_fallback;
     SurfaceBox {
         elevation,
         radius: None,

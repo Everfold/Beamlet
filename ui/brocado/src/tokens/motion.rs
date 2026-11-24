@@ -1,4 +1,4 @@
-//! Animation duration and cubic-bezier easing curve tokens shared across design languages.
+//! Material Design 3 Expressive duration, cubic-bezier easing, and spring physics tokens.
 
 use std::time::Duration;
 
@@ -71,7 +71,7 @@ impl MotionDuration {
     }
 }
 
-/// Cubic-bezier motion easing curves spanning Material, Fluent, HIG, and Adwaita guidelines.
+/// Material 3 cubic-bezier motion easing curves.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum MotionEasing {
     /// Balanced curve (`cubic-bezier(0.2, 0.0, 0.0, 1.0)`).
@@ -83,8 +83,6 @@ pub enum MotionEasing {
     EmphasizedDecelerate,
     /// Exit curve (`cubic-bezier(0.3, 0.0, 0.8, 0.15)`).
     EmphasizedAccelerate,
-    /// Windows Fluent fast-out slow-in (`cubic-bezier(0.1, 0.9, 0.2, 1.0)`).
-    FluentFastOutSlowIn,
     /// Pure linear interpolation.
     Linear,
 }
@@ -98,7 +96,6 @@ impl MotionEasing {
             Self::Emphasized => (0.05, 0.7, 0.1, 1.0),
             Self::EmphasizedDecelerate => (0.0, 0.0, 0.0, 1.0),
             Self::EmphasizedAccelerate => (0.3, 0.0, 0.8, 0.15),
-            Self::FluentFastOutSlowIn => (0.1, 0.9, 0.2, 1.0),
             Self::Linear => (0.0, 0.0, 1.0, 1.0),
         }
     }
@@ -158,10 +155,10 @@ fn solve_bezier_x(target_x: f64, x1: f64, x2: f64) -> f64 {
     mid
 }
 
-/// Underdamped / critically-damped / overdamped spring physics specification.
+/// Material 3 Expressive spring physics specification.
 ///
-/// Used by Material 3 Expressive [`MotionScheme`] for spatial transitions (bounds, scale, morph,
-/// offset) and non-overshooting effects transitions (opacity, color).
+/// Provides bouncier spatial springs (bounds, scale, morph, offset) paired with overshoot-free
+/// effects springs (opacity, color).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpringSpec {
     /// Damping ratio (`< 1.0` produces spatial overshoot/bounce; `1.0` is critically damped).
@@ -186,75 +183,39 @@ impl SpringSpec {
         }
     }
 
-    /// M3 Expressive fast spatial spring (snappy bounce for small buttons/toggles).
+    /// M3 Expressive fast spatial spring (`0.6 / 800`, snappy bounce for small buttons/toggles).
     #[must_use]
-    pub const fn expressive_fast_spatial() -> Self {
+    pub const fn fast_spatial() -> Self {
         Self::new(0.6, 800.0)
     }
 
-    /// M3 Expressive default spatial spring (balanced overshoot for cards/panels).
+    /// M3 Expressive default spatial spring (`0.8 / 380`, balanced overshoot for cards/panels).
     #[must_use]
-    pub const fn expressive_default_spatial() -> Self {
+    pub const fn default_spatial() -> Self {
         Self::new(0.8, 380.0)
     }
 
-    /// M3 Expressive slow spatial spring (sheets/full-screen containers).
+    /// M3 Expressive slow spatial spring (`0.8 / 200`, sheets/full-screen containers).
     #[must_use]
-    pub const fn expressive_slow_spatial() -> Self {
+    pub const fn slow_spatial() -> Self {
         Self::new(0.8, 200.0)
     }
 
-    /// M3 Expressive fast effects spring (no overshoot for hover/press tints & opacity).
+    /// M3 Expressive fast effects spring (`1.0 / 3800`, no overshoot for hover/press tints & opacity).
     #[must_use]
-    pub const fn expressive_fast_effects() -> Self {
+    pub const fn fast_effects() -> Self {
         Self::new(1.0, 3800.0)
     }
 
-    /// M3 Expressive default effects spring (critically damped, zero overshoot).
+    /// M3 Expressive default effects spring (`1.0 / 1600`, critically damped, zero overshoot).
     #[must_use]
-    pub const fn expressive_default_effects() -> Self {
+    pub const fn default_effects() -> Self {
         Self::new(1.0, 1600.0)
     }
 
-    /// M3 Expressive slow effects spring (critically damped, zero overshoot).
+    /// M3 Expressive slow effects spring (`1.0 / 800`, critically damped, zero overshoot).
     #[must_use]
-    pub const fn expressive_slow_effects() -> Self {
-        Self::new(1.0, 800.0)
-    }
-
-    /// Standard fast spatial spring.
-    #[must_use]
-    pub const fn standard_fast_spatial() -> Self {
-        Self::new(0.9, 1400.0)
-    }
-
-    /// Standard default spatial spring.
-    #[must_use]
-    pub const fn standard_default_spatial() -> Self {
-        Self::new(0.9, 700.0)
-    }
-
-    /// Standard slow spatial spring.
-    #[must_use]
-    pub const fn standard_slow_spatial() -> Self {
-        Self::new(0.9, 300.0)
-    }
-
-    /// Standard fast effects spring.
-    #[must_use]
-    pub const fn standard_fast_effects() -> Self {
-        Self::new(1.0, 3800.0)
-    }
-
-    /// Standard default effects spring.
-    #[must_use]
-    pub const fn standard_default_effects() -> Self {
-        Self::new(1.0, 1600.0)
-    }
-
-    /// Standard slow effects spring.
-    #[must_use]
-    pub const fn standard_slow_effects() -> Self {
+    pub const fn slow_effects() -> Self {
         Self::new(1.0, 800.0)
     }
 
@@ -312,72 +273,6 @@ impl SpringSpec {
     }
 }
 
-/// Platform motion physics personality selector (`Standard` vs Material 3 `Expressive`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum MotionScheme {
-    /// Conservative critically- or near-critically-damped springs.
-    #[default]
-    Standard,
-    /// Material 3 Expressive bouncier spatial springs paired with overshoot-free effects springs.
-    Expressive,
-}
-
-impl MotionScheme {
-    /// Fast spatial spring (`0.6/800` for Expressive, `0.9/1400` for Standard).
-    #[must_use]
-    pub const fn fast_spatial(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_fast_spatial(),
-            Self::Expressive => SpringSpec::expressive_fast_spatial(),
-        }
-    }
-
-    /// Default spatial spring (`0.8/380` for Expressive, `0.9/700` for Standard).
-    #[must_use]
-    pub const fn default_spatial(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_default_spatial(),
-            Self::Expressive => SpringSpec::expressive_default_spatial(),
-        }
-    }
-
-    /// Slow spatial spring (`0.8/200` for Expressive, `0.9/300` for Standard).
-    #[must_use]
-    pub const fn slow_spatial(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_slow_spatial(),
-            Self::Expressive => SpringSpec::expressive_slow_spatial(),
-        }
-    }
-
-    /// Fast effects spring (critically damped, zero overshoot).
-    #[must_use]
-    pub const fn fast_effects(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_fast_effects(),
-            Self::Expressive => SpringSpec::expressive_fast_effects(),
-        }
-    }
-
-    /// Default effects spring (critically damped, zero overshoot).
-    #[must_use]
-    pub const fn default_effects(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_default_effects(),
-            Self::Expressive => SpringSpec::expressive_default_effects(),
-        }
-    }
-
-    /// Slow effects spring (critically damped, zero overshoot).
-    #[must_use]
-    pub const fn slow_effects(self) -> SpringSpec {
-        match self {
-            Self::Standard => SpringSpec::standard_slow_effects(),
-            Self::Expressive => SpringSpec::expressive_slow_effects(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,7 +313,6 @@ mod tests {
             MotionEasing::Emphasized,
             MotionEasing::EmphasizedDecelerate,
             MotionEasing::EmphasizedAccelerate,
-            MotionEasing::FluentFastOutSlowIn,
             MotionEasing::Linear,
         ] {
             assert!((curve.sample(0.0) - 0.0).abs() < 1e-6);
@@ -438,10 +332,7 @@ mod tests {
 
     #[test]
     fn spring_spec_spatial_overshoots_and_effects_are_monotonic() {
-        for spatial in [
-            MotionScheme::Expressive.fast_spatial(),
-            MotionScheme::Expressive.default_spatial(),
-        ] {
+        for spatial in [SpringSpec::fast_spatial(), SpringSpec::default_spatial()] {
             assert_eq!(spatial.sample(0.0), 0.0);
             let mut max_val = 0.0_f64;
             for step in 1..=50 {
@@ -456,10 +347,7 @@ mod tests {
             assert!((spatial.sample(1.5) - 1.0).abs() < 1e-2);
         }
 
-        for effects in [
-            MotionScheme::Expressive.fast_effects(),
-            MotionScheme::Expressive.default_effects(),
-        ] {
+        for effects in [SpringSpec::fast_effects(), SpringSpec::default_effects()] {
             assert_eq!(effects.sample(0.0), 0.0);
             let mut prev = 0.0_f64;
             for step in 1..=50 {

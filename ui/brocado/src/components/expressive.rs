@@ -6,8 +6,10 @@ use crate::components::{
     NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
 };
 use crate::foundation::{ConstrainedBox, UiClassExt, clip_box, constrained_box, ui_icon, wrap};
-use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, ElevationLevel, TypeRole};
+use crate::style_engine::{classes, with_theme};
+use crate::theme::metrics::NAV_PILL_RADIUS;
+use crate::theme::{ElevationLevel, Theme};
+use crate::tokens::TypeRole;
 use masonry::core::ArcStr;
 use masonry::layout::AsUnit;
 use masonry::properties::{Dimensions, LineBreaking, Padding};
@@ -45,13 +47,13 @@ impl FabColor {
         }
     }
 
-    const fn foreground(self, spec: &DesignSpec) -> masonry::peniko::Color {
-        let p = &spec.palette;
+    const fn foreground(self, theme: &Theme) -> masonry::peniko::Color {
+        let s = &theme.scheme;
         match self {
-            Self::Primary => p.on_accent_container,
-            Self::Surface => p.accent,
-            Self::Secondary => p.on_secondary_container,
-            Self::Tertiary => p.on_tertiary_container,
+            Self::Primary => s.on_primary_container,
+            Self::Surface => s.primary,
+            Self::Secondary => s.on_secondary_container,
+            Self::Tertiary => s.on_tertiary_container,
         }
     }
 }
@@ -105,12 +107,12 @@ where
     F: Fn(&mut State) -> Action + Send + Sync + 'static,
 {
     let cb = Arc::new(on_click);
-    with_spec(move |spec: &DesignSpec, _| {
-        let fg = color.foreground(spec);
+    with_theme(move |theme: &Theme, _| {
+        let fg = color.foreground(theme);
         let cb = cb.clone();
         button(
             ui_icon(svg_path, size.icon_px(), fg),
-            move |s: &mut State| cb(s),
+            move |st: &mut State| cb(st),
         )
         .ui_class(color.class_name())
         .corner_radius(size.radius_px().px())
@@ -166,10 +168,10 @@ where
 {
     let text: ArcStr = text.into();
     let cb = Arc::new(on_click);
-    with_spec(move |spec: &DesignSpec, _| {
-        let fg = color.foreground(spec);
+    with_theme(move |theme: &Theme, _| {
+        let fg = color.foreground(theme);
         let cb = cb.clone();
-        let lbl = spec
+        let lbl = theme
             .typography
             .style_label(TypeRole::LabelLarge, label(text.clone()))
             .color(fg);
@@ -345,8 +347,8 @@ where
 {
     let dests = destinations.to_vec();
     let cb = Arc::new(on_select);
-    let nav_items = with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    let nav_items = with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let items: Vec<Box<AnyWidgetView<State, Action>>> = dests
             .iter()
             .enumerate()
@@ -354,32 +356,32 @@ where
                 let active = i == selected;
                 let cb = cb.clone();
                 let fg = if active {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_secondary
+                    s.on_surface_variant
                 };
                 let pill_bg = if active {
-                    p.secondary_container
+                    s.secondary_container
                 } else {
                     masonry::peniko::Color::TRANSPARENT
                 };
                 let pill = sized_box(ui_icon(d.icon, 18.0, fg))
                     .padding(Padding::from_vh(5.px(), 14.px()))
                     .background_color(pill_bg)
-                    .corner_radius(spec.metrics.nav_pill_radius.px());
-                let txt = spec
+                    .corner_radius(NAV_PILL_RADIUS.px());
+                let txt = theme
                     .typography
                     .style_label(TypeRole::LabelSmall, label(d.label.clone()))
                     .color(if active {
-                        p.text_primary
+                        s.on_surface
                     } else {
-                        p.text_secondary
+                        s.on_surface_variant
                     });
                 button(
                     flex_col((pill, txt))
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(4.px()),
-                    move |s: &mut State| cb(s, i),
+                    move |st: &mut State| cb(st, i),
                 )
                 .ui_class(classes::TAB_ITEM)
                 .boxed()
@@ -411,21 +413,21 @@ where
     .fill_max_width(true)
 }
 
-pub use expressive::{
+pub use controls::{
     FabMenuItem, FloatingToolbarVariant, UiWavyLinearProgress, WavyLinearProgressWidget,
     button_group, fab_menu, floating_toolbar, floating_toolbar_with_variant, split_button,
     wavy_linear_progress,
 };
 
-mod expressive {
+mod controls {
     use std::f64::consts::TAU;
     use std::marker::PhantomData;
     use std::sync::Arc;
 
     use crate::components::{filled_icon_button, primary_button, secondary_button};
     use crate::foundation::{BoundedX, BoundedY, ClipBoxWidget, WrapWidget, clip_box, icons, wrap};
-    use crate::style_engine::current_spec_arc;
-    use crate::tokens::ElevationLevel;
+    use crate::style_engine::current_theme_arc;
+    use crate::theme::{ElevationLevel, Theme};
     use masonry::accesskit::{Node, Role};
     use masonry::core::{
         AccessCtx, ArcStr, ChildrenIds, LayoutCtx, MeasureCtx, NoAction, PaintCtx, PropertiesMut,
@@ -463,18 +465,15 @@ mod expressive {
     }
 
     impl<V, State, Action> FloatingToolbarSurface<V, State, Action> {
-        fn resolve_style(
-            variant: FloatingToolbarVariant,
-            spec: &crate::tokens::DesignSpec,
-        ) -> (Color, BoxShadow) {
-            let p = &spec.palette;
+        fn resolve_style(variant: FloatingToolbarVariant, theme: &Theme) -> (Color, BoxShadow) {
+            let s = &theme.scheme;
             let bg = match variant {
                 FloatingToolbarVariant::Standard => {
-                    ElevationLevel::Level3.tinted_surface(p.surface, p.accent)
+                    ElevationLevel::Level3.tinted_surface(s.surface, s.primary)
                 }
-                FloatingToolbarVariant::Vibrant => p.accent_container,
+                FloatingToolbarVariant::Vibrant => s.primary_container,
             };
-            let shadow = spec.box_shadow(ElevationLevel::Level3);
+            let shadow = theme.box_shadow(ElevationLevel::Level3);
             (bg, shadow)
         }
     }
@@ -495,8 +494,8 @@ mod expressive {
             ctx: &mut ViewCtx,
             app_state: &mut State,
         ) -> (Self::Element, Self::ViewState) {
-            let spec = current_spec_arc(ctx);
-            let (bg, shadow) = Self::resolve_style(self.variant, &spec);
+            let theme = current_theme_arc(ctx);
+            let (bg, shadow) = Self::resolve_style(self.variant, &theme);
             let (child_pod, child_state) = self.child.build(ctx, app_state);
             let mut pod = ctx.create_pod(widgets::SizedBox::new(child_pod.new_widget.erased()));
             pod.new_widget.properties.insert(Background::Color(bg));
@@ -516,8 +515,8 @@ mod expressive {
             mut element: Mut<'_, Self::Element>,
             app_state: &mut State,
         ) {
-            let spec = current_spec_arc(ctx);
-            let (bg, shadow) = Self::resolve_style(self.variant, &spec);
+            let theme = current_theme_arc(ctx);
+            let (bg, shadow) = Self::resolve_style(self.variant, &theme);
             let id = element.id();
             if *prev_bg != bg {
                 ctx.mark_prop_changed::<Background>(id);
@@ -900,10 +899,10 @@ mod expressive {
             ctx: &mut ViewCtx,
             _app_state: &mut State,
         ) -> (Self::Element, Self::ViewState) {
-            let spec = current_spec_arc(ctx);
-            let track = spec.palette.accent_container;
-            let indicator = spec.palette.accent;
-            let reduced = spec.reduced_motion;
+            let theme = current_theme_arc(ctx);
+            let track = theme.scheme.primary_container;
+            let indicator = theme.scheme.primary;
+            let reduced = theme.reduced_motion;
             let pod = ctx.create_pod(WavyLinearProgressWidget::new(
                 self.progress,
                 track,
@@ -921,10 +920,10 @@ mod expressive {
             mut element: Mut<'_, Self::Element>,
             _app_state: &mut State,
         ) {
-            let spec = current_spec_arc(ctx);
-            let track = spec.palette.accent_container;
-            let indicator = spec.palette.accent;
-            let reduced = spec.reduced_motion;
+            let theme = current_theme_arc(ctx);
+            let track = theme.scheme.primary_container;
+            let indicator = theme.scheme.primary;
+            let reduced = theme.reduced_motion;
             if prev.progress != self.progress {
                 WavyLinearProgressWidget::set_progress(&mut element, self.progress);
             }

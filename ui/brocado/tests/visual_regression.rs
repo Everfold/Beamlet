@@ -1,9 +1,9 @@
-//! Headless visual, layout, and contrast regression tests for Brocado multi-theme UI.
+//! Headless visual, layout, and contrast regression tests for Brocado Material 3 Expressive UI.
 
 use std::collections::HashSet;
 use std::path::Path;
 
-use brocado::prelude::{Brightness, DesignLanguage, UiTheme};
+use brocado::prelude::Theme;
 use brocado_preview::harness::{PreviewConfig, PreviewStep};
 use brocado_preview::inspect::{IssueSeverity, dump_layout_tree};
 
@@ -11,14 +11,9 @@ use brocado_preview::inspect::{IssueSeverity, dump_layout_tree};
 mod preview_support;
 
 use preview_support::scenes::build_scene_harness;
-use preview_support::{lint_spec_contrast, lint_ui_layout};
+use preview_support::{lint_theme_contrast, lint_ui_layout};
 
-fn assert_scene_snapshot(
-    scene_id: &str,
-    theme: UiTheme,
-    steps: &[PreviewStep],
-    snapshot_name: &str,
-) {
+fn assert_scene_snapshot(scene_id: &str, theme: Theme, steps: &[PreviewStep], snapshot_name: &str) {
     let config = PreviewConfig {
         width: 960,
         height: 640,
@@ -46,7 +41,7 @@ fn assert_scene_snapshot(
         "expected zero layout errors for {snapshot_name}, got: {layout_errors:#?}"
     );
 
-    let contrast_issues = lint_spec_contrast(&harness.state().theme.to_spec());
+    let contrast_issues = lint_theme_contrast(&harness.state().theme);
     assert!(
         contrast_issues.is_empty(),
         "expected zero contrast issues for {snapshot_name}, got: {contrast_issues:#?}"
@@ -76,29 +71,19 @@ fn assert_scene_snapshot(
 
 #[test]
 fn golden_md3_light_workspace() {
-    assert_scene_snapshot(
-        "workspace",
-        UiTheme::new(DesignLanguage::Md3, Brightness::Light),
-        &[],
-        "md3_light_workspace",
-    );
+    assert_scene_snapshot("workspace", Theme::light(), &[], "md3_light_workspace");
 }
 
 #[test]
 fn golden_md3_dark_workspace() {
-    assert_scene_snapshot(
-        "workspace",
-        UiTheme::new(DesignLanguage::Md3, Brightness::Dark),
-        &[],
-        "md3_dark_workspace",
-    );
+    assert_scene_snapshot("workspace", Theme::dark(), &[], "md3_dark_workspace");
 }
 
 #[test]
 fn golden_md3_light_inputs_focused() {
     assert_scene_snapshot(
         "inputs",
-        UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        Theme::light(),
         &[PreviewStep::FocusType {
             type_name: "TextArea".to_owned(),
             index: 0,
@@ -111,7 +96,7 @@ fn golden_md3_light_inputs_focused() {
 fn golden_md3_light_dialog_open() {
     assert_scene_snapshot(
         "overlays",
-        UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        Theme::light(),
         &[PreviewStep::ClickLabel("Open Basic Dialog".to_owned())],
         "md3_light_dialog_open",
     );

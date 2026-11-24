@@ -1,4 +1,4 @@
-//! Cross-theme navigation bars, rails, and permanent/modal drawers honoring [`NavIndicatorStyle`].
+//! Material Design 3 navigation bars, rails, and permanent/modal drawers.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -29,8 +29,10 @@ use crate::foundation::overlay::{
 use crate::foundation::{
     ConstrainedBox, ModalAxisSizing, UiClassExt, clip_box, constrained_box, ui_icon,
 };
-use crate::style_engine::{classes, with_spec};
-use crate::tokens::{DesignSpec, MotionDuration, NavIndicatorStyle, TypeRole};
+use crate::style_engine::{classes, current_theme_arc, with_theme};
+use crate::theme::Theme;
+use crate::theme::metrics::{NAV_PILL_RADIUS, TOP_BAR_HEIGHT};
+use crate::tokens::{MotionDuration, TypeRole};
 
 /// Navigation item metadata shared across bottom bar, rail, drawer, and platform navigation views.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,8 +80,8 @@ where
     type ViewState = (f64, V::ViewState);
 
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let h = spec.metrics.top_bar_height;
+        let _ = current_theme_arc(ctx);
+        let h = TOP_BAR_HEIGHT;
         let (child_pod, child_state) = self.inner.build(ctx, app_state);
         let mut pod = ctx.create_pod(masonry::widgets::SizedBox::new(
             child_pod.new_widget.erased(),
@@ -99,8 +101,8 @@ where
         mut element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) {
-        let spec = crate::style_engine::current_spec_arc(ctx);
-        let next_h = spec.metrics.top_bar_height;
+        let _ = current_theme_arc(ctx);
+        let next_h = TOP_BAR_HEIGHT;
         if (*prev_h - next_h).abs() > 1e-6 {
             ctx.mark_prop_changed::<Dimensions>(element.id());
             element.insert_prop(Dimensions::height(next_h.px()));
@@ -149,10 +151,10 @@ pub fn top_bar<State: 'static, Action: 'static>(
     trailing: Option<Box<AnyWidgetView<State, Action>>>,
 ) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
     let title: ArcStr = title.into();
-    let title_view = with_spec(move |spec: &DesignSpec, _| {
+    let title_view = with_theme(move |theme: &Theme, _| {
         clip_box(
             ui_label(TypeRole::TitleLarge, title.clone())
-                .color(spec.palette.text_primary)
+                .color(theme.scheme.on_surface)
                 .line_breaking(LineBreaking::Clip),
         )
     });
@@ -167,14 +169,15 @@ pub fn top_bar<State: 'static, Action: 'static>(
 }
 
 fn nav_badge_view<State: 'static, Action: 'static>(
-    spec: &DesignSpec,
+    theme: &Theme,
     badge: &Option<ArcStr>,
 ) -> Option<Box<AnyWidgetView<State, Action>>> {
     badge.as_ref().map(|b| {
-        spec.typography
+        theme
+            .typography
             .style_label(TypeRole::LabelSmall, label(b.clone()))
-            .color(spec.palette.on_error)
-            .background_color(spec.palette.error)
+            .color(theme.scheme.on_error)
+            .background_color(theme.scheme.error)
             .padding(Padding::from_vh(2.px(), 6.px()))
             .corner_radius(999.px())
             .boxed()
@@ -192,8 +195,8 @@ where
 {
     let dests = destinations.to_vec();
     let cb = Arc::new(on_select);
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let items: Vec<AnyFlexChild<State, Action>> = dests
             .iter()
             .enumerate()
@@ -201,12 +204,12 @@ where
                 let active = i == selected;
                 let cb = cb.clone();
                 let fg = if active {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_secondary
+                    s.on_surface_variant
                 };
                 let pill_bg = if active {
-                    p.secondary_container
+                    s.secondary_container
                 } else {
                     Color::TRANSPARENT
                 };
@@ -217,9 +220,9 @@ where
                 let txt = clip_box(
                     ui_label(TypeRole::LabelMedium, d.label.clone())
                         .color(if active {
-                            p.text_primary
+                            s.on_surface
                         } else {
-                            p.text_secondary
+                            s.on_surface_variant
                         })
                         .line_breaking(LineBreaking::Clip),
                 );
@@ -229,7 +232,7 @@ where
                         .gap(4.px()),
                 );
                 AnyFlexChild::Item(
-                    button(col, move |s: &mut State| cb(s, i))
+                    button(col, move |st: &mut State| cb(st, i))
                         .ui_class(classes::TAB_ITEM)
                         .padding(Padding::from_vh(4.px(), 2.px()))
                         .boxed()
@@ -263,8 +266,8 @@ where
 {
     let dests = destinations.to_vec();
     let cb = Arc::new(on_select);
-    let row = with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    let row = with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let items: Vec<Box<AnyWidgetView<State, Action>>> = dests
             .iter()
             .enumerate()
@@ -272,32 +275,32 @@ where
                 let active = i == selected;
                 let cb = cb.clone();
                 let fg = if active {
-                    p.on_secondary_container
+                    s.on_secondary_container
                 } else {
-                    p.text_secondary
+                    s.on_surface_variant
                 };
                 let pill_bg = if active {
-                    p.secondary_container
+                    s.secondary_container
                 } else {
                     Color::TRANSPARENT
                 };
                 let pill = sized_box(ui_icon(d.icon, 18.0, fg))
                     .padding(Padding::from_vh(5.px(), 14.px()))
                     .background_color(pill_bg)
-                    .corner_radius(spec.metrics.nav_pill_radius.px());
-                let txt = spec
+                    .corner_radius(NAV_PILL_RADIUS.px());
+                let txt = theme
                     .typography
                     .style_label(TypeRole::LabelSmall, label(d.label.clone()))
                     .color(if active {
-                        p.text_primary
+                        s.on_surface
                     } else {
-                        p.text_secondary
+                        s.on_surface_variant
                     });
                 button(
                     flex_col((pill, txt))
                         .cross_axis_alignment(CrossAxisAlignment::Center)
                         .gap(4.px()),
-                    move |s: &mut State| cb(s, i),
+                    move |st: &mut State| cb(st, i),
                 )
                 .ui_class(classes::TAB_ITEM)
                 .boxed()
@@ -312,7 +315,7 @@ where
                     .padding(Padding::from_vh(12.px(), 6.px())),
             )
             .dims(Dimensions::STRETCH)
-            .background_color(p.surface_low)
+            .background_color(s.surface_container_low)
             .flex(1.0),
             vertical_divider(),
         ))
@@ -321,10 +324,7 @@ where
     constrained_box(row).max_width(81.0).fill_max_width(true)
 }
 
-/// Persistent sidebar navigation drawer honoring [`NavIndicatorStyle`]:
-/// - MD3 `PillBackground`
-/// - Windows Fluent `LeadingAccentBar` (`3px × 16px` left pill accent bar)
-/// - macOS HIG / GNOME Adwaita `RoundedRow`
+/// Persistent Material Design 3 sidebar navigation drawer using pill indicator backgrounds.
 fn navigation_drawer_inner<State: 'static, Action: 'static, F>(
     header_title: Option<&str>,
     destinations: &[NavDestination],
@@ -337,11 +337,11 @@ where
     let header_title = header_title.map(ArcStr::from);
     let dests = destinations.to_vec();
     let cb = Arc::new(on_select);
-    with_spec(move |spec: &DesignSpec, _| {
-        let p = &spec.palette;
+    with_theme(move |theme: &Theme, _| {
+        let s = &theme.scheme;
         let head = header_title.as_ref().map(|h| {
             ui_label(TypeRole::TitleSmall, h.clone())
-                .color(p.text_secondary)
+                .color(s.on_surface_variant)
                 .padding(Padding::from_vh(8.px(), 12.px()))
         });
 
@@ -351,27 +351,18 @@ where
             .map(|(i, d)| {
                 let active = i == selected;
                 let cb = cb.clone();
-                let fg = match (spec.nav_indicator, active) {
-                    (NavIndicatorStyle::PillBackground, true) => p.on_secondary_container,
-                    (NavIndicatorStyle::LeadingAccentBar | NavIndicatorStyle::RoundedRow, true) => {
-                        p.text_primary
-                    }
-                    (_, false) => p.text_secondary,
+                let fg = if active {
+                    s.on_secondary_container
+                } else {
+                    s.on_surface_variant
                 };
-                let leading_bar = matches!(spec.nav_indicator, NavIndicatorStyle::LeadingAccentBar)
-                    .then(|| {
-                        sized_box(label(""))
-                            .dims(Dimensions::fixed(3.px(), 16.px()))
-                            .background_color(if active { p.accent } else { Color::TRANSPARENT })
-                            .corner_radius(2.px())
-                    });
-                let icon_c = if active { p.accent } else { fg };
+                let icon_c = if active { s.primary } else { fg };
                 let lbl = clip_box(
                     ui_label(TypeRole::LabelLarge, d.label.clone())
                         .color(fg)
                         .line_breaking(LineBreaking::Clip),
                 );
-                let badge = nav_badge_view(spec, &d.badge_text);
+                let badge = nav_badge_view(theme, &d.badge_text);
                 let cls = if active {
                     classes::NAV_PILL_ACTIVE
                 } else {
@@ -379,17 +370,12 @@ where
                 };
                 button(
                     clip_box(
-                        flex_row((
-                            leading_bar,
-                            ui_icon(d.icon, 18.0, icon_c),
-                            lbl.flex(1.0),
-                            badge,
-                        ))
-                        .cross_axis_alignment(CrossAxisAlignment::Center)
-                        .gap(10.px()),
+                        flex_row((ui_icon(d.icon, 18.0, icon_c), lbl.flex(1.0), badge))
+                            .cross_axis_alignment(CrossAxisAlignment::Center)
+                            .gap(10.px()),
                     )
                     .fill_available(true),
-                    move |s: &mut State| cb(s, i),
+                    move |st: &mut State| cb(st, i),
                 )
                 .ui_class(cls)
                 .boxed()
@@ -408,7 +394,7 @@ where
             .padding(Padding::all(12.px())),
         )
         .dims(Dimensions::STRETCH)
-        .background_color(p.surface_low);
+        .background_color(s.surface_container_low);
 
         flex_row((drawer_panel.flex(1.0), vertical_divider()))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
