@@ -472,16 +472,16 @@ impl Widget for UiScrollBar {
                     }
                 }
             }
-            PointerEvent::Up(..) | PointerEvent::Cancel(..) => {
-                if self.grab_anchor.take().is_some() {
-                    if self.style.auto_hides()
-                        && !self.is_interacting()
-                        && (self.target_opacity - self.opacity).abs() > 1e-4
-                    {
-                        ctx.request_anim_frame();
-                    }
-                    ctx.request_paint_only();
+            PointerEvent::Up(..) | PointerEvent::Cancel(..)
+                if self.grab_anchor.take().is_some() =>
+            {
+                if self.style.auto_hides()
+                    && !self.is_interacting()
+                    && (self.target_opacity - self.opacity).abs() > 1e-4
+                {
+                    ctx.request_anim_frame();
                 }
+                ctx.request_paint_only();
             }
             _ => {}
         }
@@ -1125,19 +1125,18 @@ impl Widget for ScrollViewWidget {
                     ctx.request_anim_frame();
                 }
             }
-            Update::HoveredChanged(true) | Update::ChildHoveredChanged(true) => {
+            Update::HoveredChanged(true) | Update::ChildHoveredChanged(true)
                 if style.auto_hides()
-                    && (self.scrollbar_horizontal_visible || self.scrollbar_vertical_visible)
-                {
-                    self.idle_ns = Some(0);
-                    for bar_pod in [&mut self.scrollbar_horizontal, &mut self.scrollbar_vertical] {
-                        let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
-                        if bar.set_target_opacity(1.0, false) {
-                            bar_ctx.request_anim_frame();
-                        }
+                    && (self.scrollbar_horizontal_visible || self.scrollbar_vertical_visible) =>
+            {
+                self.idle_ns = Some(0);
+                for bar_pod in [&mut self.scrollbar_horizontal, &mut self.scrollbar_vertical] {
+                    let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
+                    if bar.set_target_opacity(1.0, false) {
+                        bar_ctx.request_anim_frame();
                     }
-                    ctx.request_anim_frame();
                 }
+                ctx.request_anim_frame();
             }
             _ => {}
         }
@@ -1415,9 +1414,9 @@ impl Widget for ScrollViewWidget {
             0.0
         };
 
-        let init_opacity = if style.visibility == ScrollBarVisibility::Never {
-            0.0
-        } else if style.auto_hides() && self.idle_ns.is_none() {
+        let init_opacity = if style.visibility == ScrollBarVisibility::Never
+            || (style.auto_hides() && self.idle_ns.is_none())
+        {
             0.0
         } else {
             1.0
