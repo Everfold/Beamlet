@@ -13,7 +13,7 @@ use masonry::core::{
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
 use masonry::layout::{AsUnit, LayoutSize, LenDef, LenReq, Length, SizeDef};
-use masonry::properties::types::CrossAxisAlignment;
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
 use tracing::{Span, trace_span};
 use xilem_core::{
     AppendVec, ElementSplice, MessageCtx, MessageResult, Mut, View, ViewMarker, ViewSequence,
@@ -92,15 +92,22 @@ pub struct WrapWidget {
     gap: f64,
     run_gap: f64,
     cross_align: CrossAxisAlignment,
+    main_align: MainAxisAlignment,
 }
 
 impl WrapWidget {
-    fn new(gap: f64, run_gap: f64, cross_align: CrossAxisAlignment) -> Self {
+    fn new(
+        gap: f64,
+        run_gap: f64,
+        cross_align: CrossAxisAlignment,
+        main_align: MainAxisAlignment,
+    ) -> Self {
         Self {
             children: Vec::new(),
             gap,
             run_gap,
             cross_align,
+            main_align,
         }
     }
 
@@ -109,14 +116,17 @@ impl WrapWidget {
         gap: f64,
         run_gap: f64,
         cross_align: CrossAxisAlignment,
+        main_align: MainAxisAlignment,
     ) {
         if (this.widget.gap - gap).abs() > f64::EPSILON
             || (this.widget.run_gap - run_gap).abs() > f64::EPSILON
             || this.widget.cross_align != cross_align
+            || this.widget.main_align != main_align
         {
             this.widget.gap = gap;
             this.widget.run_gap = run_gap;
             this.widget.cross_align = cross_align;
+            this.widget.main_align = main_align;
             this.ctx.request_layout();
         }
     }
@@ -193,6 +203,9 @@ impl Widget for WrapWidget {
                 Length::px(total_w)
             }
             (Axis::Horizontal, LenReq::FitContent(space)) => {
+                if self.main_align != MainAxisAlignment::Start {
+                    return space;
+                }
                 let avail_w = space.get().max(0.0);
                 for (idx, c) in self.children.iter_mut().enumerate() {
                     let w = ctx
@@ -264,6 +277,15 @@ impl Widget for WrapWidget {
 
         let mut first_baseline = None;
         for run in runs {
+            let run_w = run
+                .items
+                .last()
+                .map_or(0.0, |item| item.x + item.size.width);
+            let run_dx = match self.main_align {
+                MainAxisAlignment::End => (avail_w - run_w).max(0.0),
+                MainAxisAlignment::Center => ((avail_w - run_w) * 0.5).max(0.0),
+                _ => 0.0,
+            };
             for item in run.items {
                 let target_size = match self.cross_align {
                     CrossAxisAlignment::Stretch => Size::new(item.size.width, run.height),
@@ -278,7 +300,7 @@ impl Widget for WrapWidget {
                 };
                 let child = &mut self.children[item.index];
                 ctx.run_layout(child, target_size);
-                ctx.place_child(child, Point::new(item.x, run.y + dy));
+                ctx.place_child(child, Point::new(run_dx + item.x, run.y + dy));
                 if first_baseline.is_none() {
                     ctx.derive_baselines(child);
                     first_baseline = Some(item.index);
@@ -396,6 +418,7 @@ pub struct WrapView<Seq, State, Action> {
     gap: Length,
     run_gap: Length,
     cross_align: CrossAxisAlignment,
+    main_align: MainAxisAlignment,
     phantom: PhantomData<fn(State) -> Action>,
 }
 
@@ -409,6 +432,7 @@ where
         gap: 8.px(),
         run_gap: 8.px(),
         cross_align: CrossAxisAlignment::Center,
+        main_align: MainAxisAlignment::Start,
         phantom: PhantomData,
     }
 }
@@ -431,6 +455,12 @@ impl<Seq, State, Action> WrapView<Seq, State, Action> {
         self.cross_align = align;
         self
     }
+
+    /// Sets horizontal alignment of each wrapped row (`Start`, `Center`, or `End`).
+    pub fn main_axis_alignment(mut self, align: MainAxisAlignment) -> Self {
+        self.main_align = align;
+        self
+    }
 }
 
 impl<Seq, State, Action> ViewMarker for WrapView<Seq, State, Action> {}
@@ -447,7 +477,12 @@ where
     fn build(&self, ctx: &mut ViewCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
         let mut elements = AppendVec::default();
         let seq_state = self.sequence.seq_build(ctx, &mut elements, app_state);
-        let mut widget = WrapWidget::new(self.gap.get(), self.run_gap.get(), self.cross_align);
+        let mut widget = WrapWidget::new(
+            self.gap.get(),
+            self.run_gap.get(),
+            self.cross_align,
+            self.main_align,
+        );
         for child in elements.drain() {
             widget.children.push(child.new_widget.to_pod());
         }
@@ -474,6 +509,7 @@ where
             self.gap.get(),
             self.run_gap.get(),
             self.cross_align,
+            self.main_align,
         );
         let mut splice = WrapSplice::new(element, scratch);
         self.sequence
