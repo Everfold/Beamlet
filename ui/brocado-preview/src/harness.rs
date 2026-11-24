@@ -17,8 +17,8 @@ use image::{ImageFormat, RgbaImage};
 use masonry::app::RenderRoot;
 use masonry::core::keyboard::{Code, Key, KeyState, NamedKey};
 use masonry::core::{
-    DefaultProperties, KeyboardEvent, PointerButton, TextEvent, Widget, WidgetId, WidgetRef,
-    WindowEvent,
+    DefaultProperties, KeyboardEvent, PointerButton, Property, TextEvent, Widget, WidgetId,
+    WidgetRef, WindowEvent,
 };
 use masonry::dpi::PhysicalSize;
 use masonry::kurbo::Point;
@@ -33,6 +33,8 @@ use xilem_core::{
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
+
+use crate::diff::{ImageDiffReport, ImageDiffTolerance, check_snapshot_image};
 
 #[derive(Debug)]
 struct NoopRawProxy;
@@ -587,6 +589,88 @@ impl<State: 'static> PreviewHarness<State> {
     pub fn check_render_snapshot(&mut self, manifest_dir: &str, test_name: &str) {
         self.harness
             .check_render_snapshot(manifest_dir, test_name, false);
+    }
+
+    /// Reads the resolved Masonry property `P` (local override -> `PropertyStack` -> default) on widget `id`.
+    pub fn widget_prop<P: Property + Clone>(&mut self, id: WidgetId) -> Option<P> {
+        let _ = self.harness.redraw();
+        self.harness
+            .try_get_widget(id)
+            .map(|w| w.get_prop::<P>().clone())
+    }
+
+    /// Returns `true` when widget `id` carries a local instance override for property `P`.
+    pub fn widget_contains_local_prop<P: Property>(&mut self, id: WidgetId) -> bool {
+        let _ = self.harness.redraw();
+        self.harness
+            .try_get_widget(id)
+            .is_some_and(|w| w.contains_prop::<P>())
+    }
+
+    /// Renders the frame and returns the tight RGBA crop matching widget `id`'s laid-out border-box.
+    pub fn render_widget_image(&mut self, id: WidgetId) -> Option<RgbaImage> {
+        let (lx, ly, lw, lh) = self.widget_rect(id)?;
+        let img = self.render_image();
+        let (img_w, img_h) = img.dimensions();
+        let scale = self.config.scale_factor;
+
+        let x0 = ((lx * scale).floor() as i64).clamp(0, i64::from(img_w));
+        let y0 = ((ly * scale).floor() as i64).clamp(0, i64::from(img_h));
+        let x1 = (((lx + lw) * scale).ceil() as i64).clamp(0, i64::from(img_w));
+        let y1 = (((ly + lh) * scale).ceil() as i64).clamp(0, i64::from(img_h));
+
+        let px = u32::try_from(x0).ok()?;
+        let py = u32::try_from(y0).ok()?;
+        let pw = u32::try_from(x1 - x0).ok()?;
+        let ph = u32::try_from(y1 - y0).ok()?;
+        if pw == 0 || ph == 0 {
+            return None;
+        }
+        Some(image::imageops::crop_imm(&img, px, py, pw, ph).to_image())
+    }
+
+    /// Samples a single RGBA pixel inside widget `id` at normalized coordinates `(x_frac, y_frac)` in `0.0..=1.0`.
+    pub fn sample_widget_pixel(
+        &mut self,
+        id: WidgetId,
+        x_frac: f64,
+        y_frac: f64,
+    ) -> Option<[u8; 4]> {
+        let crop = self.render_widget_image(id)?;
+        let (w, h) = crop.dimensions();
+        if w == 0 || h == 0 {
+            return None;
+        }
+        let xf = x_frac.clamp(0.0, 1.0);
+        let yf = y_frac.clamp(0.0, 1.0);
+        let px = ((xf * f64::from(w)).floor() as u32).min(w - 1);
+        let py = ((yf * f64::from(h)).floor() as u32).min(h - 1);
+        Some(crop.get_pixel(px, py).0)
+    }
+
+    /// Compares the full rendered frame against `<manifest_dir>/screenshots/<test_name>.png` using `tolerance`.
+    pub fn check_snapshot_with_tolerance(
+        &mut self,
+        manifest_dir: impl AsRef<Path>,
+        test_name: &str,
+        tolerance: ImageDiffTolerance,
+    ) -> anyhow::Result<ImageDiffReport> {
+        let actual = self.render_image();
+        check_snapshot_image(&actual, manifest_dir, test_name, tolerance)
+    }
+
+    /// Compares only widget `id`'s cropped bitmap against `<manifest_dir>/screenshots/<test_name>.png`.
+    pub fn check_widget_snapshot(
+        &mut self,
+        id: WidgetId,
+        manifest_dir: impl AsRef<Path>,
+        test_name: &str,
+        tolerance: ImageDiffTolerance,
+    ) -> anyhow::Result<ImageDiffReport> {
+        let actual = self
+            .render_widget_image(id)
+            .with_context(|| format!("widget {id:?} rendered empty or offscreen"))?;
+        check_snapshot_image(&actual, manifest_dir, test_name, tolerance)
     }
 
     /// Returns a mutable handle to the underlying `TestHarness` for custom low-level assertions.
