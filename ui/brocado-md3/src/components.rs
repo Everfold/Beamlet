@@ -220,8 +220,8 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
                 trail_row,
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(6.px())
-            .padding(Padding::from_vh(8.px(), 12.px()))
+            .gap(4.px())
+            .padding(Padding::from_vh(8.px(), 6.px()))
             .boxed(),
         ),
         TopAppBarVariant::CenterAligned => (
@@ -237,8 +237,8 @@ pub fn top_app_bar_slots<State: 'static, Action: 'static>(
                 trail_row,
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(6.px())
-            .padding(Padding::from_vh(8.px(), 12.px()))
+            .gap(4.px())
+            .padding(Padding::from_vh(8.px(), 6.px()))
             .boxed(),
         ),
         TopAppBarVariant::Medium => {

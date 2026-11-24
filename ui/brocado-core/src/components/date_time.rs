@@ -278,7 +278,8 @@ where
         let grid = sized_box(
             flex_col((weekday_row, flex_col(rows).gap(4.px())))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .gap(6.px()),
+                .gap(6.px())
+                .padding(Padding::bottom(14.px())),
         )
         .dims(Dimensions::new(Dim::MaxContent, Dim::MaxContent));
 

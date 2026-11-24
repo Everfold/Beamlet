@@ -29,7 +29,7 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, sized_box,
     text_input,
 };
 
@@ -58,8 +58,8 @@ where
                 }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px())
-            .padding(Padding::from_vh(6.px(), 10.px())),
+            .gap(4.px())
+            .padding(Padding::from_vh(6.px(), 6.px())),
         )
         .dims(Dimensions::height(46.px()))
         .ui_class(classes::HEADER_BAR),
@@ -109,18 +109,14 @@ pub fn preferences_group<State: 'static, Action: 'static>(
     let header = if title_owned.is_some() || desc_owned.is_some() {
         Some(with_spec(move |spec: &DesignSpec, _| {
             let p = &spec.palette;
-            let t = title_owned.as_ref().map(|s| {
-                spec.typography
-                    .style_label(TypeRole::TitleMedium, label(s.clone()))
-                    .color(p.text_primary)
-            });
-            let d = desc_owned.as_ref().map(|s| {
-                spec.typography
-                    .style_label(TypeRole::BodySmall, label(s.clone()))
-                    .color(p.text_secondary)
-            });
+            let t = title_owned
+                .as_ref()
+                .map(|s| ui_label(TypeRole::TitleMedium, s.clone()).color(p.text_primary));
+            let d = desc_owned
+                .as_ref()
+                .map(|s| ui_label(TypeRole::BodySmall, s.clone()).color(p.text_secondary));
             flex_col((t, d))
-                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(2.px())
         }))
     } else {
@@ -478,10 +474,7 @@ where
     let inner = with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let cb = cb.clone();
-        let top = spec
-            .typography
-            .style_label(TypeRole::LabelSmall, label(title.clone()))
-            .color(p.text_secondary);
+        let top = ui_label(TypeRole::LabelSmall, title.clone()).color(p.text_secondary);
         let style = spec.typography.get(TypeRole::BodyLarge);
         let mut ti = text_input(value.clone(), move |s: &mut State, txt| cb(s, txt))
             .text_size(style.font_size)

@@ -56,8 +56,8 @@ where
                 }),
             ))
             .cross_axis_alignment(CrossAxisAlignment::Center)
-            .gap(8.px())
-            .padding(Padding::from_vh(4.px(), 10.px())),
+            .gap(4.px())
+            .padding(Padding::from_vh(4.px(), 6.px())),
         )
         .dims(Dimensions::height(38.px()))
         .ui_class(classes::HEADER_BAR),
@@ -174,8 +174,7 @@ pub fn form_group<State: 'static, Action: 'static>(
 
     let head_view = header_owned.map(|h| {
         with_spec(move |spec: &DesignSpec, _| {
-            spec.typography
-                .style_label(TypeRole::LabelMedium, label(h.clone()))
+            ui_label(TypeRole::LabelMedium, h.clone())
                 .color(spec.palette.text_secondary)
                 .padding(Padding::from_vh(2.px(), 6.px()))
         })
@@ -194,8 +193,7 @@ pub fn form_group<State: 'static, Action: 'static>(
 
     let foot_view = footer_owned.map(|f| {
         with_spec(move |spec: &DesignSpec, _| {
-            spec.typography
-                .style_label(TypeRole::BodySmall, label(f.clone()))
+            ui_label(TypeRole::BodySmall, f.clone())
                 .color(spec.palette.text_secondary)
                 .padding(Padding::from_vh(2.px(), 6.px()))
         })
@@ -272,14 +270,17 @@ where
         } else {
             icons::CHEVRON_RIGHT
         };
-        let lbl = spec
-            .typography
-            .style_label(TypeRole::TitleSmall, label(title.clone()))
-            .color(p.text_primary);
+        let lbl = clip_box(
+            ui_label(TypeRole::TitleSmall, title.clone())
+                .color(p.text_primary)
+                .line_breaking(LineBreaking::Clip),
+        );
         button(
-            flex_row((ui_icon(chevron, 16.0, p.text_secondary), lbl.flex(1.0)))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(6.px()),
+            clip_box(
+                flex_row((ui_icon(chevron, 16.0, p.text_secondary), lbl.flex(1.0)))
+                    .cross_axis_alignment(CrossAxisAlignment::Center)
+                    .gap(6.px()),
+            ),
             move |s: &mut State| cb(s),
         )
         .ui_class(classes::BTN_SUBTLE)

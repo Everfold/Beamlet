@@ -1,7 +1,8 @@
 //! Shared 15-role typography ramp, line-height/tracking tokens, and platform font stacks.
 
-use masonry::parley::style::FontFamily;
-use masonry::parley::style::FontWeight;
+use std::borrow::Cow;
+
+use masonry::parley::style::{FontFamily, FontFamilyName, FontWeight};
 use masonry::parley::{GenericFamily, LineHeight};
 use xilem_masonry::view::Label;
 
@@ -113,6 +114,45 @@ impl Default for TypeScale {
     }
 }
 
+const MD3_FONT_STACK: &[FontFamilyName<'static>] = &[
+    FontFamilyName::Named(Cow::Borrowed("Roboto")),
+    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
+    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
+    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
+    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
+const FLUENT_FONT_STACK: &[FontFamilyName<'static>] = &[
+    FontFamilyName::Named(Cow::Borrowed("Segoe UI Variable")),
+    FontFamilyName::Named(Cow::Borrowed("Segoe UI")),
+    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
+    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
+    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
+    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
+const HIG_FONT_STACK: &[FontFamilyName<'static>] = &[
+    FontFamilyName::Named(Cow::Borrowed("SF Pro Text")),
+    FontFamilyName::Named(Cow::Borrowed("SF Pro Display")),
+    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
+    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
+    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
+    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
+const ADWAITA_FONT_STACK: &[FontFamilyName<'static>] = &[
+    FontFamilyName::Named(Cow::Borrowed("Adwaita Sans")),
+    FontFamilyName::Named(Cow::Borrowed("Cantarell")),
+    FontFamilyName::Named(Cow::Borrowed("Sarasa UI SC")),
+    FontFamilyName::Named(Cow::Borrowed("Noto Sans CJK SC")),
+    FontFamilyName::Named(Cow::Borrowed("Microsoft YaHei UI")),
+    FontFamilyName::Named(Cow::Borrowed("PingFang SC")),
+    FontFamilyName::Generic(GenericFamily::SansSerif),
+];
+
 impl TypeScale {
     /// Returns the baseline Material Design 3 15-role typography ramp (`16sp`/`14sp` body).
     #[must_use]
@@ -139,7 +179,7 @@ impl TypeScale {
             label_large: TextStyleSpec::new(14.0, 20.0, 0.1, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.5, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(11.0, 16.0, 0.5, FontWeight::MEDIUM),
-            font_family: None,
+            font_family: Some(FontFamily::List(Cow::Borrowed(MD3_FONT_STACK))),
         }
     }
 
@@ -162,7 +202,7 @@ impl TypeScale {
             label_large: TextStyleSpec::new(14.0, 20.0, 0.0, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
+            font_family: Some(FontFamily::List(Cow::Borrowed(FLUENT_FONT_STACK))),
         }
     }
 
@@ -185,7 +225,7 @@ impl TypeScale {
             label_large: TextStyleSpec::new(13.0, 16.0, 0.0, FontWeight::MEDIUM),
             label_medium: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
             label_small: TextStyleSpec::new(10.0, 13.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
+            font_family: Some(FontFamily::List(Cow::Borrowed(HIG_FONT_STACK))),
         }
     }
 
@@ -208,7 +248,7 @@ impl TypeScale {
             label_large: TextStyleSpec::new(15.0, 20.0, 0.0, FontWeight::SEMI_BOLD),
             label_medium: TextStyleSpec::new(12.0, 16.0, 0.0, FontWeight::BOLD),
             label_small: TextStyleSpec::new(11.0, 14.0, 0.0, FontWeight::MEDIUM),
-            font_family: None,
+            font_family: Some(FontFamily::List(Cow::Borrowed(ADWAITA_FONT_STACK))),
         }
     }
 
@@ -284,40 +324,54 @@ impl TypeScale {
     /// Parses and assigns a CSS-style font fallback stack string (e.g. `"Roboto, sans-serif"`).
     #[must_use]
     pub fn with_font_stack(mut self, stack: &'static str) -> Self {
-        self.font_family = Some(FontFamily::from(stack));
+        let items: Vec<FontFamilyName<'static>> = stack
+            .split(',')
+            .map(|part| part.trim().trim_matches('\'').trim_matches('"'))
+            .filter(|part| !part.is_empty())
+            .map(|name| match name {
+                "sans-serif" => FontFamilyName::Generic(GenericFamily::SansSerif),
+                "serif" => FontFamilyName::Generic(GenericFamily::Serif),
+                "monospace" => FontFamilyName::Generic(GenericFamily::Monospace),
+                "system-ui" => FontFamilyName::Generic(GenericFamily::SystemUi),
+                other => FontFamilyName::Named(Cow::Borrowed(other)),
+            })
+            .collect();
+        if let [single] = items.as_slice() {
+            self.font_family = Some(FontFamily::Single(single.clone()));
+        } else if !items.is_empty() {
+            self.font_family = Some(FontFamily::List(Cow::Owned(items)));
+        } else {
+            self.font_family = Some(FontFamily::from(stack));
+        }
         self
     }
 
     /// Selects the canonical Material Design 3 Roboto + CJK sans fallback stack.
     #[must_use]
-    pub fn with_md3_font_stack(self) -> Self {
-        self.with_font_stack(
-            "Roboto, 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif",
-        )
+    pub fn with_md3_font_stack(mut self) -> Self {
+        self.font_family = Some(FontFamily::List(Cow::Borrowed(MD3_FONT_STACK)));
+        self
     }
 
     /// Selects the canonical Windows 11 Segoe UI Variable + YaHei + cross-platform CJK fallback stack.
     #[must_use]
-    pub fn with_fluent_font_stack(self) -> Self {
-        self.with_font_stack(
-            "'Segoe UI Variable', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Sarasa UI SC', 'PingFang SC', sans-serif",
-        )
+    pub fn with_fluent_font_stack(mut self) -> Self {
+        self.font_family = Some(FontFamily::List(Cow::Borrowed(FLUENT_FONT_STACK)));
+        self
     }
 
     /// Selects the canonical Apple macOS SF Pro + PingFang + cross-platform CJK fallback stack.
     #[must_use]
-    pub fn with_hig_font_stack(self) -> Self {
-        self.with_font_stack(
-            "'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', sans-serif",
-        )
+    pub fn with_hig_font_stack(mut self) -> Self {
+        self.font_family = Some(FontFamily::List(Cow::Borrowed(HIG_FONT_STACK)));
+        self
     }
 
     /// Selects the canonical GNOME Adwaita Sans + Cantarell + cross-platform CJK fallback stack.
     #[must_use]
-    pub fn with_adwaita_font_stack(self) -> Self {
-        self.with_font_stack(
-            "'Adwaita Sans', 'Cantarell', 'Noto Sans CJK SC', 'Sarasa UI SC', 'Microsoft YaHei UI', 'PingFang SC', sans-serif",
-        )
+    pub fn with_adwaita_font_stack(mut self) -> Self {
+        self.font_family = Some(FontFamily::List(Cow::Borrowed(ADWAITA_FONT_STACK)));
+        self
     }
 
     /// Convenience helper selecting the generic sans-serif stack (`FontFamily::from(GenericFamily::SansSerif)`).

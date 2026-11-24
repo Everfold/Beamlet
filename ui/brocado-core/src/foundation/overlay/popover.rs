@@ -454,8 +454,9 @@ impl Widget for PopoverPlacementWidget {
         &mut self,
         _ctx: &mut AccessCtx<'_>,
         _props: &PropertiesRef<'_>,
-        _node: &mut Node,
+        node: &mut Node,
     ) {
+        node.set_modal();
     }
 
     fn children_ids(&self) -> ChildrenIds {
