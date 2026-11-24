@@ -8,6 +8,7 @@ use anyhow::{Context as _, bail};
 use brocado::prelude::*;
 use brocado_preview::harness::{PreviewConfig, PreviewStep};
 use brocado_preview::inspect::{IssueSeverity, format_tree_text};
+use brocado_preview::report::{PreviewReportEntry, write_html_report};
 use clap::Parser;
 use image::ImageFormat;
 
@@ -16,7 +17,7 @@ use image::ImageFormat;
 mod preview_support;
 
 use preview_support::scenes::{ALL_SCENES, SceneOutput, build_scene_harness, run_scene_preview};
-use preview_support::{lint_spec_contrast, lint_ui_layout};
+use preview_support::{lint_spec_contrast, lint_ui_accessibility, lint_ui_layout};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -71,6 +72,10 @@ struct Cli {
     /// Skip settling entrance animations (e.g. SlideTransition) before capturing the frame.
     #[arg(long)]
     no_settle: bool,
+
+    /// Skip generating `<out>/index.html` review report.
+    #[arg(long)]
+    no_html: bool,
 
     /// Output directory for preview artifacts.
     #[arg(long, default_value = "target/previews")]
@@ -188,6 +193,7 @@ fn main() -> anyhow::Result<()> {
         .with_context(|| format!("failed creating output directory {}", cli.out.display()))?;
 
     let mut total_lint_failures = 0usize;
+    let mut report_entries = Vec::new();
 
     for scene_id in &scenes {
         for (lang, lang_slug) in &themes {
@@ -195,7 +201,8 @@ fn main() -> anyhow::Result<()> {
                 let mut theme = UiTheme::new(*lang, *brightness);
                 theme.high_contrast = cli.high_contrast;
                 let hc_suffix = if cli.high_contrast { "_hc" } else { "" };
-                let base_name = format!("{scene_id}_{lang_slug}_{bright_slug}{hc_suffix}");
+                let bright_label = format!("{bright_slug}{hc_suffix}");
+                let base_name = format!("{scene_id}_{lang_slug}_{bright_label}");
 
                 let t0 = Instant::now();
                 let output = if cli.no_settle {
@@ -205,29 +212,36 @@ fn main() -> anyhow::Result<()> {
                     let tree = brocado_preview::inspect::dump_layout_tree(&mut h);
                     let layout_issues = lint_ui_layout(&tree, h.viewport());
                     let contrast_issues = lint_spec_contrast(&h.state().theme.to_spec());
+                    let a11y_issues = lint_ui_accessibility(&mut h);
                     SceneOutput {
                         image,
                         tree,
                         layout_issues,
                         contrast_issues,
+                        a11y_issues,
                     }
                 } else {
                     run_scene_preview(scene_id, theme, config, &steps)?
                 };
                 let elapsed_ms = t0.elapsed().as_millis();
 
-                let png_path = cli.out.join(format!("{base_name}.png"));
+                let image_filename = format!("{base_name}.png");
+                let png_path = cli.out.join(&image_filename);
                 output
                     .image
                     .save_with_format(&png_path, ImageFormat::Png)
                     .with_context(|| format!("failed saving {}", png_path.display()))?;
 
-                if cli.dump_tree {
+                let tree_text = if cli.dump_tree {
+                    let text = format_tree_text(&output.tree);
                     let tree_path = cli.out.join(format!("{base_name}.tree.txt"));
                     let json_path = cli.out.join(format!("{base_name}.layout.json"));
-                    fs::write(&tree_path, format_tree_text(&output.tree))?;
+                    fs::write(&tree_path, &text)?;
                     fs::write(&json_path, serde_json::to_string_pretty(&output.tree)?)?;
-                }
+                    Some(text)
+                } else {
+                    None
+                };
 
                 let err_count = output
                     .layout_issues
@@ -236,14 +250,16 @@ fn main() -> anyhow::Result<()> {
                     .count();
                 let warn_count = output.layout_issues.len() - err_count;
                 let contrast_count = output.contrast_issues.len();
+                let a11y_count = output.a11y_issues.len();
 
                 println!(
-                    "[preview] {} ({}ms) -> layout: {} errors / {} warnings, contrast: {} issues",
+                    "[preview] {} ({}ms) -> layout: {} errors / {} warnings, contrast: {} issues, a11y: {} issues",
                     png_path.display(),
                     elapsed_ms,
                     err_count,
                     warn_count,
                     contrast_count,
+                    a11y_count,
                 );
 
                 if cli.lint || cli.fail_on_lint {
@@ -259,17 +275,49 @@ fn main() -> anyhow::Result<()> {
                             issue.pair, issue.ratio, issue.minimum
                         );
                     }
+                    for issue in &output.a11y_issues {
+                        println!(
+                            "  [a11y:{:?}:{}] {}",
+                            issue.severity, issue.kind, issue.message
+                        );
+                    }
                 }
 
                 if cli.fail_on_lint {
-                    total_lint_failures += err_count + contrast_count;
+                    total_lint_failures += err_count + contrast_count + a11y_count;
                 }
+
+                report_entries.push(PreviewReportEntry {
+                    name: base_name,
+                    scene: (*scene_id).to_string(),
+                    theme: lang_slug.to_string(),
+                    brightness: bright_label,
+                    viewport: (width, height),
+                    scale_factor: cli.scale,
+                    elapsed_ms,
+                    image_path: image_filename,
+                    diff_image_path: None,
+                    layout_issues: output.layout_issues,
+                    contrast_issues: output.contrast_issues,
+                    a11y_issues: output.a11y_issues,
+                    tree_text,
+                });
             }
         }
     }
 
+    if !cli.no_html {
+        let report_path = cli.out.join("index.html");
+        write_html_report(
+            &report_path,
+            "Brocado Offline Preview Report",
+            &report_entries,
+        )?;
+        println!("[preview] report -> {}", report_path.display());
+    }
+
     if total_lint_failures > 0 {
-        bail!("preview lint check detected {total_lint_failures} error/contrast failures");
+        bail!("preview lint check detected {total_lint_failures} error/contrast/a11y failures");
     }
 
     Ok(())

@@ -7,3 +7,4 @@
 pub mod diff;
 pub mod harness;
 pub mod inspect;
+pub mod report;

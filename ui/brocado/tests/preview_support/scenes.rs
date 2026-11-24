@@ -16,9 +16,11 @@ use xilem_masonry::view::{
 };
 
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use brocado_preview::inspect::{ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree};
+use brocado_preview::inspect::{
+    A11yIssue, ContrastIssue, LayoutIssue, LayoutNode, dump_layout_tree,
+};
 
-use super::{build_ui_harness, lint_spec_contrast, lint_ui_layout};
+use super::{build_ui_harness, lint_spec_contrast, lint_ui_accessibility, lint_ui_layout};
 
 /// Metadata describing a built-in preview scene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +70,8 @@ pub struct SceneOutput {
     pub layout_issues: Vec<LayoutIssue>,
     /// Automated WCAG 2.1 color contrast findings on active `DesignSpec`.
     pub contrast_issues: Vec<ContrastIssue>,
+    /// Automated AccessKit accessibility findings.
+    pub a11y_issues: Vec<A11yIssue>,
 }
 
 /// Shared mutable state driving all built-in preview scenes.
@@ -1215,10 +1219,12 @@ pub fn run_scene_preview(
     let tree = dump_layout_tree(&mut harness);
     let layout_issues = lint_ui_layout(&tree, harness.viewport());
     let contrast_issues = lint_spec_contrast(&harness.state().theme.to_spec());
+    let a11y_issues = lint_ui_accessibility(&mut harness);
     Ok(SceneOutput {
         image,
         tree,
         layout_issues,
         contrast_issues,
+        a11y_issues,
     })
 }
