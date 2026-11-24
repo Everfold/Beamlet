@@ -1423,3 +1423,51 @@ fn sidebars_and_inspector_clamp_in_narrow_containers() {
         drawer_desktop_box.rect
     );
 }
+
+#[test]
+fn time_picker_dialog_has_no_phantom_bottom_whitespace() {
+    fn find_button_containing_text<'a>(node: &'a LayoutNode, text: &str) -> Option<&'a LayoutNode> {
+        if node.type_name == "Button" && find_node_by_text(node, text).is_some() {
+            return Some(node);
+        }
+        for ch in &node.children {
+            if let Some(found) = find_button_containing_text(ch, text) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    struct State {
+        time: TimeOfDay,
+    }
+
+    let mut h = build_ui_harness(
+        State {
+            time: TimeOfDay::new(16, 0),
+        },
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |s| {
+            let t = s.time;
+            time_picker_dialog(t, |st: &mut State, new_t| st.time = new_t, |_| {}, |_| {}).boxed()
+        },
+        PreviewConfig {
+            width: 1200,
+            height: 800,
+            ..PreviewConfig::default()
+        },
+    );
+    h.settle_animations();
+    let tree = dump_layout_tree(&mut h);
+    let card = &find_first_node(&tree, "SlideTransition")
+        .expect("SlideTransition missing")
+        .children[0];
+    let ok_btn = find_button_containing_text(card, "OK").expect("'OK' button missing");
+    let bottom_gap = (card.rect.y + card.rect.height) - (ok_btn.rect.y + ok_btn.rect.height);
+    assert!(
+        bottom_gap <= 24.0 && card.rect.height <= 230.0,
+        "time_picker_dialog has phantom bottom whitespace (gap={bottom_gap:.2}): card={:?}, ok={:?}",
+        card.rect,
+        ok_btn.rect
+    );
+}

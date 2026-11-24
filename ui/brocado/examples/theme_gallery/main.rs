@@ -1436,6 +1436,16 @@ mod tests {
             "DatePickerDialog should hug calendar width (~272px) without right-side void: {:?}",
             date_card.rect
         );
+        let (date_ok_btn, _) =
+            find_ancestor_button_and_label(&date_dlg_tree, "OK").expect("DatePicker 'OK' button");
+        let date_bottom_gap = (date_card.rect.y + date_card.rect.height)
+            - (date_ok_btn.rect.y + date_ok_btn.rect.height);
+        assert!(
+            date_bottom_gap <= 24.0,
+            "DatePickerDialog should hug OK button bottom without dead void (gap={date_bottom_gap:.2}): card={:?}, ok={:?}",
+            date_card.rect,
+            date_ok_btn.rect
+        );
         h_ov.run_step(&PreviewStep::ClickLabel("Cancel".into()))
             .unwrap();
         assert!(!h_ov.state().overlays.show_date_dialog);
@@ -1454,6 +1464,16 @@ mod tests {
             time_card.rect.width <= 264.0 && time_card.rect.width >= 220.0,
             "TimePickerDialog should stay compact (~256px) without right-side void: {:?}",
             time_card.rect
+        );
+        let (time_ok_btn, _) =
+            find_ancestor_button_and_label(&time_dlg_tree, "OK").expect("TimePicker 'OK' button");
+        let time_bottom_gap = (time_card.rect.y + time_card.rect.height)
+            - (time_ok_btn.rect.y + time_ok_btn.rect.height);
+        assert!(
+            time_bottom_gap <= 24.0 && time_card.rect.height <= 230.0,
+            "TimePickerDialog should have no phantom bottom whitespace (gap={time_bottom_gap:.2}): card={:?}, ok={:?}",
+            time_card.rect,
+            time_ok_btn.rect
         );
         let time_wrap = find_first_with_type(time_card, "WrapWidget")
             .expect("TimePicker WrapWidget inside dialog");
