@@ -9,12 +9,16 @@ pub mod theme;
 
 pub use brocado_core::components::*;
 pub use brocado_core::foundation::{
-    AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,
-    FocusFrame, FocusFrameView, HoverTooltipHost, HoverTooltipView, InteractiveColors, PopupAction,
-    PopupEntrySpec, PopupLayer, PopupLayerSpec, RippleLayer, RippleLayerView, ScrollBarStyle,
+    AnchoredPopupHost, AnchoredPopupView, Bounded, BoundedAnyView, BoundedViewExt, BoundedX,
+    BoundedXAnyView, BoundedXSeq, BoundedY, BoundedYSeq, ColumnView, ContainerView, EscapeCatcher,
+    EscapeCatcherView, EscapePressed, FitAxis, FocusFrame, FocusFrameView, HasMinAxis,
+    HoverTooltipHost, HoverTooltipView, InteractiveColors, PopupAction, PopupEntrySpec, PopupLayer,
+    PopupLayerSpec, RippleLayer, RippleLayerView, RowView, ScrollAxis, ScrollBarStyle,
     ScrollBarVisibility, ScrollView, ScrollViewWidget, SlideTransition, TooltipContentSpec,
-    UiClassExt, UiScrollBar, UiTransition, WithClass, blend_over, escape_catcher, focus_frame,
-    icons, resolve_interactive_colors, ripple_layer, scroll_view, ui_icon, ui_transition,
+    UiClassExt, UiScrollBar, UiTransition, UncheckedBounded, UncheckedBoundedX, UncheckedBoundedY,
+    UnminAxis, WithClass, assume_bounded, assume_bounded_x, assume_bounded_y, blend_over, bounded,
+    bounded_x, bounded_y, column, container, escape_catcher, focus_frame, icons,
+    resolve_interactive_colors, ripple_layer, row, scroll_view, ui_icon, ui_transition,
     with_opacity,
 };
 pub use brocado_core::style_engine::{

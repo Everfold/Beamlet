@@ -3,6 +3,7 @@
 
 pub mod adaptive_pair;
 pub mod bevel;
+pub mod bounded;
 pub mod class_view;
 pub mod clip_box;
 pub mod constrained_box;
@@ -17,6 +18,12 @@ pub mod wrap;
 
 pub use adaptive_pair::{AdaptivePairView, AdaptivePairWidget, adaptive_pair};
 pub use bevel::{BeveledBorder, BeveledBorderView, beveled_surface};
+pub use bounded::{
+    Bounded, BoundedAnyView, BoundedViewExt, BoundedX, BoundedXAnyView, BoundedXSeq, BoundedY,
+    BoundedYSeq, ColumnView, ContainerView, FitAxis, HasMinAxis, RowView, ScrollAxis,
+    UncheckedBounded, UncheckedBoundedX, UncheckedBoundedY, UnminAxis, assume_bounded,
+    assume_bounded_x, assume_bounded_y, bounded, bounded_x, bounded_y, column, container, row,
+};
 pub use class_view::{UiClassExt, WithClass};
 pub use clip_box::{ClipBoxView, ClipBoxWidget, clip_box};
 pub use constrained_box::{ConstrainedBox, ConstrainedBoxView, constrained_box};

@@ -320,3 +320,17 @@ where
         }
     }
 }
+
+impl<W, N, State, Action> brocado_core::foundation::BoundedX for BreakpointBin<W, N, State, Action>
+where
+    W: brocado_core::foundation::BoundedX,
+    N: brocado_core::foundation::BoundedX,
+{
+}
+
+impl<W, N, State, Action> brocado_core::foundation::BoundedY for BreakpointBin<W, N, State, Action>
+where
+    W: brocado_core::foundation::BoundedY,
+    N: brocado_core::foundation::BoundedY,
+{
+}

@@ -4,11 +4,9 @@ use std::marker::PhantomData;
 
 use masonry::layout::AsUnit;
 use masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
-use masonry::widgets;
 use xilem_masonry::WidgetView;
-use xilem_masonry::view::sized_box;
 
-use crate::foundation::UiClassExt;
+use crate::foundation::{ContainerView, UiClassExt, WithClass, container};
 use crate::style_engine::classes;
 use crate::tokens::{DesignSpec, ElevationLevel};
 
@@ -41,35 +39,35 @@ impl CardVariant {
 pub fn card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     variant: CardVariant,
     child: V,
-) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
-    sized_box(child).ui_class(variant.class_name())
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
+    container(child).ui_class(variant.class_name())
 }
 
 /// Returns an elevated card container wrapping `child`.
 pub fn elevated_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
     card(CardVariant::Elevated, child)
 }
 
 /// Returns a filled container card wrapping `child`.
 pub fn filled_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
     card(CardVariant::Filled, child)
 }
 
 /// Returns an outlined bordered card wrapping `child`.
 pub fn outlined_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
     card(CardVariant::Outlined, child)
 }
 
 /// Returns a grouped card surface suitable for Fluent SettingsCards / HIG FormGroups / Adwaita PreferencesGroups.
 pub fn grouped_card<State: 'static, Action: 'static, V: WidgetView<State, Action>>(
     child: V,
-) -> impl WidgetView<State, Action, Widget = widgets::SizedBox> {
+) -> WithClass<ContainerView<V, State, Action>, State, Action> {
     card(CardVariant::Grouped, child)
 }
 

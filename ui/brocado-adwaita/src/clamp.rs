@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 
+use brocado_core::foundation::{BoundedX, BoundedY};
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
     AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PropertiesRef,
@@ -231,3 +232,6 @@ where
         }
     }
 }
+
+impl<V: BoundedX, State, Action> BoundedX for ClampView<V, State, Action> {}
+impl<V: BoundedY, State, Action> BoundedY for ClampView<V, State, Action> {}

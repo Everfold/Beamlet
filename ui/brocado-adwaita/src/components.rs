@@ -1175,3 +1175,22 @@ where
         phantom: PhantomData,
     }
 }
+
+impl<C, K, State, Action> brocado_core::foundation::BoundedX
+    for AdwResponseRowView<C, K, State, Action>
+where
+    C: brocado_core::foundation::BoundedX,
+    K: brocado_core::foundation::BoundedX,
+{
+}
+
+impl<C, K, State, Action> brocado_core::foundation::BoundedY
+    for AdwResponseRowView<C, K, State, Action>
+where
+    C: brocado_core::foundation::BoundedY,
+    K: brocado_core::foundation::BoundedY,
+{
+}
+
+impl<State, Action> brocado_core::foundation::BoundedX for AdwAlertDialog<State, Action> {}
+impl<State, Action> brocado_core::foundation::BoundedY for AdwAlertDialog<State, Action> {}

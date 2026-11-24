@@ -964,6 +964,20 @@ where
     }
 }
 
+impl<V, State, Action> brocado_core::foundation::BoundedX
+    for NumberStepCatcherView<V, State, Action>
+where
+    V: brocado_core::foundation::BoundedX,
+{
+}
+
+impl<V, State, Action> brocado_core::foundation::BoundedY
+    for NumberStepCatcherView<V, State, Action>
+where
+    V: brocado_core::foundation::BoundedY,
+{
+}
+
 /// WinUI 3 `NumberBox` compact numeric spin control with inline `−` / `+` buttons, `ArrowUp`/`ArrowDown`
 /// keyboard stepping, and mouse-wheel stepping clamped to `[min, max]`.
 pub fn number_box<State: 'static, Action: 'static, F>(

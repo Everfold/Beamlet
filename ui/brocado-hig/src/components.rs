@@ -788,3 +788,6 @@ where
         phantom: PhantomData,
     }
 }
+
+impl<State, Action> brocado_core::foundation::BoundedX for MacosAlertDialog<State, Action> {}
+impl<State, Action> brocado_core::foundation::BoundedY for MacosAlertDialog<State, Action> {}
