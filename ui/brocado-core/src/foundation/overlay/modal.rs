@@ -74,15 +74,11 @@ fn resolve_modal_limits(dims: Dimensions, alignment: UnitPoint) -> ModalLimits {
     );
     let mut card_dims = dims;
     let mut preferred_max = (None, None);
-    if clamp_axes.0
-        && let Dim::Fixed(w) = dims.dim(Axis::Horizontal)
-    {
+    if let Dim::Fixed(w) = dims.dim(Axis::Horizontal) {
         preferred_max.0 = Some(w.get());
         card_dims = card_dims.with_width(Dim::Stretch);
     }
-    if clamp_axes.1
-        && let Dim::Fixed(h) = dims.dim(Axis::Vertical)
-    {
+    if let Dim::Fixed(h) = dims.dim(Axis::Vertical) {
         preferred_max.1 = Some(h.get());
         card_dims = card_dims.with_height(Dim::Stretch);
     }

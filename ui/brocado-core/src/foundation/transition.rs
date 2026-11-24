@@ -101,7 +101,10 @@ impl SlideTransition {
 
     fn effective_axis_cap(avail: Option<Length>, clamp: bool, pref: Option<f64>) -> Option<f64> {
         if !clamp {
-            return pref;
+            return match (avail, pref) {
+                (Some(a), Some(p)) => Some(p.min(a.get().max(0.0))),
+                (_, p) => p,
+            };
         }
         avail.map_or(pref, |a| {
             let av = a.get().max(0.0);
@@ -503,7 +506,15 @@ mod tests {
         );
         assert_eq!(
             SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, Some(240.0)),
+            Some(160.0)
+        );
+        assert_eq!(
+            SlideTransition::effective_axis_cap(Some(Length::px(1200.0)), false, Some(240.0)),
             Some(240.0)
+        );
+        assert_eq!(
+            SlideTransition::effective_axis_cap(Some(Length::px(160.0)), false, None),
+            None
         );
         assert_eq!(
             SlideTransition::effective_axis_cap(Some(Length::px(180.0)), true, None),

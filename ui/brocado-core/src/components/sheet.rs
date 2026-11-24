@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use masonry::kurbo::Vec2;
-use masonry::layout::{AsUnit, UnitPoint};
+use masonry::layout::{AsUnit, Dim, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem_masonry::Pod;
@@ -32,7 +32,8 @@ enum SheetEdge {
 #[expect(missing_debug_implementations, reason = "Contains closure callback")]
 pub struct UiSheet<V, State, Action> {
     edge: SheetEdge,
-    size: f64,
+    size: Option<f64>,
+    max_width: f64,
     content: V,
     on_dismiss: SheetDismissCallback<State, Action>,
     phantom: PhantomData<fn(State) -> Action>,
@@ -41,30 +42,42 @@ pub struct UiSheet<V, State, Action> {
 impl<V, State, Action> UiSheet<V, State, Action> {
     /// Overrides the sheet's height (bottom sheet) or width (side sheet).
     pub fn extent(mut self, size: f64) -> Self {
-        self.size = size;
+        self.size = Some(size);
+        self
+    }
+
+    /// Caps the maximum width of a `bottom_sheet` on wide viewports (defaults to `640.0` per MD3 spec).
+    pub fn max_width(mut self, width: f64) -> Self {
+        self.max_width = width;
         self
     }
 
     fn shell_config(&self) -> ModalShellConfig {
         match self.edge {
-            SheetEdge::Bottom => ModalShellConfig {
-                class: classes::SHEET_SURFACE,
-                dims: Dimensions::STRETCH.with_height(self.size.px()),
-                padding: Padding::all(20.px()),
-                alignment: UnitPoint::BOTTOM,
-                enter_offset: Vec2::new(0.0, 48.0),
-                duration: MotionDuration::Medium3,
-                dismiss_on_scrim: true,
-            },
-            SheetEdge::Side => ModalShellConfig {
-                class: classes::SHEET_SURFACE,
-                dims: Dimensions::STRETCH.with_width(self.size.px()),
-                padding: Padding::all(20.px()),
-                alignment: UnitPoint::RIGHT,
-                enter_offset: Vec2::new(48.0, 0.0),
-                duration: MotionDuration::Medium3,
-                dismiss_on_scrim: true,
-            },
+            SheetEdge::Bottom => {
+                let height_dim = self.size.map_or(Dim::MaxContent, |h| h.px().into());
+                ModalShellConfig {
+                    class: classes::SHEET_SURFACE,
+                    dims: Dimensions::new(self.max_width.px().into(), height_dim),
+                    padding: Padding::all(20.px()),
+                    alignment: UnitPoint::BOTTOM,
+                    enter_offset: Vec2::new(0.0, 48.0),
+                    duration: MotionDuration::Medium3,
+                    dismiss_on_scrim: true,
+                }
+            }
+            SheetEdge::Side => {
+                let width = self.size.unwrap_or(360.0);
+                ModalShellConfig {
+                    class: classes::SHEET_SURFACE,
+                    dims: Dimensions::STRETCH.with_width(width.px()),
+                    padding: Padding::all(20.px()),
+                    alignment: UnitPoint::RIGHT,
+                    enter_offset: Vec2::new(48.0, 0.0),
+                    duration: MotionDuration::Medium3,
+                    dismiss_on_scrim: true,
+                }
+            }
         }
     }
 }
@@ -138,6 +151,8 @@ where
 }
 
 /// Modal sheet sliding up from the bottom edge of the window.
+///
+/// Hugs its content height vertically by default (override with `.extent(px)`) and stretches up to `.max_width(640.0)`.
 pub fn bottom_sheet<State: 'static, Action: 'static, V, F>(
     content: V,
     on_dismiss: F,
@@ -148,7 +163,8 @@ where
 {
     UiSheet {
         edge: SheetEdge::Bottom,
-        size: 320.0,
+        size: None,
+        max_width: 640.0,
         content,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,
@@ -166,7 +182,8 @@ where
 {
     UiSheet {
         edge: SheetEdge::Side,
-        size: 360.0,
+        size: Some(360.0),
+        max_width: 640.0,
         content,
         on_dismiss: Arc::new(on_dismiss),
         phantom: PhantomData,

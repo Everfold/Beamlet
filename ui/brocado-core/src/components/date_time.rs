@@ -335,7 +335,7 @@ where
     let content = flex_col((picker, actions))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(16.px());
-    dialog(content, on_dismiss).width(340.0)
+    dialog(content, on_dismiss).width(272.0)
 }
 
 /// Interactive numeric 24-hour / 12-hour stepper time selector.
@@ -459,6 +459,7 @@ where
         let _ = Color::TRANSPARENT;
 
         wrap((hour_col, colon, min_col, am_pm_col))
+            .main_axis_alignment(MainAxisAlignment::Center)
             .cross_axis_alignment(CrossAxisAlignment::Center)
             .gap(8.px())
             .run_gap(8.px())
@@ -483,7 +484,7 @@ where
     let content = flex_col((picker, actions))
         .cross_axis_alignment(CrossAxisAlignment::Stretch)
         .gap(16.px());
-    dialog(content, on_dismiss).width(340.0)
+    dialog(content, on_dismiss).width(256.0)
 }
 
 #[cfg(test)]
