@@ -6,8 +6,12 @@ use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
 use brocado_preview::inspect::{LayoutNode, dump_layout_tree};
 use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
 use masonry::core::pointer::{PointerId, PointerInfo, PointerType};
-use masonry::core::{KeyboardEvent, PointerButton, PointerEvent, TextEvent};
-use masonry::kurbo::{Axis, Point};
+use masonry::core::{
+    KeyboardEvent, PointerButton, PointerEvent, PointerScrollEvent, PointerState, ScrollDelta,
+    TextEvent,
+};
+use masonry::dpi::LogicalPosition;
+use masonry::kurbo::{Axis, Point, Vec2};
 use masonry::layout::{AsUnit, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
 use xilem_masonry::WidgetView;
@@ -1469,5 +1473,272 @@ fn time_picker_dialog_has_no_phantom_bottom_whitespace() {
         "time_picker_dialog has phantom bottom whitespace (gap={bottom_gap:.2}): card={:?}, ok={:?}",
         card.rect,
         ok_btn.rect
+    );
+}
+
+#[test]
+fn scroll_view_wheel_and_scrollbar_drag_update_viewport() {
+    struct State {
+        visibility: ScrollBarVisibility,
+    }
+
+    let make_harness = |visibility: ScrollBarVisibility| {
+        let mut h = build_ui_harness(
+            State { visibility },
+            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |s| {
+                scroll_view(
+                    flex_col((
+                        label("ScrollTopMarker"),
+                        sized_box(label("Spacer")).dims(Dimensions::height(800.px())),
+                        label("ScrollBottomMarker"),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Start),
+                )
+                .constrain_horizontal(true)
+                .scrollbar_visibility(s.visibility)
+                .boxed()
+            },
+            PreviewConfig {
+                width: 320,
+                height: 200,
+                ..PreviewConfig::default()
+            },
+        );
+        h.settle_animations();
+        h
+    };
+
+    let mut h = make_harness(ScrollBarVisibility::OverlayAlways);
+    let tree0 = dump_layout_tree(&mut h);
+    let top0 = find_node_by_text(&tree0, "ScrollTopMarker")
+        .expect("ScrollTopMarker missing")
+        .rect;
+    let bar0 = find_first_node(&tree0, "UiScrollBar").expect("OverlayAlways UiScrollBar missing");
+    assert!(
+        bar0.rect.width > 1.0 && bar0.rect.height > 100.0,
+        "unexpected UiScrollBar rect: {:?}",
+        bar0.rect
+    );
+
+    // Wheel scroll down
+    {
+        let inner = h.inner_harness_mut();
+        inner.mouse_move(Point::new(100.0, 100.0));
+        inner.mouse_wheel(Vec2::new(0.0, -120.0));
+    }
+    h.pump_actions();
+    h.settle_animations();
+
+    let tree_wheel = dump_layout_tree(&mut h);
+    let top_wheel = find_node_by_text(&tree_wheel, "ScrollTopMarker")
+        .expect("ScrollTopMarker missing after wheel")
+        .rect;
+    assert!(
+        top_wheel.y < top0.y - 80.0,
+        "expected wheel down to shift content upward: before={}, after={}",
+        top0.y,
+        top_wheel.y
+    );
+
+    // Drag vertical scrollbar thumb downward
+    let bar_rect = find_first_node(&tree_wheel, "UiScrollBar")
+        .expect("UiScrollBar missing before drag")
+        .rect;
+    {
+        let inner = h.inner_harness_mut();
+        let cx = bar_rect.x + bar_rect.width * 0.5;
+        inner.mouse_move(Point::new(cx, bar_rect.y + 8.0));
+        inner.mouse_button_press(Some(PointerButton::Primary));
+        inner.mouse_move(Point::new(cx, bar_rect.y + bar_rect.height - 8.0));
+        inner.mouse_button_release(Some(PointerButton::Primary));
+    }
+    h.pump_actions();
+    h.settle_animations();
+
+    let tree_drag = dump_layout_tree(&mut h);
+    let top_drag = find_node_by_text(&tree_drag, "ScrollTopMarker")
+        .expect("ScrollTopMarker missing after drag")
+        .rect;
+    assert!(
+        top_drag.y < top_wheel.y - 20.0,
+        "expected scrollbar drag to scroll further down: wheel={}, drag={}",
+        top_wheel.y,
+        top_drag.y
+    );
+
+    // `Never` visibility hides scrollbars
+    let mut h_never = make_harness(ScrollBarVisibility::Never);
+    let tree_never = dump_layout_tree(&mut h_never);
+    assert!(
+        find_first_node(&tree_never, "UiScrollBar").is_none(),
+        "expected ScrollBarVisibility::Never to stash UiScrollBar widgets"
+    );
+}
+
+#[test]
+fn scroll_view_reserved_mode_reserves_track_width_and_applies_custom_style() {
+    struct State {
+        style: ScrollBarStyle,
+    }
+
+    let make_harness = |style: ScrollBarStyle| {
+        let mut h = build_ui_harness(
+            State { style },
+            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |s| {
+                scroll_view(
+                    flex_col((
+                        label("RowA"),
+                        sized_box(label("")).dims(Dimensions::height(500.px())),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Stretch),
+                )
+                .constrain_horizontal(true)
+                .scrollbar_style(s.style)
+                .boxed()
+            },
+            PreviewConfig {
+                width: 300,
+                height: 160,
+                ..PreviewConfig::default()
+            },
+        );
+        h.settle_animations();
+        h
+    };
+
+    let overlay_style =
+        ScrollBarStyle::default().with_visibility(ScrollBarVisibility::OverlayAlways);
+    let mut h_overlay = make_harness(overlay_style);
+    let tree_overlay = dump_layout_tree(&mut h_overlay);
+    let sv_overlay = find_first_node(&tree_overlay, "ScrollViewWidget").unwrap();
+    let child_overlay = &sv_overlay.children[0];
+
+    let reserved_style = ScrollBarStyle::default()
+        .with_visibility(ScrollBarVisibility::Reserved)
+        .with_thickness(8.0, 14.0)
+        .with_padding(3.0);
+    assert!((reserved_style.reserved_size() - 20.0).abs() < 1e-6);
+
+    let mut h_reserved = make_harness(reserved_style);
+    let tree_reserved = dump_layout_tree(&mut h_reserved);
+    let sv_reserved = find_first_node(&tree_reserved, "ScrollViewWidget").unwrap();
+    let child_reserved = &sv_reserved.children[0];
+    let bar_reserved = find_first_node(&tree_reserved, "UiScrollBar").unwrap();
+
+    assert!(
+        (bar_reserved.rect.width - 20.0).abs() <= 0.5,
+        "expected custom reserved UiScrollBar width ~20.0, got {:?}",
+        bar_reserved.rect
+    );
+    assert!(
+        (child_overlay.rect.width - child_reserved.rect.width - 20.0).abs() <= 0.5,
+        "expected Reserved mode to narrow constrained child by 20px: overlay={:?}, reserved={:?}",
+        child_overlay.rect,
+        child_reserved.rect
+    );
+}
+
+#[test]
+fn scroll_view_shift_wheel_and_focus_pan_to_child() {
+    #[derive(Default)]
+    struct State;
+
+    // 1. Shift+Wheel scrolls horizontally when vertically constrained
+    let mut h_horiz = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| {
+            scroll_view(sized_box(label("WideStart")).dims(Dimensions::fixed(900.px(), 60.px())))
+                .constrain_vertical(true)
+                .boxed()
+        },
+        PreviewConfig {
+            width: 240,
+            height: 120,
+            ..PreviewConfig::default()
+        },
+    );
+    h_horiz.settle_animations();
+    let tree_h0 = dump_layout_tree(&mut h_horiz);
+    let wide0 = find_node_by_text(&tree_h0, "WideStart").unwrap().rect;
+    {
+        let inner = h_horiz.inner_harness_mut();
+        let scale = inner.render_root().scale_factor();
+        let ptr_pos = LogicalPosition::new(100.0, 60.0).to_physical(scale);
+        inner.mouse_move(Point::new(100.0, 60.0));
+        inner.process_pointer_event(PointerEvent::Scroll(PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            delta: ScrollDelta::PixelDelta(LogicalPosition::new(0.0, -120.0).to_physical(scale)),
+            state: PointerState {
+                modifiers: Modifiers::SHIFT,
+                position: ptr_pos,
+                ..PointerState::default()
+            },
+        }));
+    }
+    h_horiz.pump_actions();
+    h_horiz.settle_animations();
+    let tree_h1 = dump_layout_tree(&mut h_horiz);
+    let wide1 = find_node_by_text(&tree_h1, "WideStart").unwrap().rect;
+    assert!(
+        wide1.x < wide0.x - 80.0,
+        "expected Shift+Wheel to scroll horizontally: before={}, after={}",
+        wide0.x,
+        wide1.x
+    );
+
+    // 2. Tab focus onto an offscreen button triggers RequestPanToChild into viewport
+    let mut h_pan = build_ui_harness(
+        State,
+        |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+        |_| {
+            scroll_view(
+                flex_col(vec![
+                    primary_button("Item0", |_| {}).boxed(),
+                    primary_button("Item1", |_| {}).boxed(),
+                    primary_button("Item2", |_| {}).boxed(),
+                    primary_button("Item3", |_| {}).boxed(),
+                    primary_button("Item4", |_| {}).boxed(),
+                    primary_button("Item5", |_| {}).boxed(),
+                    primary_button("Item6", |_| {}).boxed(),
+                    primary_button("Item7", |_| {}).boxed(),
+                ])
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(8.px()),
+            )
+            .constrain_horizontal(true)
+            .boxed()
+        },
+        PreviewConfig {
+            width: 240,
+            height: 120,
+            ..PreviewConfig::default()
+        },
+    );
+    h_pan.settle_animations();
+    let tree_pan0 = dump_layout_tree(&mut h_pan);
+    let item7_before = find_node_by_text(&tree_pan0, "Item7").unwrap().rect;
+    assert!(
+        item7_before.y > 120.0,
+        "Item7 must start outside 120px viewport: {item7_before:?}"
+    );
+
+    let btn_ids = h_pan.find_widget_ids("Button");
+    let item7_id = *btn_ids.last().expect("Item7 button id missing");
+    h_pan.inner_harness_mut().scroll_into_view(item7_id);
+    h_pan.pump_actions();
+    h_pan.settle_animations();
+
+    let tree_pan1 = dump_layout_tree(&mut h_pan);
+    let item7_after = find_node_by_text(&tree_pan1, "Item7").unwrap().rect;
+    assert!(
+        item7_after.y >= -0.5 && item7_after.y + item7_after.height <= 120.5,
+        "expected RequestPanToChild to bring Item7 inside 0..120 viewport: before={item7_before:?}, after={item7_after:?}"
     );
 }
