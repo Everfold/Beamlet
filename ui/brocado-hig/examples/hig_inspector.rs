@@ -6,7 +6,7 @@ use brocado_hig::{
     Brightness, HigAccent, HigTheme, body_medium, body_small, disclosure_group, form_group,
     form_row, headline_small, help_button, icon_button, icons, inspector_panel, label_medium,
     macos_alert_dialog, macos_toolbar_with_center, path_control, popup_button, primary_button,
-    search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
+    scroll_view, search_bar, segmented_button, source_list_sidebar, stepper, switch, text_field,
 };
 use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
 use masonry::dpi::LogicalSize;
@@ -15,7 +15,7 @@ use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack,
 };
 
 struct InspectorApp {
@@ -125,7 +125,7 @@ fn app_view(state: &mut InspectorApp) -> impl WidgetView<InspectorApp> + use<> {
         _ => 0,
     };
 
-    let main_body = portal(
+    let main_body = scroll_view(
         sized_box(
             flex_col((
                 headline_small("macOS 文档与检查器"),

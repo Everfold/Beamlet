@@ -14,9 +14,10 @@ pub use brocado_core::components::*;
 pub use brocado_core::foundation::{
     AnchoredPopupHost, AnchoredPopupView, EscapeCatcher, EscapeCatcherView, EscapePressed,
     FocusFrame, FocusFrameView, HoverTooltipHost, HoverTooltipView, InteractiveColors, PopupAction,
-    PopupEntrySpec, PopupLayer, PopupLayerSpec, SlideTransition, TooltipContentSpec, UiClassExt,
-    UiTransition, WithClass, blend_over, escape_catcher, focus_frame, icons,
-    resolve_interactive_colors, ui_icon, ui_transition, with_opacity,
+    PopupEntrySpec, PopupLayer, PopupLayerSpec, ScrollBarStyle, ScrollBarVisibility, ScrollView,
+    ScrollViewWidget, SlideTransition, TooltipContentSpec, UiClassExt, UiScrollBar, UiTransition,
+    WithClass, blend_over, escape_catcher, focus_frame, icons, resolve_interactive_colors,
+    scroll_view, ui_icon, ui_transition, with_opacity,
 };
 pub use brocado_core::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,

@@ -274,7 +274,10 @@ mod tests {
                             portal_x1
                         ));
                     }
-                    if c.type_name == "Portal" || c.type_name == "ScrollPortal" {
+                    if matches!(
+                        c.type_name.as_str(),
+                        "Portal" | "ScrollPortal" | "ScrollViewWidget"
+                    ) {
                         collect_portal_horizontal_overflows(c, out);
                     } else {
                         check_children(portal_x0, portal_x1, c, out);
@@ -282,12 +285,15 @@ mod tests {
                 }
             }
         }
-        if (node.type_name == "Portal" || node.type_name == "ScrollPortal") && node.rect.width > 1.0
+        if matches!(
+            node.type_name.as_str(),
+            "Portal" | "ScrollPortal" | "ScrollViewWidget"
+        ) && node.rect.width > 1.0
         {
-            let has_h_scrollbar = node
-                .children
-                .iter()
-                .any(|c| c.type_name == "ScrollBar" && c.rect.width > c.rect.height);
+            let has_h_scrollbar = node.children.iter().any(|c| {
+                matches!(c.type_name.as_str(), "ScrollBar" | "UiScrollBar")
+                    && c.rect.width > c.rect.height
+            });
             if has_h_scrollbar {
                 for c in &node.children {
                     collect_portal_horizontal_overflows(c, out);

@@ -7,8 +7,8 @@ use std::sync::Arc;
 use brocado_adwaita::{
     AdwaitaAccent, AdwaitaTheme, Brightness, action_row, alert_dialog, banner, breakpoint_bin,
     clamp, clickable_action_row, combo_row, destructive_button, entry_row, expander_row,
-    header_bar, header_bar_with_title, icon_button, icons, preferences_group, status_page,
-    switch_row, view_switcher, view_switcher_bar,
+    header_bar, header_bar_with_title, icon_button, icons, preferences_group, scroll_view,
+    status_page, switch_row, view_switcher, view_switcher_bar,
 };
 use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
 use masonry::dpi::LogicalSize;
@@ -16,9 +16,7 @@ use masonry::layout::{AsUnit, UnitPoint};
 use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, portal, sized_box, zstack,
-};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, ZStackExt, flex_col, sized_box, zstack};
 
 struct PrefsApp {
     window_id: WindowId,
@@ -295,7 +293,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
     let wide_shell = flex_col((
         wide_hdr,
         top_banner_wide,
-        portal(sized_box(page).padding(Padding::all(24.px())))
+        scroll_view(sized_box(page).padding(Padding::all(24.px())))
             .constrain_horizontal(true)
             .flex(1.0),
     ))
@@ -304,7 +302,7 @@ fn app_view(state: &mut PrefsApp) -> impl WidgetView<PrefsApp> + use<> {
     let narrow_shell = flex_col((
         narrow_hdr,
         top_banner_narrow,
-        portal(sized_box(page_narrow).padding(Padding::all(16.px())))
+        scroll_view(sized_box(page_narrow).padding(Padding::all(16.px())))
             .constrain_horizontal(true)
             .flex(1.0),
         view_switcher_bar(

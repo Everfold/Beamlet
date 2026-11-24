@@ -8,7 +8,8 @@ use brocado_fluent::{
     Brightness, FluentAccent, FluentTheme, InfoBarSeverity, NavDestination, basic_dialog,
     body_small, breadcrumb_bar, command_bar_with_overflow, expander, headline_small,
     horizontal_divider, icons, info_badge, info_bar, menu_item, navigation_view_collapsible,
-    number_box, primary_button, settings_card, settings_expander, subtle_button, switch,
+    number_box, primary_button, scroll_view, settings_card, settings_expander, subtle_button,
+    switch,
 };
 use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
 use masonry::dpi::LogicalSize;
@@ -17,7 +18,7 @@ use masonry::properties::Padding;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack,
 };
 
 struct SettingsApp {
@@ -148,7 +149,7 @@ fn app_view(state: &mut SettingsApp) -> impl WidgetView<SettingsApp> + use<> {
         )
     });
 
-    let body = portal(
+    let body = scroll_view(
         sized_box(
             flex_col((
                 headline_small(page_title),

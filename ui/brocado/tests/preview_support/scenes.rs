@@ -12,7 +12,7 @@ use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, label, portal, sized_box, zstack,
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, label, sized_box, zstack,
 };
 
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
@@ -924,7 +924,7 @@ fn workspace_body(state: &mut SceneState) -> Box<AnyWidgetView<SceneState>> {
     );
 
     let overview_bit = render_overview_page(state);
-    portal(
+    scroll_view(
         sized_box(
             flex_col((card, overview_bit))
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
@@ -1158,29 +1158,32 @@ pub fn build_scene_harness(
 ) -> anyhow::Result<PreviewHarness<SceneState>> {
     let logic: fn(&mut SceneState) -> Box<AnyWidgetView<SceneState>> = match scene_id {
         "overview" => |s| {
-            let body = portal(sized_box(render_overview_page(s)).padding(Padding::all(20.px())))
-                .constrain_horizontal(true);
+            let body =
+                scroll_view(sized_box(render_overview_page(s)).padding(Padding::all(20.px())))
+                    .constrain_horizontal(true);
             wrap_overlays(s, body, None)
         },
         "inputs" => |s| {
-            let body = portal(sized_box(render_inputs_page(s)).padding(Padding::all(20.px())))
+            let body = scroll_view(sized_box(render_inputs_page(s)).padding(Padding::all(20.px())))
                 .constrain_horizontal(true);
             wrap_overlays(s, body, None)
         },
         "overlays" => |s| {
-            let body = portal(sized_box(render_overlays_page(s)).padding(Padding::all(20.px())))
-                .constrain_horizontal(true);
+            let body =
+                scroll_view(sized_box(render_overlays_page(s)).padding(Padding::all(20.px())))
+                    .constrain_horizontal(true);
             wrap_overlays(s, body, None)
         },
         "tokens" => |s| {
-            let body = portal(sized_box(render_tokens_page()).padding(Padding::all(20.px())))
+            let body = scroll_view(sized_box(render_tokens_page()).padding(Padding::all(20.px())))
                 .constrain_horizontal(true);
             wrap_overlays(s, body, None)
         },
         "platform-native" => |s| {
-            let body =
-                portal(sized_box(render_platform_native_page(s)).padding(Padding::all(20.px())))
-                    .constrain_horizontal(true);
+            let body = scroll_view(
+                sized_box(render_platform_native_page(s)).padding(Padding::all(20.px())),
+            )
+            .constrain_horizontal(true);
             wrap_overlays(s, body, None)
         },
         "workspace" => render_workspace_scene,

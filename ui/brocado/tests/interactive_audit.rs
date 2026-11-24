@@ -2207,11 +2207,12 @@ fn preview_harness_reports_frame_timings_and_tab_cycle_reachability() {
 
 #[test]
 fn extreme_narrow_160px_all_components_ascii_stress() {
+    use brocado::prelude::scroll_view;
     use brocado::prelude::*;
     use masonry::layout::AsUnit;
     use masonry::properties::Dimensions;
     use xilem_masonry::style::Style as _;
-    use xilem_masonry::view::{CrossAxisAlignment, flex_col, portal, sized_box};
+    use xilem_masonry::view::{CrossAxisAlignment, flex_col, sized_box};
 
     #[derive(Clone)]
     struct StressState {
@@ -2411,8 +2412,8 @@ fn extreme_narrow_160px_all_components_ascii_stress() {
                 .cross_axis_alignment(CrossAxisAlignment::Stretch)
                 .gap(8.px());
 
-                let base =
-                    sized_box(portal(page).constrain_horizontal(true)).dims(Dimensions::STRETCH);
+                let base = sized_box(scroll_view(page).constrain_horizontal(true))
+                    .dims(Dimensions::STRETCH);
                 let dlg = s.show_dialog.then(|| {
                     basic_dialog(
                         "ConfirmSupercalifragilisticAction?",

@@ -18,8 +18,8 @@ use masonry::widgets::{
     Spinner, Switch, TextArea, TextInput,
 };
 
-use crate::foundation::FocusFrame;
 use crate::foundation::state_layer::{resolve_interactive_colors, with_opacity};
+use crate::foundation::{FocusFrame, ScrollBarStyle, ScrollViewWidget, UiScrollBar};
 use crate::style_engine::classes;
 use crate::tokens::{Brightness, ControlBorderStyle, DesignSpec, ElevationLevel};
 
@@ -847,6 +847,12 @@ fn push_text_field_rules(
     );
 }
 
+fn configure_scrollbars(props: &mut DefaultProperties, spec: &DesignSpec) {
+    let style = ScrollBarStyle::from_spec(spec);
+    props.insert::<ScrollViewWidget, ScrollBarStyle>(style);
+    props.insert::<UiScrollBar, ScrollBarStyle>(style);
+}
+
 /// Builds a complete Masonry [`DefaultProperties`] bundle for `spec`.
 #[must_use]
 pub fn build_default_properties(spec: &DesignSpec) -> DefaultProperties {
@@ -854,6 +860,7 @@ pub fn build_default_properties(spec: &DesignSpec) -> DefaultProperties {
     configure_buttons(&mut props, spec);
     configure_surfaces(&mut props, spec);
     configure_inputs(&mut props, spec);
+    configure_scrollbars(&mut props, spec);
     props
 }
 

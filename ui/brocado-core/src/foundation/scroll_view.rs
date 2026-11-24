@@ -182,6 +182,10 @@ impl ScrollBarStyle {
         (self.hover_thickness.max(self.thickness).max(1.0) + self.padding.max(0.0) * 2.0).max(0.0)
     }
 
+    const fn auto_hides(&self) -> bool {
+        matches!(self.visibility, ScrollBarVisibility::OverlayAutoHide) && !self.reduced_motion
+    }
+
     /// Sets presentation mode.
     #[must_use]
     pub fn with_visibility(mut self, visibility: ScrollBarVisibility) -> Self {
@@ -381,13 +385,13 @@ impl UiScrollBar {
         self.set_cursor_progress(self.cursor_progress + delta_pixels / range)
     }
 
+    /// Returns `true` when an opacity fade animation frame should be scheduled.
     fn set_target_opacity(&mut self, target: f32, immediate: bool) -> bool {
         let target = target.clamp(0.0, 1.0);
-        if immediate || self.style.reduced_motion {
-            let changed = (self.opacity - target).abs() > 1e-4;
+        if immediate || !self.style.auto_hides() {
             self.opacity = target;
             self.target_opacity = target;
-            changed
+            false
         } else {
             self.target_opacity = target;
             (self.target_opacity - self.opacity).abs() > 1e-4
@@ -406,9 +410,14 @@ impl Widget for UiScrollBar {
     fn update(&mut self, ctx: &mut UpdateCtx<'_>, _props: &mut PropertiesMut<'_>, event: &Update) {
         if let Update::HoveredChanged(hovered) = event {
             self.hovered = *hovered;
-            if *hovered && self.style.visibility == ScrollBarVisibility::OverlayAutoHide {
-                let needs_anim = self.set_target_opacity(1.0, false);
-                if needs_anim {
+            if self.style.auto_hides() {
+                if *hovered {
+                    if self.set_target_opacity(1.0, false) {
+                        ctx.request_anim_frame();
+                    }
+                } else if !self.is_interacting()
+                    && (self.target_opacity - self.opacity).abs() > 1e-4
+                {
                     ctx.request_anim_frame();
                 }
             }
@@ -465,6 +474,12 @@ impl Widget for UiScrollBar {
             }
             PointerEvent::Up(..) | PointerEvent::Cancel(..) => {
                 if self.grab_anchor.take().is_some() {
+                    if self.style.auto_hides()
+                        && !self.is_interacting()
+                        && (self.target_opacity - self.opacity).abs() > 1e-4
+                    {
+                        ctx.request_anim_frame();
+                    }
                     ctx.request_paint_only();
                 }
             }
@@ -549,22 +564,21 @@ impl Widget for UiScrollBar {
         _props: &mut PropertiesMut<'_>,
         interval: u64,
     ) {
-        if self.style.visibility != ScrollBarVisibility::OverlayAutoHide {
-            if (self.opacity - 1.0).abs() > 1e-4 {
-                self.opacity = 1.0;
-                self.target_opacity = 1.0;
+        if !self.style.auto_hides() {
+            let target = if self.style.visibility == ScrollBarVisibility::Never {
+                0.0
+            } else {
+                1.0
+            };
+            if (self.opacity - target).abs() > 1e-4 {
+                self.opacity = target;
+                self.target_opacity = target;
                 ctx.request_paint_only();
             }
             return;
         }
 
         if (self.target_opacity - self.opacity).abs() <= 1e-4 {
-            self.opacity = self.target_opacity;
-            ctx.request_paint_only();
-            return;
-        }
-
-        if self.style.reduced_motion {
             self.opacity = self.target_opacity;
             ctx.request_paint_only();
             return;
@@ -610,7 +624,12 @@ impl Widget for UiScrollBar {
         _props: &PropertiesRef<'_>,
         painter: &mut Painter<'_>,
     ) {
-        if self.opacity <= 0.001
+        let effective_opacity = if self.is_interacting() {
+            1.0
+        } else {
+            self.opacity
+        };
+        if effective_opacity <= 0.001
             || self.scroll_range() <= 0.5
             || self.style.visibility == ScrollBarVisibility::Never
         {
@@ -622,12 +641,12 @@ impl Widget for UiScrollBar {
             return;
         }
 
-        let needs_group = self.opacity < 0.999;
+        let needs_group = effective_opacity < 0.999;
         if needs_group {
             painter.push_fill_clip(ctx.border_box());
             painter.push_group(GroupRef::new().with_composite(Composite::new(
                 masonry::peniko::BlendMode::default(),
-                self.opacity,
+                effective_opacity,
             )));
         }
 
@@ -843,7 +862,6 @@ impl ScrollViewWidget {
         if this.widget.style_override != style {
             this.widget.style_override = style;
             this.ctx.request_layout();
-            this.ctx.request_anim_frame();
         }
     }
 
@@ -855,7 +873,6 @@ impl ScrollViewWidget {
         if this.widget.visibility_override != visibility {
             this.widget.visibility_override = visibility;
             this.ctx.request_layout();
-            this.ctx.request_anim_frame();
         }
     }
 
@@ -945,21 +962,30 @@ impl ScrollViewWidget {
         } else {
             0.0
         };
-        for (bar_pod, progress) in [
-            (&mut self.scrollbar_horizontal, px),
-            (&mut self.scrollbar_vertical, py),
+        let mut woke_any = false;
+        for (bar_pod, visible, progress) in [
+            (
+                &mut self.scrollbar_horizontal,
+                self.scrollbar_horizontal_visible,
+                px,
+            ),
+            (
+                &mut self.scrollbar_vertical,
+                self.scrollbar_vertical_visible,
+                py,
+            ),
         ] {
             let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
             bar.cursor_progress = progress;
-            if wake_auto_hide && bar.style.visibility == ScrollBarVisibility::OverlayAutoHide {
-                let needs_anim = bar.set_target_opacity(1.0, false);
-                if needs_anim {
+            if wake_auto_hide && visible && bar.style.auto_hides() {
+                woke_any = true;
+                if bar.set_target_opacity(1.0, false) {
                     bar_ctx.request_anim_frame();
                 }
             }
             bar_ctx.request_render();
         }
-        if wake_auto_hide {
+        if woke_any {
             self.idle_ns = Some(0);
             ctx.request_anim_frame();
         }
@@ -1071,27 +1097,36 @@ impl Widget for ScrollViewWidget {
                 } else {
                     0.0
                 };
-                for (bar_pod, progress) in [
-                    (&mut self.scrollbar_horizontal, px),
-                    (&mut self.scrollbar_vertical, py),
+                let mut woke_any = false;
+                for (bar_pod, visible, progress) in [
+                    (
+                        &mut self.scrollbar_horizontal,
+                        self.scrollbar_horizontal_visible,
+                        px,
+                    ),
+                    (
+                        &mut self.scrollbar_vertical,
+                        self.scrollbar_vertical_visible,
+                        py,
+                    ),
                 ] {
                     let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
                     bar.cursor_progress = progress;
-                    if style.visibility == ScrollBarVisibility::OverlayAutoHide {
-                        let needs_anim = bar.set_target_opacity(1.0, false);
-                        if needs_anim {
+                    if visible && style.auto_hides() {
+                        woke_any = true;
+                        if bar.set_target_opacity(1.0, false) {
                             bar_ctx.request_anim_frame();
                         }
                     }
                     bar_ctx.request_render();
                 }
-                if style.visibility == ScrollBarVisibility::OverlayAutoHide {
+                if woke_any {
                     self.idle_ns = Some(0);
                     ctx.request_anim_frame();
                 }
             }
             Update::HoveredChanged(true) | Update::ChildHoveredChanged(true) => {
-                if style.visibility == ScrollBarVisibility::OverlayAutoHide
+                if style.auto_hides()
                     && (self.scrollbar_horizontal_visible || self.scrollbar_vertical_visible)
                 {
                     self.idle_ns = Some(0);
@@ -1111,7 +1146,6 @@ impl Widget for ScrollViewWidget {
     fn property_changed(&mut self, ctx: &mut UpdateCtx<'_>, property_type: TypeId) {
         if ScrollBarStyle::matches(property_type) {
             ctx.request_layout();
-            ctx.request_anim_frame();
         }
     }
 
@@ -1128,29 +1162,8 @@ impl Widget for ScrollViewWidget {
             style.visibility = vis;
         }
 
-        if style.visibility != ScrollBarVisibility::OverlayAutoHide {
+        if !style.auto_hides() {
             self.idle_ns = None;
-            for bar_pod in [&mut self.scrollbar_horizontal, &mut self.scrollbar_vertical] {
-                let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
-                bar.style = style;
-                if bar.set_target_opacity(1.0, true) {
-                    bar_ctx.request_paint_only();
-                }
-            }
-            return;
-        }
-
-        let bar_busy = {
-            let (bh, _) = ctx.get_raw_mut(&mut self.scrollbar_horizontal);
-            bh.is_interacting()
-        } || {
-            let (bv, _) = ctx.get_raw_mut(&mut self.scrollbar_vertical);
-            bv.is_interacting()
-        };
-
-        if bar_busy {
-            self.idle_ns = Some(0);
-            ctx.request_anim_frame();
             return;
         }
 
@@ -1162,12 +1175,13 @@ impl Widget for ScrollViewWidget {
         if total >= delay_ns {
             self.idle_ns = None;
             for bar_pod in [&mut self.scrollbar_horizontal, &mut self.scrollbar_vertical] {
-                let (bar, mut bar_ctx) = ctx.get_raw_mut(bar_pod);
-                if bar.set_target_opacity(0.0, false) {
-                    bar_ctx.request_anim_frame();
-                } else {
-                    bar_ctx.request_paint_only();
-                }
+                ctx.mutate_child_later(bar_pod, |mut bar: WidgetMut<'_, UiScrollBar>| {
+                    if !bar.widget.is_interacting() && bar.widget.set_target_opacity(0.0, false) {
+                        bar.ctx.request_anim_frame();
+                    } else {
+                        bar.ctx.request_paint_only();
+                    }
+                });
             }
         } else {
             self.idle_ns = Some(total);
@@ -1218,7 +1232,7 @@ impl Widget for ScrollViewWidget {
                 }
             }
             PointerEvent::Move(_)
-                if style.visibility == ScrollBarVisibility::OverlayAutoHide
+                if style.auto_hides()
                     && (self.scrollbar_horizontal_visible || self.scrollbar_vertical_visible) =>
             {
                 self.idle_ns = Some(0);
@@ -1401,10 +1415,12 @@ impl Widget for ScrollViewWidget {
             0.0
         };
 
-        let init_opacity = match style.visibility {
-            ScrollBarVisibility::OverlayAlways | ScrollBarVisibility::Reserved => 1.0,
-            ScrollBarVisibility::OverlayAutoHide if self.idle_ns.is_some() => 1.0,
-            ScrollBarVisibility::OverlayAutoHide | ScrollBarVisibility::Never => 0.0,
+        let init_opacity = if style.visibility == ScrollBarVisibility::Never {
+            0.0
+        } else if style.auto_hides() && self.idle_ns.is_none() {
+            0.0
+        } else {
+            1.0
         };
 
         let v_thickness = if self.scrollbar_vertical_visible {

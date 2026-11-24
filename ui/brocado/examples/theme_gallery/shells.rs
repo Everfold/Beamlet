@@ -6,7 +6,7 @@ use masonry::properties::Padding;
 use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
-use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, portal, sized_box};
+use xilem_masonry::view::{CrossAxisAlignment, FlexExt, flex_col, flex_row, sized_box};
 
 use crate::overlays::wrap_with_overlays;
 use crate::pages;
@@ -83,7 +83,7 @@ fn active_page_body(
         GalleryTab::Native => pages::native_page(state).boxed(),
         GalleryTab::Lab => pages::lab_page(state).boxed(),
     };
-    portal(sized_box(page).padding(pad)).constrain_horizontal(true)
+    scroll_view(sized_box(page).padding(pad)).constrain_horizontal(true)
 }
 
 fn narrow_bottom_nav(state: &GalleryState) -> Box<AnyWidgetView<GalleryState>> {

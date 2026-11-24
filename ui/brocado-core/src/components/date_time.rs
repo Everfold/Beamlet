@@ -11,15 +11,15 @@ use xilem_masonry::AnyWidgetView;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label, portal,
-    sized_box, zstack,
+    CrossAxisAlignment, MainAxisAlignment, ZStackExt, button, flex_col, flex_row, label, sized_box,
+    zstack,
 };
 
 use crate::components::button::{primary_button, subtle_button};
 use crate::components::dialog::dialog;
 use crate::components::typography::ui_label;
 use crate::foundation::{
-    EscapeCatcher, UiClassExt, WrapWidget, adaptive_pair, icons, ui_icon, wrap,
+    EscapeCatcher, UiClassExt, WrapWidget, adaptive_pair, icons, scroll_view, ui_icon, wrap,
 };
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, DialogActionOrder, TypeRole};
@@ -293,7 +293,7 @@ where
         )
         .dims(Dimensions::new(Dim::MaxContent, Dim::MaxContent));
 
-        flex_col((header, portal(grid).constrain_vertical(true)))
+        flex_col((header, scroll_view(grid).constrain_vertical(true)))
             .cross_axis_alignment(CrossAxisAlignment::Stretch)
             .gap(8.px())
     })

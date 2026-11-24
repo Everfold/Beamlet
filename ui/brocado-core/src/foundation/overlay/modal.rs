@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use masonry::core::{CollectionWidget, NewWidget, Widget};
+use masonry::core::{CollectionWidget, NewWidget};
 use masonry::kurbo::Vec2;
 use masonry::layout::{Dim, UnitPoint};
 use masonry::properties::{Dimensions, Padding};
@@ -12,6 +12,8 @@ use xilem_masonry::AnyWidgetView;
 use xilem_masonry::Pod;
 use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
+
+use crate::foundation::ScrollViewWidget;
 
 use crate::foundation::overlay::focus_bridge::collect_modal_focusables;
 use crate::foundation::overlay::{EscapeCatcher, EscapePressed, ui_scrim};
@@ -119,10 +121,10 @@ where
     });
 
     let limits = resolve_modal_limits(config.width, config.height, config.alignment);
-    let portal = NewWidget::new(
-        widgets::Portal::new(content_el.new_widget.erased()).constrain_horizontal(true),
+    let scroll_view = NewWidget::new(
+        ScrollViewWidget::new(content_el.new_widget.erased()).constrain_horizontal(true),
     );
-    let mut card = NewWidget::new(widgets::SizedBox::new(portal.erased()));
+    let mut card = NewWidget::new(widgets::SizedBox::new(scroll_view.erased()));
     card.classes.insert(config.class.to_string());
     card.properties.insert(limits.card_dims);
     card.properties.insert(config.padding);
@@ -233,10 +235,10 @@ pub fn modal_shell_rebuild<State, Action, V>(
             card.ctx.remove_class(view_state.config.class);
             card.ctx.add_class(config.class);
         }
-        let mut portal_dyn =
-            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds portal child");
-        let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
-        let mut content_dyn = widgets::Portal::child_mut(&mut portal);
+        let mut scroll_dyn = widgets::SizedBox::child_mut(&mut card)
+            .expect("modal card always holds scroll view child");
+        let mut scroll = scroll_dyn.downcast::<ScrollViewWidget>();
+        let mut content_dyn = ScrollViewWidget::child_mut(&mut scroll);
         ctx.with_id(MODAL_CONTENT_ID, |ctx| {
             content.rebuild(
                 prev_content,
@@ -276,10 +278,10 @@ pub fn modal_shell_teardown<State, Action, V>(
         let mut slide = slide_dyn.downcast::<SlideTransition>();
         let mut card_dyn = SlideTransition::child_mut(&mut slide);
         let mut card = card_dyn.downcast::<widgets::SizedBox>();
-        let mut portal_dyn =
-            widgets::SizedBox::child_mut(&mut card).expect("modal card always holds portal child");
-        let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
-        let mut content_dyn = widgets::Portal::child_mut(&mut portal);
+        let mut scroll_dyn = widgets::SizedBox::child_mut(&mut card)
+            .expect("modal card always holds scroll view child");
+        let mut scroll = scroll_dyn.downcast::<ScrollViewWidget>();
+        let mut content_dyn = ScrollViewWidget::child_mut(&mut scroll);
         ctx.with_id(MODAL_CONTENT_ID, |ctx| {
             content.teardown(&mut view_state.child_state, ctx, content_dyn.downcast());
         });
@@ -316,10 +318,10 @@ where
             let mut slide = slide_dyn.downcast::<SlideTransition>();
             let mut card_dyn = SlideTransition::child_mut(&mut slide);
             let mut card = card_dyn.downcast::<widgets::SizedBox>();
-            let mut portal_dyn = widgets::SizedBox::child_mut(&mut card)
-                .expect("modal card always holds portal child");
-            let mut portal = portal_dyn.downcast::<widgets::Portal<dyn Widget>>();
-            let mut content_dyn = widgets::Portal::child_mut(&mut portal);
+            let mut scroll_dyn = widgets::SizedBox::child_mut(&mut card)
+                .expect("modal card always holds scroll view child");
+            let mut scroll = scroll_dyn.downcast::<ScrollViewWidget>();
+            let mut content_dyn = ScrollViewWidget::child_mut(&mut scroll);
             content.message(
                 &mut view_state.child_state,
                 message,

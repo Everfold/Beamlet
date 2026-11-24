@@ -12,12 +12,12 @@ use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
     AnyFlexChild, CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row,
-    label, portal, sized_box,
+    label, sized_box,
 };
 
 use crate::components::divider::horizontal_divider;
 use crate::components::typography::ui_label;
-use crate::foundation::{UiClassExt, clip_box};
+use crate::foundation::{ScrollBarVisibility, UiClassExt, clip_box, scroll_view};
 use crate::style_engine::{classes, with_spec};
 use crate::tokens::{DesignSpec, TabIndicatorStyle, TypeRole};
 
@@ -154,7 +154,10 @@ where
             };
 
         let inner = if scrollable {
-            portal(container).constrain_vertical(true).boxed()
+            scroll_view(container)
+                .constrain_vertical(true)
+                .scrollbar_visibility(ScrollBarVisibility::Never)
+                .boxed()
         } else {
             container
         };

@@ -15,12 +15,15 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, Flex, FlexExt, Prop, ZStackExt, button, flex_col, flex_row, label, portal,
+    CrossAxisAlignment, Flex, FlexExt, Prop, ZStackExt, button, flex_col, flex_row, label,
     sized_box, text_input, zstack,
 };
 
 use crate::components::typography::{UiLabel, ui_label};
-use crate::foundation::{UiClassExt, clip_box, constrained_box, focus_frame, icons, ui_icon};
+use crate::foundation::{
+    ScrollBarVisibility, UiClassExt, clip_box, constrained_box, focus_frame, icons, scroll_view,
+    ui_icon,
+};
 use crate::style_engine::{classes, current_spec_arc};
 use crate::tokens::{ControlVisualGrammar, DesignSpec, TypeRole};
 
@@ -618,9 +621,10 @@ impl<State, Action> UiTextArea<State, Action> {
         }
 
         let bounded_portal = constrained_box(
-            portal(ti.ui_class(classes::TEXT_FIELD_FLUSH))
+            scroll_view(ti.ui_class(classes::TEXT_FIELD_FLUSH))
                 .constrain_horizontal(true)
-                .must_fill(true),
+                .must_fill(true)
+                .scrollbar_visibility(ScrollBarVisibility::Never),
         )
         .min_height(self.min_height)
         .max_height(self.max_height);

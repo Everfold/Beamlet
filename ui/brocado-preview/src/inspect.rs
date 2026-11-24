@@ -232,10 +232,12 @@ impl Default for LintConfig {
             .collect(),
             overflow_containers: [
                 "Portal",
+                "ScrollViewWidget",
                 "VirtualScroll",
                 "ZStack",
                 "Passthrough",
                 "ScrollBar",
+                "UiScrollBar",
             ]
             .into_iter()
             .map(str::to_string)
@@ -304,8 +306,10 @@ fn lint_walk(
     config: &LintConfig,
     issues: &mut Vec<LayoutIssue>,
 ) {
-    let in_portal =
-        inside_portal || node.type_name == "Portal" || node.type_name == "VirtualScroll";
+    let in_portal = inside_portal
+        || node.type_name == "Portal"
+        || node.type_name == "ScrollViewWidget"
+        || node.type_name == "VirtualScroll";
 
     let is_nonempty_label = node.type_name == "Label" && node.text.is_some();
     if (config.is_visible_leaf_type(&node.type_name) || is_nonempty_label)
@@ -353,7 +357,10 @@ fn lint_walk(
     if node.rect.is_non_empty() && !config.allows_child_overflow(&node.type_name) {
         const TOL: f64 = 2.5;
         for child in &node.children {
-            if !child.rect.is_non_empty() || child.type_name == "ScrollBar" {
+            if !child.rect.is_non_empty()
+                || child.type_name == "ScrollBar"
+                || child.type_name == "UiScrollBar"
+            {
                 continue;
             }
             let overflows = child.rect.x < node.rect.x - TOL

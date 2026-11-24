@@ -7,7 +7,7 @@ use brocado_md3::{
     TopAppBarVariant, basic_dialog, body_medium, body_small, destructive_button, elevated_card,
     extended_fab, filter_chip, floating_toolbar, headline_small, horizontal_divider, icon_button,
     icons, large_fab, list_item_view, navigation_rail_with_fab, outlined_card, primary_button,
-    ripple_layer, search_bar, small_fab, subtle_button, title_medium, toast_host,
+    ripple_layer, scroll_view, search_bar, small_fab, subtle_button, title_medium, toast_host,
     top_app_bar_slots,
 };
 use brocado_winit::{AppRunner, AppState, WindowId, desktop_window};
@@ -18,7 +18,7 @@ use masonry::properties::{Dimensions, Padding};
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, portal, sized_box, zstack,
+    CrossAxisAlignment, FlexExt, ZStackExt, flex_col, flex_row, sized_box, zstack,
 };
 
 struct NoteItem {
@@ -207,7 +207,7 @@ fn app_view(state: &mut NotesApp) -> impl WidgetView<NotesApp> + use<> {
         .gap(16.px()),
     );
 
-    let body = portal(
+    let body = scroll_view(
         sized_box(
             flex_col((
                 search_bar(state.query.clone(), |s: &mut NotesApp, v| s.query = v)
