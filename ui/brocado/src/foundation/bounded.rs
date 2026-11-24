@@ -21,21 +21,21 @@
 //! and bounded modals:
 //!
 //! ```rust,no_run
-//! use brocado_core::WidgetView;
-//! use brocado_core::components::{
+//! use brocado::WidgetView;
+//! use brocado::components::{
 //!     CardVariant, bounded_bottom_sheet, bounded_card, bounded_dialog, bounded_scaffold,
 //!     primary_button, ui_label,
 //! };
-//! use brocado_core::foundation::{
+//! use brocado::foundation::{
 //!     BoundedViewExt as _, adaptive_pair, clip_box, column, constrained_box, container,
 //!     scroll_vertical, wrap,
 //! };
-//! use brocado_core::masonry::layout::AsUnit;
-//! use brocado_core::masonry::properties::Padding;
-//! use brocado_core::style::Style as _;
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::masonry::layout::AsUnit;
+//! use brocado::masonry::properties::Padding;
+//! use brocado::style::Style as _;
+//! use brocado::tokens::TypeRole;
 //!
-//! fn safe_screen() -> impl WidgetView<()> + brocado_core::foundation::Bounded {
+//! fn safe_screen() -> impl WidgetView<()> + brocado::foundation::Bounded {
 //!     let card_body = column((
 //!         ui_label(TypeRole::TitleMedium, "Safe Section"),
 //!         adaptive_pair(
@@ -73,8 +73,8 @@
 //! Horizontally scrolling a [`row`] of compact [`BoundedY`] items produces a [`Bounded`] view:
 //!
 //! ```rust,no_run
-//! use brocado_core::components::primary_button;
-//! use brocado_core::foundation::{bounded, row, scroll_horizontal};
+//! use brocado::components::primary_button;
+//! use brocado::foundation::{bounded, row, scroll_horizontal};
 //!
 //! let strip = bounded(scroll_horizontal(row((
 //!     primary_button("A", |()| {}),
@@ -86,9 +86,9 @@
 //! Two-axis [`scroll_view`](crate::foundation::scroll_view) absorbs overflow even for raw `flex_row`:
 //!
 //! ```rust,no_run
-//! use brocado_core::components::primary_button;
-//! use brocado_core::foundation::{bounded, scroll_view};
-//! use brocado_core::view::flex_row;
+//! use brocado::components::primary_button;
+//! use brocado::foundation::{bounded, scroll_view};
+//! use brocado::view::flex_row;
 //!
 //! let table = bounded(scroll_view(flex_row((
 //!     primary_button("Col 1", |()| {}),
@@ -100,11 +100,11 @@
 //! Type-erased [`BoundedXAnyView`] / [`BoundedAnyView`] preserve bounds across `Vec` collections:
 //!
 //! ```rust,no_run
-//! use brocado_core::components::{primary_button, ui_label};
-//! use brocado_core::foundation::{
+//! use brocado::components::{primary_button, ui_label};
+//! use brocado::foundation::{
 //!     BoundedAnyView, BoundedViewExt as _, BoundedXAnyView, bounded, column, scroll_vertical,
 //! };
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::tokens::TypeRole;
 //!
 //! let items: Vec<BoundedXAnyView<()>> = vec![
 //!     ui_label(TypeRole::BodyMedium, "Row 1").boxed_bounded_x(),
@@ -117,13 +117,13 @@
 //! Auditable escape hatches opt manually verified custom widgets into compile-time bounds:
 //!
 //! ```rust,no_run
-//! use brocado_core::WidgetView;
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{
+//! use brocado::WidgetView;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{
 //!     Bounded, BoundedX, assume_bounded, assume_bounded_x, bounded, bounded_x,
 //! };
-//! use brocado_core::tokens::TypeRole;
-//! use brocado_core::view::flex_row;
+//! use brocado::tokens::TypeRole;
+//! use brocado::view::flex_row;
 //!
 //! fn custom_x() -> impl WidgetView<()> + BoundedX {
 //!     bounded_x(assume_bounded_x(flex_row(ui_label(
@@ -146,10 +146,10 @@
 //! Raw `flex_row` fails `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::bounded_x;
-//! use brocado_core::tokens::TypeRole;
-//! use brocado_core::view::flex_row;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::bounded_x;
+//! use brocado::tokens::TypeRole;
+//! use brocado::view::flex_row;
 //!
 //! let _ = bounded_x(flex_row::<(), (), _>(ui_label(TypeRole::BodyMedium, "Unwrapped row")));
 //! ```
@@ -157,10 +157,10 @@
 //! Raw `flex_col` erases its axis type and therefore does not satisfy `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::bounded_x;
-//! use brocado_core::tokens::TypeRole;
-//! use brocado_core::view::flex_col;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::bounded_x;
+//! use brocado::tokens::TypeRole;
+//! use brocado::view::flex_col;
 //!
 //! let _ = bounded_x(flex_col::<(), (), _>(ui_label(TypeRole::BodyMedium, "Upstream untyped Flex")));
 //! ```
@@ -168,11 +168,11 @@
 //! Fixed-width `sized_box` is rejected by `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::bounded_x;
-//! use brocado_core::masonry::layout::AsUnit;
-//! use brocado_core::tokens::TypeRole;
-//! use brocado_core::view::sized_box;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::bounded_x;
+//! use brocado::masonry::layout::AsUnit;
+//! use brocado::tokens::TypeRole;
+//! use brocado::view::sized_box;
 //!
 //! let _ = bounded_x(sized_box::<(), (), _>(ui_label(TypeRole::BodyMedium, "Fixed")).fixed_width(400.px()));
 //! ```
@@ -180,11 +180,11 @@
 //! Adding `.width(...)` (`Prop<Dimensions, ...>`) on [`container`] drops `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{bounded_x, container};
-//! use brocado_core::masonry::layout::AsUnit;
-//! use brocado_core::style::Style as _;
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{bounded_x, container};
+//! use brocado::masonry::layout::AsUnit;
+//! use brocado::style::Style as _;
+//! use brocado::tokens::TypeRole;
 //!
 //! let _ = bounded_x(container::<(), (), _>(ui_label(TypeRole::BodyMedium, "Fixed")).width(400.px()));
 //! ```
@@ -193,10 +193,10 @@
 //! constraints inward, so wrapping an unbounded `flex_row` fails `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{bounded_x, scroll_vertical};
-//! use brocado_core::tokens::TypeRole;
-//! use brocado_core::view::flex_row;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{bounded_x, scroll_vertical};
+//! use brocado::tokens::TypeRole;
+//! use brocado::view::flex_row;
 //!
 //! let _ = bounded_x(scroll_vertical(flex_row::<(), (), _>(ui_label(TypeRole::BodyMedium, "Wide"))));
 //! ```
@@ -204,9 +204,9 @@
 //! An unscrolled [`column`] is only horizontally bounded (`BoundedX`), not `Bounded`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{bounded, column};
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{bounded, column};
+//! use brocado::tokens::TypeRole;
 //!
 //! let _ = bounded(column::<(), (), _>(ui_label(TypeRole::BodyMedium, "Tall content")));
 //! ```
@@ -215,9 +215,9 @@
 //! and drops `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{bounded_x, constrained_box};
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{bounded_x, constrained_box};
+//! use brocado::tokens::TypeRole;
 //!
 //! let _ = bounded_x(constrained_box::<(), (), _>(ui_label(TypeRole::BodyMedium, "Floored")).min_width(320.0));
 //! ```
@@ -226,9 +226,9 @@
 //! [`Bounded`]:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::{bounded, column, constrained_box, scroll_vertical};
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::{bounded, column, constrained_box, scroll_vertical};
+//! use brocado::tokens::TypeRole;
 //!
 //! let page = scroll_vertical(column::<(), (), _>(ui_label(TypeRole::BodyMedium, "Body")));
 //! let _ = bounded(constrained_box(page).min_height(400.0));
@@ -237,10 +237,10 @@
 //! Unverified `Box<AnyWidgetView>` (via `.boxed()`) cannot masquerade as `BoundedX`:
 //!
 //! ```compile_fail,E0277
-//! use brocado_core::WidgetView as _;
-//! use brocado_core::components::ui_label;
-//! use brocado_core::foundation::bounded_x;
-//! use brocado_core::tokens::TypeRole;
+//! use brocado::WidgetView as _;
+//! use brocado::components::ui_label;
+//! use brocado::foundation::bounded_x;
+//! use brocado::tokens::TypeRole;
 //!
 //! let _ = bounded_x(ui_label::<(), ()>(TypeRole::BodyMedium, "Unchecked dynamic view").boxed());
 //! ```

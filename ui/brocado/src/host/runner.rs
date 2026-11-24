@@ -18,9 +18,9 @@ use tokio::runtime::Runtime as TokioRuntime;
 use xilem_core::map_state;
 use xilem_masonry::WidgetView;
 
-use crate::config::WindowConfig;
-use crate::driver::{DesktopDriver, OnStartCallback, OnWgpuReadyCallback};
-use crate::window::DesktopWindow;
+use super::config::WindowConfig;
+use super::driver::{DesktopDriver, OnStartCallback, OnWgpuReadyCallback};
+use super::window::DesktopWindow;
 
 /// Trait implemented by multi-window application states to govern event-loop termination.
 pub trait AppState {

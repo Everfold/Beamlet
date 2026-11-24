@@ -1,6 +1,6 @@
 //! Perceptual OKLCH dynamic Material Design 3 `ColorScheme` generator and contrast helpers.
 
-use brocado_core::tokens::{Brightness, SemanticPalette};
+use crate::tokens::{Brightness, SemanticPalette};
 use masonry::peniko::Color;
 
 /// Material Design 3 color expression variant.

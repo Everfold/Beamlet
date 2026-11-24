@@ -6,8 +6,8 @@
 
 use std::sync::Arc;
 
-use brocado_core::style_engine::{cached_default_properties, ui_scope_arc};
-use brocado_core::tokens::{Brightness, DesignSpec, WindowBackdrop};
+use crate::style_engine::{cached_default_properties, ui_scope_arc};
+use crate::tokens::{Brightness, DesignSpec, WindowBackdrop};
 use masonry::core::{DefaultProperties, FromDynWidget};
 use masonry::peniko::Color;
 use masonry::properties::Dimensions;
@@ -18,7 +18,7 @@ use xilem_masonry::style::Style as _;
 use xilem_masonry::view::sized_box;
 use xilem_masonry::{InitialRootWidget, MasonryRoot, ViewCtx, WidgetView};
 
-use crate::config::{WindowChrome, WindowConfig};
+use super::config::{WindowChrome, WindowConfig};
 
 /// View element wrapper around [`masonry_winit::app::NewWindow`].
 #[expect(

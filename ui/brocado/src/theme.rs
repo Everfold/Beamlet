@@ -2,13 +2,11 @@
 
 use std::sync::{Arc, LazyLock, Mutex};
 
-use brocado_core::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
-use brocado_core::tokens::{Brightness, DesignSpec, TypeScale, UiLocale, WindowBackdrop};
-use brocado_core::{FontFamily, FontFamilyName};
 #[cfg(feature = "winit")]
-use brocado_winit::{
-    DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop,
-};
+use crate::host::{DesktopWindow, WindowId, desktop_window_arc, desktop_window_arc_with_backdrop};
+use crate::style_engine::scope::{UiScope, ui_scope_arc as core_ui_scope_arc};
+use crate::tokens::{Brightness, DesignSpec, TypeScale, UiLocale, WindowBackdrop};
+use crate::{FontFamily, FontFamilyName};
 use masonry::core::DefaultProperties;
 use masonry::core::FromDynWidget;
 use masonry::peniko::Color;
@@ -98,7 +96,6 @@ impl UiAccent {
         }
     }
 
-    #[cfg(feature = "md3")]
     const fn md3_seed(self) -> Color {
         match self {
             Self::Default | Self::Purple => Color::from_rgb8(0x67, 0x50, 0xA4),
@@ -259,23 +256,16 @@ impl UiTheme {
     pub fn to_spec(&self) -> DesignSpec {
         let mut spec = match self.language {
             DesignLanguage::Md3 => {
-                #[cfg(feature = "md3")]
-                {
-                    let seed = self.accent.md3_seed();
-                    let contrast = if self.high_contrast {
-                        brocado_md3::ContrastLevel::High
-                    } else {
-                        brocado_md3::ContrastLevel::Standard
-                    };
-                    brocado_md3::Md3Theme::from_seed(seed, self.brightness)
-                        .with_contrast(seed, contrast)
-                        .with_reduced_motion(self.reduced_motion)
-                        .to_spec()
-                }
-                #[cfg(not(feature = "md3"))]
-                {
-                    DesignSpec::neutral_fallback(self.brightness)
-                }
+                let seed = self.accent.md3_seed();
+                let contrast = if self.high_contrast {
+                    crate::md3::ContrastLevel::High
+                } else {
+                    crate::md3::ContrastLevel::Standard
+                };
+                crate::md3::Md3Theme::from_seed(seed, self.brightness)
+                    .with_contrast(seed, contrast)
+                    .with_reduced_motion(self.reduced_motion)
+                    .to_spec()
             }
         };
         if let Some(font) = &self.font_family {
@@ -311,7 +301,7 @@ impl UiTheme {
     /// Builds Masonry [`DefaultProperties`] corresponding to [`to_spec`](Self::to_spec).
     #[must_use]
     pub fn default_properties(&self) -> DefaultProperties {
-        brocado_core::style_engine::build_default_properties(&self.cached_spec())
+        crate::style_engine::build_default_properties(&self.cached_spec())
     }
 }
 
@@ -384,9 +374,7 @@ mod tests {
     #[test]
     fn ui_theme_defaults_to_system_font_and_propagates_custom_fallbacks() {
         use std::borrow::Cow;
-        let system_ui = FontFamily::Single(FontFamilyName::Generic(
-            brocado_core::GenericFamily::SystemUi,
-        ));
+        let system_ui = FontFamily::Single(FontFamilyName::Generic(crate::GenericFamily::SystemUi));
 
         for lang in DesignLanguage::ALL {
             let theme = UiTheme::new(lang, Brightness::Light);
@@ -401,7 +389,7 @@ mod tests {
             stacked.cached_spec().typography.font_family(),
             Some(&FontFamily::List(Cow::Owned(vec![
                 FontFamilyName::Named(Cow::Owned(String::from("CustomUI"))),
-                FontFamilyName::Generic(brocado_core::GenericFamily::Serif),
+                FontFamilyName::Generic(crate::GenericFamily::Serif),
             ])))
         );
 
@@ -410,7 +398,7 @@ mod tests {
         assert_eq!(
             appended.cached_spec().typography.font_family(),
             Some(&FontFamily::List(Cow::Owned(vec![
-                FontFamilyName::Generic(brocado_core::GenericFamily::SystemUi),
+                FontFamilyName::Generic(crate::GenericFamily::SystemUi),
                 FontFamilyName::Named(Cow::Borrowed("AppEmoji")),
             ])))
         );

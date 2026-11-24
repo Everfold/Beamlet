@@ -32,8 +32,7 @@ pub use crate::{
     WindowConfig, WindowId, desktop_window, desktop_window_arc,
 };
 
-#[cfg(feature = "md3")]
-pub use brocado_md3::{
+pub use crate::md3::{
     ColorScheme, ContrastLevel, FabColor, FabMenuItem, FabSize, FloatingToolbarVariant,
     Md3ColorVariant, Md3Style, Md3Theme, TopAppBarVariant, UiWavyLinearProgress,
     WavyLinearProgressWidget, bottom_app_bar, button_group, center_aligned_top_app_bar,

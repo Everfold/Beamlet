@@ -1,14 +1,11 @@
 //! Material Design 3 theme backend and signature Material 3 components for Brocado.
 
-#![warn(clippy::print_stdout, clippy::print_stderr)]
-#![cfg_attr(target_pointer_width = "64", warn(clippy::trivially_copy_pass_by_ref))]
-
 pub mod color;
 pub mod components;
 pub mod theme;
 
-pub use brocado_core::components::*;
-pub use brocado_core::foundation::{
+pub use crate::components::*;
+pub use crate::foundation::{
     AnchoredPopupHost, AnchoredPopupView, Bounded, BoundedAnyView, BoundedViewExt, BoundedX,
     BoundedXAnyView, BoundedXSeq, BoundedY, BoundedYSeq, ColumnView, ContainerView, EscapeCatcher,
     EscapeCatcherView, EscapePressed, FitAxis, FocusFrame, FocusFrameView, HasMinAxis,
@@ -21,11 +18,11 @@ pub use brocado_core::foundation::{
     resolve_interactive_colors, ripple_layer, row, scroll_horizontal, scroll_vertical, scroll_view,
     ui_icon, ui_transition, with_opacity,
 };
-pub use brocado_core::style_engine::{
+pub use crate::style_engine::{
     MemoizeWithSpec, build_default_properties, cached_default_properties, classes, current_spec,
     memoize_with_spec, with_spec,
 };
-pub use brocado_core::tokens::{
+pub use crate::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, ElevationLevel,
     InputFocusStyle, MotionDuration, MotionEasing, MotionScheme, NavIndicatorStyle,
     SemanticPalette, ShortcutConvention, SpringSpec, StateFeedbackMode, TabIndicatorStyle,

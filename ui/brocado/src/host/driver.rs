@@ -19,8 +19,8 @@ use xilem_core::{
 };
 use xilem_masonry::ViewCtx;
 
-use crate::runner::AppState;
-use crate::window::{DesktopWindow, DesktopWindowViewState};
+use super::runner::AppState;
+use super::window::{DesktopWindow, DesktopWindowViewState};
 
 type MessagePackage = (Arc<[ViewId]>, SendMessage);
 

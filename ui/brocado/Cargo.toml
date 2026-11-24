@@ -8,19 +8,23 @@ repository.workspace = true
 license.workspace = true
 
 [features]
-default = ["md3", "winit"]
-md3 = ["dep:brocado-md3"]
-winit = ["dep:brocado-winit"]
+default = ["winit"]
+winit = ["dep:masonry_winit", "dep:tokio"]
 
 [[example]]
 name = "theme_gallery"
 required-features = ["winit"]
 
+[[example]]
+name = "md3_notes"
+required-features = ["winit"]
+
 [dependencies]
-brocado-core.workspace = true
-brocado-md3 = { workspace = true, optional = true }
-brocado-winit = { workspace = true, optional = true }
 masonry.workspace = true
+masonry_winit = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tracing.workspace = true
+usvg.workspace = true
 xilem_core.workspace = true
 xilem_masonry.workspace = true
 

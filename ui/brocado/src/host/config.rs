@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use brocado_core::tokens::{Brightness, WindowBackdrop};
+use crate::tokens::{Brightness, WindowBackdrop};
 use masonry_winit::winit::dpi::{Position, Size};
 use masonry_winit::winit::window::{
     Cursor, Icon, Theme as WinitTheme, Window as WinitWindow, WindowAttributes, WindowButtons,

@@ -15,7 +15,7 @@ use xilem_masonry::view::sized_box;
 
 pub mod scenes;
 
-/// Returns a [`LintConfig`] extended with `brocado` / `brocado-core` custom widgets and
+/// Returns a [`LintConfig`] extended with `brocado` custom widgets and
 /// overlay/decorator containers.
 #[must_use]
 pub fn ui_lint_config() -> LintConfig {
@@ -38,7 +38,7 @@ pub fn lint_ui_layout(root: &LayoutNode, viewport: (f64, f64)) -> Vec<LayoutIssu
     lint_layout_with(root, viewport, &ui_lint_config())
 }
 
-/// Returns an [`A11yLintConfig`] extended with `brocado` / `brocado-core` custom widgets and
+/// Returns an [`A11yLintConfig`] extended with `brocado` custom widgets and
 /// modal dialog wrappers.
 #[must_use]
 pub fn ui_a11y_lint_config() -> A11yLintConfig {

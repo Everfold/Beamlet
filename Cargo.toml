@@ -22,10 +22,7 @@ members = [
   "crates/app-support/beamlet-host",
 
   "ui/brocado",
-  "ui/brocado-core",
-  "ui/brocado-md3",
   "ui/brocado-preview",
-  "ui/brocado-winit",
 ]
 
 [workspace.package]
@@ -89,10 +86,7 @@ reedline = { version = "0.52", features = ["bashisms", "sqlite", "system_clipboa
 tachyonfx = "0.25"
 
 brocado = { path = "ui/brocado" }
-brocado-core = { path = "ui/brocado-core" }
-brocado-md3 = { path = "ui/brocado-md3" }
 brocado-preview = { path = "ui/brocado-preview" }
-brocado-winit = { path = "ui/brocado-winit" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 masonry = { git = "https://github.com/linebender/xilem.git" }
 masonry_testing = { git = "https://github.com/linebender/xilem.git" }

@@ -2,14 +2,12 @@
 
 use std::sync::Arc;
 
-use brocado_core::components::{
+use crate::components::{
     NavDestination, headline_medium, headline_small, surface_box, title_large, vertical_divider,
 };
-use brocado_core::foundation::{
-    ConstrainedBox, UiClassExt, clip_box, constrained_box, ui_icon, wrap,
-};
-use brocado_core::style_engine::{classes, with_spec};
-use brocado_core::tokens::{DesignSpec, ElevationLevel, TypeRole};
+use crate::foundation::{ConstrainedBox, UiClassExt, clip_box, constrained_box, ui_icon, wrap};
+use crate::style_engine::{classes, with_spec};
+use crate::tokens::{DesignSpec, ElevationLevel, TypeRole};
 use masonry::core::ArcStr;
 use masonry::layout::AsUnit;
 use masonry::properties::{Dimensions, LineBreaking, Padding};
@@ -21,7 +19,7 @@ use xilem_masonry::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, sized_box,
 };
 
-use brocado_core::TextAlign;
+use crate::TextAlign;
 
 /// Material 3 FAB tonal color mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -424,13 +422,10 @@ mod expressive {
     use std::marker::PhantomData;
     use std::sync::Arc;
 
-    use brocado_core::components::{filled_icon_button, primary_button, secondary_button};
-    use brocado_core::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
-    use brocado_core::foundation::{
-        BoundedX, BoundedY, ClipBoxWidget, WrapWidget, clip_box, icons, wrap,
-    };
-    use brocado_core::style_engine::current_spec_arc;
-    use brocado_core::tokens::ElevationLevel;
+    use crate::components::{filled_icon_button, primary_button, secondary_button};
+    use crate::foundation::{BoundedX, BoundedY, ClipBoxWidget, WrapWidget, clip_box, icons, wrap};
+    use crate::style_engine::current_spec_arc;
+    use crate::tokens::ElevationLevel;
     use masonry::accesskit::{Node, Role};
     use masonry::core::{
         AccessCtx, ArcStr, ChildrenIds, LayoutCtx, MeasureCtx, NoAction, PaintCtx, PropertiesMut,
@@ -442,6 +437,7 @@ mod expressive {
     use masonry::peniko::Color;
     use masonry::properties::{Background, BoxShadow, CornerRadius, Padding};
     use masonry::widgets;
+    use xilem_core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
     use xilem_masonry::style::Style as _;
     use xilem_masonry::view::{CrossAxisAlignment, FlexExt as _, flex_col, flex_row};
     use xilem_masonry::{AnyWidgetView, Pod, ViewCtx, WidgetView};
@@ -469,7 +465,7 @@ mod expressive {
     impl<V, State, Action> FloatingToolbarSurface<V, State, Action> {
         fn resolve_style(
             variant: FloatingToolbarVariant,
-            spec: &brocado_core::tokens::DesignSpec,
+            spec: &crate::tokens::DesignSpec,
         ) -> (Color, BoxShadow) {
             let p = &spec.palette;
             let bg = match variant {

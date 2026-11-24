@@ -1,7 +1,7 @@
 //! `Md3Theme` constructing a complete Material Design 3 [`DesignSpec`].
 
-use brocado_core::style_engine::scope::{UiScope, ui_scope};
-use brocado_core::tokens::{
+use crate::style_engine::scope::{UiScope, ui_scope};
+use crate::tokens::{
     Brightness, ControlBorderStyle, ControlMetrics, DesignSpec, DialogActionOrder, InputFocusStyle,
     MotionScheme, NavIndicatorStyle, ShortcutConvention, StateFeedbackMode, TabIndicatorStyle,
     TypeScale, WindowBackdrop,
@@ -10,7 +10,7 @@ use masonry::core::FromDynWidget;
 use masonry::peniko::Color;
 use xilem_masonry::WidgetView;
 
-use crate::color::{ColorScheme, ContrastLevel, Md3ColorVariant};
+use super::color::{ColorScheme, ContrastLevel, Md3ColorVariant};
 
 /// Configuration handle generating Material Design 3 [`DesignSpec`] instances.
 /// Material Design 3 visual style generation.
