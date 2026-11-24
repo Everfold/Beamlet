@@ -23,7 +23,7 @@ use masonry::core::{
 use masonry::dpi::PhysicalPosition;
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Size};
-use masonry::layout::{AsUnit, LenReq, Length};
+use masonry::layout::{AsUnit, LenReq, Length, UnitPoint};
 use masonry::parley::LineHeight;
 use masonry::parley::style::FontWeight;
 use masonry::peniko::Color;
@@ -36,7 +36,7 @@ use xilem_masonry::ViewCtx;
 use xilem_masonry::WidgetView;
 use xilem_masonry::style::Style as _;
 use xilem_masonry::view::{
-    CrossAxisAlignment, FlexExt, button, flex_col, flex_row, label, sized_box,
+    CrossAxisAlignment, FlexExt, ZStackExt, button, flex_col, flex_row, label, sized_box, zstack,
 };
 
 /// WinUI 3 `InfoBar` semantic severity presets.
@@ -384,6 +384,10 @@ fn nav_view_item<State: 'static, Action: 'static>(
     .boxed()
 }
 
+fn nav_compact_min_inner_h(spec: &DesignSpec) -> f64 {
+    (36.0_f64.max(f64::from(spec.typography.label_large.line_height) + 12.0) - 12.0).max(16.0)
+}
+
 fn nav_view_compact_item<State: 'static, Action: 'static>(
     spec: &DesignSpec,
     dest: &NavDestination,
@@ -403,14 +407,13 @@ fn nav_view_compact_item<State: 'static, Action: 'static>(
     } else {
         classes::NAV_PILL
     };
-    let min_inner_h =
-        (36.0_f64.max(f64::from(spec.typography.label_large.line_height) + 12.0) - 12.0).max(16.0);
+    let min_inner_h = nav_compact_min_inner_h(spec);
     button(
-        constrained_box(
-            flex_row((bar, ui_icon(dest.icon, 16.0, icon_color)))
-                .cross_axis_alignment(CrossAxisAlignment::Center)
-                .gap(6.px()),
-        )
+        constrained_box(zstack((
+            bar.alignment(UnitPoint::LEFT),
+            ui_icon(dest.icon, 16.0, icon_color).alignment(UnitPoint::CENTER),
+        )))
+        .fill_max_width(true)
         .min_height(min_inner_h),
         move |s: &mut State| cb(s, index),
     )
@@ -523,12 +526,18 @@ where
     with_spec(move |spec: &DesignSpec, _| {
         let p = &spec.palette;
         let toggle_cb = toggle_cb.clone();
-        let hamburger = icon_button(icons::MENU, move |s: &mut State| toggle_cb(s))
-            .dims(Dimensions::fixed(32.px(), 32.px()));
-
         let top_row: Box<AnyWidgetView<State, Action>> = if collapsed {
-            hamburger.boxed()
+            button(
+                constrained_box(ui_icon(icons::MENU, 16.0, p.text_primary))
+                    .min_height(nav_compact_min_inner_h(spec)),
+                move |s: &mut State| toggle_cb(s),
+            )
+            .ui_class(classes::NAV_PILL)
+            .padding(Padding::from_vh(6.px(), 4.px()))
+            .boxed()
         } else {
+            let hamburger = icon_button(icons::MENU, move |s: &mut State| toggle_cb(s))
+                .dims(Dimensions::fixed(32.px(), 32.px()));
             let head_lbl = header.as_ref().map(|h| {
                 spec.typography
                     .style_label(TypeRole::TitleSmall, label(h.clone()))

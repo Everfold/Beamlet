@@ -1923,3 +1923,97 @@ fn scroll_view_and_constrained_box_type_state_runtime_parity() {
         cbox_node.rect
     );
 }
+
+#[test]
+fn fluent_collapsed_navigation_view_aligns_toggle_and_items() {
+    #[derive(Default)]
+    struct NavState;
+
+    fn collect_nodes<'a>(node: &'a LayoutNode, type_name: &str, out: &mut Vec<&'a LayoutNode>) {
+        if node.type_name == type_name {
+            out.push(node);
+        }
+        for c in &node.children {
+            collect_nodes(c, type_name, out);
+        }
+    }
+
+    let mut harness = build_ui_harness(
+        NavState,
+        |_| UiTheme::new(DesignLanguage::Fluent, Brightness::Light),
+        |_| {
+            let primary = [
+                NavDestination::new("Home", icons::HOME),
+                NavDestination::new("Explore", icons::EXPLORE),
+            ];
+            let footer = [NavDestination::new("Settings", icons::SETTINGS)];
+            navigation_view_collapsible(
+                Some("Fluent"),
+                &primary,
+                &footer,
+                0,
+                true,
+                |_| {},
+                |_, _| {},
+            )
+            .boxed()
+        },
+        PreviewConfig {
+            width: 320,
+            height: 360,
+            ..PreviewConfig::default()
+        },
+    );
+    harness.settle_animations();
+    let tree = dump_layout_tree(&mut harness);
+
+    let mut buttons = Vec::new();
+    collect_nodes(&tree, "Button", &mut buttons);
+    assert_eq!(
+        buttons.len(),
+        4,
+        "expected toggle + 2 primary + 1 footer nav buttons"
+    );
+
+    let toggle_btn = buttons[0];
+    for (idx, btn) in buttons.iter().enumerate() {
+        assert!(
+            (btn.rect.x - toggle_btn.rect.x).abs() < 0.5
+                && (btn.rect.width - toggle_btn.rect.width).abs() < 0.5,
+            "button[{idx}] outer rect must match toggle button {:?}: got {:?}",
+            toggle_btn.rect,
+            btn.rect
+        );
+    }
+
+    let mut toggle_svgs = Vec::new();
+    collect_nodes(toggle_btn, "Svg", &mut toggle_svgs);
+    assert_eq!(toggle_svgs.len(), 1);
+    let toggle_icon = &toggle_svgs[0].rect;
+    let toggle_center = toggle_icon.x + toggle_icon.width * 0.5;
+
+    for (idx, btn) in buttons.iter().enumerate().skip(1) {
+        let mut svgs = Vec::new();
+        collect_nodes(btn, "Svg", &mut svgs);
+        assert_eq!(svgs.len(), 1);
+        let icon_rect = &svgs[0].rect;
+        let icon_center = icon_rect.x + icon_rect.width * 0.5;
+        assert!(
+            (icon_center - toggle_center).abs() < 0.5,
+            "nav item[{idx}] icon center ({icon_center}) must align with toggle icon center ({toggle_center}): item={icon_rect:?}, toggle={toggle_icon:?}"
+        );
+
+        let mut bars = Vec::new();
+        collect_nodes(btn, "SizedBox", &mut bars);
+        let bar = bars
+            .into_iter()
+            .find(|n| (n.rect.width - 3.0).abs() < 0.5 && (n.rect.height - 16.0).abs() < 0.5)
+            .expect("compact nav item must render 3x16 active indicator slot");
+        assert!(
+            bar.rect.x + bar.rect.width <= icon_rect.x - 1.0,
+            "active bar {:?} must stay clear of icon {:?}",
+            bar.rect,
+            icon_rect
+        );
+    }
+}
