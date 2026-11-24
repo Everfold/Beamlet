@@ -3,7 +3,7 @@
 
 use brocado::prelude::*;
 use brocado_preview::harness::{PreviewConfig, PreviewHarness, PreviewStep};
-use brocado_preview::inspect::{LayoutNode, dump_layout_tree};
+use brocado_preview::inspect::{LayoutNode, dump_layout_tree, lint_layout};
 use masonry::core::keyboard::{Code, Key, KeyState, Modifiers, NamedKey};
 use masonry::core::pointer::{PointerId, PointerInfo, PointerType};
 use masonry::core::{
@@ -1740,5 +1740,186 @@ fn scroll_view_shift_wheel_and_focus_pan_to_child() {
     assert!(
         item7_after.y >= -0.5 && item7_after.y + item7_after.height <= 120.5,
         "expected RequestPanToChild to bring Item7 inside 0..120 viewport: before={item7_before:?}, after={item7_after:?}"
+    );
+}
+
+#[test]
+fn compile_time_bounded_scaffold_zero_overflow_on_narrow_and_short_viewports() {
+    #[derive(Default)]
+    struct BoundedState;
+
+    fn build_bounded_scene(_: &mut BoundedState) -> impl WidgetView<BoundedState> + Bounded {
+        let dynamic_rows: Vec<BoundedXAnyView<BoundedState>> = vec![
+            ui_label(
+                TypeRole::BodyMedium,
+                "Compile-time bounded paragraph that wraps across ultra-narrow widths without pushing horizontal overflow.",
+            )
+            .boxed_bounded_x(),
+            adaptive_pair(
+                ui_label(TypeRole::LabelLarge, "Trailing Action"),
+                primary_button("Apply", |_| {}),
+            )
+            .boxed_bounded_x(),
+        ];
+
+        let chip_strip = scroll_horizontal(
+            row((
+                primary_button("Alpha", |_| {}),
+                secondary_button("Beta", |_| {}),
+                outlined_button("Gamma", |_| {}),
+            ))
+            .gap(8.px()),
+        )
+        .assert_bounded();
+
+        let wrapped = wrap((
+            primary_button("One", |_| {}),
+            secondary_button("Two", |_| {}),
+            outlined_button("Three", |_| {}),
+        ));
+
+        let card_view = bounded_card(
+            CardVariant::Elevated,
+            column((wrapped, chip_strip, column(dynamic_rows).gap(8.px())))
+                .cross_axis_alignment(CrossAxisAlignment::Stretch)
+                .gap(10.px()),
+        );
+
+        let body = scroll_vertical(
+            container(constrained_box(card_view).max_width(420.0)).padding(Padding::all(12.px())),
+        );
+
+        bounded_scaffold(body)
+            .top_bar(clip_box(ui_label(
+                TypeRole::TitleMedium,
+                "Bounded Scaffold Title",
+            )))
+            .dialog(Some(bounded_dialog(
+                ui_label(
+                    TypeRole::BodyMedium,
+                    "Modal content guaranteed horizontally bounded",
+                ),
+                |_| {},
+            )))
+            .build()
+    }
+
+    for &(w, h) in &[(360_u32, 480_u32), (200_u32, 240_u32), (140_u32, 160_u32)] {
+        let mut harness = build_ui_harness(
+            BoundedState,
+            |_| UiTheme::new(DesignLanguage::Md3, Brightness::Light),
+            |st| build_bounded_scene(st).boxed(),
+            PreviewConfig {
+                width: w,
+                height: h,
+                ..PreviewConfig::default()
+            },
+        );
+        harness.settle_animations();
+        let tree = dump_layout_tree(&mut harness);
+        let issues = lint_layout(&tree, (f64::from(w), f64::from(h)));
+        let overflow_issues: Vec<_> = issues
+            .iter()
+            .filter(|issue| issue.kind == "parent_overflow" || issue.kind == "offscreen")
+            .collect();
+        assert!(
+            overflow_issues.is_empty(),
+            "expected zero overflow/offscreen issues at viewport ({w}x{h}), got: {overflow_issues:?}"
+        );
+    }
+}
+
+#[test]
+fn scroll_view_and_constrained_box_type_state_runtime_parity() {
+    #[derive(Default)]
+    struct ParityState;
+
+    // 1. scroll_horizontal permits horizontal wheel scroll on a Bounded row while preserving Bounded
+    let mut h_horiz = build_ui_harness(
+        ParityState,
+        |_| UiTheme::new(DesignLanguage::Adwaita, Brightness::Light),
+        |_| {
+            bounded(scroll_horizontal(
+                row((
+                    primary_button("FirstWideActionButton", |_| {}),
+                    primary_button("SecondWideActionButton", |_| {}),
+                    primary_button("ThirdWideActionButton", |_| {}),
+                ))
+                .gap(16.px()),
+            ))
+            .boxed()
+        },
+        PreviewConfig {
+            width: 180,
+            height: 80,
+            ..PreviewConfig::default()
+        },
+    );
+    h_horiz.settle_animations();
+    let before = find_node_by_text(&dump_layout_tree(&mut h_horiz), "FirstWideActionButton")
+        .unwrap()
+        .rect
+        .x;
+    {
+        let inner = h_horiz.inner_harness_mut();
+        let scale = inner.render_root().scale_factor();
+        let ptr_pos = LogicalPosition::new(90.0, 40.0).to_physical(scale);
+        inner.mouse_move(Point::new(90.0, 40.0));
+        inner.process_pointer_event(PointerEvent::Scroll(PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            delta: ScrollDelta::PixelDelta(LogicalPosition::new(0.0, -100.0).to_physical(scale)),
+            state: PointerState {
+                modifiers: Modifiers::SHIFT,
+                position: ptr_pos,
+                ..PointerState::default()
+            },
+        }));
+    }
+    h_horiz.pump_actions();
+    h_horiz.settle_animations();
+    let after = find_node_by_text(&dump_layout_tree(&mut h_horiz), "FirstWideActionButton")
+        .unwrap()
+        .rect
+        .x;
+    assert!(
+        after < before - 40.0,
+        "expected scroll_horizontal row to pan horizontally: before={before}, after={after}"
+    );
+
+    // 2. constrained_box max_width preserves BoundedX and caps card width cleanly
+    let mut h_cbox = build_ui_harness(
+        ParityState,
+        |_| UiTheme::new(DesignLanguage::Hig, Brightness::Dark),
+        |_| {
+            scroll_vertical(
+                constrained_box(bounded_card(
+                    CardVariant::Outlined,
+                    ui_label(
+                        TypeRole::BodyMedium,
+                        "Long label inside max-width constrained card",
+                    ),
+                ))
+                .max_width(220.0),
+            )
+            .assert_bounded()
+            .boxed()
+        },
+        PreviewConfig {
+            width: 480,
+            height: 240,
+            ..PreviewConfig::default()
+        },
+    );
+    h_cbox.settle_animations();
+    let tree = dump_layout_tree(&mut h_cbox);
+    let cbox_node = find_first_node(&tree, "ConstrainedBox").expect("ConstrainedBox missing");
+    assert!(
+        cbox_node.rect.width <= 220.5,
+        "ConstrainedBox must respect 220px max_width: {:?}",
+        cbox_node.rect
     );
 }
