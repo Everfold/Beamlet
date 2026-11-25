@@ -1,67 +1,60 @@
-# Beamlet 跨语言架构与协议规范
+# Beamlet 架构与协议规范
 
-本目录定义 **Beamlet** 的系统性架构设计、跨语言逻辑数据结构、行为契约与形式化安全性质。整套规范采用“自底向上、下层对上层完全透明、三种载体正交分工”的组织方式，使任意语言的实现都可以独立对照校验，而不必反向耦合到特定运行时或消息中间件。
+Beamlet 规范自底向上分层，下层不耦合上层，由三种载体正交定义。
 
-## 三元规范栈与单一事实来源
-
-为避免同一设计决策在不同文档间重复抄写与漂移，本规范通过三种互补载体各自承担唯一权威职责（Single Source of Truth）：
+## 载体分工
 
 ```mermaid
 flowchart LR
-    PB["Protobuf Edition 2026 (.proto) - 逻辑结构契约"]
-    QNT["Quint (.qnt) - 状态转换与不变量"]
-    MD["Markdown (.md) - 职责边界与失败语义"]
+    PB["Protobuf Edition 2026 (.proto)"]
+    QNT["Quint (.qnt)"]
+    MD["Markdown (.md)"]
     IMPL["多语言实现与契约测试"]
 
-    PB -->|"定义字段类型、枚举与消息签名"| MD
-    QNT -->|"定义转换前置条件与 Safety 性质"| MD
-    MD -->|"定义环境假设、失败语义与角色编排"| IMPL
-    PB -->|"结构映射"| IMPL
-    QNT -->|"不变量编号与边界反例映射"| IMPL
+    PB -->|"逻辑结构与枚举"| MD
+    QNT -->|"状态转换与 Safety 不变量"| MD
+    MD -->|"职责边界、失败语义与环境假设"| IMPL
+    PB -->|"结构契约"| IMPL
+    QNT -->|"INV-* 映射"| IMPL
 ```
 
-- **Markdown（`spec/*.md`）**：阐述分层架构、跨字段约束、环境假设及 RFC 2119 规范性条款，**不重复抄写 `.proto` 字段定义表**。
-- **Protobuf Edition 2026（`spec/proto/`）**：作为跨语言逻辑 IDL，定义消息封套、枚举与服务接口签名；仅表达**逻辑结构契约**，不强制要求具体传输绑定必须使用二进制 Protobuf 编码。
-- **Quint（`spec/quint/`）**：对关键生命周期、授权防重用、租约状态格及定向交付协议构建可执行形式化模型，并通过随机模拟与 TLC 模型检验验证可追踪不变量（`INV-*`）。
+- **Markdown（`spec/*.md`）**：分层边界、环境假设与 RFC 2119 条款；不重复抄写 `.proto` 字段表。
+- **Protobuf Edition 2026（`spec/proto/`）**：跨语言逻辑数据结构契约（Logical IDL）；不限定线编码格式。
+- **Quint（`spec/quint/`）**：可执行状态机与安全不变量（`INV-*`），经随机模拟与 TLC 模型检验验证。
 
-## 分层依赖图谱（L0 到 L4）
+## 分层依赖
 
-规范严格按照从微观原语到宏观绑定的五个层级组织。阅读任一 `Ln` 层文件时，其概念与依赖绝不向上引用 `Ln+1` 层实体：
+`L0`–`L4` 单向演进，`Ln` 层不得引用 `Ln+1` 层概念：
 
 ```mermaid
 flowchart BT
-    L0["L0: 基础约定与词汇 (00-glossary.md)"]
-    L1["L1: 核心原语与内核 (01-primitives.md, 02-kernel.md, proto/l1, quint/kernel)"]
-    L2["L2: 在线执行台账 (03-ledger.md, proto/l2, quint/ledger)"]
-    L3["L3: 分布式交付协议 (04-protocol.md, proto/l3, quint/protocol)"]
-    L4["L4: 传输绑定与宿主映射 (05-binding-nats.md, 06-host-and-rust.md)"]
+    L0["L0: 基础约定与词汇 (00-conventions.md, 00-glossary.md)"]
+    L1["L1: 原语与内核 (01-primitives.md, 02-kernel.md, proto/l1, quint/kernel)"]
+    L2["L2: 在线台账 (03-ledger.md, proto/l2, quint/ledger)"]
+    L3["L3: 交付协议 (04-protocol.md, proto/l3, quint/protocol)"]
+    L4["L4: 传输绑定与宿主 (05-binding-nats.md, 06-host-and-rust.md)"]
 
     L0 --> L1 --> L2 --> L3 --> L4
 ```
 
-## 文档与模型索引
+## 索引
 
-| 层级 | Markdown 规范 | Protobuf IDL (Edition 2026) | Quint 形式化模型 | 核心覆盖范围 |
+| 层级 | Markdown | Protobuf IDL | Quint 模型 | 范围 |
 | --- | --- | --- | --- | --- |
-| L0 | [00-glossary.md](00-glossary.md) | — | — | RFC 2119 关键词、全局身份/时间约定、领域术语表 |
-| L1 | [01-primitives.md](01-primitives.md) | [primitives.proto](proto/beamlet/l1/v1/primitives.proto) | [primitives.qnt](quint/kernel/primitives.qnt) | `Attempt`、`Report`、`OpaquePayload` 不可变证据模型 |
-| L1 | [02-kernel.md](02-kernel.md) | [kernel.proto](proto/beamlet/l1/v1/kernel.proto) | [state_machine.qnt](quint/kernel/state_machine.qnt) / [kernel.qnt](quint/kernel/kernel.qnt) | 单 `Operation` 三态生命周期、已知状态重建与校验优先级 |
-| L2 | [03-ledger.md](03-ledger.md) | [ledger.proto](proto/beamlet/l2/v1/ledger.proto) | [ledger.qnt](quint/ledger/ledger.qnt) | 多 `Operation` 在线管理与全局 `Attempt` 身份防重用 |
-| L3 | [04-protocol.md](04-protocol.md) | [protocol.proto](proto/beamlet/l3/v1/protocol.proto) | [registry_lease.qnt](quint/protocol/registry_lease.qnt) / [delivery.qnt](quint/protocol/delivery.qnt) | `Authority` 与 `Worker` 的单调租约格、定向交付与优雅排空 |
-| L4 | [05-binding-nats.md](05-binding-nats.md) | — | — | NATS Subject 路由、v3 JSON 线协议封装与连接世代 |
-| L4 | [06-host-and-rust.md](06-host-and-rust.md) | — | — | `Host` 任务监督、`Local` 进程内传输与 Rust Crate 映射 |
+| L0 | [00-conventions.md](00-conventions.md) / [00-glossary.md](00-glossary.md) | — | — | RFC 2119、基础约定、追踪编号与五维领域词典 |
+| L1 | [01-primitives.md](01-primitives.md) | [primitives.proto](proto/beamlet/l1/v1/primitives.proto) | [primitives.qnt](quint/kernel/primitives.qnt) | `Attempt`、`Report`、`OpaquePayload` 不可变证据 |
+| L1 | [02-kernel.md](02-kernel.md) | [kernel.proto](proto/beamlet/l1/v1/kernel.proto) | [state_machine.qnt](quint/kernel/state_machine.qnt) / [kernel.qnt](quint/kernel/kernel.qnt) | 单 `Operation` 三态状态机与外部重建 |
+| L2 | [03-ledger.md](03-ledger.md) | [ledger.proto](proto/beamlet/l2/v1/ledger.proto) | [ledger.qnt](quint/ledger/ledger.qnt) | 多 `Operation` 在线索引与 `Attempt` 全局防重用 |
+| L3 | [04-protocol.md](04-protocol.md) | [protocol.proto](proto/beamlet/l3/v1/protocol.proto) | [registry_lease.qnt](quint/protocol/registry_lease.qnt) / [delivery.qnt](quint/protocol/delivery.qnt) | 单调租约格、定向交付与优雅排空 |
+| L4 | [05-binding-nats.md](05-binding-nats.md) | — | — | NATS Subject 路由、v3 JSON 线格式与连接世代 |
+| L4 | [06-host-and-rust.md](06-host-and-rust.md) | — | — | `Host` 任务监督、`Local` 传输与 Rust 映射 |
 
-## 验证方式
+## 校验
 
-进入仓库开发环境（例如 `nix develop`）后，可执行以下命令全量校验 IDL 与形式化模型：
+在开发环境（如 `nix develop`）中执行：
 
 ```bash
-# 校验 Protobuf Edition 2026 格式与 buf lint 规则
-just check-proto
-
-# 运行全部 Quint 类型检查、场景单元测试、随机轨迹见证与 TLC 模型检验
-just check-models
-
-# 一键运行完整规范校验
-just check-spec
+just check-proto   # buf 格式、lint 与构建检查
+just check-models  # Quint 类型检查、测试、模拟与 TLC 模型检验
+just check-spec    # 全量校验
 ```
