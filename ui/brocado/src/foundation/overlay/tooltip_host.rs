@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use masonry::accesskit::{Node, Role};
 use masonry::core::{
-    AccessCtx, ArcStr, ChildrenIds, EventCtx, Layer, LayerType, LayoutCtx, MeasureCtx, NewWidget,
-    NoAction, PaintCtx, PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef, RegisterCtx,
-    StyleProperty, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
+    AccessCtx, ArcStr, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx,
+    PointerEvent, PointerUpdate, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
+    Subwindow, SubwindowType, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
@@ -173,7 +173,7 @@ impl Widget for TooltipLayer {
                 || (adjusted.y - self.placed_pos.y).abs() > 0.5
             {
                 self.placed_pos = adjusted;
-                ctx.reposition_layer(ctx.widget_id(), adjusted);
+                ctx.reposition_subwindow(ctx.widget_id(), adjusted);
             }
         }
     }
@@ -311,7 +311,7 @@ impl Widget for TooltipLayer {
         ChildrenIds::from_slice(&[self.child.id()])
     }
 
-    fn as_layer(&mut self) -> Option<&mut dyn Layer> {
+    fn as_subwindow(&mut self) -> Option<&mut dyn Subwindow> {
         Some(self)
     }
 
@@ -324,7 +324,7 @@ impl Widget for TooltipLayer {
     }
 }
 
-impl Layer for TooltipLayer {
+impl Subwindow for TooltipLayer {
     fn capture_pointer_event(
         &mut self,
         ctx: &mut EventCtx<'_>,
@@ -345,7 +345,7 @@ impl Layer for TooltipLayer {
         if remove_tooltip && !self.dismissed {
             self.dismissed = true;
             let self_id = ctx.widget_id();
-            ctx.remove_layer(self_id);
+            ctx.remove_subwindow(self_id);
             ctx.mutate_later(self.creator, move |mut host| {
                 let host = host.downcast::<HoverTooltipHost>();
                 if host.widget.layer_id == Some(self_id) {
@@ -398,7 +398,7 @@ impl HoverTooltipHost {
             this.ctx.mutate_later(old_id, |mut layer| {
                 layer.downcast::<TooltipLayer>().widget.dismissed = true;
             });
-            this.ctx.remove_layer(old_id);
+            this.ctx.remove_subwindow(old_id);
         }
     }
 
@@ -421,8 +421,8 @@ impl HoverTooltipHost {
             .build_tooltip_widget(this.ctx.widget_id(), anchor_rect, pos);
         let layer_id = layer.id();
         this.widget.layer_id = Some(layer_id);
-        this.ctx.create_layer(
-            LayerType::Tooltip(this.widget.spec.body.to_string()),
+        this.ctx.create_subwindow(
+            SubwindowType::Tooltip(this.widget.spec.body.to_string()),
             layer,
             pos,
         );
@@ -458,7 +458,7 @@ impl Widget for HoverTooltipHost {
                 ctx.mutate_later(old_id, |mut layer| {
                     layer.downcast::<TooltipLayer>().widget.dismissed = true;
                 });
-                ctx.remove_layer(old_id);
+                ctx.remove_subwindow(old_id);
             }
         }
     }
@@ -476,7 +476,7 @@ impl Widget for HoverTooltipHost {
                 ctx.mutate_later(old_id, |mut layer| {
                     layer.downcast::<TooltipLayer>().widget.dismissed = true;
                 });
-                ctx.remove_layer(old_id);
+                ctx.remove_subwindow(old_id);
             }
             return;
         }
@@ -490,7 +490,7 @@ impl Widget for HoverTooltipHost {
                     ctx.mutate_later(old_id, |mut layer| {
                         layer.downcast::<TooltipLayer>().widget.dismissed = true;
                     });
-                    ctx.remove_layer(old_id);
+                    ctx.remove_subwindow(old_id);
                 }
                 let border_box = ctx.border_box();
                 if border_box.size() == Size::ZERO {
@@ -503,7 +503,11 @@ impl Widget for HoverTooltipHost {
                     .spec
                     .build_tooltip_widget(ctx.widget_id(), anchor_rect, pos);
                 self.layer_id = Some(layer.id());
-                ctx.create_layer(LayerType::Tooltip(self.spec.body.to_string()), layer, pos);
+                ctx.create_subwindow(
+                    SubwindowType::Tooltip(self.spec.body.to_string()),
+                    layer,
+                    pos,
+                );
             } else {
                 ctx.request_anim_frame();
             }

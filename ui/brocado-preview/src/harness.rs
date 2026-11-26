@@ -375,7 +375,7 @@ impl<State: 'static> PreviewHarness<State> {
     fn layer_roots_after_redraw(&mut self) -> Vec<WidgetId> {
         let (visual_layers, _) = self.harness.redraw();
         let rr = self.harness.render_root();
-        let base_id = rr.get_layer_root(0).id();
+        let base_id = rr.get_subwindow_root(0).id();
         let mut roots = vec![base_id];
         let mut seen = HashSet::from([base_id]);
         for layer in &visual_layers.layers {
@@ -1032,7 +1032,7 @@ mod tests {
         let root_box = harness
             .inner_harness_mut()
             .render_root()
-            .get_layer_root(0)
+            .get_subwindow_root(0)
             .ctx()
             .border_box();
         assert_eq!((root_box.width(), root_box.height()), (640.0, 480.0));

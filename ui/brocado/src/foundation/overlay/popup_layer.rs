@@ -7,10 +7,10 @@ use std::sync::Arc;
 use masonry::accesskit::{Node, Role};
 use masonry::core::keyboard::{Key, NamedKey};
 use masonry::core::{
-    AccessCtx, AccessEvent, ActionCtx, ArcStr, ChildrenIds, ErasedAction, EventCtx, Layer,
-    LayerType, LayoutCtx, MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton,
-    PointerButtonEvent, PointerEvent, PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty,
-    TextEvent, Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
+    AccessCtx, AccessEvent, ActionCtx, ArcStr, ChildrenIds, ErasedAction, EventCtx, LayoutCtx,
+    MeasureCtx, NewWidget, NoAction, PaintCtx, PointerButton, PointerButtonEvent, PointerEvent,
+    PropertiesMut, PropertiesRef, RegisterCtx, StyleProperty, Subwindow, SubwindowType, TextEvent,
+    Update, UpdateCtx, Widget, WidgetId, WidgetMut, WidgetPod,
 };
 use masonry::imaging::Painter;
 use masonry::kurbo::{Axis, Point, Rect, Size, Vec2};
@@ -263,7 +263,7 @@ impl PopupLayer {
         }
         self.dismissed = true;
         let self_id = ctx.widget_id();
-        ctx.remove_layer(self_id);
+        ctx.remove_subwindow(self_id);
         ctx.mutate_later(self.creator, move |host| {
             clear_creator_layer(host, self_id, Some(PopupAction::Selected(idx)));
         });
@@ -275,7 +275,7 @@ impl PopupLayer {
         }
         self.dismissed = true;
         let self_id = ctx.widget_id();
-        ctx.remove_layer(self_id);
+        ctx.remove_subwindow(self_id);
         ctx.mutate_later(self.creator, move |host| {
             clear_creator_layer(host, self_id, Some(PopupAction::Dismissed));
         });
@@ -388,7 +388,7 @@ impl Widget for PopupLayer {
             self.dismissed = true;
             ctx.set_handled();
             let self_id = ctx.widget_id();
-            ctx.remove_layer(self_id);
+            ctx.remove_subwindow(self_id);
             ctx.mutate_later(self.creator, move |host| {
                 clear_creator_layer(host, self_id, Some(PopupAction::Selected(idx)));
             });
@@ -434,7 +434,7 @@ impl Widget for PopupLayer {
                 || (adjusted.y - self.placed_pos.y).abs() > 0.5
             {
                 self.placed_pos = adjusted;
-                ctx.reposition_layer(ctx.widget_id(), adjusted);
+                ctx.reposition_subwindow(ctx.widget_id(), adjusted);
             }
         }
     }
@@ -526,7 +526,7 @@ impl Widget for PopupLayer {
         ChildrenIds::from_slice(&[self.child.id()])
     }
 
-    fn as_layer(&mut self) -> Option<&mut dyn Layer> {
+    fn as_subwindow(&mut self) -> Option<&mut dyn Subwindow> {
         Some(self)
     }
 
@@ -535,7 +535,7 @@ impl Widget for PopupLayer {
     }
 }
 
-impl Layer for PopupLayer {
+impl Subwindow for PopupLayer {
     fn capture_pointer_event(
         &mut self,
         ctx: &mut EventCtx<'_>,
@@ -627,7 +627,7 @@ impl AnchoredPopupHost {
             this.ctx.mutate_later(id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
             });
-            this.ctx.remove_layer(id);
+            this.ctx.remove_subwindow(id);
         });
         let border_box = this.ctx.border_box();
         if border_box.size() != Size::ZERO {
@@ -643,7 +643,7 @@ impl AnchoredPopupHost {
             );
             this.widget.layer_id = Some(layer.id());
             this.widget.layer_buttons = buttons;
-            this.ctx.create_layer(LayerType::Other, layer, pos);
+            this.ctx.create_subwindow(SubwindowType::Other, layer, pos);
             this.widget.pending_spawn = false;
         } else {
             this.widget.pending_spawn = true;
@@ -658,7 +658,7 @@ impl AnchoredPopupHost {
             this.ctx.mutate_later(id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
             });
-            this.ctx.remove_layer(id);
+            this.ctx.remove_subwindow(id);
         }
     }
 }
@@ -678,7 +678,7 @@ impl Widget for AnchoredPopupHost {
                     ctx.mutate_later(old_id, |mut layer| {
                         layer.downcast::<PopupLayer>().widget.dismissed = true;
                     });
-                    ctx.remove_layer(old_id);
+                    ctx.remove_subwindow(old_id);
                 }
             }
             Update::StashedChanged(false) if self.open && self.layer_id.is_none() => {
@@ -709,7 +709,7 @@ impl Widget for AnchoredPopupHost {
                     ctx.mutate_later(layer_id, |mut layer| {
                         layer.downcast::<PopupLayer>().widget.dismissed = true;
                     });
-                    ctx.remove_layer(layer_id);
+                    ctx.remove_subwindow(layer_id);
                     self.layer_id = None;
                     self.layer_buttons.clear();
                     self.pending_spawn = false;
@@ -750,7 +750,7 @@ impl Widget for AnchoredPopupHost {
                 ctx.mutate_later(old_id, |mut layer| {
                     layer.downcast::<PopupLayer>().widget.dismissed = true;
                 });
-                ctx.remove_layer(old_id);
+                ctx.remove_subwindow(old_id);
             }
             return;
         }
@@ -765,7 +765,7 @@ impl Widget for AnchoredPopupHost {
                 ctx.mutate_later(old_id, |mut layer| {
                     layer.downcast::<PopupLayer>().widget.dismissed = true;
                 });
-                ctx.remove_layer(old_id);
+                ctx.remove_subwindow(old_id);
             }
             let anchor_origin = ctx.to_window(border_box.origin());
             let anchor_rect = Rect::from_origin_size(anchor_origin, border_box.size());
@@ -774,7 +774,7 @@ impl Widget for AnchoredPopupHost {
                 PopupLayer::from_spec(ctx.widget_id(), &self.spec, anchor_rect, self.offset, pos);
             self.layer_id = Some(layer.id());
             self.layer_buttons = buttons;
-            ctx.create_layer(LayerType::Other, layer, pos);
+            ctx.create_subwindow(SubwindowType::Other, layer, pos);
         }
     }
 
@@ -1044,7 +1044,7 @@ impl ContextMenuHost {
             ctx.mutate_later(old_id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
             });
-            ctx.remove_layer(old_id);
+            ctx.remove_subwindow(old_id);
         }
         let anchor_rect = Rect::from_origin_size(window_pos, Size::ZERO);
         let (layer, buttons) = PopupLayer::from_spec(
@@ -1056,7 +1056,7 @@ impl ContextMenuHost {
         );
         self.layer_id = Some(layer.id());
         self.layer_buttons = buttons;
-        ctx.create_layer(LayerType::Other, layer, window_pos);
+        ctx.create_subwindow(SubwindowType::Other, layer, window_pos);
     }
 
     fn close_layer_with_update(this: &mut WidgetMut<'_, Self>) {
@@ -1065,7 +1065,7 @@ impl ContextMenuHost {
             this.ctx.mutate_later(id, |mut layer| {
                 layer.downcast::<PopupLayer>().widget.dismissed = true;
             });
-            this.ctx.remove_layer(id);
+            this.ctx.remove_subwindow(id);
         }
     }
 }
@@ -1115,7 +1115,7 @@ impl Widget for ContextMenuHost {
                         ctx.mutate_later(layer_id, |mut layer| {
                             layer.downcast::<PopupLayer>().widget.dismissed = true;
                         });
-                        ctx.remove_layer(layer_id);
+                        ctx.remove_subwindow(layer_id);
                         self.layer_id = None;
                         self.layer_buttons.clear();
                         ctx.submit_action::<PopupAction>(PopupAction::Dismissed);
@@ -1150,7 +1150,7 @@ impl Widget for ContextMenuHost {
                 ctx.mutate_later(id, |mut layer| {
                     layer.downcast::<PopupLayer>().widget.dismissed = true;
                 });
-                ctx.remove_layer(id);
+                ctx.remove_subwindow(id);
             }
         }
     }

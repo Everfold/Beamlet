@@ -108,7 +108,7 @@ impl<State: 'static> BrocadoHarness<State> {
         let view_state = &mut self.view_state;
         let view_ctx = &mut self.view_ctx;
         let app_state = &mut self.state;
-        self.harness.render_root().edit_base_layer(|mut root| {
+        self.harness.render_root().edit_main_subwindow(|mut root| {
             let mut root = root.downcast::<Passthrough>();
             next_view.rebuild(
                 current_view,
@@ -131,7 +131,7 @@ impl<State: 'static> BrocadoHarness<State> {
             let view = &self.current_view;
             let view_state = &mut self.view_state;
             let app_state = &mut self.state;
-            let _ = self.harness.render_root().edit_base_layer(|mut root| {
+            let _ = self.harness.render_root().edit_main_subwindow(|mut root| {
                 view.message(view_state, &mut msg_ctx, root.downcast(), app_state)
             });
             let (restored_env, _, _) = msg_ctx.finish();
@@ -311,7 +311,7 @@ fn range_slider_pointer_drag_emits_clamped_pair() {
     );
     let _ = app.render_bytes();
 
-    let base_root = app.harness.render_root().get_layer_root(0);
+    let base_root = app.harness.render_root().get_subwindow_root(0);
     let rs_id = find_first_widget_id_by_type_name(&base_root, "RangeSliderWidget")
         .expect("RangeSliderWidget must be present");
     let rect = app.harness.get_widget_with_id(rs_id).ctx().border_box();
@@ -386,14 +386,14 @@ fn date_and_time_pickers_update_state_on_click() {
     );
     let _ = app.render_bytes();
 
-    let root = app.harness.render_root().get_layer_root(0);
+    let root = app.harness.render_root().get_subwindow_root(0);
     let day15_id = find_button_with_label(&root, "15").expect("day 15 button exists");
     app.harness
         .mouse_click_on(day15_id, Some(PointerButton::Primary));
     app.pump_actions();
     assert_eq!(app.state.date.day, 15);
 
-    let root2 = app.harness.render_root().get_layer_root(0);
+    let root2 = app.harness.render_root().get_subwindow_root(0);
     let pm_id = find_button_with_label(&root2, "PM").expect("PM toggle button exists");
     app.harness
         .mouse_click_on(pm_id, Some(PointerButton::Primary));
@@ -431,7 +431,7 @@ fn modal_dialog_dismisses_on_escape_key() {
     );
     let _ = app.render_bytes();
 
-    let root = app.harness.render_root().get_layer_root(0);
+    let root = app.harness.render_root().get_subwindow_root(0);
     let confirm_btn =
         find_button_with_label(&root, "Confirm").expect("dialog contains Confirm button");
     app.harness.focus_on(Some(confirm_btn));
@@ -493,7 +493,7 @@ fn hover_tooltip_and_anchored_popup_lifecycle() {
     );
 
     // Hover tooltip lifecycle: enter -> animate past 450ms -> leave
-    let root = app.harness.render_root().get_layer_root(0);
+    let root = app.harness.render_root().get_subwindow_root(0);
     let tip_host_id = find_first_widget_id_by_type_name(&root, "HoverTooltipHost")
         .expect("HoverTooltipHost present");
     let center = app
@@ -589,7 +589,7 @@ fn focus_frame_reacts_to_real_focus_changes() {
         );
         let before = app.render_bytes();
 
-        let root = app.harness.render_root().get_layer_root(0);
+        let root = app.harness.render_root().get_subwindow_root(0);
         assert!(
             find_first_widget_id_by_type_name(&root, "FocusFrame").is_some(),
             "TextField must expose FocusFrame"
@@ -630,7 +630,7 @@ fn dialog_action_order_follows_md3_convention() {
     );
     let _ = app.render_bytes();
 
-    let root = app.harness.render_root().get_layer_root(0);
+    let root = app.harness.render_root().get_subwindow_root(0);
     let confirm_id = find_button_with_label(&root, "Confirm").expect("Confirm button");
     let cancel_id = find_button_with_label(&root, "Cancel").expect("Cancel button");
 
@@ -705,7 +705,7 @@ fn style_overrides_apply_directly_to_concrete_components() {
     }
 
     let (wide_id, custom_id, child_types) = {
-        let root = app.harness.render_root().get_layer_root(0);
+        let root = app.harness.render_root().get_subwindow_root(0);
         let wide_id = find_button_with_label(&root, "WideBtn").expect("WideBtn found");
         let custom_id = find_button_with_label(&root, "CustomSlot").expect("CustomSlot found");
         let child_types =
@@ -824,7 +824,7 @@ fn aligned_platform_signature_components_build_interact_and_render() {
         assert!(bytes.as_chunks::<4>().0.iter().any(|px| px[3] > 0));
 
         let clamp_child_id = {
-            let root = app.harness.render_root().get_layer_root(0);
+            let root = app.harness.render_root().get_subwindow_root(0);
             fn find_clamp_child(
                 node: &masonry::core::WidgetRef<'_, dyn masonry::core::Widget>,
             ) -> Option<WidgetId> {
@@ -897,7 +897,7 @@ fn destructive_button_and_dialog_apply_error_semantics_and_fire_actions() {
     let _ = app.render_bytes();
 
     let erase_btn = {
-        let root = app.harness.render_root().get_layer_root(0);
+        let root = app.harness.render_root().get_subwindow_root(0);
         find_button_with_label(&root, "Erase").expect("destructive Erase button")
     };
     app.harness
@@ -909,7 +909,7 @@ fn destructive_button_and_dialog_apply_error_semantics_and_fire_actions() {
     );
 
     let confirm_btn = {
-        let root = app.harness.render_root().get_layer_root(0);
+        let root = app.harness.render_root().get_subwindow_root(0);
         find_button_with_label(&root, "Confirm Erase").expect("destructive dialog confirm button")
     };
     app.harness

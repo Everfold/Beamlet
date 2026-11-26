@@ -406,7 +406,7 @@ impl RichTextWidget {
 
         builder.build_into(&mut layout, &self.full_text);
         layout.break_all_lines(max_advance);
-        layout.align(max_advance, TextAlign::Start, AlignmentOptions::default());
+        layout.align(TextAlign::Start, AlignmentOptions::default());
         layout
     }
 

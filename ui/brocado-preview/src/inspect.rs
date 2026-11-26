@@ -71,7 +71,7 @@ pub fn dump_layout_tree<State: 'static>(harness: &mut PreviewHarness<State>) -> 
     let mut ids = Vec::new();
     let mut tree = {
         let rr = inner.render_root();
-        let root = rr.get_layer_root(0);
+        let root = rr.get_subwindow_root(0);
         let mut root_node = snapshot_node(&root, focused_id, &mut visited, &mut ids);
         for layer in &visual_layers.layers {
             if !visited.contains(&layer.widget_id)
@@ -599,7 +599,7 @@ pub fn lint_accessibility_with<State: 'static>(
     let mut nodes: Vec<(WidgetId, String)> = Vec::new();
     {
         let rr: &RenderRoot = inner.render_root();
-        let root = rr.get_layer_root(0);
+        let root = rr.get_subwindow_root(0);
         collect_visible_widgets(&root, &mut visited, &mut nodes);
         for layer in &visual_layers.layers {
             if !visited.contains(&layer.widget_id)
