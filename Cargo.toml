@@ -49,12 +49,12 @@ beamlet-worker = { path = "crates/components/beamlet-worker" }
 
 futures = "0.3"
 rayon = "1.12"
-state-machines = { version = "0.34", features = ["async"] }
+state-machines = { version = "0.36", features = ["async"] }
 tokio = { version = "1.54", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
 
-async-nats = "0.52"
+async-nats = "0.53"
 zenoh = { version = "1.10", features = ["shared-memory", "stats"] }
 
 axum = { version = "0.8", features = ["http2", "ws"] }
