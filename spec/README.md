@@ -16,10 +16,11 @@ flowchart BT
     KRN["原语与内核 (01-kernel.md, quint/kernel)"]
     LDG["执行台账 (02-ledger.md, quint/ledger)"]
     ROL["角色与基础交付 (03-roles.md, quint/roles)"]
-    RTE["会话路由与编排 (04-routing.md, quint/routing, proto/beamlet/v1)"]
-    TRP["抽象传输保证 (05-transport.md, proto/beamlet/v1)"]
+    SES["会话与存活观测 (04-session.md, quint/session, proto/beamlet/v1)"]
+    RTE["选路、调用与裁决 (05-routing.md, quint/routing, proto/beamlet/v1)"]
+    TRP["抽象传输保证 (06-transport.md)"]
 
-    CONV --> KRN --> LDG --> ROL --> RTE --> TRP
+    CONV --> KRN --> LDG --> ROL --> SES --> RTE --> TRP
 ```
 
 ## 文档索引
@@ -30,6 +31,7 @@ flowchart BT
 | [00-glossary.md](00-glossary.md) | — | 按依赖顺序与角色分类的领域词汇表 |
 | [01-kernel.md](01-kernel.md) | [spec/quint/kernel/](quint/kernel/state_machine.qnt) | `Operation`、`Attempt`、`Report` 三种原语及内核状态机 |
 | [02-ledger.md](02-ledger.md) | [spec/quint/ledger/](quint/ledger/ledger.qnt) | `Ledger` 多 `Operation` 管理与 `Attempt` 身份防重用 |
-| [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、单次交付边界与不变量 |
-| [04-routing.md](04-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleInstance`、`Pool`、`Presence` 租约、`Selection` 与 `Client` |
-| [05-transport.md](05-transport.md) | [messages.proto](proto/beamlet/v1/messages.proto) | 下游传输实现须满足的投递、隔离与排空保证 |
+| [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、二分结果契约与不变量 |
+| [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleInstance`、`Pool`、`Presence` 租约与连接世代隔离 |
+| [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Selection` 零回退、`Call` 准入与三态 `Outcome` 裁决 |
+| [06-transport.md](06-transport.md) | — | 下游传输实现须满足的无状态投递、世代清理与排空保证 |

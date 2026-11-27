@@ -1,369 +1,362 @@
-// 会话公告登记, Connection.epoch 世代隔离, Presence.sequence 序校验及 Selection::Any / Exact 路由模型.
+// 目标选定(Selection::Any / Exact)、定向调用与三态提交裁决(Outcome)协议模型.
 module routing {
-  type PresenceMode =
-    | ModeReady
-    | ModeDraining
-    | ModeOffline
-
-  type LinkState = {
-    epoch: int,
-    connected: bool,
-  }
-
-  type SourceLease =
-    | NoLease
-    | ActiveLease({ epoch: int, receivedAt: int, seq: int })
-
-  type RegistryEntry =
-    | AbsentEntry
-    | Entry({
-        seq: int,
-        firstSeenAt: int,
-        mode: PresenceMode,
-        leases: int -> SourceLease,
-      })
-
   type SelectionKind =
     | SelectAny
-    | SelectExact1
-    | SelectExact2
+    | SelectExact(int)
 
-  type SelectionDecision =
-    | DecisionNone
-    | RejectedBeforeCreate
-    | Selected({ worker: int, source: int })
+  type OpEntry =
+    | OpNone
+    | OpAwaiting({ attemptId: int, targetWorker: int })
+    | OpClosed({ attemptId: int, reportId: int, worker: int })
 
-  pure val SOURCES = Set(1, 2)
-  pure val MAX_SEQ = 2
-  pure val MAX_EPOCHS = 2
-  pure val MAX_NOW = 3
-  pure val LEASE_TIMEOUT = 2
+  type SubOutcome =
+    | SubIdle
+    | SubRejected
+    | SubUnresolved({ opId: int, attemptId: int, worker: int })
+    | SubCompleted({ opId: int, attemptId: int, reportId: int, worker: int })
 
-  pure def leaseIsFresh(link: LinkState, lease: SourceLease, currentTime: int): bool =
-    match lease {
-      | NoLease => false
-      | ActiveLease(l) => and {
-          link.connected,
-          l.epoch == link.epoch,
-          currentTime - l.receivedAt < LEASE_TIMEOUT,
-        }
-    }
-
-  pure def firstFreshSource(
-    linksMap: int -> LinkState,
-    entry: RegistryEntry,
-    currentTime: int
-  ): int =
-    match entry {
-      | AbsentEntry => 0
-      | Entry(e) =>
-          if (e.mode != ModeReady) 0
-          else if (leaseIsFresh(linksMap.get(1), e.leases.get(1), currentTime)) 1
-          else if (leaseIsFresh(linksMap.get(2), e.leases.get(2), currentTime)) 2
-          else 0
-    }
-
-  pure def sourceSeqMatchesOrNewer(lease: SourceLease, seq: int): bool =
-    match lease {
-      | NoLease => false
-      | ActiveLease(l) => seq <= l.seq
-    }
-
-  // 会话快照观测规则:
-  // sequence 单调递减被拒; 同一 sequence 仅在尚未登记的来源上补充租约, 且不延长首次到达时间.
-  pure def canAcceptPresence(
-    linksMap: int -> LinkState,
-    entry: RegistryEntry,
-    src: int,
-    observedEpoch: int,
-    seq: int,
-    mode: PresenceMode
-  ): bool = {
-    val link = linksMap.get(src)
-    if (not(link.connected) or link.epoch != observedEpoch or seq < 1) false
-    else
-      match entry {
-        | AbsentEntry => true
-        | Entry(e) =>
-            if (seq < e.seq) false
-            else if (seq == e.seq and (mode != e.mode or sourceSeqMatchesOrNewer(e.leases.get(src), seq))) false
-            else true
-      }
+  type CallMsg = {
+    opId: int,
+    attemptId: int,
+    worker: int,
   }
 
-  pure def applyPresence(
-    entry: RegistryEntry,
-    src: int,
-    observedEpoch: int,
-    seq: int,
-    mode: PresenceMode,
-    currentTime: int
-  ): RegistryEntry =
-    match entry {
-      | AbsentEntry =>
-          Entry({
-            seq: seq,
-            firstSeenAt: currentTime,
-            mode: mode,
-            leases: SOURCES.mapBy(s =>
-              if (s == src) ActiveLease({ epoch: observedEpoch, receivedAt: currentTime, seq: seq })
-              else NoLease
-            ),
-          })
-      | Entry(e) => {
-          val nextFirstSeen = if (seq > e.seq) currentTime else e.firstSeenAt
-          Entry({
-            seq: seq,
-            firstSeenAt: nextFirstSeen,
-            mode: mode,
-            leases: e.leases.put(src, ActiveLease({ epoch: observedEpoch, receivedAt: nextFirstSeen, seq: seq })),
-          })
-        }
-    }
-
-  pure def evalSelection(
-    linksMap: int -> LinkState,
-    entry: RegistryEntry,
-    worker2Ready: bool,
-    currentTime: int,
-    sel: SelectionKind
-  ): SelectionDecision = {
-    val s1 = firstFreshSource(linksMap, entry, currentTime)
-    match sel {
-      | SelectExact1 =>
-          if (s1 != 0) Selected({ worker: 1, source: s1 })
-          else RejectedBeforeCreate
-      | SelectExact2 =>
-          if (worker2Ready) Selected({ worker: 2, source: 1 })
-          else RejectedBeforeCreate
-      | SelectAny =>
-          if (s1 != 0) Selected({ worker: 1, source: s1 })
-          else if (worker2Ready) Selected({ worker: 2, source: 1 })
-          else RejectedBeforeCreate
-    }
+  type ReportMsg = {
+    reportId: int,
+    opId: int,
+    attemptId: int,
+    worker: int,
   }
 
-  var links: int -> LinkState
-  var entry: RegistryEntry
-  var worker2Ready: bool
-  var now: int
-  var lastSelection: SelectionKind
-  var lastDecision: SelectionDecision
-  var maxObservedSeq: int
-  var replayedSameSeq: bool
+  pure val WORKERS = Set(1, 2)
+  pure val SUBMISSIONS = Set(1)
+  pure val BOGUS_ATTEMPT = 9
+  pure val BOGUS_REPORT = 9
+
+  var workerRoutable: int -> bool
+  var opEntry: int -> OpEntry
+  var subOutcome: int -> SubOutcome
+  var subSelection: int -> SelectionKind
+  var attemptCount: int -> int
+  var inFlightCalls: Set[CallMsg]
+  var inFlightReports: Set[ReportMsg]
+  var authenticReports: Set[ReportMsg]
 
   action init: bool = all {
-    links' = SOURCES.mapBy(_ => { epoch: 1, connected: true }),
-    entry' = AbsentEntry,
-    worker2Ready' = false,
-    now' = 0,
-    lastSelection' = SelectAny,
-    lastDecision' = DecisionNone,
-    maxObservedSeq' = 0,
-    replayedSameSeq' = false,
+    workerRoutable' = WORKERS.mapBy(_ => true),
+    opEntry' = SUBMISSIONS.mapBy(_ => OpNone),
+    subOutcome' = SUBMISSIONS.mapBy(_ => SubIdle),
+    subSelection' = SUBMISSIONS.mapBy(_ => SelectAny),
+    attemptCount' = SUBMISSIONS.mapBy(_ => 0),
+    inFlightCalls' = Set(),
+    inFlightReports' = Set(),
+    authenticReports' = Set(),
   }
 
-  action observePresence(
-    src: int,
-    observedEpoch: int,
-    seq: int,
-    mode: PresenceMode
-  ): bool = {
-    val accepted = canAcceptPresence(links, entry, src, observedEpoch, seq, mode)
-    val sameSeqNewSource = match entry {
-      | AbsentEntry => false
-      | Entry(e) => accepted and seq == e.seq
+  action toggleWorkerRoutable(target: int): bool = all {
+    workerRoutable' = workerRoutable.put(target, not(workerRoutable.get(target))),
+    opEntry' = opEntry,
+    subOutcome' = subOutcome,
+    subSelection' = subSelection,
+    attemptCount' = attemptCount,
+    inFlightCalls' = inFlightCalls,
+    inFlightReports' = inFlightReports,
+    authenticReports' = authenticReports,
+  }
+
+  // Exact 提交: 目标不可路由时直接裁决 Rejected 且不创建 Operation, 绝不回退其他候选.
+  action submitExact(subId: int, target: int): bool = all {
+    subOutcome.get(subId) == SubIdle,
+    opEntry.get(subId) == OpNone,
+    subSelection' = subSelection.put(subId, SelectExact(target)),
+    if (workerRoutable.get(target)) all {
+      opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: target })),
+      subOutcome' = subOutcome,
+      attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
+      inFlightCalls' = inFlightCalls.union(Set({ opId: subId, attemptId: subId, worker: target })),
+    } else all {
+      opEntry' = opEntry,
+      subOutcome' = subOutcome.put(subId, SubRejected),
+      attemptCount' = attemptCount,
+      inFlightCalls' = inFlightCalls,
+    },
+    workerRoutable' = workerRoutable,
+    inFlightReports' = inFlightReports,
+    authenticReports' = authenticReports,
+  }
+
+  // Any 提交: 从当前可路由候选中任选其一, 无候选时直接裁决 Rejected.
+  action submitAny(subId: int): bool = all {
+    subOutcome.get(subId) == SubIdle,
+    opEntry.get(subId) == OpNone,
+    subSelection' = subSelection.put(subId, SelectAny),
+    if (WORKERS.exists(w => workerRoutable.get(w))) {
+      nondet picked = WORKERS.filter(w => workerRoutable.get(w)).oneOf()
+      all {
+        opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: picked })),
+        subOutcome' = subOutcome,
+        attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
+        inFlightCalls' = inFlightCalls.union(Set({ opId: subId, attemptId: subId, worker: picked })),
+      }
+    } else all {
+      opEntry' = opEntry,
+      subOutcome' = subOutcome.put(subId, SubRejected),
+      attemptCount' = attemptCount,
+      inFlightCalls' = inFlightCalls,
+    },
+    workerRoutable' = workerRoutable,
+    inFlightReports' = inFlightReports,
+    authenticReports' = authenticReports,
+  }
+
+  // Worker 正常执行并返回完整 Report (允许此时 Worker 已退出可路由状态).
+  action workerReplyReport(call: CallMsg): bool = {
+    val rep = {
+      reportId: call.opId,
+      opId: call.opId,
+      attemptId: call.attemptId,
+      worker: call.worker,
     }
-    val nextEntry =
-      if (accepted) applyPresence(entry, src, observedEpoch, seq, mode, now)
-      else entry
-    val nextMaxSeq =
-      if (accepted and seq > maxObservedSeq) seq
-      else maxObservedSeq
     all {
-      entry' = nextEntry,
-      maxObservedSeq' = nextMaxSeq,
-      replayedSameSeq' = (replayedSameSeq or sameSeqNewSource),
-      links' = links,
-      worker2Ready' = worker2Ready,
-      now' = now,
-      lastSelection' = lastSelection,
-      lastDecision' = DecisionNone,
+      inFlightCalls.contains(call),
+      inFlightCalls' = inFlightCalls.exclude(Set(call)),
+      inFlightReports' = inFlightReports.union(Set(rep)),
+      authenticReports' = authenticReports.union(Set(rep)),
+      workerRoutable' = workerRoutable,
+      opEntry' = opEntry,
+      subOutcome' = subOutcome,
+      subSelection' = subSelection,
+      attemptCount' = attemptCount,
     }
   }
 
-  action disconnectLink(src: int): bool = {
-    val link = links.get(src)
+  // Worker 执行期失败或交付未达/超时: 裁决 Unresolved 且保持 OpAwaiting.
+  action authorityTimeoutOrFailed(subId: int): bool = {
+    val canResolve = match opEntry.get(subId) {
+      | OpAwaiting(_) => subOutcome.get(subId) == SubIdle
+      | _ => false
+    }
+    val nextOutcome = match opEntry.get(subId) {
+      | OpAwaiting(a) => SubUnresolved({
+          opId: subId,
+          attemptId: a.attemptId,
+          worker: a.targetWorker,
+        })
+      | _ => subOutcome.get(subId)
+    }
     all {
-      link.connected,
-      links' = links.put(src, { ...link, connected: false }),
-      entry' = entry,
-      worker2Ready' = worker2Ready,
-      now' = now,
-      lastSelection' = lastSelection,
-      lastDecision' = DecisionNone,
-      maxObservedSeq' = maxObservedSeq,
-      replayedSameSeq' = replayedSameSeq,
+      canResolve,
+      subOutcome' = subOutcome.put(subId, nextOutcome),
+      workerRoutable' = workerRoutable,
+      opEntry' = opEntry,
+      subSelection' = subSelection,
+      attemptCount' = attemptCount,
+      inFlightCalls' = inFlightCalls,
+      inFlightReports' = inFlightReports,
+      authenticReports' = authenticReports,
     }
   }
 
-  action reconnectLink(src: int): bool = {
-    val link = links.get(src)
+  // 注入错配或过时 Report.
+  action injectMismatchedReport(subId: int, wrongWorker: int): bool = {
+    val bogus = {
+      reportId: BOGUS_REPORT,
+      opId: subId,
+      attemptId: BOGUS_ATTEMPT,
+      worker: wrongWorker,
+    }
     all {
-      not(link.connected),
-      link.epoch < MAX_EPOCHS,
-      links' = links.put(src, { epoch: link.epoch + 1, connected: true }),
-      entry' = entry,
-      worker2Ready' = worker2Ready,
-      now' = now,
-      lastSelection' = lastSelection,
-      lastDecision' = DecisionNone,
-      maxObservedSeq' = maxObservedSeq,
-      replayedSameSeq' = replayedSameSeq,
+      opEntry.get(subId) != OpNone,
+      not(inFlightReports.contains(bogus)),
+      inFlightReports' = inFlightReports.union(Set(bogus)),
+      workerRoutable' = workerRoutable,
+      opEntry' = opEntry,
+      subOutcome' = subOutcome,
+      subSelection' = subSelection,
+      attemptCount' = attemptCount,
+      inFlightCalls' = inFlightCalls,
+      authenticReports' = authenticReports,
     }
   }
 
-  action toggleWorker2: bool = all {
-    worker2Ready' = not(worker2Ready),
-    links' = links,
-    entry' = entry,
-    now' = now,
-    lastSelection' = lastSelection,
-    lastDecision' = DecisionNone,
-    maxObservedSeq' = maxObservedSeq,
-    replayedSameSeq' = replayedSameSeq,
-  }
-
-  action advanceClock: bool = all {
-    now < MAX_NOW,
-    now' = now + 1,
-    links' = links,
-    entry' = entry,
-    worker2Ready' = worker2Ready,
-    lastSelection' = lastSelection,
-    lastDecision' = DecisionNone,
-    maxObservedSeq' = maxObservedSeq,
-    replayedSameSeq' = replayedSameSeq,
-  }
-
-  action selectAction(sel: SelectionKind): bool = all {
-    lastSelection' = sel,
-    lastDecision' = evalSelection(links, entry, worker2Ready, now, sel),
-    links' = links,
-    entry' = entry,
-    worker2Ready' = worker2Ready,
-    now' = now,
-    maxObservedSeq' = maxObservedSeq,
-    replayedSameSeq' = replayedSameSeq,
+  // Authority 收取 Report: 核对 Operation、Attempt 与锁定目标一致, 不依赖当前可路由性.
+  action authorityReceiveReport(rep: ReportMsg): bool = {
+    val curOp = opEntry.get(rep.opId)
+    val matched = match curOp {
+      | OpAwaiting(a) => (rep.attemptId == a.attemptId and rep.worker == a.targetWorker)
+      | _ => false
+    }
+    val nextOp =
+      if (matched) OpClosed({ attemptId: rep.attemptId, reportId: rep.reportId, worker: rep.worker })
+      else curOp
+    val nextOutcome =
+      if (matched and subOutcome.get(rep.opId) == SubIdle)
+        SubCompleted({ opId: rep.opId, attemptId: rep.attemptId, reportId: rep.reportId, worker: rep.worker })
+      else subOutcome.get(rep.opId)
+    all {
+      inFlightReports.contains(rep),
+      inFlightReports' = inFlightReports.exclude(Set(rep)),
+      opEntry' = opEntry.put(rep.opId, nextOp),
+      subOutcome' = subOutcome.put(rep.opId, nextOutcome),
+      workerRoutable' = workerRoutable,
+      subSelection' = subSelection,
+      attemptCount' = attemptCount,
+      inFlightCalls' = inFlightCalls,
+      authenticReports' = authenticReports,
+    }
   }
 
   action step: bool = any {
     {
-      nondet src = SOURCES.oneOf()
-      nondet ep = 1.to(MAX_EPOCHS).oneOf()
-      nondet seq = 1.to(MAX_SEQ).oneOf()
-      nondet mode = Set(ModeReady, ModeDraining, ModeOffline).oneOf()
-      observePresence(src, ep, seq, mode)
+      nondet target = WORKERS.oneOf()
+      toggleWorkerRoutable(target)
     },
     {
-      nondet src = SOURCES.oneOf()
-      disconnectLink(src)
+      nondet subId = SUBMISSIONS.oneOf()
+      nondet target = WORKERS.oneOf()
+      submitExact(subId, target)
     },
     {
-      nondet src = SOURCES.oneOf()
-      reconnectLink(src)
+      nondet subId = SUBMISSIONS.oneOf()
+      submitAny(subId)
     },
-    toggleWorker2,
-    advanceClock,
     {
-      nondet sel = Set(SelectAny, SelectExact1, SelectExact2).oneOf()
-      selectAction(sel)
+      nondet call = inFlightCalls.oneOf()
+      all {
+        inFlightCalls.size() > 0,
+        workerReplyReport(call),
+      }
+    },
+    {
+      nondet subId = SUBMISSIONS.oneOf()
+      nondet target = WORKERS.oneOf()
+      injectMismatchedReport(subId, target)
+    },
+    {
+      nondet subId = SUBMISSIONS.oneOf()
+      authorityTimeoutOrFailed(subId)
+    },
+    {
+      nondet rep = inFlightReports.oneOf()
+      all {
+        inFlightReports.size() > 0,
+        authorityReceiveReport(rep),
+      }
     },
   }
 
-  // 被选中的 Worker 1 必须处于 ModeReady, 且出口链路在线, 世代一致, 未过期.
-  val selectedWorker1IsFreshAndCurrentEpoch: bool =
-    match lastDecision {
-      | Selected(s) =>
-          if (s.worker != 1) true
-          else match entry {
-            | AbsentEntry => false
-            | Entry(e) =>
-                e.mode == ModeReady and leaseIsFresh(links.get(s.source), e.leases.get(s.source), now)
+  // Exact 选择绝不回退, Rejected 时不创建 Operation.
+  val exactNeverFallsBack: bool =
+    SUBMISSIONS.forall(subId =>
+      match subSelection.get(subId) {
+        | SelectAny => true
+        | SelectExact(w) => and {
+            (subOutcome.get(subId) == SubRejected) implies (opEntry.get(subId) == OpNone),
+            match opEntry.get(subId) {
+              | OpNone => true
+              | OpAwaiting(a) => a.targetWorker == w
+              | OpClosed(c) => c.worker == w
+            },
+            match subOutcome.get(subId) {
+              | SubIdle => true
+              | SubRejected => true
+              | SubUnresolved(u) => u.worker == w
+              | SubCompleted(c) => c.worker == w
+            },
           }
-      | _ => true
-    }
+      }
+    )
 
-  // Presence.sequence 单调不回退, 且相同 sequence 在他源转发不延长首次到达时间戳.
-  val sequenceMonotonicAndReplayNeverExtendsTtl: bool =
-    match entry {
-      | AbsentEntry => maxObservedSeq == 0
-      | Entry(e) => and {
-          e.seq == maxObservedSeq,
-          SOURCES.forall(src =>
-            match e.leases.get(src) {
-              | NoLease => true
-              | ActiveLease(l) => l.receivedAt == e.firstSeenAt or l.seq < e.seq
+  // Rejected 不产生任何 Operation 或 Attempt.
+  val rejectedCreatesNoOperation: bool =
+    SUBMISSIONS.forall(subId =>
+      (subOutcome.get(subId) == SubRejected) implies (opEntry.get(subId) == OpNone and attemptCount.get(subId) == 0)
+    )
+
+  // Completed 与 OpClosed 必定对应一条真实匹配的 Report.
+  val completedRequiresAuthenticReport: bool =
+    SUBMISSIONS.forall(subId => and {
+      match opEntry.get(subId) {
+        | OpClosed(c) => authenticReports.contains({
+            reportId: c.reportId,
+            opId: subId,
+            attemptId: c.attemptId,
+            worker: c.worker,
+          })
+        | _ => true
+      },
+      match subOutcome.get(subId) {
+        | SubCompleted(c) => authenticReports.contains({
+            reportId: c.reportId,
+            opId: subId,
+            attemptId: c.attemptId,
+            worker: c.worker,
+          })
+        | _ => true
+      },
+    })
+
+  // Unresolved 不得无证关闭 Operation; 错配报告永不关闭 Operation.
+  val unresolvedKeepsOperationOpenUnlessReported: bool =
+    SUBMISSIONS.forall(subId => and {
+      attemptCount.get(subId) <= 1,
+      match opEntry.get(subId) {
+        | OpClosed(c) => c.attemptId != BOGUS_ATTEMPT and c.reportId != BOGUS_REPORT
+        | _ => true
+      },
+      match subOutcome.get(subId) {
+        | SubUnresolved(u) =>
+            match opEntry.get(subId) {
+              | OpNone => false
+              | OpAwaiting(a) => a.attemptId == u.attemptId and a.targetWorker == u.worker
+              | OpClosed(c) => authenticReports.contains({
+                  reportId: c.reportId,
+                  opId: subId,
+                  attemptId: c.attemptId,
+                  worker: c.worker,
+                })
             }
-          ),
-        }
-    }
-
-  // Selection::Exact 绝不回退到其他 Worker.
-  val exactSelectionNeverFallsBack: bool =
-    match lastDecision {
-      | Selected(s) =>
-          and {
-            (lastSelection == SelectExact1) implies (s.worker == 1),
-            (lastSelection == SelectExact2) implies (s.worker == 2),
-          }
-      | _ => true
-    }
-
-  // 任一来源断线或推进 epoch 不破坏另一在线且未过期来源的可用性.
-  val multiSourceFaultIsolation: bool =
-    match entry {
-      | AbsentEntry => true
-      | Entry(e) =>
-          SOURCES.forall(src =>
-            (e.mode == ModeReady and leaseIsFresh(links.get(src), e.leases.get(src), now))
-              implies firstFreshSource(links, entry, now) != 0
-          )
-    }
+        | _ => true
+      },
+    })
 
   val invariants: bool = and {
-    selectedWorker1IsFreshAndCurrentEpoch,
-    sequenceMonotonicAndReplayNeverExtendsTtl,
-    exactSelectionNeverFallsBack,
-    multiSourceFaultIsolation,
+    exactNeverFallsBack,
+    rejectedCreatesNoOperation,
+    completedRequiresAuthenticReport,
+    unresolvedKeepsOperationOpenUnlessReported,
   }
 
-  val witnessSelected: bool =
-    match lastDecision {
-      | Selected(_) => true
+  val witnessExactCompleted: bool =
+    match subOutcome.get(1) {
+      | SubCompleted(_) =>
+          match subSelection.get(1) {
+            | SelectExact(_) => true
+            | _ => false
+          }
       | _ => false
     }
 
-  val witnessReconnectInvalidatesOldEpoch: bool =
-    SOURCES.exists(s =>
-      links.get(s).epoch == 2 and
-        match entry {
-          | AbsentEntry => false
-          | Entry(e) =>
-              match e.leases.get(s) {
-                | NoLease => false
-                | ActiveLease(l) => l.epoch == 1
-              }
-        }
-    )
-
-  val witnessReplayDoesNotExtendTtl: bool =
-    replayedSameSeq and
-      match entry {
-        | AbsentEntry => false
-        | Entry(e) => now > e.firstSeenAt and firstFreshSource(links, entry, now) == 0
+  val witnessExactRejectedWhileOtherRoutable: bool =
+    subOutcome.get(1) == SubRejected and
+      match subSelection.get(1) {
+        | SelectExact(w) => WORKERS.exists(other => other != w and workerRoutable.get(other))
+        | _ => false
       }
 
-  val witnessExactRejectedWhileOtherReady: bool =
-    lastDecision == RejectedBeforeCreate and lastSelection == SelectExact1 and worker2Ready
+  val witnessUnresolvedKeepsAwaiting: bool =
+    match subOutcome.get(1) {
+      | SubUnresolved(_) =>
+          match opEntry.get(1) {
+            | OpAwaiting(_) => true
+            | _ => false
+          }
+      | _ => false
+    }
+
+  val witnessCompletedAfterWorkerUnroutable: bool =
+    match opEntry.get(1) {
+      | OpClosed(c) => not(workerRoutable.get(c.worker))
+      | _ => false
+    }
 }

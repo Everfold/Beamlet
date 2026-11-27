@@ -2,7 +2,7 @@
 
 - **前置约定**：[00-conventions.md](00-conventions.md)
 
-仅收录与特定编程语言、运行时和具体传输方案无关的核心领域与协议术语，按依赖顺序自底向上归位。
+仅收录与特定编程语言、运行时和具体传输方案无关的核心领域术语，按依赖顺序自底向上归位。
 
 ---
 
@@ -12,9 +12,9 @@
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Operation` | 携带固定身份 `id`、不可变原始 `request` 与三态生命周期的最小协调对象 | `request` 相同而 `id` 不同属于两个独立 `Operation`；不承担网络或存储职责 |
-| `Attempt` | 针对某个指定 `Operation` 的单次执行授权，携带自身 `id` 与所属 `operation_id` | 重复传递同一份 `Attempt` 数据不产生新授权；自身不证明授权真实性 |
-| `Report` | 一次 `Attempt` 执行结束后的结果证据，携带自身 `id`、`Attempt` 引用与 `result` | 即使 `result` 表达业务失败，对应已结束 `Attempt` 即构成合法 `Report` |
+| `Operation` | 携带固定身份、不可变原始请求与三态生命周期的最小协调对象 | 请求内容相同而身份不同属于两个独立 `Operation`；不承担网络或存储职责 |
+| `Attempt` | 针对指定 `Operation` 的单次执行授权，同时关联自身身份与所属 `Operation` 身份 | 重复传递同一份 `Attempt` 数据不产生新授权；数据自身不证明授权真实性 |
+| `Report` | 一次 `Attempt` 执行结束后的结果证据，绑定自身身份、所对应 `Attempt` 引用与业务结果 | 即使业务结果代表业务失败，对应已结束 `Attempt` 仍构成合法 `Report` |
 
 ### 原语与内核：生命周期状态
 
@@ -47,41 +47,29 @@
 
 ---
 
-## 会话路由与编排
+## 会话与存活
 
-### 会话路由与编排：身份与寻址
+### 会话与存活：身份、分组与状态
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `RoleInstance` | 持久角色标识 `role_id` 与单次运行会话标识 `session_id` 的二元组合 | 禁止按标识值大小或字典序推断会话新旧 |
+| `RoleInstance` | 持久角色标识与单次运行会话标识组成的角色实例标识 | 禁止按标识值大小或字典序推断会话新旧 |
 | `Pool` | 大小写敏感的精确逻辑隔离分组 | 限定 `Presence` 可见域与选路候选范围，不修剪或改写 |
-| `Selection` | 目标选定约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleInstance`） | 每次提交至多选人一次；`Exact` 失效直接拒绝，绝不回退 |
-
-### 会话路由与编排：消息载体
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Presence` | `Worker` 发布的完整状态快照，含 `pool`、`instance`、`capabilities`、`sequence`、`state` | 会话内 `sequence` 递增；相同快照经他路重复转发不延长租约时间 |
-| `AuthorityInfo` | `Authority` 对外发现回复携带的 `instance` 与所属 `pools` | 仅用于发现与选定目标 |
-| `Task` | 由精确匹配的能力标识与不透明业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
-| `Submission` | 外部提交创建请求的描述，含 `pool`、`Selection` 与 `Task` | 仅表达提交意图，尚未创建 `Operation` 或 `Attempt` |
-| `Command` | `Authority` 请求入口命令：`Workers`（查询视图）与 `Submit`（提交执行） | `request_id` 仅用于请求/回复关联，不提供创建幂等 |
-| `Reply` | `Authority` 对 `Command` 的关联回复，含 `request_id`、`authority` 与 `Outcome` | 按完成顺序独立返回 |
-| `Call` | 发往唯一选定 `Worker` 的调用消息，含 `pool`、`authority`、`worker`、`attempt`、`capability`、`payload` | 只携带既有 `Attempt` 授权 |
-| `WorkerResponse` | `Worker` 对单次 `Call` 的一次性响应：`Report` 或执行失败通知 `failed` | 执行期失败无法排除副作用，绝不伪造为 `Report` 或执行前拒收 |
-| `DiscoveryReply` | 与发现查询关联的回复，含 `request_id` 与 `AuthorityInfo` | 同一次发现允许收到零份或多份回复 |
-
-### 会话路由与编排：角色、状态与观测
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Client` | 发起发现、查询与提交并校验关联回复的调用方角色 | 不保存全局可变选择，提交只投递一次 |
+| `Presence` | `Worker` 发布的完整状态快照，含所属分组、实例身份、启用能力集、会话序号与当前状态 | 会话内序号单调递增；相同快照经他路转发不延长租约时间 |
 | `PresenceState` | `Worker` 自报接收状态：`Ready`、`Draining`、`Offline` | 失联标记由观察方按本地单调时钟另行判定；`Ready` 不预留并发槽位 |
-| `Connection` | 观测方读取的底层连接视图，包含单调递增连接世代 `epoch` 与布尔状态 `connected` | 每次断线或重连推进 `epoch` 后，旧 `epoch` 租约立即失效 |
-| `WorkerView` | `Authority` 对某个 `Worker` 会话的本地观测视图，含 `presence` 与 `stale` | `stale` 按 `Authority` 本地单调时钟与连接状态即时判定 |
+| `Connection` | 观测方读取的连接状态，包含单调递增连接世代与当前是否连通 | 每次断线或重连推进世代后，绑定旧世代的租约立即失效 |
 
-### 会话路由与编排：结果裁决
+---
+
+## 选路与提交
+
+### 选路与提交：任务、调用与裁决
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Outcome` | `Authority` 对外返回的四态裁决：`Rejected`、`Workers`、`Completed`、`Unresolved` | `Rejected` 承诺未创建 `Operation`；`Completed` 必对应已验收 `Report`；`Unresolved` 保持原 `AwaitingReport` |
+| `Task` | 由精确匹配的能力标识与不透明业务输入载荷构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
+| `Selection` | 目标选定约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleInstance`） | 每次提交至多选人一次；`Exact` 不可路由时直接拒绝，绝不回退 |
+| `Submission` | 外部提交创建请求的描述，含目标分组、`Selection` 与 `Task` | 仅表达提交意图，尚未创建 `Operation` 或 `Attempt` |
+| `Call` | 发往唯一选定 `Worker` 的调用消息，含目标分组、`Authority`、`Worker`、既有 `Attempt`、能力标识与业务输入 | 只传递既有 `Attempt` 授权 |
+| `WorkerResponse` | `Worker` 对单次 `Call` 的一次性响应：完整 `Report` 或执行期失败通知 | 执行期失败无法排除副作用，绝不伪造为 `Report` 或执行前拒收 |
+| `Outcome` | 对单次 `Submission` 的三态终局裁决：`Rejected`、`Completed`、`Unresolved` | `Rejected` 承诺未创建 `Operation`；`Completed` 必对应已验收 `Report`；`Unresolved` 保持原 `AwaitingReport` |

@@ -1,48 +1,26 @@
-// 会话公告, epoch 隔离与 Selection 路由场景测试.
+// Selection 零回退、Unresolved 保持等待与迟到合法 Report 验收测试.
 module routing_test {
   import routing.* from "./routing"
 
-  // 断线重连推进 epoch 后旧租约立即失效, 拒绝旧 epoch 心跳, 新 epoch 心跳后恢复.
-  run reconnectInvalidatesLeaseUntilNewEpochTest =
+  // Exact 目标不可路由时即使其他候选可路由也直接裁决 Rejected 且不创建 Operation.
+  run exactRejectedWhileOtherRoutableTest =
     init
-      .then(observePresence(1, 1, 1, ModeReady))
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == Selected({ worker: 1, source: 1 }))
-      .then(disconnectLink(1))
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == RejectedBeforeCreate)
-      .then(reconnectLink(1))
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == RejectedBeforeCreate)
-      .then(observePresence(1, 1, 2, ModeReady))
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == RejectedBeforeCreate)
-      .then(observePresence(1, 2, 2, ModeReady))
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == Selected({ worker: 1, source: 1 }))
+      .then(toggleWorkerRoutable(1))
+      .then(submitExact(1, 1))
+      .expect(subOutcome.get(1) == SubRejected and opEntry.get(1) == OpNone and attemptCount.get(1) == 0)
 
-  // 重复 sequence 跨来源转发不延长首次到达时间; 乱序旧 sequence 被拒绝.
-  run replaySameSequenceDoesNotExtendTtlTest =
+  // 超时裁决 Unresolved 后保持 OpAwaiting; 错配报告不关闭; Worker 离线后迟到真实 Report 仍可关闭.
+  run unresolvedAndLateAuthenticReportTest =
     init
-      .then(observePresence(1, 1, 1, ModeReady))
-      .then(advanceClock)
-      .then(observePresence(2, 1, 1, ModeReady))
-      .then(advanceClock)
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == RejectedBeforeCreate)
-      .then(observePresence(1, 1, 2, ModeDraining))
-      .then(observePresence(2, 1, 1, ModeReady))
-      .expect(match entry {
-        | Entry(e) => e.seq == 2 and e.mode == ModeDraining
-        | AbsentEntry => false
-      })
-
-  // Exact 目标不可用时即使其他候选 Ready 也直接拒绝, 绝不回退.
-  run exactNeverFallsBackWhileOtherReadyTest =
-    init
-      .then(toggleWorker2)
-      .then(selectAction(SelectExact1))
-      .expect(lastDecision == RejectedBeforeCreate)
-      .then(selectAction(SelectAny))
-      .expect(lastDecision == Selected({ worker: 2, source: 1 }))
+      .then(submitExact(1, 1))
+      .then(authorityTimeoutOrFailed(1))
+      .expect(subOutcome.get(1) == SubUnresolved({ opId: 1, attemptId: 1, worker: 1 })
+        and opEntry.get(1) == OpAwaiting({ attemptId: 1, targetWorker: 1 }))
+      .then(injectMismatchedReport(1, 1))
+      .then(authorityReceiveReport({ reportId: BOGUS_REPORT, opId: 1, attemptId: BOGUS_ATTEMPT, worker: 1 }))
+      .expect(opEntry.get(1) == OpAwaiting({ attemptId: 1, targetWorker: 1 }))
+      .then(workerReplyReport({ opId: 1, attemptId: 1, worker: 1 }))
+      .then(toggleWorkerRoutable(1))
+      .then(authorityReceiveReport({ reportId: 1, opId: 1, attemptId: 1, worker: 1 }))
+      .expect(opEntry.get(1) == OpClosed({ attemptId: 1, reportId: 1, worker: 1 }))
 }

@@ -2,7 +2,7 @@ edition = "2026";
 
 package beamlet.v1;
 
-// Beamlet 跨角色与跨进程逻辑消息契约, 与具体传输后端及线编码格式无关.
+// Beamlet 跨角色与跨进程逻辑消息契约, 与具体实现语言及传输后端无关.
 // 业务请求与结果载荷统一使用 bytes 表示任意不透明数据.
 
 // Worker 自报的接收状态; 失联状态由观察方按本地单调时钟另行判定.
@@ -36,12 +36,6 @@ export message RoleInstance {
   string session_id = 2;
 }
 
-// Authority 对外发现回复携带的实例与所属 Pool 集合.
-export message AuthorityInfo {
-  RoleInstance instance = 1;
-  repeated string pools = 2;
-}
-
 // Worker 发布的完整状态快照, 首份有效快照即可完成登记.
 export message Presence {
   string pool = 1;
@@ -49,12 +43,6 @@ export message Presence {
   repeated string capabilities = 3;
   uint64 sequence = 4;
   PresenceState state = 5;
-}
-
-// Authority 观察到的 Worker 状态视图.
-export message WorkerView {
-  Presence presence = 1;
-  bool stale = 2;
 }
 
 // 从指定 Pool 与能力匹配的可用 Worker 候选中任选其一.
@@ -66,12 +54,6 @@ export message Selection {
     SelectionAny any = 1;
     RoleInstance exact = 2;
   }
-}
-
-// Authority 发现回复.
-export message DiscoveryReply {
-  string request_id = 1;
-  AuthorityInfo authority = 2;
 }
 
 // 不可变业务任务描述, 作为 Operation 的原始请求输入.
@@ -87,37 +69,27 @@ export message Submission {
   Task task = 3;
 }
 
-// 查询指定 Pool 的 Worker 快照, 可选按能力过滤.
-export message CommandWorkers {
-  string request_id = 1;
+// 发往唯一选定 Worker 的调用数据, 仅携带既有 Attempt 授权.
+export message Call {
+  string pool = 1;
   RoleInstance authority = 2;
-  string pool = 3;
-  string capability = 4;
+  RoleInstance worker = 3;
+  Attempt attempt = 4;
+  string capability = 5;
+  bytes payload = 6;
 }
 
-// 请求目标 Authority 创建 Operation 并执行一次交付.
-export message CommandSubmit {
-  string request_id = 1;
-  RoleInstance authority = 2;
-  Submission submission = 3;
-}
-
-// Authority 请求入口命令.
-export message Command {
+// Worker 对单次 Call 的一次性响应: 正常生成 Report 或执行期失败通知.
+export message WorkerResponse {
   oneof kind {
-    CommandWorkers workers = 1;
-    CommandSubmit submit = 2;
+    Report report = 1;
+    string failed = 2;
   }
 }
 
 // 创建 Operation 前的拒绝结果.
 export message OutcomeRejected {
   string reason = 1;
-}
-
-// Worker 视图查询结果.
-export message OutcomeWorkers {
-  repeated WorkerView workers = 1;
 }
 
 // 有效 Report 已被接受且 Operation 已关闭的完成结果.
@@ -137,37 +109,11 @@ export message OutcomeUnresolved {
   string reason = 4;
 }
 
-// Authority 对外返回的四态结果; 未解决结果绝不伪装成 Report.
+// 对单次 Submission 的三态裁决; 未解决结果绝不伪装成 Report.
 export message Outcome {
   oneof kind {
     OutcomeRejected rejected = 1;
-    OutcomeWorkers workers = 2;
-    OutcomeCompleted completed = 3;
-    OutcomeUnresolved unresolved = 4;
-  }
-}
-
-// Authority 对请求方的关联回复.
-export message Reply {
-  string request_id = 1;
-  RoleInstance authority = 2;
-  Outcome outcome = 3;
-}
-
-// 发往唯一选定 Worker 的调用数据, 仅携带既有 Attempt 授权.
-export message Call {
-  string pool = 1;
-  RoleInstance authority = 2;
-  RoleInstance worker = 3;
-  Attempt attempt = 4;
-  string capability = 5;
-  bytes payload = 6;
-}
-
-// Worker 对单次 Call 的一次性响应: 正常生成 Report 或执行期失败通知.
-export message WorkerResponse {
-  oneof kind {
-    Report report = 1;
-    string failed = 2;
+    OutcomeCompleted completed = 2;
+    OutcomeUnresolved unresolved = 3;
   }
 }
