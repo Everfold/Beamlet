@@ -1,15 +1,14 @@
-// L2 在线台账: 管理多个 Operation 生命周期并强制 Attempt 身份全局不重复.
-// 不依赖 L3 角色, 传输或存储细节.
+// Ledger 在线执行台账: 管理多个 Operation 并强制 Attempt 身份全局不重复.
+// 不依赖角色, 传输或外部存储.
 module ledger {
   import primitives.* from "../kernel/primitives"
   import state_machine.* from "../kernel/state_machine"
 
-  // 台账中 Operation 槽位状态.
   type LedgerSlot =
     | Uncreated
     | Managed(State[int])
 
-  // 台账操作拒绝原因 (对应 ledger.proto 中的 LedgerErrorReason).
+  // 对应 beamlet-ledger 中的 LedgerError.
   type LedgerError =
     | OperationExists
     | OperationNotFound
@@ -19,14 +18,12 @@ module ledger {
     | AttemptIdReused
     | ReportMismatch
 
-  // 聚合在线台账内部状态.
   type LedgerState = {
     entries: int -> LedgerSlot,
     usedAttempts: Set[int],
   }
 
-  // 台账动作观测结果.
-  type LedgerOutcome =
+  type LedgerEvent =
     | LedgerInit
     | LedgerCreatedOp(int)
     | LedgerIssuedAttempt({ opId: int, attemptId: int })
@@ -36,13 +33,13 @@ module ledger {
 
   type LedgerResult = {
     ledger: LedgerState,
-    outcome: LedgerOutcome,
+    event: LedgerEvent,
   }
 
   pure val OPERATION_IDS = Set(1, 2)
   pure val ATTEMPT_IDS = Set(1, 2, 3)
 
-  // 创建新的 Ready Operation; 若身份已存在则拒绝且不覆盖原记录.
+  // 创建 Ready Operation; 身份已存在则拒绝且不覆盖原记录.
   pure def ledgerCreateOperation(state: LedgerState, opId: int): LedgerResult =
     match state.entries.get(opId) {
       | Uncreated =>
@@ -51,32 +48,32 @@ module ledger {
               ...state,
               entries: state.entries.put(opId, Managed(Ready)),
             },
-            outcome: LedgerCreatedOp(opId),
+            event: LedgerCreatedOp(opId),
           }
       | Managed(_) =>
           {
             ledger: state,
-            outcome: LedgerErr(OperationExists),
+            event: LedgerErr(OperationExists),
           }
     }
 
-  // 为 Ready Operation 签发未曾使用的 Attempt; 任何拒绝都不污染 usedAttempts.
+  // 为 Ready Operation 签发未使用的 Attempt; 任何拒绝均不污染 usedAttempts.
   pure def ledgerCreateAttempt(
     state: LedgerState,
     opId: int,
     attemptId: int
   ): LedgerResult =
     match state.entries.get(opId) {
-      | Uncreated => { ledger: state, outcome: LedgerErr(OperationNotFound) }
+      | Uncreated => { ledger: state, event: LedgerErr(OperationNotFound) }
       | Managed(opState) =>
           match opState {
             | AwaitingReport(_) =>
-                { ledger: state, outcome: LedgerErr(AttemptPendingErr) }
+                { ledger: state, event: LedgerErr(AttemptPendingErr) }
             | Closed =>
-                { ledger: state, outcome: LedgerErr(OperationClosedErr) }
+                { ledger: state, event: LedgerErr(OperationClosedErr) }
             | Ready =>
                 if (state.usedAttempts.contains(attemptId))
-                  { ledger: state, outcome: LedgerErr(AttemptIdReused) }
+                  { ledger: state, event: LedgerErr(AttemptIdReused) }
                 else
                   match createAttempt(opState, opId, attemptId) {
                     | Created(created) =>
@@ -85,27 +82,27 @@ module ledger {
                             entries: state.entries.put(opId, Managed(created.state)),
                             usedAttempts: state.usedAttempts.union(Set(attemptId)),
                           },
-                          outcome: LedgerIssuedAttempt({ opId: opId, attemptId: attemptId }),
+                          event: LedgerIssuedAttempt({ opId: opId, attemptId: attemptId }),
                         }
-                    | Updated(_) => { ledger: state, outcome: LedgerErr(AttemptPendingErr) }
-                    | Rejected(_) => { ledger: state, outcome: LedgerErr(AttemptPendingErr) }
+                    | Updated(_) => { ledger: state, event: LedgerErr(AttemptPendingErr) }
+                    | Rejected(_) => { ledger: state, event: LedgerErr(AttemptPendingErr) }
                   }
           }
     }
 
-  // 按 Report.operation_id 查找并校验; 不匹配时保留原 AwaitingReport 状态.
+  // 查找 Report.operation_id 并委托内核校验; 失配时保留原等待态.
   pure def ledgerAcceptReport(
     state: LedgerState,
     evidence: Report[int, int, int, str]
   ): LedgerResult =
     match state.entries.get(evidence.operation_id) {
-      | Uncreated => { ledger: state, outcome: LedgerErr(OperationNotFound) }
+      | Uncreated => { ledger: state, event: LedgerErr(OperationNotFound) }
       | Managed(opState) =>
           match opState {
             | Ready =>
-                { ledger: state, outcome: LedgerErr(NoPendingAttemptErr) }
+                { ledger: state, event: LedgerErr(NoPendingAttemptErr) }
             | Closed =>
-                { ledger: state, outcome: LedgerErr(OperationClosedErr) }
+                { ledger: state, event: LedgerErr(OperationClosedErr) }
             | AwaitingReport(pendingAttempt) =>
                 match acceptReport(opState, evidence.operation_id, evidence) {
                   | Updated(newState) =>
@@ -114,15 +111,15 @@ module ledger {
                           ...state,
                           entries: state.entries.put(evidence.operation_id, Managed(newState)),
                         },
-                        outcome: LedgerAcceptedReport({
+                        event: LedgerAcceptedReport({
                           opId: evidence.operation_id,
                           attemptId: pendingAttempt,
                         }),
                       }
                   | Rejected(_) =>
-                      { ledger: state, outcome: LedgerErr(ReportMismatch) }
+                      { ledger: state, event: LedgerErr(ReportMismatch) }
                   | Created(_) =>
-                      { ledger: state, outcome: LedgerErr(ReportMismatch) }
+                      { ledger: state, event: LedgerErr(ReportMismatch) }
                 }
           }
     }
@@ -130,7 +127,7 @@ module ledger {
   // 关闭 Ready 或幂等关闭 Closed Operation; 等待中时拒绝.
   pure def ledgerClose(state: LedgerState, opId: int): LedgerResult =
     match state.entries.get(opId) {
-      | Uncreated => { ledger: state, outcome: LedgerErr(OperationNotFound) }
+      | Uncreated => { ledger: state, event: LedgerErr(OperationNotFound) }
       | Managed(opState) =>
           match close(opState) {
             | Updated(newState) =>
@@ -139,19 +136,17 @@ module ledger {
                     ...state,
                     entries: state.entries.put(opId, Managed(newState)),
                   },
-                  outcome: LedgerClosedOp(opId),
+                  event: LedgerClosedOp(opId),
                 }
             | Rejected(_) =>
-                { ledger: state, outcome: LedgerErr(AttemptPendingErr) }
+                { ledger: state, event: LedgerErr(AttemptPendingErr) }
             | Created(_) =>
-                { ledger: state, outcome: LedgerErr(AttemptPendingErr) }
+                { ledger: state, event: LedgerErr(AttemptPendingErr) }
           }
     }
 
-  // --- 状态机与辅助历史变量 (用于安全不变量) ---
-
   var ledger: LedgerState
-  var lastOutcome: LedgerOutcome
+  var lastEvent: LedgerEvent
   var issuedLog: List[{ opId: int, attemptId: int }]
   var everClosed: Set[int]
   var acceptedOps: Set[int]
@@ -162,7 +157,7 @@ module ledger {
       entries: OPERATION_IDS.mapBy(_ => Uncreated),
       usedAttempts: Set(),
     },
-    lastOutcome' = LedgerInit,
+    lastEvent' = LedgerInit,
     issuedLog' = List(),
     everClosed' = Set(),
     acceptedOps' = Set(),
@@ -171,20 +166,20 @@ module ledger {
 
   action applyLedger(res: LedgerResult): bool = all {
     ledger' = res.ledger,
-    lastOutcome' = res.outcome,
-    issuedLog' = match res.outcome {
+    lastEvent' = res.event,
+    issuedLog' = match res.event {
       | LedgerIssuedAttempt(entry) => issuedLog.append(entry)
       | _ => issuedLog
     },
-    everClosed' = match res.outcome {
+    everClosed' = match res.event {
       | LedgerClosedOp(opId) => everClosed.union(Set(opId))
       | _ => everClosed
     },
-    acceptedOps' = match res.outcome {
+    acceptedOps' = match res.event {
       | LedgerAcceptedReport(ev) => acceptedOps.union(Set(ev.opId))
       | _ => acceptedOps
     },
-    retriedOps' = match res.outcome {
+    retriedOps' = match res.event {
       | LedgerIssuedAttempt(entry) =>
           if (acceptedOps.contains(entry.opId)) retriedOps.union(Set(entry.opId))
           else retriedOps
@@ -215,8 +210,6 @@ module ledger {
     }
   }
 
-  // --- 安全不变量 (对应 03-ledger.md 中的 INV-LDG-*) ---
-
   pure def isPendingOperation(slot: LedgerSlot): bool =
     match slot {
       | Managed(s) =>
@@ -237,12 +230,12 @@ module ledger {
       | Uncreated => -1
     }
 
-  // INV-LDG-01: 已关闭的 Operation 保持 Closed, 永不重开或被覆盖.
-  val inv_ldg_01_closed_monotonic: bool =
+  // 已关闭的 Operation 在线期间保持 Closed, 不被覆盖或重启.
+  val closedIsMonotonic: bool =
     everClosed.forall(opId => ledger.entries.get(opId) == Managed(Closed))
 
-  // INV-LDG-02: 全局签发日志中的 Attempt 身份彼此唯一, 且与 usedAttempts 完全一致.
-  val inv_ldg_02_attempt_id_globally_unique: bool = {
+  // 全局已签发 Attempt 身份彼此唯一, 且与 usedAttempts 完全一致.
+  val attemptIdsAreUnique: bool = {
     val issuedSet = issuedLog.foldl(Set(), (acc, entry) => acc.union(Set(entry.attemptId)))
     and {
       issuedSet.size() == issuedLog.length(),
@@ -250,12 +243,12 @@ module ledger {
     }
   }
 
-  // INV-LDG-03: 被拒绝的创建尝试绝不污染 usedAttempts.
-  val inv_ldg_03_rejected_does_not_pollute_used: bool =
+  // 被拒绝的 CreateAttempt 绝不把未使用身份写入 usedAttempts.
+  val rejectionDoesNotPolluteUsed: bool =
     ledger.usedAttempts.size() == issuedLog.length()
 
-  // INV-LDG-04: 所有等待中 Operation 持有的 Attempt 均已记录于 usedAttempts, 且互不相同.
-  val inv_ldg_04_pending_attempt_is_used: bool = and {
+  // 等待中的 Operation 持有的 Attempt 已记录于 usedAttempts, 且互不相同.
+  val pendingAttemptIsRecorded: bool = and {
     OPERATION_IDS.forall(opId => {
       val slot = ledger.entries.get(opId)
       not(isPendingOperation(slot)) or ledger.usedAttempts.contains(pendingAttemptOf(slot))
@@ -267,19 +260,17 @@ module ledger {
   }
 
   val invariants: bool = and {
-    inv_ldg_01_closed_monotonic,
-    inv_ldg_02_attempt_id_globally_unique,
-    inv_ldg_03_rejected_does_not_pollute_used,
-    inv_ldg_04_pending_attempt_is_used,
+    closedIsMonotonic,
+    attemptIdsAreUnique,
+    rejectionDoesNotPolluteUsed,
+    pendingAttemptIsRecorded,
   }
-
-  // --- 可达性见证 ---
 
   val witnessTwoOpsActive: bool =
     OPERATION_IDS.forall(opId => isPendingOperation(ledger.entries.get(opId)))
 
   val witnessAttemptReuseRejected: bool =
-    lastOutcome == LedgerErr(AttemptIdReused)
+    lastEvent == LedgerErr(AttemptIdReused)
 
   val witnessRetryWithFreshAttempt: bool =
     retriedOps.size() > 0

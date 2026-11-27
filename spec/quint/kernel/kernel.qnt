@@ -1,4 +1,4 @@
-// L1 内核有界模型探索: 验证单 Operation 状态机不变量与可达性见证.
+// Operation 内核有界模型探索: 验证生命周期不变量与可达性见证.
 module kernel {
   import primitives.* from "./primitives"
   import state_machine.* from "./state_machine"
@@ -39,7 +39,7 @@ module kernel {
     },
   }
 
-  // 仅在 Ready 时要求外层提供未使用的 Attempt 身份; 非 Ready 时模拟非法重复触发.
+  // Ready 时外层提供未使用 Attempt 身份; 非 Ready 时模拟非法触发以验证拒绝语义.
   action createAction(attemptId: int): bool = all {
     state != Ready or not(used.contains(attemptId)),
     applyOutcome(createAttempt(state, CURRENT_OP.id, attemptId), NoReport),
@@ -68,21 +68,19 @@ module kernel {
     }
   }
 
-  // --- 安全不变量 (对应 02-kernel.md 中的 INV-KRN-*) ---
-
-  // INV-KRN-01: 任何被拒绝的动作都不得改变生命周期状态.
-  val inv_krn_01_rejection_keeps_state: bool =
+  // 被拒绝的动作不改变状态.
+  val rejectionKeepsState: bool =
     match outcome {
       | Rejected(_) => state == previous
       | _ => true
     }
 
-  // INV-KRN-02: 一旦进入 Closed, 后续任何转换都不得重新打开 Operation.
-  val inv_krn_02_closed_stays_closed: bool =
+  // 进入 Closed 后不再回到 Ready 或 AwaitingReport.
+  val closedStaysClosed: bool =
     previous != Closed or state == Closed
 
-  // INV-KRN-03: 创建 Attempt 仅在 Ready 发生, 且返回授权与等待状态完全一致.
-  val inv_krn_03_creation_is_consistent: bool =
+  // CreateAttempt 仅在 Ready 成功, 且授权与等待状态一致.
+  val creationIsConsistent: bool =
     match outcome {
       | Created(created) => and {
           previous == Ready,
@@ -92,8 +90,8 @@ module kernel {
       | _ => true
     }
 
-  // INV-KRN-04: 接受 Report 仅在 AwaitingReport 且两个引用身份精确匹配时发生, 并转回 Ready.
-  val inv_krn_04_report_acceptance_is_valid: bool =
+  // AcceptReport 仅在 AwaitingReport 且双身份均匹配时成功并回到 Ready.
+  val reportAcceptanceIsValid: bool =
     match reportInput {
       | NoReport => true
       | SubmittedReport(ev) =>
@@ -114,13 +112,11 @@ module kernel {
     }
 
   val invariants: bool = and {
-    inv_krn_01_rejection_keeps_state,
-    inv_krn_02_closed_stays_closed,
-    inv_krn_03_creation_is_consistent,
-    inv_krn_04_report_acceptance_is_valid,
+    rejectionKeepsState,
+    closedStaysClosed,
+    creationIsConsistent,
+    reportAcceptanceIsValid,
   }
-
-  // --- 可达性见证 (Witnesses) ---
 
   val witnessAttemptCreated: bool =
     match outcome {

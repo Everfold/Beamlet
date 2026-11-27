@@ -59,17 +59,19 @@ check-ledger-model:
     quint run spec/quint/ledger/ledger.qnt --main=ledger --invariant=invariants --witnesses witnessTwoOpsActive witnessAttemptReuseRejected witnessRetryWithFreshAttempt --max-samples=1000 --max-steps=20 --seed=42 --verbosity=1
     quint verify spec/quint/ledger/ledger.qnt --main=ledger --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
-check-protocol-models:
-    quint typecheck spec/quint/protocol/registry_lease_test.qnt
-    quint test spec/quint/protocol/registry_lease_test.qnt
-    quint run spec/quint/protocol/registry_lease.qnt --main=registry_lease --invariant=invariants --witnesses witnessSelected witnessReconnectInvalidatesOldEpoch witnessOfflineBlocksOldReady witnessMultiSourceFailover --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
-    quint verify spec/quint/protocol/registry_lease.qnt --main=registry_lease --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
-    quint typecheck spec/quint/protocol/delivery_test.qnt
-    quint test spec/quint/protocol/delivery_test.qnt
-    quint run spec/quint/protocol/delivery.qnt --main=delivery --invariant=invariants --witnesses witnessExactSuccess witnessExactNoFallback witnessTimeoutUnresolved witnessLateReportAfterWorkerOffline --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
-    quint verify spec/quint/protocol/delivery.qnt --main=delivery --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
+check-roles-model:
+    quint typecheck spec/quint/roles/roles_test.qnt
+    quint test spec/quint/roles/roles_test.qnt
+    quint run spec/quint/roles/roles.qnt --main=roles --invariant=invariants --witnesses witnessAcceptedAndClosed witnessRetryWithSecondAttempt witnessUnknownKeepsAwaiting witnessOfflineWorkerReportAccepted --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
+    quint verify spec/quint/roles/roles.qnt --main=roles --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
-check-spec: check-proto check-kernel-model check-ledger-model check-protocol-models
+check-routing-model:
+    quint typecheck spec/quint/routing/routing_test.qnt
+    quint test spec/quint/routing/routing_test.qnt
+    quint run spec/quint/routing/routing.qnt --main=routing --invariant=invariants --witnesses witnessSelected witnessReconnectInvalidatesOldEpoch witnessReplayDoesNotExtendTtl witnessExactRejectedWhileOtherReady --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
+    quint verify spec/quint/routing/routing.qnt --main=routing --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
+
+check-spec: check-proto check-kernel-model check-ledger-model check-roles-model check-routing-model
 
 doc:
     cargo doc --workspace --no-deps --document-private-items --open

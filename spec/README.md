@@ -1,50 +1,38 @@
 # Beamlet 架构与协议规范
 
-Beamlet 规范自底向上分层，下层不耦合上层，由三种载体正交定义。
+Beamlet 规范自底向上组织，下层不依赖上层；层次越靠下，与业务及传输的耦合度越低。
 
 ## 载体分工
 
-```mermaid
-flowchart LR
-    PB["Protobuf Edition 2026 (.proto)"]
-    QNT["Quint (.qnt)"]
-    MD["Markdown (.md)"]
-    IMPL["多语言实现与契约测试"]
+- **Markdown（`spec/*.md`）**：定义各层边界、职责分工、生命周期规则与失败语义。
+- **Quint（`spec/quint/`）**：定义可执行的状态机与交互模型，并通过单元测试、随机模拟和 TLC 模型检验验证不变量。
+- **Protobuf Edition 2026（`spec/proto/`）**：仅定义真正跨进程边界的 v3 线协议消息结构，不为纯内存泛型库强加 IDL。
 
-    PB -->|"逻辑结构与枚举"| MD
-    QNT -->|"状态转换与 Safety 不变量"| MD
-    MD -->|"职责边界、失败语义与环境假设"| IMPL
-    PB -->|"结构契约"| IMPL
-    QNT -->|"INV-* 映射"| IMPL
-```
-
-- **Markdown（`spec/*.md`）**：分层边界、环境假设与 RFC 2119 条款；不重复抄写 `.proto` 字段表。
-- **Protobuf Edition 2026（`spec/proto/`）**：跨语言逻辑数据结构契约（Logical IDL）；不限定线编码格式。
-- **Quint（`spec/quint/`）**：可执行状态机与安全不变量（`INV-*`），经随机模拟与 TLC 模型检验验证。
-
-## 分层依赖
-
-`L0`–`L4` 单向演进，`Ln` 层不得引用 `Ln+1` 层概念：
+## 分层依赖图谱
 
 ```mermaid
 flowchart BT
-    L0["L0: 基础约定与词汇 (00-conventions.md, 00-glossary.md)"]
-    L1["L1: 原语与内核 (01-primitives.md, 02-kernel.md, proto/l1, quint/kernel)"]
-    L2["L2: 在线台账 (03-ledger.md, proto/l2, quint/ledger)"]
-    L3["L3: 交付协议 (04-protocol.md, proto/l3, quint/protocol)"]
-    L4["L4: 传输绑定与宿主 (05-binding-nats.md, 06-host-and-rust.md)"]
+    CONV["约定与词典 (00-conventions.md, 00-glossary.md)"]
+    KRN["原语与内核 (01-kernel.md, quint/kernel)"]
+    LDG["执行台账 (02-ledger.md, quint/ledger)"]
+    ROL["角色与基础交付 (03-roles.md, quint/roles)"]
+    RTE["会话路由与编排 (04-routing.md, quint/routing)"]
+    WIRE["v3 线协议与 NATS 传输 (05-wire-and-nats.md, proto/protocol/v3)"]
+    HOST["Local 传输、Host 监督与工作区映射 (06-host-and-workspace.md)"]
 
-    L0 --> L1 --> L2 --> L3 --> L4
+    CONV --> KRN --> LDG --> ROL --> RTE --> WIRE --> HOST
+    RTE --> HOST
 ```
 
-## 索引
+## 文档索引
 
-| 层级 | Markdown | Protobuf IDL | Quint 模型 | 范围 |
-| --- | --- | --- | --- | --- |
-| L0 | [00-conventions.md](00-conventions.md) / [00-glossary.md](00-glossary.md) | — | — | RFC 2119、基础约定、追踪编号与五维领域词典 |
-| L1 | [01-primitives.md](01-primitives.md) | [primitives.proto](proto/beamlet/l1/v1/primitives.proto) | [primitives.qnt](quint/kernel/primitives.qnt) | `Attempt`、`Report`、`OpaquePayload` 不可变证据 |
-| L1 | [02-kernel.md](02-kernel.md) | [kernel.proto](proto/beamlet/l1/v1/kernel.proto) | [state_machine.qnt](quint/kernel/state_machine.qnt) / [kernel.qnt](quint/kernel/kernel.qnt) | 单 `Operation` 三态状态机与外部重建 |
-| L2 | [03-ledger.md](03-ledger.md) | [ledger.proto](proto/beamlet/l2/v1/ledger.proto) | [ledger.qnt](quint/ledger/ledger.qnt) | 多 `Operation` 在线索引与 `Attempt` 全局防重用 |
-| L3 | [04-protocol.md](04-protocol.md) | [protocol.proto](proto/beamlet/l3/v1/protocol.proto) | [registry_lease.qnt](quint/protocol/registry_lease.qnt) / [delivery.qnt](quint/protocol/delivery.qnt) | 单调租约格、定向交付与优雅排空 |
-| L4 | [05-binding-nats.md](05-binding-nats.md) | — | — | NATS Subject 路由、v3 JSON 线格式与连接世代 |
-| L4 | [06-host-and-rust.md](06-host-and-rust.md) | — | — | `Host` 任务监督、`Local` 传输与 Rust 映射 |
+| 文件 | 形式化模型 / IDL | 核心范围 |
+| --- | --- | --- |
+| [00-conventions.md](00-conventions.md) | — | 规范性关键词、时钟与期限准则、术语书写规则 |
+| [00-glossary.md](00-glossary.md) | — | 按依赖顺序与角色分类的真实领域词汇表 |
+| [01-kernel.md](01-kernel.md) | [spec/quint/kernel/](quint/kernel/state_machine.qnt) | `Operation`、`Attempt`、`Report` 三种原语及内核状态机 |
+| [02-ledger.md](02-ledger.md) | [spec/quint/ledger/](quint/ledger/ledger.qnt) | `Ledger` 多 `Operation` 管理与 `Attempt` 身份防重用 |
+| [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、基础交付与报告验收 |
+| [04-routing.md](04-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt) | `RoleInstance`、`Pool`、`Presence` 租约、`Selection` 与 `Client` |
+| [05-wire-and-nats.md](05-wire-and-nats.md) | [protocol.proto](proto/beamlet/protocol/v3/protocol.proto) | `beamlet-protocol` v3 JSON 线格式与 `Nats` 主题绑定 |
+| [06-host-and-workspace.md](06-host-and-workspace.md) | — | `Local` 内存传输、`Host` 任务监督与 Crate 依赖图谱 |

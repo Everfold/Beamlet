@@ -1,4 +1,4 @@
-// L1 内核穷举与场景测试套件.
+// Operation 内核穷举与场景测试.
 module kernel_test {
   import primitives.* from "./primitives"
   import state_machine.* from "./state_machine"
@@ -7,7 +7,7 @@ module kernel_test {
   pure val STATES: Set[State[int]] =
     Set(Ready, Closed).union(ATTEMPT_IDS.map(id => AwaitingReport(id)))
 
-  // 内容相同而身份不同的 Operation 是彼此独立的请求.
+  // 内容相同而身份不同的 Operation 是彼此独立的实例.
   run distinctOperationsTest = assert(
     makeOperation(1, "request") != makeOperation(2, "request")
   )
@@ -27,7 +27,7 @@ module kernel_test {
     ))
   )
 
-  // 穷举状态, Operation 与 Attempt 引用组合, 验证拒绝优先级与接受条件.
+  // 穷举状态, Operation 与 Attempt 引用组合, 验证校验顺序与接受条件.
   run reportRulesTest = assert(
     STATES.forall(s => OPERATION_IDS.forall(o => ATTEMPT_IDS.forall(a =>
       acceptReport(s, 1, makeReport(1, o, a, "result")) == match s {
@@ -41,7 +41,7 @@ module kernel_test {
     )))
   )
 
-  // 穷举关闭规则, 包含对 Closed 状态的幂等重复关闭.
+  // 穷举关闭规则, 包含对 Closed 状态的幂等关闭.
   run closeRulesTest = assert(
     STATES.forall(s =>
       close(s) == match s {
@@ -52,14 +52,14 @@ module kernel_test {
     )
   )
 
-  // 验证已知状态重建入口在身份匹配与不匹配时的行为.
-  run reconstructRulesTest = assert(and {
-    reconstructAwaitingReport(1, makeAttempt(1, 2)) == Updated(AwaitingReport(2)),
-    reconstructAwaitingReport(1, makeAttempt(2, 2)) == Rejected(OperationMismatch),
-    reconstructClosed == Updated(Closed),
+  // 验证外部状态恢复在匹配与不匹配时的行为.
+  run restoreRulesTest = assert(and {
+    restoreAwaitingReport(1, makeAttempt(1, 2)) == Updated(AwaitingReport(2)),
+    restoreAwaitingReport(1, makeAttempt(2, 2)) == Rejected(OperationMismatch),
+    restoreClosed == Updated(Closed),
   })
 
-  // 验证重试后旧报告不能解除新等待, 且关闭后不可再次创建 Attempt.
+  // 重试后旧报告不能解除新等待, 关闭后不可再创建 Attempt.
   run lifecycleTest =
     init
       .then(createAction(1))

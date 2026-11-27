@@ -1,14 +1,14 @@
-// L1 内核纯转换规则: Operation 三态转换与已知状态重建, 不含模拟状态变量.
+// Operation 内核状态机纯转换规则: Ready / AwaitingReport / Closed 及外部状态恢复.
 module state_machine {
   import primitives.* from "./primitives"
 
-  // Operation 的三态生命周期投影.
+  // Operation 的三态生命周期.
   type State[a] =
     | Ready
     | AwaitingReport(a)
     | Closed
 
-  // 状态转换被拒绝的抽象原因.
+  // 状态机动作的抽象拒绝原因 (实现可在编译期阻止非法状态调用, 或在运行时返回错误).
   type KernelError =
     | AttemptPending
     | OperationClosed
@@ -16,7 +16,7 @@ module state_machine {
     | OperationMismatch
     | AttemptMismatch
 
-  // 内核动作的返回结果: 签发新授权, 更新状态, 或携带原因拒绝.
+  // 内核动作结果.
   type KernelOutcome[o, a] =
     | Created({ attempt: Attempt[o, a], state: State[a] })
     | Updated(State[a])
@@ -53,7 +53,7 @@ module state_machine {
           else Updated(Ready)
     }
 
-  // 关闭 Operation: Ready 转为 Closed, Closed 幂等保持, AwaitingReport 拒绝.
+  // 关闭 Operation: Ready 转 Closed, Closed 幂等保持, AwaitingReport 拒绝.
   pure def close(state: State[a]): KernelOutcome[o, a] =
     match state {
       | Ready => Updated(Closed)
@@ -61,19 +61,19 @@ module state_machine {
       | AwaitingReport(_) => Rejected(AttemptPending)
     }
 
-  // 从外部已知状态重建 AwaitingReport: 仅校验 Attempt 所属 Operation 匹配, 不签发新授权.
-  pure def reconstructAwaitingReport(
+  // 从外部已验证状态恢复 AwaitingReport: 校验 Attempt 所属 Operation, 不签发新授权.
+  pure def restoreAwaitingReport(
     operationId: o,
     attempt: Attempt[o, a]
   ): KernelOutcome[o, a] =
     if (attempt.operation_id != operationId) Rejected(OperationMismatch)
     else Updated(AwaitingReport(attempt.id))
 
-  // 从外部已知状态重建 Closed: 直接返回 Closed, 不重新触发关闭副作用.
-  pure def reconstructClosed: KernelOutcome[o, a] =
+  // 从外部已验证状态恢复 Closed.
+  pure def restoreClosed: KernelOutcome[o, a] =
     Updated(Closed)
 
-  // 应用转换结果; 被拒绝时原状态保持不变.
+  // 应用转换结果; 被拒绝时保持原状态不变.
   pure def nextState(state: State[a], result: KernelOutcome[o, a]): State[a] =
     match result {
       | Created(created) => created.state

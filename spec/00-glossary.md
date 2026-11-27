@@ -1,149 +1,136 @@
-# L0-B: 领域词汇表
+# 领域词汇表
 
 - **前置约定**：[00-conventions.md](00-conventions.md)
 
-## 分类标准（架构层级 × 五维角色）
-
-术语先按所属最低层级（`L1`–`L4`）归位，层内按五个正交维度细分（空维度省略）：
-
-```mermaid
-flowchart LR
-    subgraph Dims["层内五维角色"]
-        direction TB
-        D1["主体与容器: 状态持有者与执行单元"]
-        D2["身份与寻址: 标识、隔离域与选路策略"]
-        D3["载体与消息: 不可变数据封套与证据"]
-        D4["状态与观测: 生命周期阶段与链路视图"]
-        D5["结果与裁决: 转换或交付的终局定性"]
-    end
-
-    subgraph Hierarchy["架构层级"]
-        direction BT
-        L1["L1 原语与内核"] --> L2["L2 在线台账"] --> L3["L3 交付协议"] --> L4["L4 绑定与宿主"]
-    end
-
-    Dims --> Hierarchy
-```
+仅收录真实存在于 Beamlet 架构与代码边界中的领域术语；术语按自底向上模块归位，模块内按概念角色细分。
 
 ---
 
-## L1 原语与内核
+## 原语与内核
 
-### L1 主体与容器
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Operation` | 绑定固定 `operation_id`、不可变 `request` 与三态生命周期的单体状态机 | `request` 相同但 `operation_id` 不同视为独立实例；区别于未签发的 `Submission` |
-
-### L1 载体与消息
+### 原语与内核：三大核心原语
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `OpaquePayload` | 含格式标识与原始字节流的不透明业务载荷 | 封装请求与结果，L1–L3 不解析其内容 |
-| `Attempt` | 针对指定 `Operation` 的单次不可变执行授权（`attempt_id`, `operation_id`） | 重复传递同一 `Attempt` 不产生新授权 |
-| `Report` | 绑定 `operation_id`、`attempt_id` 与 `result` 的不可变结果证据 | 业务级失败只要对应已结束 `Attempt`，仍属合法 `Report` |
+| `Operation` | 携带固定身份 `id`、不可变原始 `request` 与三态生命周期的状态机对象 | `request` 相同而 `id` 不同属于两个独立 `Operation`；不承担网络或存储职责 |
+| `Attempt` | 针对某个指定 `Operation` 的单次执行授权，携带自身 `id` 与 `operation_id` | 重复传递同一份 `Attempt` 数据不产生新授权；自身不证明授权真实性 |
+| `Report` | 一次 `Attempt` 执行结束后的结果证据，携带自身 `id`、`Attempt` 引用与 `result` | 即使 `result` 表达业务失败，对应已结束 `Attempt` 即构成合法 `Report` |
 
-### L1 状态与观测
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `OperationStatus` | `Operation` 三态枚举：`Ready`、`AwaitingReport`、`Closed` | 三态互斥完备 |
-| `Ready` | 未关闭且无在途 `Attempt` 的状态 | 属 `OperationStatus`（初态或接受 `Report` 后状态）；区别于 L3 `PresenceState::Ready` |
-| `AwaitingReport` | 唯一等待 `pending_attempt_id` 对应 `Report` 的状态 | 单实例同时至多一个在途 `Attempt`，期间禁止新签发或关闭 |
-| `Closed` | 显式终结的不可逆终态 | 幂等关闭，不回退；接受 `Report` 不自动进入 `Closed` |
-
-### L1 结果与裁决
+### 原语与内核：状态与错误
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `KernelRejectionReason` | 单 `Operation` 因状态不符或引用失配拒绝转换的原因枚举 | 拒绝无副作用；区别于 L3 未建操作即返回的 `Outcome::Rejected` |
+| `OperationStatus` | `Operation` 当前生命周期阶段的只读标签：`Ready`、`AwaitingReport`、`Closed` | 三态互斥完备，待处理 `Attempt` 身份需单独读取 |
+| `Ready` | 尚未关闭且当前没有等待 `Report` 的 `Attempt` 之状态 | 既可以是新建初态，也可以是接受 `Report` 后的状态；区别于上层 `PresenceState::Ready` |
+| `AwaitingReport` | 正在唯一等待指定 `attempt_id` 对应 `Report` 的状态 | 同时至多等待一个 `Attempt`，期间禁止再签发或关闭 |
+| `Closed` | `Operation` 已显式终结的状态 | 允许幂等重复 `close`，永不回退；接受 `Report` 不会自动进入 `Closed` |
+| `AcceptReportError` | `accept_report` 校验失败时保留原等待中 `Operation` 的错误：`OperationMismatch`、`AttemptMismatch` | 调用 `into_operation` 可无损取回原 `Operation` 继续等待 |
+| `RestoreOperationError` | `restore_awaiting_report` 发现 `Attempt` 所属身份失配时的错误 | 调用 `into_parts` 可无损取回传入身份、请求与授权 |
 
 ---
 
-## L2 在线台账
+## 执行台账
 
-### L2 主体与容器
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Ledger` | 索引在线 `Operation` 并记录全局已签发 `attempt_id` 集合的内存台账 | 保证跨重试、跨 `Operation` 的 `attempt_id` 单次签发；不含网络与外部存储 |
-
-### L2 结果与裁决
+### 执行台账：主体与容器
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `LedgerErrorReason` | `Ledger` 因身份冲突、目标缺失、`Attempt` 复用或内核拒绝报错的原因枚举 | 失败调用原子无副作用，不污染已用 `attempt_id` 集合 |
+| `Ledger` | 在内存中管理多个 `Operation` 当前状态并记录全局已签发 `Attempt` 身份的执行台账 | 保障跨重试与跨 `Operation` 的 `Attempt` 身份不重复；不含网络与持久化 |
+| `OperationView` | `Ledger` 对外提供的单个 `Operation` 只读借用视图 | 不暴露内部可变状态对象 |
+
+### 执行台账：错误
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `LedgerError` | `Ledger` 更新拒绝原因：`OperationExists`、`OperationNotFound`、`AttemptPending`、`NoPendingAttempt`、`OperationClosed`、`AttemptIdReused`、`ReportMismatch` | 任何失败均保留原状态，且不把被拒的未使用 `Attempt` 身份记为已用 |
+| `CreateOperationError` | `create_operation` 遇到重复身份时的错误 | 保留非 `Clone` 请求与身份，不覆盖既有条目 |
 
 ---
 
-## L3 交付协议
+## 角色与基础交付
 
-### L3 主体与容器
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Authority` | 持有私有 `Ledger` 与本地 `Registry`、负责选路、签发 `Attempt` 并验收 `Report` 的协调者 | 各 `Authority` 间不共享 `Ledger` 或 `Registry` |
-| `Worker` | 发布 `Presence`、执行能力并产出 `Report` 的无台账执行者 | 共用 `Worker` 不共享或接管任何 `Authority` 的 `Operation` |
-| `Registry` | `Authority` 按 `(Pool, RoleInstance)` 维护的本地 `Worker` 状态与租约视图 | 纯内存软状态，依赖状态格合流与本地单调时钟判定可用性 |
-
-### L3 身份与寻址
+### 角色与基础交付：主体与容器
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `RoleInstance` | 固定 `role_id` 与单次运行 `session_id` 组成的角色会话标识 | 锁定单次运行实例；禁止按 UUID 大小推断新旧 |
-| `Pool` | 大小写敏感的路由隔离命名空间 | 限定 `Presence` 可见域与选路范围，不修剪或改写 |
-| `CapabilityId` | 按字节精确匹配的带版本能力标识 | 同时约束 `Presence` 声明与 `Call` 准入，无隐式兼容 |
-| `Selection` | 目标选定策略：`Any`（同池匹配能力任选其一）或 `Exact`（指定 `RoleInstance`） | 单次提交至多选路一次；`Exact` 不可达时直接拒绝，绝不回退 |
+| `Authority` | 持有 `Ledger`、负责创建 `Operation`、签发 `Attempt`、交付调用并验收 `Report` 的协调角色 | 不同 `Authority` 之间不共享 `Ledger` |
+| `Worker` | 接收既有 `Attempt`、执行任务并产出 `Report` 或失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
 
-### L3 载体与消息
+### 角色与基础交付：消息与入口
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Presence` | `Worker` 向所属 `Pool` 发布的含 `RoleInstance`、能力集与 `PresenceState` 的完整快照 | 单份快照即可完成登记，无需增量补丁 |
-| `Task` | 由 `CapabilityId` 与输入 `OpaquePayload` 组成的不可变任务内容 | 创建 `Operation` 时冻结为原始 `request` |
-| `Submission` | 携带 `Pool`、`Selection` 与 `Task` 的外部提交封套 | 仅表提交意图，尚未创建 `Operation` 或 `Attempt` |
-| `Call` | `Authority` 发往选定 `Worker`、携带已签发 `Attempt` 与 `Task` 的定向调用 | 仅传递既有授权，`Worker` 不生成新授权 |
-| `WorkerResponse` | `Worker` 对 `Call` 的一次性响应：`Report`、准入拒收（`rejected_reason`）或执行异常（`failed_reason`） | 拒收代表未进入处理器；执行异常无法排除副作用，不得伪造为 `Report` |
+| `WorkerResponse` | `Worker` 对单次已接收调用的一次性响应：`Report` 或 `Failed` | 执行期 `Failed` 无法排除副作用，绝不伪造为 `Report` 或未交付 |
+| `Responder` | 隐藏传输地址、消费所有权并异步完成唯一一次回复发送的回复入口 | 发送成功仅表示传输层接收回复，不证明接收端已推进状态机 |
 
-### L3 状态与观测
+### 角色与基础交付：结果与错误
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `PresenceState` | 单 `session_id` 内的单调状态格：`Ready < Draining < Offline` | 按上确界（`join`）合流，阻止乱序旧消息复活会话；重启须换新 `session_id` |
-| `Ready` | 允许投递新 `Call` 的会话初态 | 属 `PresenceState`；仅表可路由，不预留并发槽位，区别于 L1 `OperationStatus::Ready` |
-| `Draining` | 停止接入新 `Call`、排空在途任务的会话中间态 | 不可再被选路，但在途任务产出的 `Report` 仍有效 |
-| `Offline` | 排空完毕退出的会话终态 | 当前 `session_id` 下不可逆 |
-| `Connection` | 传输端点暴露的链路布尔连接态与当前 `Epoch` 视图 | 隔离底层重连细节与上层租约判定 |
-| `Epoch` | 单条传输链路的本地单调递增连接世代号 | 断线或重连推进 `Epoch` 后，旧世代租约立即失效 |
-| `Stale` | 因断线、`Epoch` 失配或本地 TTL 超时派生的租约失效标记 | 观测方本地计算属性；不影响在途合法 `Report` 验收 |
-
-### L3 结果与裁决
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Outcome` | `Authority` 对 `Submission` 的三态终局裁决：`Rejected`、`Completed`、`Unresolved` | 三态互斥完备 |
-| `Rejected` | 未创建 `Operation` 与 `Attempt` 即拒绝的裁决 | 属 `Outcome`；保证 `Ledger` 无新增对象 |
-| `Completed` | 验收匹配 `Report` 并关闭 `Operation` 后的完成裁决 | 属 `Outcome`；唯一携带 `report_id` 与 `result` 的分支 |
-| `Unresolved` | 已签发 `Attempt` 但未在期限内获有效 `Report` 的未决裁决 | 属 `Outcome`；`Operation` 保持 `AwaitingReport`，不代表远端已取消或未执行 |
+| `DeliveryError` | 单次交付的可确认程度：`NoReceiver`、`NotDelivered`、`Unknown` | 不改变 `Operation` 既有等待状态；`Unknown` 禁止自动重试 |
+| `ReplyError` | `Responder` 发送唯一回复失败时包装底层原因的错误 | 保留原始错误链，不自动重试 |
 
 ---
 
-## L4 绑定与宿主
+## 会话路由与编排
 
-### L4 主体与容器
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Host` | 启动异步长期任务组、广播停止信号并限时收集排空结果的监督容器 | 不感知领域身份、传输协议或系统信号源 |
-
-### L4 身份与寻址
+### 会话路由与编排：身份与寻址
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Subject` | NATS 绑定中按版本、`Pool` 与 `RoleInstance` 构造的路由主题名 | 仅作路由与来源核对，非安全认证凭据 |
+| `RoleInstance` | 持久配置的 `role_id` 与单次运行生成的 `session_id` 组成的角色实例标识 | 禁止按 UUID 大小推断会话新旧 |
+| `Pool` | 大小写敏感、可用作单段路由名的逻辑隔离分组（`1..=64` 字节 ASCII 字母、数字、`-`、` _`） | 限定 `Presence` 可见域与选路范围，不修剪空白 |
+| `CapabilityId` | 按字节精确匹配的带版本能力标识（`1..=256` 字节非空字符串） | 同时约束公告声明与调用准入，无隐式版本兼容 |
+| `WorkerBinding` | 绑定到 `Worker` 实例的 `pool`、`RoleInstance` 与启用 `CapabilityId` 集合 | 不包含选人策略 |
+| `Selection` | 目标选定约束：`Any`（从同池匹配能力候选中任选其一）或 `Exact(RoleInstance)` | 每次提交至多选人一次；`Exact` 失效直接拒绝，绝不回退 |
 
-### L4 状态与观测
+### 会话路由与编排：载体与消息
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Shutdown` | `Host` 向受管任务广播的单向幂等停止信号 | 首次触发即锁定全组排空截止时间，后续异常不重置倒计时 |
+| `Presence` | `Worker` 发布的完整状态快照，含 `pool`、`instance`、`label`、`capabilities`、`sequence`、`state` | 会话内 `sequence` 递增；相同快照重复转发不延长租约时间 |
+| `AuthorityInfo` | `Authority` 对外发现回复携带的 `RoleInstance`、`label` 与已加入 `pools` | 仅用于发现与目标选择 |
+| `Task` | 由精确匹配的 `capability` 与泛型业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
+| `Submission` | 外部提交创建请求的描述，含 `pool`、`Selection` 与 `Task` | 仅表达提交意图，尚未创建 `Operation` 或 `Attempt` |
+| `Command` | `Authority` 请求入口命令：`Workers`（查询列表）与 `Submit`（提交执行） | `request_id` 仅作请求/回复关联，不提供创建幂等 |
+| `Reply` | `Authority` 对 `Command` 的关联回复，含 `request_id`、`authority` 与 `Outcome` | 按完成顺序独立返回 |
+| `Call` | 发往选定 `Worker` 的调用数据，含 `pool`、`authority`、`worker`、`attempt`、`capability`、`payload` | 只携带既有 `Attempt` 授权 |
+| `Incoming` | 传输层交由 `Worker` 处理的单次接收单元，由 `Call` 与一次性 `Responder` 组成 | 回复入口专属于本次调用 |
+
+### 会话路由与编排：主体、状态与观测
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `Client` | 驱动外部发现、`Workers` 查询与 `Submit` 请求并校关联回复的客户端组件 | 不保存可变选择快照，请求只交付传输一次 |
+| `PresenceState` | `Worker` 自报接收状态：`Ready`、`Draining`、`Offline` | 失联标记由观察方按本地单调时钟另行判定；`Ready` 不预留并发槽位 |
+| `Connection` | 传输端点暴露的本地连接世代 `epoch` 与布尔状态 `connected`（只读视图为 `ConnectionView`） | 每次断线或重连推进 `epoch` 后，绑定于旧 `epoch` 的租约立即失效 |
+| `WorkerView` | `Authority` 对某个 `Worker` 会话的本地观测视图，含 `presence`、`last_seen_ms`、`stale` | `last_seen_ms` 与 `stale` 按 `Authority` 本地单调时钟即时计算 |
+
+### 会话路由与编排：结果与错误
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `Outcome` | `Authority` 对外返回的四态结果：`Rejected`、`Workers`、`Completed`、`Unresolved` | `Rejected` 表示未创建 `Operation`；`Unresolved` 表示已签发但未取得有效 `Report` |
+| `TransportError` | 传输入口或底层连接失败的包装错误 | 保留底层原因链，不自动重试 |
+
+---
+
+## 线协议、传输与宿主
+
+### 线协议、传输与宿主：v3 线协议消息（`beamlet-protocol`）
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `Envelope` | 携带 `version = 3` 与具体 `body` 的外层 JSON 封装 | 严格拒绝未知字段与非 `3` 版本报文 |
+| `Discovery` / `DiscoveryReply` | v3 发现查询与包含 `AuthorityInfo` 的关联回复 | 允许在发现窗口内收集多份回复 |
+| `WorkerCall` / `ReportData` | v3 文本协议上展开字段后的调用与报告载体 | 仅在编码层把 `Attempt`/`Report` 展开并与 `String` 文本互转 |
+| `WorkerReply` | v3 线格式的 `Worker` 三态回复：`Report`、`Rejected`、`Failed` | `Rejected` 在传输契约侧映射为 `DeliveryError::NotDelivered`，`Failed` 映射为 `Unknown` |
+
+### 线协议、传输与宿主：传输与宿主容器
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `Nats` | 基于 NATS 实现跨进程通信并携带连接 `epoch` 观测的传输适配器 | `Subject` 与 `RoleInstance` 仅作路由关联，不提供安全认证 |
+| `Local` | 创建隔离进程内有界路由空间、按值透传任意 Rust 类型的传输适配器 | 无需序列化与 `serde` |
+| `Host` | 统一启动并发长期任务组、广播停止并限时排空的监督容器 | 不解析领域身份、配置文件或系统信号源 |
+| `Shutdown` | `Host` 向受管任务广播的不可撤回停止通知 | 支持克隆与晚等待者；首次触发锁定全组排空截止时间 |
