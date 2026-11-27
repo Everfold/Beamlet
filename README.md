@@ -59,5 +59,4 @@ just update
 
 # Spec & Quint Check
 just check-spec
-just check-kernel-model
 ```

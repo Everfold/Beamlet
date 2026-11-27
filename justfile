@@ -69,9 +69,7 @@ check-protocol-models:
     quint run spec/quint/protocol/delivery.qnt --main=delivery --invariant=invariants --witnesses witnessExactSuccess witnessExactNoFallback witnessTimeoutUnresolved witnessLateReportAfterWorkerOffline --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
     quint verify spec/quint/protocol/delivery.qnt --main=delivery --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
-check-models: check-kernel-model check-ledger-model check-protocol-models
-
-check-spec: check-proto check-models
+check-spec: check-proto check-kernel-model check-ledger-model check-protocol-models
 
 doc:
     cargo doc --workspace --no-deps --document-private-items --open

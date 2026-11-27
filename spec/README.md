@@ -48,13 +48,3 @@ flowchart BT
 | L3 | [04-protocol.md](04-protocol.md) | [protocol.proto](proto/beamlet/l3/v1/protocol.proto) | [registry_lease.qnt](quint/protocol/registry_lease.qnt) / [delivery.qnt](quint/protocol/delivery.qnt) | 单调租约格、定向交付与优雅排空 |
 | L4 | [05-binding-nats.md](05-binding-nats.md) | — | — | NATS Subject 路由、v3 JSON 线格式与连接世代 |
 | L4 | [06-host-and-rust.md](06-host-and-rust.md) | — | — | `Host` 任务监督、`Local` 传输与 Rust 映射 |
-
-## 校验
-
-在开发环境（如 `nix develop`）中执行：
-
-```bash
-just check-proto   # buf 格式、lint 与构建检查
-just check-models  # Quint 类型检查、测试、模拟与 TLC 模型检验
-just check-spec    # 全量校验
-```
