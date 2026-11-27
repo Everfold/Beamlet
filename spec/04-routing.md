@@ -26,11 +26,11 @@ flowchart TD
     Pick -->|"无可用候选 (Exact 绝不回退)"| OutRej["返回 Outcome 的 Rejected 分支 (不创建 Operation)"]
     Pick -->|"锁定目标并签发 Attempt"| Call["投递 Call, 限时等待 WorkerResponse"]
     Call -->|"匹配 Report 且完成接受与关闭"| OutOk["返回 Outcome 的 Completed 分支"]
-    Call -->|"NoReceiver / NotDelivered / Unknown / 失配"| OutUnres["保持 AwaitingReport -> 返回 Unresolved 分支"]
+    Call -->|"未取得有效 Report / 失配"| OutUnres["保持 AwaitingReport -> 返回 Unresolved 分支"]
 ```
 
 - **`Selection` 零回退**：创建 `Operation` 前必须先完成一次候选选定：`Any` 从同池匹配能力、`PresenceState` 为 `Ready` 且存在有效新鲜路径的候选中任选其一（不承诺公平或均衡）；`Exact` 仅检查指定 `RoleInstance`，不可路由时直接返回 `Rejected`，绝不回退到其他实例，亦不在台账中创建 `Operation`。
-- **`Call` 准入与结果验收**：`Worker` 接收 `Call` 时必须校验 `pool`、目标 `worker`、`authority` 与 `attempt` 身份非空以及能力已启用；不满足则拒收（对应 `NotDelivered`），有效执行则经 `WorkerResponse` 返回 `Report` 或执行失败通知 `failed`。`Authority` 验收回复时仅核对 `pool`、`worker`、非空 `report_id` 及 `(operation_id, attempt_id)` 与签发记录一致，不依赖目标当前租约是否仍然新鲜。
+- **`Call` 准入与结果验收**：`Worker` 接收 `Call` 时必须校验 `pool`、目标 `worker`、`authority` 与 `attempt` 身份非空以及能力已启用；不满足则拒收，有效执行则经 `WorkerResponse` 返回 `Report` 或执行失败通知 `failed`。`Authority` 验收回复时仅核对 `pool`、`worker`、非空 `report_id` 及 `(operation_id, attempt_id)` 与签发记录一致，不依赖目标当前租约是否仍然新鲜。
 - **`Client` 发现与请求关联**：`Client` 在发现时间窗内按 `RoleInstance` 去重聚合有效 `AuthorityInfo`（忽略与关注 `Pool` 集合无交集或非法的回复）。`Command` 携带的 `request_id` 仅用于关联 `Reply`，不提供创建幂等；`Client` 核对 `Reply` 中的 `request_id`、`authority` 与预期 `Outcome` 分支后消费结果，不自动重试。
 
 ## 优雅停止与排空

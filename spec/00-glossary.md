@@ -45,14 +45,6 @@
 | `Authority` | 持有 `Ledger`、负责创建 `Operation`、签发 `Attempt`、交付调用并验收 `Report` 的协调角色 | 不同 `Authority` 之间不共享 `Ledger` |
 | `Worker` | 接收既有 `Attempt`、执行任务并产出 `Report` 或失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
 
-### 角色与基础交付：交付故障分类
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `NoReceiver` | 目标不存在或当前无对应接收者的交付故障 | 不推进也不关闭原 `AwaitingReport` 状态 |
-| `NotDelivered` | 有明确证据表明调用在进入业务执行前即未交付的故障 | 不推进原 `AwaitingReport` 状态 |
-| `Unknown` | 无法排除远端已接收或已产生副作用的未决故障（超时、断线、错配、执行异常） | 禁止自动重发同一次尝试，亦不得无证关闭原 `Operation` |
-
 ---
 
 ## 会话路由与编排
@@ -76,7 +68,7 @@
 | `Command` | `Authority` 请求入口命令：`Workers`（查询视图）与 `Submit`（提交执行） | `request_id` 仅用于请求/回复关联，不提供创建幂等 |
 | `Reply` | `Authority` 对 `Command` 的关联回复，含 `request_id`、`authority` 与 `Outcome` | 按完成顺序独立返回 |
 | `Call` | 发往唯一选定 `Worker` 的调用消息，含 `pool`、`authority`、`worker`、`attempt`、`capability`、`payload` | 只携带既有 `Attempt` 授权 |
-| `WorkerResponse` | `Worker` 对单次 `Call` 的一次性响应：`Report` 或执行失败通知 `failed` | 执行期失败无法排除副作用，绝不伪造为 `Report` 或 `NotDelivered` |
+| `WorkerResponse` | `Worker` 对单次 `Call` 的一次性响应：`Report` 或执行失败通知 `failed` | 执行期失败无法排除副作用，绝不伪造为 `Report` 或执行前拒收 |
 | `DiscoveryReply` | 与发现查询关联的回复，含 `request_id` 与 `AuthorityInfo` | 同一次发现允许收到零份或多份回复 |
 
 ### 会话路由与编排：角色、状态与观测

@@ -62,7 +62,7 @@ check-ledger-model:
 check-roles-model:
     quint typecheck spec/quint/roles/roles_test.qnt
     quint test spec/quint/roles/roles_test.qnt
-    quint run spec/quint/roles/roles.qnt --main=roles --invariant=invariants --witnesses witnessAcceptedAndClosed witnessRetryWithSecondAttempt witnessUnknownKeepsAwaiting witnessOfflineWorkerReportAccepted --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
+    quint run spec/quint/roles/roles.qnt --main=roles --invariant=invariants --witnesses witnessAcceptedAndClosed witnessRetryWithSecondAttempt witnessFailureKeepsAwaiting witnessOfflineWorkerReportAccepted --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
     quint verify spec/quint/roles/roles.qnt --main=roles --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
 check-routing-model:

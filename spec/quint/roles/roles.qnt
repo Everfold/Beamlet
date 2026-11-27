@@ -1,5 +1,5 @@
 // Authority 与 Worker 的基础职责分工及单次尝试交付交互模型.
-// 仅建模 Authority(持有台账) 与 Worker(无台账执行者) 以及 DeliveryError / WorkerResponse 契约.
+// 仅建模 Authority(持有台账) 与 Worker(无台账执行者) 以及二分结果契约.
 module roles {
   type OpSlot =
     | Uncreated
@@ -9,8 +9,7 @@ module roles {
 
   type DeliveryStatus =
     | DeliveryIdle
-    | DeliveryNotDelivered
-    | DeliveryUnknown
+    | DeliveryNoReport
     | DeliveryReported
 
   type InFlightCall = {
@@ -83,14 +82,14 @@ module roles {
     lastDelivery' = lastDelivery,
   }
 
-  // 签发后遇到明确未交付(NoReceiver / NotDelivered): 不得关闭或重发, Operation 保持等待.
-  action dispatchNotDelivered(opId: int, attemptId: int, target: int): bool = all {
+  // 签发后未到达或被拒收: 不得关闭或重发, Operation 保持等待.
+  action dispatchFailedBeforeArrival(opId: int, attemptId: int, target: int): bool = all {
     opSlot.get(opId) == ReadyOp,
     not(usedAttempts.contains(attemptId)),
     opSlot' = opSlot.put(opId, AwaitingOp({ attemptId: attemptId, worker: target })),
     usedAttempts' = usedAttempts.union(Set(attemptId)),
     issuedList' = issuedList.append({ opId: opId, attemptId: attemptId, worker: target }),
-    lastDelivery' = DeliveryNotDelivered,
+    lastDelivery' = DeliveryNoReport,
     workerOnline' = workerOnline,
     inFlightCalls' = inFlightCalls,
     inFlightReports' = inFlightReports,
@@ -120,11 +119,11 @@ module roles {
     }
   }
 
-  // Worker 执行期失败(WorkerResponse::Failed): 不伪造 Report, 映射为结果未知.
+  // Worker 执行期失败: 不伪造 Report, Operation 保持等待.
   action workerFailExecution(call: InFlightCall): bool = all {
     inFlightCalls.contains(call),
     inFlightCalls' = inFlightCalls.exclude(Set(call)),
-    lastDelivery' = DeliveryUnknown,
+    lastDelivery' = DeliveryNoReport,
     opSlot' = opSlot,
     usedAttempts' = usedAttempts,
     issuedList' = issuedList,
@@ -134,7 +133,7 @@ module roles {
     acceptedReports' = acceptedReports,
   }
 
-  // 等待报告超时或断线: 结束本次等待(Unknown), 保持 Operation 为 AwaitingReport.
+  // 等待报告超时或断线: 结束本次等待, 保持 Operation 为 AwaitingReport.
   action authorityTimeoutOrDisconnect(opId: int): bool = {
     val awaiting = match opSlot.get(opId) {
       | AwaitingOp(_) => true
@@ -142,7 +141,7 @@ module roles {
     }
     all {
       awaiting,
-      lastDelivery' = DeliveryUnknown,
+      lastDelivery' = DeliveryNoReport,
       opSlot' = opSlot,
       usedAttempts' = usedAttempts,
       issuedList' = issuedList,
@@ -239,7 +238,7 @@ module roles {
     any {
       createOp(opId),
       dispatchDelivered(opId, attemptId, target),
-      dispatchNotDelivered(opId, attemptId, target),
+      dispatchFailedBeforeArrival(opId, attemptId, target),
       {
         nondet call = inFlightCalls.oneOf()
         all {
@@ -299,8 +298,8 @@ module roles {
   val witnessRetryWithSecondAttempt: bool =
     issuedList.length() == 2
 
-  val witnessUnknownKeepsAwaiting: bool =
-    lastDelivery == DeliveryUnknown and
+  val witnessFailureKeepsAwaiting: bool =
+    lastDelivery == DeliveryNoReport and
       match opSlot.get(1) {
         | AwaitingOp(_) => true
         | _ => false
