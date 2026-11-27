@@ -2,7 +2,7 @@ edition = "2026";
 
 package beamlet.v1;
 
-// Beamlet 跨角色与跨进程逻辑消息契约, 与具体实现语言及传输后端无关.
+// Beamlet Authority 与 Worker 之间的跨角色逻辑消息契约, 与具体实现语言及传输后端无关.
 // 业务请求与结果载荷统一使用 bytes 表示任意不透明数据.
 
 // Worker 自报的接收状态; 失联状态由观察方按本地单调时钟另行判定.
@@ -10,7 +10,7 @@ export enum PresenceState {
   PRESENCE_STATE_UNSPECIFIED = 0;
   // 正在接收新派发, 不表示已预留执行槽位.
   PRESENCE_STATE_ACCEPTING = 1;
-  // 已停止接收新派发, 正在排空已入队任务.
+  // 已停止接收新派发, 正在完成已接收的在途任务.
   PRESENCE_STATE_DRAINING = 2;
   // 本会话已正常退出; 重启必须更换新的 session_id.
   PRESENCE_STATE_OFFLINE = 3;
@@ -45,28 +45,10 @@ export message Presence {
   PresenceState state = 5;
 }
 
-// 从指定 Pool 与能力匹配的可用 Worker 候选中任选其一.
-export message TargetAny {}
-
-// 提交目标约束: 任选可用会话或精确锁定唯一会话.
-export message Target {
-  oneof kind {
-    TargetAny any = 1;
-    RoleSession exact = 2;
-  }
-}
-
-// 不可变业务任务描述, 贯穿 Submission、Operation 与 Dispatch 的唯一请求载体.
+// 不可变业务任务描述, 携带精确能力标识与不透明业务载荷.
 export message Task {
   string capability = 1;
   bytes payload = 2;
-}
-
-// 外部调用方提交创建请求的描述, 本身尚未创建 Operation 或签发 Attempt.
-export message Submission {
-  string pool = 1;
-  Target target = 2;
-  Task task = 3;
 }
 
 // 发往唯一选定 Worker 的派发消息, 直接携带既有 Attempt 授权与 Task.
@@ -83,36 +65,5 @@ export message DispatchReply {
   oneof kind {
     Report report = 1;
     string failed = 2;
-  }
-}
-
-// 创建 Operation 前的拒绝结果.
-export message OutcomeRejected {
-  string reason = 1;
-}
-
-// 有效 Report 已被接受且 Operation 已关闭的完成结果.
-export message OutcomeCompleted {
-  string operation_id = 1;
-  string attempt_id = 2;
-  string report_id = 3;
-  RoleSession worker = 4;
-  bytes result = 5;
-}
-
-// 已签发 Attempt 但未能取得有效 Report 的未解决结果.
-export message OutcomeUnresolved {
-  string operation_id = 1;
-  string attempt_id = 2;
-  RoleSession worker = 3;
-  string reason = 4;
-}
-
-// 对单次 Submission 的三态裁决; 未解决结果绝不伪装成 Report.
-export message Outcome {
-  oneof kind {
-    OutcomeRejected rejected = 1;
-    OutcomeCompleted completed = 2;
-    OutcomeUnresolved unresolved = 3;
   }
 }

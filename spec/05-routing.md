@@ -2,13 +2,13 @@
 
 - **下层依赖**：[04-session.md](04-session.md)
 - **逻辑消息结构**：[messages.proto](proto/beamlet/v1/messages.proto)
-- **非目标范围**：不绑定外部发现接口、用户界面查询协议、具体传输中间件或运行时并发框架。
+- **非目标范围**：不规定外部调用方接入 `Authority` 的接口形态或线协议，亦不绑定外部发现接口、具体传输中间件或运行时并发框架。
 
 ## 提交流程与三态裁决
 
 ```mermaid
 flowchart TD
-    Sub["收到外部 Submission"] --> Pick{"依据 Target 选定唯一可路由 Worker"}
+    Sub["Authority 收到 Submission"] --> Pick{"依据 Target 选定唯一可路由 Worker"}
     Pick -->|"无可用候选 [Exact 绝不回退]"| OutRej["裁决 Rejected [不创建 Operation]"]
     Pick -->|"锁定目标并签发 Attempt"| Disp["投递 Dispatch 并限时等待 DispatchReply"]
     Disp -->|"收到匹配有效 Report 并完成接受与关闭"| OutOk["裁决 Completed"]

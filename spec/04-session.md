@@ -14,7 +14,7 @@
 每个 `Authority` 在本地按分组和 `RoleSession` 独立维护 `Worker` 存活视图，不同 `Authority` 允许存在短暂视图差异：
 
 1. **会话序号与状态快照**：`Worker` 发布的 `Presence` 必须携带所属 `Pool`、自身 `RoleSession`、实际启用的精确能力列表、会话内严格递增的正整数序号 `sequence` 以及当前 `PresenceState`（`Accepting`、`Draining` 或 `Offline`）。首份有效快照即可完成登记；收到序号回退或同序号内容矛盾的公告必须拒绝。
-2. **本地租约与重放不续期**：每个 `Authority` 按自身本地单调时钟记录首次收到当前最新 `sequence` 的时间。同一份 `sequence` 快照重复到达（如重传或多路径转发）**不得**刷新首次到达时间，防止重复转发无端延长本地租约期限。
+2. **本地租约与重放不续期**：每个 `Authority` 按自身本地单调时钟记录首次收到当前最新 `sequence` 的时间。同一份 `sequence` 快照重复到达**不得**刷新首次到达时间，防止重复投递无端延长本地租约期限。
 3. **可路由判定**：仅当该会话当前处于 `Accepting` 且距最新有效 `sequence` 首次到达时间未超出本地租约期限时，该 `Worker` 会话方可视为**可路由**；收到 `Draining` 或 `Offline`、或本地租约到期后，立即退出可路由集合。
 
 ## 优雅停止与会话排空
@@ -27,12 +27,12 @@ sequenceDiagram
 
     par Authority 排空
         S->>A: 触发停止
-        A->>A: 停止新提交接入并丢弃未签发排队项
-        A->>A: 等待已签发在途派发结束
+        A->>A: 停止新提交接入并拒绝未签发提交
+        A->>A: 等待已签发的在途 Dispatch 结束
     and Worker 排空
         S->>W: 触发停止
         W->>W: 发布 Draining 状态并停止接收新 Dispatch
-        W->>W: 排空已入队任务并发送响应
+        W->>W: 完成已接收的在途 Dispatch 并发送响应
         W->>W: 发布 Offline 状态退出当前会话
     end
 ```
