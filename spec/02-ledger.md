@@ -1,7 +1,6 @@
 # Ledger 在线执行台账
 
 - **下层依赖**：[01-kernel.md](01-kernel.md)
-- **参考实现**：[beamlet-ledger](../crates/core/beamlet-ledger/src/lib.rs)
 - **非目标范围**：不涉及进程外存储、事件历史归档、角色调度、网络通信或超时控制。
 
 ## 状态结构

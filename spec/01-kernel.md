@@ -1,6 +1,5 @@
 # 原语与 Operation 内核状态机
 
-- **参考实现**：[beamlet-primitives](../crates/core/beamlet-primitives/src/lib.rs)、[beamlet-kernel](../crates/core/beamlet-kernel/src/lib.rs)
 - **非目标范围**：不执行任何 I/O 或存储，不管理多 `Operation` 集合，不保存历史已用 `Attempt` 集合，亦不决定重试或关闭策略。
 
 ## 三种核心原语

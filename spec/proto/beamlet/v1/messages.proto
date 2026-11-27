@@ -1,11 +1,11 @@
 edition = "2026";
 
-package beamlet.protocol.v3;
+package beamlet.v1;
 
-// v3 跨进程 JSON 线协议 (VERSION = 3).
-// 实际线上报文统一封装为 Envelope { version: 3, body: <message> }, 并启用未知字段拒绝.
+// Beamlet 跨角色与跨进程逻辑消息契约, 与具体传输后端及线编码格式无关.
+// 业务请求与结果载荷统一使用 bytes 表示任意不透明数据.
 
-// Worker 自报的接收状态; 失联由观察方按本地时间另行判定.
+// Worker 自报的接收状态; 失联状态由观察方按本地单调时钟另行判定.
 export enum PresenceState {
   PRESENCE_STATE_UNSPECIFIED = 0;
   // 可以尝试投递调用, 不表示已预留执行槽位.
@@ -16,20 +16,34 @@ export enum PresenceState {
   PRESENCE_STATE_OFFLINE = 3;
 }
 
+// 针对某个指定 Operation 的单次执行授权.
+export message Attempt {
+  string attempt_id = 1;
+  string operation_id = 2;
+}
+
+// 一次 Attempt 执行结束后的结果证据, 保留双引用关联.
+export message Report {
+  string report_id = 1;
+  string operation_id = 2;
+  string attempt_id = 3;
+  bytes result = 4;
+}
+
 // 持久角色 UUID 与单次运行会话 UUID 组合, 不按 UUID 大小推断新旧.
 export message RoleInstance {
   string role_id = 1;
   string session_id = 2;
 }
 
-// Authority 对外发现回复携带的实例与 pool 信息.
+// Authority 对外发现回复携带的实例与 pool 集合信息.
 export message AuthorityInfo {
   RoleInstance instance = 1;
   string label = 2;
   repeated string pools = 3;
 }
 
-// Worker 发布的完整状态快照, 首份快照即可完成登记.
+// Worker 发布的完整状态快照, 首份有效快照即可完成登记.
 export message Presence {
   string pool = 1;
   RoleInstance instance = 2;
@@ -57,21 +71,16 @@ export message Selection {
   }
 }
 
-// Authority 发现请求.
-export message Discovery {
-  string request_id = 1;
-}
-
 // Authority 发现回复.
 export message DiscoveryReply {
   string request_id = 1;
   AuthorityInfo authority = 2;
 }
 
-// v3 文本业务请求, 作为 Operation 的原始请求输入.
+// 不可变业务任务描述, 作为 Operation 的原始请求输入.
 export message Task {
   string capability = 1;
-  string text = 2;
+  bytes payload = 2;
 }
 
 // 外部调用方提交创建请求的描述, 本身尚未创建 Operation 或签发 Attempt.
@@ -120,7 +129,7 @@ export message OutcomeCompleted {
   string attempt_id = 2;
   string report_id = 3;
   RoleInstance worker = 4;
-  string result = 5;
+  bytes result = 5;
 }
 
 // 已签发 Attempt 但未能取得有效 Report 的未解决结果.
@@ -148,54 +157,20 @@ export message Reply {
   Outcome outcome = 3;
 }
 
-// 发往选定 Worker 的定向调用线格式, 仅携带既有 Attempt 授权.
-export message WorkerCall {
+// 发往唯一选定 Worker 的调用数据, 仅携带既有 Attempt 授权.
+export message Call {
   string pool = 1;
   RoleInstance authority = 2;
   RoleInstance worker = 3;
-  string operation_id = 4;
-  string attempt_id = 5;
-  Task task = 6;
+  Attempt attempt = 4;
+  string capability = 5;
+  bytes payload = 6;
 }
 
-// 完整 Report 的线格式字段.
-export message ReportData {
-  string report_id = 1;
-  string operation_id = 2;
-  string attempt_id = 3;
-  string result = 4;
-}
-
-// Worker 正常执行结束并生成完整 Report.
-export message WorkerReplyReport {
-  string pool = 1;
-  RoleInstance worker = 2;
-  ReportData report = 3;
-}
-
-// Worker 执行前校验拒绝; 在传输契约侧映射为明确未交付.
-export message WorkerReplyRejected {
-  string pool = 1;
-  RoleInstance worker = 2;
-  string operation_id = 3;
-  string attempt_id = 4;
-  string reason = 5;
-}
-
-// Worker 执行期失败且未生成 Report; 在传输契约侧映射为结果未知.
-export message WorkerReplyFailed {
-  string pool = 1;
-  RoleInstance worker = 2;
-  string operation_id = 3;
-  string attempt_id = 4;
-  string reason = 5;
-}
-
-// Worker 对单次 WorkerCall 的一次性线格式回复.
-export message WorkerReply {
+// Worker 对单次 Call 的一次性响应: 正常生成 Report 或执行期失败通知.
+export message WorkerResponse {
   oneof kind {
-    WorkerReplyReport report = 1;
-    WorkerReplyRejected rejected = 2;
-    WorkerReplyFailed failed = 3;
+    Report report = 1;
+    string failed = 2;
   }
 }

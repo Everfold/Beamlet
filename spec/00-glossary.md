@@ -2,7 +2,7 @@
 
 - **前置约定**：[00-conventions.md](00-conventions.md)
 
-仅收录真实存在于 Beamlet 架构与代码边界中的领域术语；术语按自底向上模块归位，模块内按概念角色细分。
+仅收录独立于特定语言与特定传输中间件的核心领域术语；术语按自底向上模块归位，模块内按概念角色细分。
 
 ---
 
@@ -43,7 +43,7 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `LedgerError` | `Ledger` 更新拒绝原因：`OperationExists`、`OperationNotFound`、`AttemptPending`、`NoPendingAttempt`、`OperationClosed`、`AttemptIdReused`、`ReportMismatch` | 任何失败均保留原状态，且不把被拒的未使用 `Attempt` 身份记为已用 |
-| `CreateOperationError` | `create_operation` 遇到重复身份时的错误 | 保留非 `Clone` 请求与身份，不覆盖既有条目 |
+| `CreateOperationError` | `create_operation` 遇到重复身份时的错误 | 保留原输入请求与身份，不覆盖既有条目 |
 
 ---
 
@@ -61,7 +61,7 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `WorkerResponse` | `Worker` 对单次已接收调用的一次性响应：`Report` 或 `Failed` | 执行期 `Failed` 无法排除副作用，绝不伪造为 `Report` 或未交付 |
-| `Responder` | 隐藏传输地址、消费所有权并异步完成唯一一次回复发送的回复入口 | 发送成功仅表示传输层接收回复，不证明接收端已推进状态机 |
+| `Responder` | 隐藏传输回执路径、至多消费并异步发送唯一一次回复的回复入口 | 发送成功仅表示传输层接收回复，不证明接收端已推进状态机 |
 
 ### 角色与基础交付：结果与错误
 
@@ -79,7 +79,7 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `RoleInstance` | 持久配置的 `role_id` 与单次运行生成的 `session_id` 组成的角色实例标识 | 禁止按 UUID 大小推断会话新旧 |
-| `Pool` | 大小写敏感、可用作单段路由名的逻辑隔离分组（`1..=64` 字节 ASCII 字母、数字、`-`、` _`） | 限定 `Presence` 可见域与选路范围，不修剪空白 |
+| `Pool` | 大小写敏感的逻辑隔离分组（`1..=64` 字节 ASCII 字母、数字、`-`、`_`） | 限定 `Presence` 可见域与选路范围，不修剪空白 |
 | `CapabilityId` | 按字节精确匹配的带版本能力标识（`1..=256` 字节非空字符串） | 同时约束公告声明与调用准入，无隐式版本兼容 |
 | `WorkerBinding` | 绑定到 `Worker` 实例的 `pool`、`RoleInstance` 与启用 `CapabilityId` 集合 | 不包含选人策略 |
 | `Selection` | 目标选定约束：`Any`（从同池匹配能力候选中任选其一）或 `Exact(RoleInstance)` | 每次提交至多选人一次；`Exact` 失效直接拒绝，绝不回退 |
@@ -90,7 +90,7 @@
 | --- | --- | --- |
 | `Presence` | `Worker` 发布的完整状态快照，含 `pool`、`instance`、`label`、`capabilities`、`sequence`、`state` | 会话内 `sequence` 递增；相同快照重复转发不延长租约时间 |
 | `AuthorityInfo` | `Authority` 对外发现回复携带的 `RoleInstance`、`label` 与已加入 `pools` | 仅用于发现与目标选择 |
-| `Task` | 由精确匹配的 `capability` 与泛型业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
+| `Task` | 由精确匹配的 `capability` 与不透明业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
 | `Submission` | 外部提交创建请求的描述，含 `pool`、`Selection` 与 `Task` | 仅表达提交意图，尚未创建 `Operation` 或 `Attempt` |
 | `Command` | `Authority` 请求入口命令：`Workers`（查询列表）与 `Submit`（提交执行） | `request_id` 仅作请求/回复关联，不提供创建幂等 |
 | `Reply` | `Authority` 对 `Command` 的关联回复，含 `request_id`、`authority` 与 `Outcome` | 按完成顺序独立返回 |
@@ -115,22 +115,22 @@
 
 ---
 
-## 线协议、传输与宿主
+## 抽象传输契约
 
-### 线协议、传输与宿主：v3 线协议消息（`beamlet-protocol`）
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Envelope` | 携带 `version = 3` 与具体 `body` 的外层 JSON 封装 | 严格拒绝未知字段与非 `3` 版本报文 |
-| `Discovery` / `DiscoveryReply` | v3 发现查询与包含 `AuthorityInfo` 的关联回复 | 允许在发现窗口内收集多份回复 |
-| `WorkerCall` / `ReportData` | v3 文本协议上展开字段后的调用与报告载体 | 仅在编码层把 `Attempt`/`Report` 展开并与 `String` 文本互转 |
-| `WorkerReply` | v3 线格式的 `Worker` 三态回复：`Report`、`Rejected`、`Failed` | `Rejected` 在传输契约侧映射为 `DeliveryError::NotDelivered`，`Failed` 映射为 `Unknown` |
-
-### 线协议、传输与宿主：传输与宿主容器
+### 抽象传输契约：端点接口
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Nats` | 基于 NATS 实现跨进程通信并携带连接 `epoch` 观测的传输适配器 | `Subject` 与 `RoleInstance` 仅作路由关联，不提供安全认证 |
-| `Local` | 创建隔离进程内有界路由空间、按值透传任意 Rust 类型的传输适配器 | 无需序列化与 `serde` |
-| `Host` | 统一启动并发长期任务组、广播停止并限时排空的监督容器 | 不解析领域身份、配置文件或系统信号源 |
-| `Shutdown` | `Host` 向受管任务广播的不可撤回停止通知 | 支持克隆与晚等待者；首次触发锁定全组排空截止时间 |
+| `Delivery` | 向唯一指定的 `(pool, worker)` 投递单次 `Call` 并在期限内等待匹配 `WorkerReport` 的交付接口 | 不选人、不重发，超期只终止本地等待 |
+| `WorkerInbox` | `Worker` 接收 `Incoming` 并在 `stop` 后继续保留已入队消息供排空的接收入口 | `receive` 可取消，到达末尾返回空信号 |
+| `PresenceChannel` | 读取本地 `Connection`、接收 `PresenceEvent`、发布 `Presence` 快照与刷新缓冲的公告通道 | 仅传递消息，不生成 `sequence` 或状态 |
+| `AuthorityInbox` | `Authority` 读取 `ConnectionView`、接收 `AuthorityEvent` 与触发 `probe` 的控制入口 | 独立于业务并发队列；重连必须清空旧世代缓冲 |
+| `ClientTransport` / `DiscoveryInbox` | `Client` 发起多回复 `discover` 与单次关联 `request` 的传输与发现读取接口 | 允许发现丢包，不自动重发命令 |
+
+### 抽象传输契约：控制事件与发现回复
+
+| 术语 | 定义 | 边界 |
+| --- | --- | --- |
+| `AuthorityEvent` | `AuthorityInbox` 产出的控制事件：`Connection`、`Presence`、`Discovery`、`Request` | 解耦底层协议订阅与 `Authority` 编排循环 |
+| `PresenceEvent` | `PresenceChannel` 产出的触发事件：`Probe` 或 `Connection` 变化 | 仅作重新公告触发线索 |
+| `DiscoveryReply` | 与一次发现查询关联的回复，包含 `request_id` 与 `AuthorityInfo` | 允许同一查询收到多份或零份回复 |

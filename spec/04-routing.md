@@ -1,8 +1,8 @@
 # 会话身份、Presence 租约、路由与 Client 编排
 
 - **下层依赖**：[03-roles.md](03-roles.md)
-- **参考实现**：[beamlet-api](../crates/core/beamlet-api/src/lib.rs)、[beamlet-authority](../crates/components/beamlet-authority/src/lib.rs)、[beamlet-worker](../crates/components/beamlet-worker/src/lib.rs)、[beamlet-client](../crates/components/beamlet-client/src/lib.rs)
-- **非目标范围**：不绑定具体消息中间件、具体编码线格式或宿主配置文件格式。
+- **逻辑消息结构**：[messages.proto](proto/beamlet/v1/messages.proto)
+- **非目标范围**：不绑定具体消息中间件、序列化线格式、进程运行容器或编程语言实现。
 
 ## 实例身份、Pool 与能力约束
 
