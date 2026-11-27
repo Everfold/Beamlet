@@ -8,7 +8,7 @@ module ledger {
     | Uncreated
     | Managed(State[int])
 
-  // 对应 beamlet-ledger 中的 LedgerError.
+  // 台账转换被拒绝的原因分类.
   type LedgerError =
     | OperationExists
     | OperationNotFound

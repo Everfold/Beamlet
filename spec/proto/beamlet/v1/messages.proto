@@ -30,37 +30,34 @@ export message Report {
   bytes result = 4;
 }
 
-// 持久角色 UUID 与单次运行会话 UUID 组合, 不按 UUID 大小推断新旧.
+// 持久角色标识与单次运行会话标识组合, 不按标识大小或字典序推断新旧.
 export message RoleInstance {
   string role_id = 1;
   string session_id = 2;
 }
 
-// Authority 对外发现回复携带的实例与 pool 集合信息.
+// Authority 对外发现回复携带的实例与所属 Pool 集合.
 export message AuthorityInfo {
   RoleInstance instance = 1;
-  string label = 2;
-  repeated string pools = 3;
+  repeated string pools = 2;
 }
 
 // Worker 发布的完整状态快照, 首份有效快照即可完成登记.
 export message Presence {
   string pool = 1;
   RoleInstance instance = 2;
-  string label = 3;
-  repeated string capabilities = 4;
-  uint64 sequence = 5;
-  PresenceState state = 6;
+  repeated string capabilities = 3;
+  uint64 sequence = 4;
+  PresenceState state = 5;
 }
 
 // Authority 观察到的 Worker 状态视图.
 export message WorkerView {
   Presence presence = 1;
-  uint64 last_seen_ms = 2;
-  bool stale = 3;
+  bool stale = 2;
 }
 
-// 从指定 pool 与能力匹配的可用 Worker 候选中任选其一.
+// 从指定 Pool 与能力匹配的可用 Worker 候选中任选其一.
 export message SelectionAny {}
 
 // Worker 选择策略: 任选可用实例或精确锁定唯一实例.
@@ -90,7 +87,7 @@ export message Submission {
   Task task = 3;
 }
 
-// 查询指定 pool 的 Worker 快照, 可选按能力过滤.
+// 查询指定 Pool 的 Worker 快照, 可选按能力过滤.
 export message CommandWorkers {
   string request_id = 1;
   RoleInstance authority = 2;

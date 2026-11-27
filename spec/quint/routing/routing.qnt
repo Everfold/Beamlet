@@ -69,7 +69,7 @@ module routing {
       | ActiveLease(l) => seq <= l.seq
     }
 
-  // 对齐 beamlet-authority/src/registry.rs::observe:
+  // 会话快照观测规则:
   // sequence 单调递减被拒; 同一 sequence 仅在尚未登记的来源上补充租约, 且不延长首次到达时间.
   pure def canAcceptPresence(
     linksMap: int -> LinkState,

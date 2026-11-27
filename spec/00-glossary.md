@@ -2,7 +2,7 @@
 
 - **前置约定**：[00-conventions.md](00-conventions.md)
 
-仅收录独立于特定语言与特定传输中间件的核心领域术语；术语按自底向上模块归位，模块内按概念角色细分。
+仅收录与特定编程语言、运行时和具体传输方案无关的核心领域与协议术语，按依赖顺序自底向上归位。
 
 ---
 
@@ -12,63 +12,46 @@
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Operation` | 携带固定身份 `id`、不可变原始 `request` 与三态生命周期的状态机对象 | `request` 相同而 `id` 不同属于两个独立 `Operation`；不承担网络或存储职责 |
-| `Attempt` | 针对某个指定 `Operation` 的单次执行授权，携带自身 `id` 与 `operation_id` | 重复传递同一份 `Attempt` 数据不产生新授权；自身不证明授权真实性 |
+| `Operation` | 携带固定身份 `id`、不可变原始 `request` 与三态生命周期的最小协调对象 | `request` 相同而 `id` 不同属于两个独立 `Operation`；不承担网络或存储职责 |
+| `Attempt` | 针对某个指定 `Operation` 的单次执行授权，携带自身 `id` 与所属 `operation_id` | 重复传递同一份 `Attempt` 数据不产生新授权；自身不证明授权真实性 |
 | `Report` | 一次 `Attempt` 执行结束后的结果证据，携带自身 `id`、`Attempt` 引用与 `result` | 即使 `result` 表达业务失败，对应已结束 `Attempt` 即构成合法 `Report` |
 
-### 原语与内核：状态与错误
+### 原语与内核：生命周期状态
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `OperationStatus` | `Operation` 当前生命周期阶段的只读标签：`Ready`、`AwaitingReport`、`Closed` | 三态互斥完备，待处理 `Attempt` 身份需单独读取 |
-| `Ready` | 尚未关闭且当前没有等待 `Report` 的 `Attempt` 之状态 | 既可以是新建初态，也可以是接受 `Report` 后的状态；区别于上层 `PresenceState::Ready` |
-| `AwaitingReport` | 正在唯一等待指定 `attempt_id` 对应 `Report` 的状态 | 同时至多等待一个 `Attempt`，期间禁止再签发或关闭 |
-| `Closed` | `Operation` 已显式终结的状态 | 允许幂等重复 `close`，永不回退；接受 `Report` 不会自动进入 `Closed` |
-| `AcceptReportError` | `accept_report` 校验失败时保留原等待中 `Operation` 的错误：`OperationMismatch`、`AttemptMismatch` | 调用 `into_operation` 可无损取回原 `Operation` 继续等待 |
-| `RestoreOperationError` | `restore_awaiting_report` 发现 `Attempt` 所属身份失配时的错误 | 调用 `into_parts` 可无损取回传入身份、请求与授权 |
+| `Ready` | `Operation` 尚未关闭且当前没有等待 `Report` 的 `Attempt` 之状态 | 既可以是新建初态，也可以是接受 `Report` 后的状态；区别于会话层的 `PresenceState` `Ready` |
+| `AwaitingReport` | `Operation` 正在唯一等待指定 `Attempt` 对应 `Report` 的状态 | 同时至多等待一个 `Attempt`，期间禁止再签发授权或关闭 |
+| `Closed` | `Operation` 已显式终结的状态 | 重复关闭保持幂等，永不回退；接受 `Report` 不会自动进入 `Closed` |
 
 ---
 
 ## 执行台账
 
-### 执行台账：主体与容器
+### 执行台账：状态容器
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Ledger` | 在内存中管理多个 `Operation` 当前状态并记录全局已签发 `Attempt` 身份的执行台账 | 保障跨重试与跨 `Operation` 的 `Attempt` 身份不重复；不含网络与持久化 |
-| `OperationView` | `Ledger` 对外提供的单个 `Operation` 只读借用视图 | 不暴露内部可变状态对象 |
-
-### 执行台账：错误
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `LedgerError` | `Ledger` 更新拒绝原因：`OperationExists`、`OperationNotFound`、`AttemptPending`、`NoPendingAttempt`、`OperationClosed`、`AttemptIdReused`、`ReportMismatch` | 任何失败均保留原状态，且不把被拒的未使用 `Attempt` 身份记为已用 |
-| `CreateOperationError` | `create_operation` 遇到重复身份时的错误 | 保留原输入请求与身份，不覆盖既有条目 |
+| `Ledger` | 在内存中管理多个 `Operation` 当前状态并记录全局已签发 `Attempt` 身份的状态容器 | 保障跨重试与跨 `Operation` 的 `Attempt` 身份全局不重复；不含网络与存储 |
 
 ---
 
 ## 角色与基础交付
 
-### 角色与基础交付：主体与容器
+### 角色与基础交付：协调与执行角色
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `Authority` | 持有 `Ledger`、负责创建 `Operation`、签发 `Attempt`、交付调用并验收 `Report` 的协调角色 | 不同 `Authority` 之间不共享 `Ledger` |
 | `Worker` | 接收既有 `Attempt`、执行任务并产出 `Report` 或失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
 
-### 角色与基础交付：消息与入口
+### 角色与基础交付：交付故障分类
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `WorkerResponse` | `Worker` 对单次已接收调用的一次性响应：`Report` 或 `Failed` | 执行期 `Failed` 无法排除副作用，绝不伪造为 `Report` 或未交付 |
-| `Responder` | 隐藏传输回执路径、至多消费并异步发送唯一一次回复的回复入口 | 发送成功仅表示传输层接收回复，不证明接收端已推进状态机 |
-
-### 角色与基础交付：结果与错误
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `DeliveryError` | 单次交付的可确认程度：`NoReceiver`、`NotDelivered`、`Unknown` | 不改变 `Operation` 既有等待状态；`Unknown` 禁止自动重试 |
-| `ReplyError` | `Responder` 发送唯一回复失败时包装底层原因的错误 | 保留原始错误链，不自动重试 |
+| `NoReceiver` | 目标不存在或当前无对应接收者的交付故障 | 不推进也不关闭原 `AwaitingReport` 状态 |
+| `NotDelivered` | 有明确证据表明调用在进入业务执行前即未交付的故障 | 不推进原 `AwaitingReport` 状态 |
+| `Unknown` | 无法排除远端已接收或已产生副作用的未决故障（超时、断线、错配、执行异常） | 禁止自动重发同一次尝试，亦不得无证关闭原 `Operation` |
 
 ---
 
@@ -78,59 +61,35 @@
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `RoleInstance` | 持久配置的 `role_id` 与单次运行生成的 `session_id` 组成的角色实例标识 | 禁止按 UUID 大小推断会话新旧 |
-| `Pool` | 大小写敏感的逻辑隔离分组（`1..=64` 字节 ASCII 字母、数字、`-`、`_`） | 限定 `Presence` 可见域与选路范围，不修剪空白 |
-| `CapabilityId` | 按字节精确匹配的带版本能力标识（`1..=256` 字节非空字符串） | 同时约束公告声明与调用准入，无隐式版本兼容 |
-| `WorkerBinding` | 绑定到 `Worker` 实例的 `pool`、`RoleInstance` 与启用 `CapabilityId` 集合 | 不包含选人策略 |
-| `Selection` | 目标选定约束：`Any`（从同池匹配能力候选中任选其一）或 `Exact(RoleInstance)` | 每次提交至多选人一次；`Exact` 失效直接拒绝，绝不回退 |
+| `RoleInstance` | 持久角色标识 `role_id` 与单次运行会话标识 `session_id` 的二元组合 | 禁止按标识值大小或字典序推断会话新旧 |
+| `Pool` | 大小写敏感的精确逻辑隔离分组 | 限定 `Presence` 可见域与选路候选范围，不修剪或改写 |
+| `Selection` | 目标选定约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleInstance`） | 每次提交至多选人一次；`Exact` 失效直接拒绝，绝不回退 |
 
-### 会话路由与编排：载体与消息
+### 会话路由与编排：消息载体
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Presence` | `Worker` 发布的完整状态快照，含 `pool`、`instance`、`label`、`capabilities`、`sequence`、`state` | 会话内 `sequence` 递增；相同快照重复转发不延长租约时间 |
-| `AuthorityInfo` | `Authority` 对外发现回复携带的 `RoleInstance`、`label` 与已加入 `pools` | 仅用于发现与目标选择 |
-| `Task` | 由精确匹配的 `capability` 与不透明业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
+| `Presence` | `Worker` 发布的完整状态快照，含 `pool`、`instance`、`capabilities`、`sequence`、`state` | 会话内 `sequence` 递增；相同快照经他路重复转发不延长租约时间 |
+| `AuthorityInfo` | `Authority` 对外发现回复携带的 `instance` 与所属 `pools` | 仅用于发现与选定目标 |
+| `Task` | 由精确匹配的能力标识与不透明业务输入 `payload` 构成的不可变任务内容 | 作为创建 `Operation` 时的原始请求 |
 | `Submission` | 外部提交创建请求的描述，含 `pool`、`Selection` 与 `Task` | 仅表达提交意图，尚未创建 `Operation` 或 `Attempt` |
-| `Command` | `Authority` 请求入口命令：`Workers`（查询列表）与 `Submit`（提交执行） | `request_id` 仅作请求/回复关联，不提供创建幂等 |
+| `Command` | `Authority` 请求入口命令：`Workers`（查询视图）与 `Submit`（提交执行） | `request_id` 仅用于请求/回复关联，不提供创建幂等 |
 | `Reply` | `Authority` 对 `Command` 的关联回复，含 `request_id`、`authority` 与 `Outcome` | 按完成顺序独立返回 |
-| `Call` | 发往选定 `Worker` 的调用数据，含 `pool`、`authority`、`worker`、`attempt`、`capability`、`payload` | 只携带既有 `Attempt` 授权 |
-| `Incoming` | 传输层交由 `Worker` 处理的单次接收单元，由 `Call` 与一次性 `Responder` 组成 | 回复入口专属于本次调用 |
+| `Call` | 发往唯一选定 `Worker` 的调用消息，含 `pool`、`authority`、`worker`、`attempt`、`capability`、`payload` | 只携带既有 `Attempt` 授权 |
+| `WorkerResponse` | `Worker` 对单次 `Call` 的一次性响应：`Report` 或执行失败通知 `failed` | 执行期失败无法排除副作用，绝不伪造为 `Report` 或 `NotDelivered` |
+| `DiscoveryReply` | 与发现查询关联的回复，含 `request_id` 与 `AuthorityInfo` | 同一次发现允许收到零份或多份回复 |
 
-### 会话路由与编排：主体、状态与观测
+### 会话路由与编排：角色、状态与观测
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Client` | 驱动外部发现、`Workers` 查询与 `Submit` 请求并校关联回复的客户端组件 | 不保存可变选择快照，请求只交付传输一次 |
+| `Client` | 发起发现、查询与提交并校验关联回复的调用方角色 | 不保存全局可变选择，提交只投递一次 |
 | `PresenceState` | `Worker` 自报接收状态：`Ready`、`Draining`、`Offline` | 失联标记由观察方按本地单调时钟另行判定；`Ready` 不预留并发槽位 |
-| `Connection` | 传输端点暴露的本地连接世代 `epoch` 与布尔状态 `connected`（只读视图为 `ConnectionView`） | 每次断线或重连推进 `epoch` 后，绑定于旧 `epoch` 的租约立即失效 |
-| `WorkerView` | `Authority` 对某个 `Worker` 会话的本地观测视图，含 `presence`、`last_seen_ms`、`stale` | `last_seen_ms` 与 `stale` 按 `Authority` 本地单调时钟即时计算 |
+| `Connection` | 观测方读取的底层连接视图，包含单调递增连接世代 `epoch` 与布尔状态 `connected` | 每次断线或重连推进 `epoch` 后，旧 `epoch` 租约立即失效 |
+| `WorkerView` | `Authority` 对某个 `Worker` 会话的本地观测视图，含 `presence` 与 `stale` | `stale` 按 `Authority` 本地单调时钟与连接状态即时判定 |
 
-### 会话路由与编排：结果与错误
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `Outcome` | `Authority` 对外返回的四态结果：`Rejected`、`Workers`、`Completed`、`Unresolved` | `Rejected` 表示未创建 `Operation`；`Unresolved` 表示已签发但未取得有效 `Report` |
-| `TransportError` | 传输入口或底层连接失败的包装错误 | 保留底层原因链，不自动重试 |
-
----
-
-## 抽象传输契约
-
-### 抽象传输契约：端点接口
+### 会话路由与编排：结果裁决
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Delivery` | 向唯一指定的 `(pool, worker)` 投递单次 `Call` 并在期限内等待匹配 `WorkerReport` 的交付接口 | 不选人、不重发，超期只终止本地等待 |
-| `WorkerInbox` | `Worker` 接收 `Incoming` 并在 `stop` 后继续保留已入队消息供排空的接收入口 | `receive` 可取消，到达末尾返回空信号 |
-| `PresenceChannel` | 读取本地 `Connection`、接收 `PresenceEvent`、发布 `Presence` 快照与刷新缓冲的公告通道 | 仅传递消息，不生成 `sequence` 或状态 |
-| `AuthorityInbox` | `Authority` 读取 `ConnectionView`、接收 `AuthorityEvent` 与触发 `probe` 的控制入口 | 独立于业务并发队列；重连必须清空旧世代缓冲 |
-| `ClientTransport` / `DiscoveryInbox` | `Client` 发起多回复 `discover` 与单次关联 `request` 的传输与发现读取接口 | 允许发现丢包，不自动重发命令 |
-
-### 抽象传输契约：控制事件与发现回复
-
-| 术语 | 定义 | 边界 |
-| --- | --- | --- |
-| `AuthorityEvent` | `AuthorityInbox` 产出的控制事件：`Connection`、`Presence`、`Discovery`、`Request` | 解耦底层协议订阅与 `Authority` 编排循环 |
-| `PresenceEvent` | `PresenceChannel` 产出的触发事件：`Probe` 或 `Connection` 变化 | 仅作重新公告触发线索 |
-| `DiscoveryReply` | 与一次发现查询关联的回复，包含 `request_id` 与 `AuthorityInfo` | 允许同一查询收到多份或零份回复 |
+| `Outcome` | `Authority` 对外返回的四态裁决：`Rejected`、`Workers`、`Completed`、`Unresolved` | `Rejected` 承诺未创建 `Operation`；`Completed` 必对应已验收 `Report`；`Unresolved` 保持原 `AwaitingReport` |
