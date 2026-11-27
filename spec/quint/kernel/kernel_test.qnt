@@ -5,7 +5,7 @@ module kernel_test {
   import kernel.* from "./kernel"
 
   pure val STATES: Set[State[int]] =
-    Set(Ready, Closed).union(ATTEMPT_IDS.map(id => AwaitingReport(id)))
+    Set(Idle, Closed).union(ATTEMPT_IDS.map(id => AwaitingReport(id)))
 
   // 内容相同而身份不同的 Operation 是彼此独立的实例.
   run distinctOperationsTest = assert(
@@ -16,7 +16,7 @@ module kernel_test {
   run creationRulesTest = assert(
     STATES.forall(s => ATTEMPT_IDS.forall(id =>
       createAttempt(s, 1, id) == match s {
-        | Ready =>
+        | Idle =>
             Created({
               attempt: makeAttempt(1, id),
               state: AwaitingReport(id),
@@ -31,12 +31,12 @@ module kernel_test {
   run reportRulesTest = assert(
     STATES.forall(s => OPERATION_IDS.forall(o => ATTEMPT_IDS.forall(a =>
       acceptReport(s, 1, makeReport(1, o, a, "result")) == match s {
-        | Ready => Rejected(NoPendingAttempt)
+        | Idle => Rejected(NoPendingAttempt)
         | Closed => Rejected(OperationClosed)
         | AwaitingReport(pending) =>
             if (o != 1) Rejected(OperationMismatch)
             else if (a != pending) Rejected(AttemptMismatch)
-            else Updated(Ready)
+            else Updated(Idle)
       }
     )))
   )
@@ -45,7 +45,7 @@ module kernel_test {
   run closeRulesTest = assert(
     STATES.forall(s =>
       close(s) == match s {
-        | Ready => Updated(Closed)
+        | Idle => Updated(Closed)
         | Closed => Updated(Closed)
         | AwaitingReport(_) => Rejected(AttemptPending)
       }

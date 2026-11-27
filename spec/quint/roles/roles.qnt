@@ -1,9 +1,9 @@
-// Authority 与 Worker 的基础职责分工及单次尝试交付交互模型.
+// Authority 与 Worker 的基础职责分工及单次尝试派发交互模型.
 // 仅建模 Authority(持有台账) 与 Worker(无台账执行者) 以及二分结果契约.
 module roles {
   type OpSlot =
     | Uncreated
-    | ReadyOp
+    | IdleOp
     | AwaitingOp({ attemptId: int, worker: int })
     | ClosedOp
 
@@ -12,7 +12,7 @@ module roles {
     | DeliveryNoReport
     | DeliveryReported
 
-  type InFlightCall = {
+  type InFlightDispatch = {
     opId: int,
     attemptId: int,
     worker: int,
@@ -35,7 +35,7 @@ module roles {
   var usedAttempts: Set[int]
   var issuedList: List[{ opId: int, attemptId: int, worker: int }]
   var workerOnline: int -> bool
-  var inFlightCalls: Set[InFlightCall]
+  var inFlightDispatches: Set[InFlightDispatch]
   var inFlightReports: Set[ReportRecord]
   var authenticReports: Set[ReportRecord]
   var acceptedReports: Set[ReportRecord]
@@ -46,35 +46,35 @@ module roles {
     usedAttempts' = Set(),
     issuedList' = List(),
     workerOnline' = WORKERS.mapBy(_ => true),
-    inFlightCalls' = Set(),
+    inFlightDispatches' = Set(),
     inFlightReports' = Set(),
     authenticReports' = Set(),
     acceptedReports' = Set(),
     lastDelivery' = DeliveryIdle,
   }
 
-  // Authority 创建 Operation (初始 Ready).
+  // Authority 创建 Operation (初始 Idle).
   action createOp(opId: int): bool = all {
     opSlot.get(opId) == Uncreated,
-    opSlot' = opSlot.put(opId, ReadyOp),
+    opSlot' = opSlot.put(opId, IdleOp),
     usedAttempts' = usedAttempts,
     issuedList' = issuedList,
     workerOnline' = workerOnline,
-    inFlightCalls' = inFlightCalls,
+    inFlightDispatches' = inFlightDispatches,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
     acceptedReports' = acceptedReports,
     lastDelivery' = lastDelivery,
   }
 
-  // Authority 签发未使用 Attempt 并向目标 Worker 投递.
+  // Authority 签发未使用 Attempt 并向目标 Worker 派发.
   action dispatchDelivered(opId: int, attemptId: int, target: int): bool = all {
-    opSlot.get(opId) == ReadyOp,
+    opSlot.get(opId) == IdleOp,
     not(usedAttempts.contains(attemptId)),
     opSlot' = opSlot.put(opId, AwaitingOp({ attemptId: attemptId, worker: target })),
     usedAttempts' = usedAttempts.union(Set(attemptId)),
     issuedList' = issuedList.append({ opId: opId, attemptId: attemptId, worker: target }),
-    inFlightCalls' = inFlightCalls.union(Set({ opId: opId, attemptId: attemptId, worker: target })),
+    inFlightDispatches' = inFlightDispatches.union(Set({ opId: opId, attemptId: attemptId, worker: target })),
     workerOnline' = workerOnline,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
@@ -84,30 +84,30 @@ module roles {
 
   // 签发后未到达或被拒收: 不得关闭或重发, Operation 保持等待.
   action dispatchFailedBeforeArrival(opId: int, attemptId: int, target: int): bool = all {
-    opSlot.get(opId) == ReadyOp,
+    opSlot.get(opId) == IdleOp,
     not(usedAttempts.contains(attemptId)),
     opSlot' = opSlot.put(opId, AwaitingOp({ attemptId: attemptId, worker: target })),
     usedAttempts' = usedAttempts.union(Set(attemptId)),
     issuedList' = issuedList.append({ opId: opId, attemptId: attemptId, worker: target }),
     lastDelivery' = DeliveryNoReport,
     workerOnline' = workerOnline,
-    inFlightCalls' = inFlightCalls,
+    inFlightDispatches' = inFlightDispatches,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
     acceptedReports' = acceptedReports,
   }
 
   // Worker 执行收到的既有 Attempt 并产出完整 Report; 不得擅自签发新 Attempt.
-  action workerProduceReport(call: InFlightCall): bool = {
+  action workerProduceReport(dispatched: InFlightDispatch): bool = {
     val rep = {
-      reportId: call.attemptId,
-      opId: call.opId,
-      attemptId: call.attemptId,
-      worker: call.worker,
+      reportId: dispatched.attemptId,
+      opId: dispatched.opId,
+      attemptId: dispatched.attemptId,
+      worker: dispatched.worker,
     }
     all {
-      inFlightCalls.contains(call),
-      inFlightCalls' = inFlightCalls.exclude(Set(call)),
+      inFlightDispatches.contains(dispatched),
+      inFlightDispatches' = inFlightDispatches.exclude(Set(dispatched)),
       inFlightReports' = inFlightReports.union(Set(rep)),
       authenticReports' = authenticReports.union(Set(rep)),
       opSlot' = opSlot,
@@ -120,9 +120,9 @@ module roles {
   }
 
   // Worker 执行期失败: 不伪造 Report, Operation 保持等待.
-  action workerFailExecution(call: InFlightCall): bool = all {
-    inFlightCalls.contains(call),
-    inFlightCalls' = inFlightCalls.exclude(Set(call)),
+  action workerFailExecution(dispatched: InFlightDispatch): bool = all {
+    inFlightDispatches.contains(dispatched),
+    inFlightDispatches' = inFlightDispatches.exclude(Set(dispatched)),
     lastDelivery' = DeliveryNoReport,
     opSlot' = opSlot,
     usedAttempts' = usedAttempts,
@@ -146,7 +146,7 @@ module roles {
       usedAttempts' = usedAttempts,
       issuedList' = issuedList,
       workerOnline' = workerOnline,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       inFlightReports' = inFlightReports,
       authenticReports' = authenticReports,
       acceptedReports' = acceptedReports,
@@ -169,7 +169,7 @@ module roles {
       usedAttempts' = usedAttempts,
       issuedList' = issuedList,
       workerOnline' = workerOnline,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       authenticReports' = authenticReports,
       acceptedReports' = acceptedReports,
       lastDelivery' = lastDelivery,
@@ -183,7 +183,7 @@ module roles {
       | AwaitingOp(a) => (rep.attemptId == a.attemptId and rep.worker == a.worker)
       | _ => false
     }
-    val nextSlot = if (valid) ReadyOp else cur
+    val nextSlot = if (valid) IdleOp else cur
     val nextAccepted = if (valid) acceptedReports.union(Set(rep)) else acceptedReports
     val nextDelivery = if (valid) DeliveryReported else lastDelivery
     all {
@@ -195,22 +195,22 @@ module roles {
       usedAttempts' = usedAttempts,
       issuedList' = issuedList,
       workerOnline' = workerOnline,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       authenticReports' = authenticReports,
     }
   }
 
-  // Authority 仅在 ReadyOp (未等待或已验收 Report) 时可关闭 Operation.
+  // Authority 仅在 IdleOp (未等待或已验收 Report) 时可关闭 Operation.
   action authorityClose(opId: int): bool = {
     val cur = opSlot.get(opId)
-    val canClose = (cur == ReadyOp or cur == ClosedOp)
+    val canClose = (cur == IdleOp or cur == ClosedOp)
     all {
       canClose,
       opSlot' = opSlot.put(opId, ClosedOp),
       usedAttempts' = usedAttempts,
       issuedList' = issuedList,
       workerOnline' = workerOnline,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       inFlightReports' = inFlightReports,
       authenticReports' = authenticReports,
       acceptedReports' = acceptedReports,
@@ -224,7 +224,7 @@ module roles {
     opSlot' = opSlot,
     usedAttempts' = usedAttempts,
     issuedList' = issuedList,
-    inFlightCalls' = inFlightCalls,
+    inFlightDispatches' = inFlightDispatches,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
     acceptedReports' = acceptedReports,
@@ -240,17 +240,17 @@ module roles {
       dispatchDelivered(opId, attemptId, target),
       dispatchFailedBeforeArrival(opId, attemptId, target),
       {
-        nondet call = inFlightCalls.oneOf()
+        nondet dispatched = inFlightDispatches.oneOf()
         all {
-          inFlightCalls.size() > 0,
-          workerProduceReport(call),
+          inFlightDispatches.size() > 0,
+          workerProduceReport(dispatched),
         }
       },
       {
-        nondet call = inFlightCalls.oneOf()
+        nondet dispatched = inFlightDispatches.oneOf()
         all {
-          inFlightCalls.size() > 0,
-          workerFailExecution(call),
+          inFlightDispatches.size() > 0,
+          workerFailExecution(dispatched),
         }
       },
       authorityTimeoutOrDisconnect(opId),

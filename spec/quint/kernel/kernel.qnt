@@ -18,9 +18,9 @@ module kernel {
   var reportInput: ReportInput
 
   action init: bool = all {
-    state' = Ready,
-    previous' = Ready,
-    outcome' = Updated(Ready),
+    state' = Idle,
+    previous' = Idle,
+    outcome' = Updated(Idle),
     used' = Set(),
     reportInput' = NoReport,
   }
@@ -39,9 +39,9 @@ module kernel {
     },
   }
 
-  // Ready 时外层提供未使用 Attempt 身份; 非 Ready 时模拟非法触发以验证拒绝语义.
+  // Idle 时外层提供未使用 Attempt 身份; 非 Idle 时模拟非法触发以验证拒绝语义.
   action createAction(attemptId: int): bool = all {
-    state != Ready or not(used.contains(attemptId)),
+    state != Idle or not(used.contains(attemptId)),
     applyOutcome(createAttempt(state, CURRENT_OP.id, attemptId), NoReport),
   }
 
@@ -75,22 +75,22 @@ module kernel {
       | _ => true
     }
 
-  // 进入 Closed 后不再回到 Ready 或 AwaitingReport.
+  // 进入 Closed 后不再回到 Idle 或 AwaitingReport.
   val closedStaysClosed: bool =
     previous != Closed or state == Closed
 
-  // CreateAttempt 仅在 Ready 成功, 且授权与等待状态一致.
+  // CreateAttempt 仅在 Idle 成功, 且授权与等待状态一致.
   val creationIsConsistent: bool =
     match outcome {
       | Created(created) => and {
-          previous == Ready,
+          previous == Idle,
           created.attempt.operation_id == CURRENT_OP.id,
           state == AwaitingReport(created.attempt.id),
         }
       | _ => true
     }
 
-  // AcceptReport 仅在 AwaitingReport 且双身份均匹配时成功并回到 Ready.
+  // AcceptReport 仅在 AwaitingReport 且双身份均匹配时成功并回到 Idle.
   val reportAcceptanceIsValid: bool =
     match reportInput {
       | NoReport => true
@@ -103,8 +103,8 @@ module kernel {
                   | AwaitingReport(pending) => and {
                       ev.operation_id == CURRENT_OP.id,
                       ev.attempt_id == pending,
-                      newState == Ready,
-                      state == Ready,
+                      newState == Idle,
+                      state == Idle,
                     }
                   | _ => false
                 }
@@ -129,7 +129,7 @@ module kernel {
       | NoReport => false
       | SubmittedReport(_) =>
           match outcome {
-            | Updated(newState) => newState == Ready
+            | Updated(newState) => newState == Idle
             | _ => false
           }
     }

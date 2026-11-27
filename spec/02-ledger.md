@@ -10,7 +10,7 @@
 ```mermaid
 flowchart LR
     subgraph Ledger["Ledger 状态空间"]
-        OPS["在线 Operation 映射表 [Ready / AwaitingReport / Closed]"]
+        OPS["在线 Operation 映射表 [Idle / AwaitingReport / Closed]"]
         USED["全局已签发 Attempt 身份集合"]
     end
 
@@ -28,15 +28,15 @@ flowchart TD
     FindOp -->|"不存在"| E1["拒绝: 目标不存在"]
     FindOp -->|"AwaitingReport"| E2["拒绝: 已有在途 Attempt"]
     FindOp -->|"Closed"| E3["拒绝: Operation 已关闭"]
-    FindOp -->|"Ready"| Used{"该 Attempt 身份是否已签发 ?"}
+    FindOp -->|"Idle"| Used{"该 Attempt 身份是否已签发 ?"}
     Used -->|"是"| E4["拒绝: Attempt 身份已被复用"]
     Used -->|"否"| OK["委派内核签发, 记录新身份并转入 AwaitingReport"]
 ```
 
-- **登记新 `Operation`**：仅当目标身份尚不存在时插入初始 `Ready` 条目；若已存在必须拒绝并保留原条目与原请求不变，绝不覆盖。
-- **签发 `Attempt`**：仅当目标处于 `Ready` 且待签发身份未出现在已签发集合中时成功；任意原因拒绝均不得修改原条目，亦不得把当前被拒的未使用身份写入已签发集合。
-- **接受 `Report`**：按 `Report` 关联的 `Operation` 身份查找条目；目标不存在、处于 `Ready` 或已 `Closed` 均拒绝；处于 `AwaitingReport` 时委托内核校验，失配时保留原等待态不变。
-- **关闭 `Operation`**：`Ready` 转为 `Closed`；已 `Closed` 幂等成功；处于 `AwaitingReport` 时拒绝。
+- **登记新 `Operation`**：仅当目标身份尚不存在时插入初始 `Idle` 条目；若已存在必须拒绝并保留原条目与原请求不变，绝不覆盖。
+- **签发 `Attempt`**：仅当目标处于 `Idle` 且待签发身份未出现在已签发集合中时成功；任意原因拒绝均不得修改原条目，亦不得把当前被拒的未使用身份写入已签发集合。
+- **接受 `Report`**：按 `Report` 关联的 `Operation` 身份查找条目；目标不存在、处于 `Idle` 或已 `Closed` 均拒绝；处于 `AwaitingReport` 时委托内核校验，失配时保留原等待态不变。
+- **关闭 `Operation`**：`Idle` 转为 `Closed`；已 `Closed` 幂等成功；处于 `AwaitingReport` 时拒绝。
 - **只读查询**：允许外部按身份读取当前 `Operation` 的只读状态，不暴露可绕过约束的内部可变状态。
 
 ## 关键不变量

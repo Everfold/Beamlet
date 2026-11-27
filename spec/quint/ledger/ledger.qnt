@@ -39,14 +39,14 @@ module ledger {
   pure val OPERATION_IDS = Set(1, 2)
   pure val ATTEMPT_IDS = Set(1, 2, 3)
 
-  // 创建 Ready Operation; 身份已存在则拒绝且不覆盖原记录.
+  // 创建 Idle Operation; 身份已存在则拒绝且不覆盖原记录.
   pure def ledgerCreateOperation(state: LedgerState, opId: int): LedgerResult =
     match state.entries.get(opId) {
       | Uncreated =>
           {
             ledger: {
               ...state,
-              entries: state.entries.put(opId, Managed(Ready)),
+              entries: state.entries.put(opId, Managed(Idle)),
             },
             event: LedgerCreatedOp(opId),
           }
@@ -57,7 +57,7 @@ module ledger {
           }
     }
 
-  // 为 Ready Operation 签发未使用的 Attempt; 任何拒绝均不污染 usedAttempts.
+  // 为 Idle Operation 签发未使用的 Attempt; 任何拒绝均不污染 usedAttempts.
   pure def ledgerCreateAttempt(
     state: LedgerState,
     opId: int,
@@ -71,7 +71,7 @@ module ledger {
                 { ledger: state, event: LedgerErr(AttemptPendingErr) }
             | Closed =>
                 { ledger: state, event: LedgerErr(OperationClosedErr) }
-            | Ready =>
+            | Idle =>
                 if (state.usedAttempts.contains(attemptId))
                   { ledger: state, event: LedgerErr(AttemptIdReused) }
                 else
@@ -99,7 +99,7 @@ module ledger {
       | Uncreated => { ledger: state, event: LedgerErr(OperationNotFound) }
       | Managed(opState) =>
           match opState {
-            | Ready =>
+            | Idle =>
                 { ledger: state, event: LedgerErr(NoPendingAttemptErr) }
             | Closed =>
                 { ledger: state, event: LedgerErr(OperationClosedErr) }
@@ -124,7 +124,7 @@ module ledger {
           }
     }
 
-  // 关闭 Ready 或幂等关闭 Closed Operation; 等待中时拒绝.
+  // 关闭 Idle 或幂等关闭 Closed Operation; 等待中时拒绝.
   pure def ledgerClose(state: LedgerState, opId: int): LedgerResult =
     match state.entries.get(opId) {
       | Uncreated => { ledger: state, event: LedgerErr(OperationNotFound) }

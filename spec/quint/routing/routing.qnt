@@ -1,8 +1,8 @@
-// 目标选定(Selection::Any / Exact)、定向调用与三态提交裁决(Outcome)协议模型.
+// 目标约束(Target Any / Exact)、派发(Dispatch)与三态裁决(Outcome)协议模型.
 module routing {
-  type SelectionKind =
-    | SelectAny
-    | SelectExact(int)
+  type TargetKind =
+    | TargetAnyKind
+    | TargetExactKind(int)
 
   type OpEntry =
     | OpNone
@@ -15,7 +15,7 @@ module routing {
     | SubUnresolved({ opId: int, attemptId: int, worker: int })
     | SubCompleted({ opId: int, attemptId: int, reportId: int, worker: int })
 
-  type CallMsg = {
+  type DispatchMsg = {
     opId: int,
     attemptId: int,
     worker: int,
@@ -36,9 +36,9 @@ module routing {
   var workerRoutable: int -> bool
   var opEntry: int -> OpEntry
   var subOutcome: int -> SubOutcome
-  var subSelection: int -> SelectionKind
+  var subTarget: int -> TargetKind
   var attemptCount: int -> int
-  var inFlightCalls: Set[CallMsg]
+  var inFlightDispatches: Set[DispatchMsg]
   var inFlightReports: Set[ReportMsg]
   var authenticReports: Set[ReportMsg]
 
@@ -46,9 +46,9 @@ module routing {
     workerRoutable' = WORKERS.mapBy(_ => true),
     opEntry' = SUBMISSIONS.mapBy(_ => OpNone),
     subOutcome' = SUBMISSIONS.mapBy(_ => SubIdle),
-    subSelection' = SUBMISSIONS.mapBy(_ => SelectAny),
+    subTarget' = SUBMISSIONS.mapBy(_ => TargetAnyKind),
     attemptCount' = SUBMISSIONS.mapBy(_ => 0),
-    inFlightCalls' = Set(),
+    inFlightDispatches' = Set(),
     inFlightReports' = Set(),
     authenticReports' = Set(),
   }
@@ -57,9 +57,9 @@ module routing {
     workerRoutable' = workerRoutable.put(target, not(workerRoutable.get(target))),
     opEntry' = opEntry,
     subOutcome' = subOutcome,
-    subSelection' = subSelection,
+    subTarget' = subTarget,
     attemptCount' = attemptCount,
-    inFlightCalls' = inFlightCalls,
+    inFlightDispatches' = inFlightDispatches,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
   }
@@ -68,17 +68,17 @@ module routing {
   action submitExact(subId: int, target: int): bool = all {
     subOutcome.get(subId) == SubIdle,
     opEntry.get(subId) == OpNone,
-    subSelection' = subSelection.put(subId, SelectExact(target)),
+    subTarget' = subTarget.put(subId, TargetExactKind(target)),
     if (workerRoutable.get(target)) all {
       opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: target })),
       subOutcome' = subOutcome,
       attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
-      inFlightCalls' = inFlightCalls.union(Set({ opId: subId, attemptId: subId, worker: target })),
+      inFlightDispatches' = inFlightDispatches.union(Set({ opId: subId, attemptId: subId, worker: target })),
     } else all {
       opEntry' = opEntry,
       subOutcome' = subOutcome.put(subId, SubRejected),
       attemptCount' = attemptCount,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
     },
     workerRoutable' = workerRoutable,
     inFlightReports' = inFlightReports,
@@ -89,48 +89,48 @@ module routing {
   action submitAny(subId: int): bool = all {
     subOutcome.get(subId) == SubIdle,
     opEntry.get(subId) == OpNone,
-    subSelection' = subSelection.put(subId, SelectAny),
+    subTarget' = subTarget.put(subId, TargetAnyKind),
     if (WORKERS.exists(w => workerRoutable.get(w))) {
       nondet picked = WORKERS.filter(w => workerRoutable.get(w)).oneOf()
       all {
         opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: picked })),
         subOutcome' = subOutcome,
         attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
-        inFlightCalls' = inFlightCalls.union(Set({ opId: subId, attemptId: subId, worker: picked })),
+        inFlightDispatches' = inFlightDispatches.union(Set({ opId: subId, attemptId: subId, worker: picked })),
       }
     } else all {
       opEntry' = opEntry,
       subOutcome' = subOutcome.put(subId, SubRejected),
       attemptCount' = attemptCount,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
     },
     workerRoutable' = workerRoutable,
     inFlightReports' = inFlightReports,
     authenticReports' = authenticReports,
   }
 
-  // Worker 正常执行并返回完整 Report (允许此时 Worker 已退出可路由状态).
-  action workerReplyReport(call: CallMsg): bool = {
+  // Worker 正常执行并返回 DispatchReply::Report (允许此时 Worker 已退出可路由状态).
+  action workerReplyReport(msg: DispatchMsg): bool = {
     val rep = {
-      reportId: call.opId,
-      opId: call.opId,
-      attemptId: call.attemptId,
-      worker: call.worker,
+      reportId: msg.opId,
+      opId: msg.opId,
+      attemptId: msg.attemptId,
+      worker: msg.worker,
     }
     all {
-      inFlightCalls.contains(call),
-      inFlightCalls' = inFlightCalls.exclude(Set(call)),
+      inFlightDispatches.contains(msg),
+      inFlightDispatches' = inFlightDispatches.exclude(Set(msg)),
       inFlightReports' = inFlightReports.union(Set(rep)),
       authenticReports' = authenticReports.union(Set(rep)),
       workerRoutable' = workerRoutable,
       opEntry' = opEntry,
       subOutcome' = subOutcome,
-      subSelection' = subSelection,
+      subTarget' = subTarget,
       attemptCount' = attemptCount,
     }
   }
 
-  // Worker 执行期失败或交付未达/超时: 裁决 Unresolved 且保持 OpAwaiting.
+  // Worker 执行期失败通知(DispatchReply::failed)或未达/超时: 裁决 Unresolved 且保持 OpAwaiting.
   action authorityTimeoutOrFailed(subId: int): bool = {
     val canResolve = match opEntry.get(subId) {
       | OpAwaiting(_) => subOutcome.get(subId) == SubIdle
@@ -149,9 +149,9 @@ module routing {
       subOutcome' = subOutcome.put(subId, nextOutcome),
       workerRoutable' = workerRoutable,
       opEntry' = opEntry,
-      subSelection' = subSelection,
+      subTarget' = subTarget,
       attemptCount' = attemptCount,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       inFlightReports' = inFlightReports,
       authenticReports' = authenticReports,
     }
@@ -172,14 +172,14 @@ module routing {
       workerRoutable' = workerRoutable,
       opEntry' = opEntry,
       subOutcome' = subOutcome,
-      subSelection' = subSelection,
+      subTarget' = subTarget,
       attemptCount' = attemptCount,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       authenticReports' = authenticReports,
     }
   }
 
-  // Authority 收取 Report: 核对 Operation、Attempt 与锁定目标一致, 不依赖当前可路由性.
+  // Authority 验收 Report: 核对 Operation、Attempt 与锁定目标一致, 不依赖当前可路由性.
   action authorityReceiveReport(rep: ReportMsg): bool = {
     val curOp = opEntry.get(rep.opId)
     val matched = match curOp {
@@ -199,9 +199,9 @@ module routing {
       opEntry' = opEntry.put(rep.opId, nextOp),
       subOutcome' = subOutcome.put(rep.opId, nextOutcome),
       workerRoutable' = workerRoutable,
-      subSelection' = subSelection,
+      subTarget' = subTarget,
       attemptCount' = attemptCount,
-      inFlightCalls' = inFlightCalls,
+      inFlightDispatches' = inFlightDispatches,
       authenticReports' = authenticReports,
     }
   }
@@ -221,10 +221,10 @@ module routing {
       submitAny(subId)
     },
     {
-      nondet call = inFlightCalls.oneOf()
+      nondet msg = inFlightDispatches.oneOf()
       all {
-        inFlightCalls.size() > 0,
-        workerReplyReport(call),
+        inFlightDispatches.size() > 0,
+        workerReplyReport(msg),
       }
     },
     {
@@ -245,12 +245,12 @@ module routing {
     },
   }
 
-  // Exact 选择绝不回退, Rejected 时不创建 Operation.
+  // Exact 目标绝不回退, Rejected 时不创建 Operation.
   val exactNeverFallsBack: bool =
     SUBMISSIONS.forall(subId =>
-      match subSelection.get(subId) {
-        | SelectAny => true
-        | SelectExact(w) => and {
+      match subTarget.get(subId) {
+        | TargetAnyKind => true
+        | TargetExactKind(w) => and {
             (subOutcome.get(subId) == SubRejected) implies (opEntry.get(subId) == OpNone),
             match opEntry.get(subId) {
               | OpNone => true
@@ -330,8 +330,8 @@ module routing {
   val witnessExactCompleted: bool =
     match subOutcome.get(1) {
       | SubCompleted(_) =>
-          match subSelection.get(1) {
-            | SelectExact(_) => true
+          match subTarget.get(1) {
+            | TargetExactKind(_) => true
             | _ => false
           }
       | _ => false
@@ -339,8 +339,8 @@ module routing {
 
   val witnessExactRejectedWhileOtherRoutable: bool =
     subOutcome.get(1) == SubRejected and
-      match subSelection.get(1) {
-        | SelectExact(w) => WORKERS.exists(other => other != w and workerRoutable.get(other))
+      match subTarget.get(1) {
+        | TargetExactKind(w) => WORKERS.exists(other => other != w and workerRoutable.get(other))
         | _ => false
       }
 

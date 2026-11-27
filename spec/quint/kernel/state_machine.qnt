@@ -1,10 +1,10 @@
-// Operation 内核状态机纯转换规则: Ready / AwaitingReport / Closed 及外部状态恢复.
+// Operation 内核状态机纯转换规则: Idle / AwaitingReport / Closed 及外部状态恢复.
 module state_machine {
   import primitives.* from "./primitives"
 
   // Operation 的三态生命周期.
   type State[a] =
-    | Ready
+    | Idle
     | AwaitingReport(a)
     | Closed
 
@@ -22,14 +22,14 @@ module state_machine {
     | Updated(State[a])
     | Rejected(KernelError)
 
-  // 创建 Attempt: 仅 Ready 允许转换, 返回新授权与 AwaitingReport(attemptId).
+  // 创建 Attempt: 仅 Idle 允许转换, 返回新授权与 AwaitingReport(attemptId).
   pure def createAttempt(
     state: State[a],
     operationId: o,
     attemptId: a
   ): KernelOutcome[o, a] =
     match state {
-      | Ready =>
+      | Idle =>
           Created({
             attempt: makeAttempt(operationId, attemptId),
             state: AwaitingReport(attemptId),
@@ -45,18 +45,18 @@ module state_machine {
     evidence: Report[o, a, r, v]
   ): KernelOutcome[o, a] =
     match state {
-      | Ready => Rejected(NoPendingAttempt)
+      | Idle => Rejected(NoPendingAttempt)
       | Closed => Rejected(OperationClosed)
       | AwaitingReport(pending) =>
           if (evidence.operation_id != operationId) Rejected(OperationMismatch)
           else if (evidence.attempt_id != pending) Rejected(AttemptMismatch)
-          else Updated(Ready)
+          else Updated(Idle)
     }
 
-  // 关闭 Operation: Ready 转 Closed, Closed 幂等保持, AwaitingReport 拒绝.
+  // 关闭 Operation: Idle 转 Closed, Closed 幂等保持, AwaitingReport 拒绝.
   pure def close(state: State[a]): KernelOutcome[o, a] =
     match state {
-      | Ready => Updated(Closed)
+      | Idle => Updated(Closed)
       | Closed => Updated(Closed)
       | AwaitingReport(_) => Rejected(AttemptPending)
     }

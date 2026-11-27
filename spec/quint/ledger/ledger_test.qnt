@@ -21,7 +21,7 @@ module ledger_test {
       .then(createAttemptAction(1, 1))
       .expect(lastEvent == LedgerIssuedAttempt({ opId: 1, attemptId: 1 }))
       .then(createAttemptAction(2, 1))
-      .expect(lastEvent == LedgerErr(AttemptIdReused) and ledger.entries.get(2) == Managed(Ready))
+      .expect(lastEvent == LedgerErr(AttemptIdReused) and ledger.entries.get(2) == Managed(Idle))
       .then(createAttemptAction(2, 2))
       .expect(lastEvent == LedgerIssuedAttempt({ opId: 2, attemptId: 2 }))
 

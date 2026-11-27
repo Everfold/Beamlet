@@ -15,9 +15,9 @@ flowchart BT
     CONV["约定与词典 (00-conventions.md, 00-glossary.md)"]
     KRN["原语与内核 (01-kernel.md, quint/kernel)"]
     LDG["执行台账 (02-ledger.md, quint/ledger)"]
-    ROL["角色与基础交付 (03-roles.md, quint/roles)"]
+    ROL["角色与基础派发 (03-roles.md, quint/roles)"]
     SES["会话与存活观测 (04-session.md, quint/session, proto/beamlet/v1)"]
-    RTE["选路、调用与裁决 (05-routing.md, quint/routing, proto/beamlet/v1)"]
+    RTE["目标、派发与裁决 (05-routing.md, quint/routing, proto/beamlet/v1)"]
     TRP["抽象传输保证 (06-transport.md)"]
 
     CONV --> KRN --> LDG --> ROL --> SES --> RTE --> TRP
@@ -32,6 +32,6 @@ flowchart BT
 | [01-kernel.md](01-kernel.md) | [spec/quint/kernel/](quint/kernel/state_machine.qnt) | `Operation`、`Attempt`、`Report` 三种原语及内核状态机 |
 | [02-ledger.md](02-ledger.md) | [spec/quint/ledger/](quint/ledger/ledger.qnt) | `Ledger` 多 `Operation` 管理与 `Attempt` 身份防重用 |
 | [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、二分结果契约与不变量 |
-| [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleInstance`、`Pool`、`Presence` 租约与连接世代隔离 |
-| [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Selection` 零回退、`Call` 准入与三态 `Outcome` 裁决 |
+| [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleSession`、`Pool`、`Presence` 租约与 `Link` 世代隔离 |
+| [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Target` 零回退、`Dispatch` 准入与三态 `Outcome` 裁决 |
 | [06-transport.md](06-transport.md) | — | 下游传输实现须满足的无状态投递、世代清理与排空保证 |

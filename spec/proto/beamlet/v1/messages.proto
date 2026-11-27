@@ -8,9 +8,9 @@ package beamlet.v1;
 // Worker 自报的接收状态; 失联状态由观察方按本地单调时钟另行判定.
 export enum PresenceState {
   PRESENCE_STATE_UNSPECIFIED = 0;
-  // 可以尝试投递调用, 不表示已预留执行槽位.
-  PRESENCE_STATE_READY = 1;
-  // 已停止接收新调用, 正在排空已入队任务.
+  // 正在接收新派发, 不表示已预留执行槽位.
+  PRESENCE_STATE_ACCEPTING = 1;
+  // 已停止接收新派发, 正在排空已入队任务.
   PRESENCE_STATE_DRAINING = 2;
   // 本会话已正常退出; 重启必须更换新的 session_id.
   PRESENCE_STATE_OFFLINE = 3;
@@ -31,7 +31,7 @@ export message Report {
 }
 
 // 持久角色标识与单次运行会话标识组合, 不按标识大小或字典序推断新旧.
-export message RoleInstance {
+export message RoleSession {
   string role_id = 1;
   string session_id = 2;
 }
@@ -39,24 +39,24 @@ export message RoleInstance {
 // Worker 发布的完整状态快照, 首份有效快照即可完成登记.
 export message Presence {
   string pool = 1;
-  RoleInstance instance = 2;
+  RoleSession session = 2;
   repeated string capabilities = 3;
   uint64 sequence = 4;
   PresenceState state = 5;
 }
 
 // 从指定 Pool 与能力匹配的可用 Worker 候选中任选其一.
-export message SelectionAny {}
+export message TargetAny {}
 
-// Worker 选择策略: 任选可用实例或精确锁定唯一实例.
-export message Selection {
+// 提交目标约束: 任选可用会话或精确锁定唯一会话.
+export message Target {
   oneof kind {
-    SelectionAny any = 1;
-    RoleInstance exact = 2;
+    TargetAny any = 1;
+    RoleSession exact = 2;
   }
 }
 
-// 不可变业务任务描述, 作为 Operation 的原始请求输入.
+// 不可变业务任务描述, 贯穿 Submission、Operation 与 Dispatch 的唯一请求载体.
 export message Task {
   string capability = 1;
   bytes payload = 2;
@@ -65,22 +65,21 @@ export message Task {
 // 外部调用方提交创建请求的描述, 本身尚未创建 Operation 或签发 Attempt.
 export message Submission {
   string pool = 1;
-  Selection worker = 2;
+  Target target = 2;
   Task task = 3;
 }
 
-// 发往唯一选定 Worker 的调用数据, 仅携带既有 Attempt 授权.
-export message Call {
+// 发往唯一选定 Worker 的派发消息, 直接携带既有 Attempt 授权与 Task.
+export message Dispatch {
   string pool = 1;
-  RoleInstance authority = 2;
-  RoleInstance worker = 3;
+  RoleSession authority = 2;
+  RoleSession worker = 3;
   Attempt attempt = 4;
-  string capability = 5;
-  bytes payload = 6;
+  Task task = 5;
 }
 
-// Worker 对单次 Call 的一次性响应: 正常生成 Report 或执行期失败通知.
-export message WorkerResponse {
+// Worker 对单次 Dispatch 的一次性响应: 正常生成 Report 或执行期失败通知.
+export message DispatchReply {
   oneof kind {
     Report report = 1;
     string failed = 2;
@@ -97,7 +96,7 @@ export message OutcomeCompleted {
   string operation_id = 1;
   string attempt_id = 2;
   string report_id = 3;
-  RoleInstance worker = 4;
+  RoleSession worker = 4;
   bytes result = 5;
 }
 
@@ -105,7 +104,7 @@ export message OutcomeCompleted {
 export message OutcomeUnresolved {
   string operation_id = 1;
   string attempt_id = 2;
-  RoleInstance worker = 3;
+  RoleSession worker = 3;
   string reason = 4;
 }
 

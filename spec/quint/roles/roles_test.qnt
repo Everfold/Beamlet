@@ -22,7 +22,7 @@ module roles_test {
       .then(workerProduceReport({ opId: 1, attemptId: 1, worker: 1 }))
       .then(toggleWorkerOnline(1))
       .then(authorityReceiveReport({ reportId: 1, opId: 1, attemptId: 1, worker: 1 }))
-      .expect(opSlot.get(1) == ReadyOp and lastDelivery == DeliveryReported)
+      .expect(opSlot.get(1) == IdleOp and lastDelivery == DeliveryReported)
       .then(dispatchDelivered(1, 2, 2))
       .then(workerProduceReport({ opId: 1, attemptId: 2, worker: 2 }))
       .then(authorityReceiveReport({ reportId: 2, opId: 1, attemptId: 2, worker: 2 }))

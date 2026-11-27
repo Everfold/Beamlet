@@ -1,7 +1,7 @@
-// 会话身份、Presence 序列号与多路径 Connection 世代租约模型.
+// RoleSession 身份、Presence 序列号与多路径 Link 世代租约模型.
 module session {
   type PresenceMode =
-    | ModeReady
+    | ModeAccepting
     | ModeDraining
     | ModeOffline
 
@@ -48,7 +48,7 @@ module session {
     match entry {
       | AbsentEntry => false
       | Entry(e) =>
-          e.mode == ModeReady and leaseIsFresh(linksMap.get(src), e.leases.get(src), currentTime)
+          e.mode == ModeAccepting and leaseIsFresh(linksMap.get(src), e.leases.get(src), currentTime)
     }
 
   pure def isSessionRoutable(
@@ -65,7 +65,7 @@ module session {
     }
 
   // 会话快照观测规则:
-  // sequence 递减或同序号内容矛盾均被拒绝; 同序号经他路转发仅补充路径可用性, 不延长首次到达时间.
+  // sequence 递减或同序号内容矛盾均被拒绝; 同序号经他路转发仅补充路径可达性, 不延长首次到达时间.
   pure def canAcceptPresence(
     linksMap: int -> LinkState,
     entry: SessionEntry,
@@ -195,7 +195,7 @@ module session {
       nondet src = SOURCES.oneOf()
       nondet ep = 1.to(MAX_EPOCHS).oneOf()
       nondet seq = 1.to(MAX_SEQ).oneOf()
-      nondet mode = Set(ModeReady, ModeDraining, ModeOffline).oneOf()
+      nondet mode = Set(ModeAccepting, ModeDraining, ModeOffline).oneOf()
       observePresence(src, ep, seq, mode)
     },
     {
@@ -209,13 +209,13 @@ module session {
     advanceClock,
   }
 
-  // 仅当会话处于 ModeReady 且路径链路在线、世代一致、未超时, 该路径才可路由.
-  val routableRequiresReadyAndFreshEpoch: bool =
+  // 仅当会话处于 ModeAccepting 且 Link 连通、世代一致、未超时, 该路径才可路由.
+  val routableRequiresAcceptingAndFreshEpoch: bool =
     SOURCES.forall(src =>
       isSourceRoutable(links, entry, src, now) iff
         match entry {
           | AbsentEntry => false
-          | Entry(e) => e.mode == ModeReady and leaseIsFresh(links.get(src), e.leases.get(src), now)
+          | Entry(e) => e.mode == ModeAccepting and leaseIsFresh(links.get(src), e.leases.get(src), now)
         }
     )
 
@@ -234,19 +234,19 @@ module session {
         }
     }
 
-  // 一条路径断线或推进 epoch 不破坏另一条在线且新鲜路径的可路由性.
+  // 一条 Link 断线或推进 epoch 不破坏另一条在线且新鲜路径的可路由性.
   val multiPathFaultIsolation: bool =
     match entry {
       | AbsentEntry => true
       | Entry(e) =>
           SOURCES.forall(src =>
-            (e.mode == ModeReady and leaseIsFresh(links.get(src), e.leases.get(src), now))
+            (e.mode == ModeAccepting and leaseIsFresh(links.get(src), e.leases.get(src), now))
               implies isSessionRoutable(links, entry, now)
           )
     }
 
   val invariants: bool = and {
-    routableRequiresReadyAndFreshEpoch,
+    routableRequiresAcceptingAndFreshEpoch,
     sequenceMonotonicAndReplayDoesNotExtendTtl,
     multiPathFaultIsolation,
   }
