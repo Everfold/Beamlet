@@ -1,224 +1,331 @@
-// 目标约束(Target Any / Exact)、派发(Dispatch)与三态裁决(Outcome)协议模型.
+// 目标选定(Target Any / Exact)、定向派发(Dispatch / DispatchReply)与多 Attempt 演进模型.
 module routing {
   type TargetKind =
     | TargetAnyKind
     | TargetExactKind(int)
 
-  type OpEntry =
-    | OpNone
-    | OpAwaiting({ attemptId: int, targetWorker: int })
-    | OpClosed({ attemptId: int, reportId: int, worker: int })
-
-  type SubOutcome =
-    | SubIdle
-    | SubRejected
-    | SubUnresolved({ opId: int, attemptId: int, worker: int })
-    | SubCompleted({ opId: int, attemptId: int, reportId: int, worker: int })
+  type OpState =
+    | OpUncreated
+    | OpIdle
+    | OpAwaiting({ attemptId: int, lockedWorker: int, target: TargetKind })
+    | OpClosed
 
   type DispatchMsg = {
-    opId: int,
     attemptId: int,
     worker: int,
   }
 
-  type ReportMsg = {
+  type ReplyKind =
+    | ReplyReport(int)
+    | ReplyFailed
+
+  type DispatchReplyMsg = {
+    worker: int,
+    attemptId: int,
+    kind: ReplyKind,
+  }
+
+  type IssuedRecord = {
+    attemptId: int,
+    worker: int,
+    target: TargetKind,
+  }
+
+  type AuthenticReport = {
     reportId: int,
-    opId: int,
     attemptId: int,
     worker: int,
   }
 
   pure val WORKERS = Set(1, 2)
-  pure val SUBMISSIONS = Set(1)
+  pure val ATTEMPT_IDS = Set(1, 2)
   pure val BOGUS_ATTEMPT = 9
   pure val BOGUS_REPORT = 9
 
   var workerRoutable: int -> bool
-  var opEntry: int -> OpEntry
-  var subOutcome: int -> SubOutcome
-  var subTarget: int -> TargetKind
-  var attemptCount: int -> int
+  var opState: OpState
+  var usedAttempts: Set[int]
+  var issuedHistory: List[IssuedRecord]
+  var acceptedCount: int
+  var preMintRejected: bool
+  var unresolvedWaitEnded: bool
+  var injectedBogus: bool
   var inFlightDispatches: Set[DispatchMsg]
-  var inFlightReports: Set[ReportMsg]
-  var authenticReports: Set[ReportMsg]
+  var inFlightReplies: Set[DispatchReplyMsg]
+  var authenticReports: Set[AuthenticReport]
 
   action init: bool = all {
     workerRoutable' = WORKERS.mapBy(_ => true),
-    opEntry' = SUBMISSIONS.mapBy(_ => OpNone),
-    subOutcome' = SUBMISSIONS.mapBy(_ => SubIdle),
-    subTarget' = SUBMISSIONS.mapBy(_ => TargetAnyKind),
-    attemptCount' = SUBMISSIONS.mapBy(_ => 0),
+    opState' = OpUncreated,
+    usedAttempts' = Set(),
+    issuedHistory' = List(),
+    acceptedCount' = 0,
+    preMintRejected' = false,
+    unresolvedWaitEnded' = false,
+    injectedBogus' = false,
     inFlightDispatches' = Set(),
-    inFlightReports' = Set(),
+    inFlightReplies' = Set(),
     authenticReports' = Set(),
+  }
+
+  action createOperation: bool = all {
+    opState == OpUncreated,
+    opState' = OpIdle,
+    workerRoutable' = workerRoutable,
+    usedAttempts' = usedAttempts,
+    issuedHistory' = issuedHistory,
+    acceptedCount' = acceptedCount,
+    preMintRejected' = preMintRejected,
+    unresolvedWaitEnded' = unresolvedWaitEnded,
+    injectedBogus' = injectedBogus,
+    inFlightDispatches' = inFlightDispatches,
+    inFlightReplies' = inFlightReplies,
+    authenticReports' = authenticReports,
   }
 
   action toggleWorkerRoutable(target: int): bool = all {
     workerRoutable' = workerRoutable.put(target, not(workerRoutable.get(target))),
-    opEntry' = opEntry,
-    subOutcome' = subOutcome,
-    subTarget' = subTarget,
-    attemptCount' = attemptCount,
+    opState' = opState,
+    usedAttempts' = usedAttempts,
+    issuedHistory' = issuedHistory,
+    acceptedCount' = acceptedCount,
+    preMintRejected' = preMintRejected,
+    unresolvedWaitEnded' = unresolvedWaitEnded,
+    injectedBogus' = injectedBogus,
     inFlightDispatches' = inFlightDispatches,
-    inFlightReports' = inFlightReports,
+    inFlightReplies' = inFlightReplies,
     authenticReports' = authenticReports,
   }
 
-  // Exact 提交: 目标不可路由时直接裁决 Rejected 且不创建 Operation, 绝不回退其他候选.
-  action submitExact(subId: int, target: int): bool = all {
-    subOutcome.get(subId) == SubIdle,
-    opEntry.get(subId) == OpNone,
-    subTarget' = subTarget.put(subId, TargetExactKind(target)),
+  // Exact 派发: 目标不可路由时直接拒绝本次派发, 不签发 Attempt, 保持 OpIdle 且绝不回退.
+  action dispatchExact(attemptId: int, target: int): bool = all {
+    opState == OpIdle,
+    not(usedAttempts.contains(attemptId)),
     if (workerRoutable.get(target)) all {
-      opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: target })),
-      subOutcome' = subOutcome,
-      attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
-      inFlightDispatches' = inFlightDispatches.union(Set({ opId: subId, attemptId: subId, worker: target })),
+      opState' = OpAwaiting({ attemptId: attemptId, lockedWorker: target, target: TargetExactKind(target) }),
+      usedAttempts' = usedAttempts.union(Set(attemptId)),
+      issuedHistory' = issuedHistory.append({ attemptId: attemptId, worker: target, target: TargetExactKind(target) }),
+      preMintRejected' = preMintRejected,
+      inFlightDispatches' = inFlightDispatches.union(Set({ attemptId: attemptId, worker: target })),
     } else all {
-      opEntry' = opEntry,
-      subOutcome' = subOutcome.put(subId, SubRejected),
-      attemptCount' = attemptCount,
+      opState' = OpIdle,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      preMintRejected' = true,
       inFlightDispatches' = inFlightDispatches,
     },
     workerRoutable' = workerRoutable,
-    inFlightReports' = inFlightReports,
+    acceptedCount' = acceptedCount,
+    unresolvedWaitEnded' = unresolvedWaitEnded,
+    injectedBogus' = injectedBogus,
+    inFlightReplies' = inFlightReplies,
     authenticReports' = authenticReports,
   }
 
-  // Any 提交: 从当前可路由候选中任选其一, 无候选时直接裁决 Rejected.
-  action submitAny(subId: int): bool = all {
-    subOutcome.get(subId) == SubIdle,
-    opEntry.get(subId) == OpNone,
-    subTarget' = subTarget.put(subId, TargetAnyKind),
+  // Any 派发: 从当前可路由候选中任选其一, 无候选时不签发 Attempt 并保持 OpIdle.
+  action dispatchAny(attemptId: int): bool = all {
+    opState == OpIdle,
+    not(usedAttempts.contains(attemptId)),
     if (WORKERS.exists(w => workerRoutable.get(w))) {
       nondet picked = WORKERS.filter(w => workerRoutable.get(w)).oneOf()
       all {
-        opEntry' = opEntry.put(subId, OpAwaiting({ attemptId: subId, targetWorker: picked })),
-        subOutcome' = subOutcome,
-        attemptCount' = attemptCount.put(subId, attemptCount.get(subId) + 1),
-        inFlightDispatches' = inFlightDispatches.union(Set({ opId: subId, attemptId: subId, worker: picked })),
+        opState' = OpAwaiting({ attemptId: attemptId, lockedWorker: picked, target: TargetAnyKind }),
+        usedAttempts' = usedAttempts.union(Set(attemptId)),
+        issuedHistory' = issuedHistory.append({ attemptId: attemptId, worker: picked, target: TargetAnyKind }),
+        preMintRejected' = preMintRejected,
+        inFlightDispatches' = inFlightDispatches.union(Set({ attemptId: attemptId, worker: picked })),
       }
     } else all {
-      opEntry' = opEntry,
-      subOutcome' = subOutcome.put(subId, SubRejected),
-      attemptCount' = attemptCount,
+      opState' = OpIdle,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      preMintRejected' = true,
       inFlightDispatches' = inFlightDispatches,
     },
     workerRoutable' = workerRoutable,
-    inFlightReports' = inFlightReports,
+    acceptedCount' = acceptedCount,
+    unresolvedWaitEnded' = unresolvedWaitEnded,
+    injectedBogus' = injectedBogus,
+    inFlightReplies' = inFlightReplies,
     authenticReports' = authenticReports,
   }
 
-  // Worker 正常执行并返回 DispatchReply::Report (允许此时 Worker 已退出可路由状态).
+  // Worker 正常执行并返回携带自身身份与 Report 的 DispatchReply.
   action workerReplyReport(msg: DispatchMsg): bool = {
-    val rep = {
-      reportId: msg.opId,
-      opId: msg.opId,
+    val reply = {
+      worker: msg.worker,
+      attemptId: msg.attemptId,
+      kind: ReplyReport(msg.attemptId),
+    }
+    val auth = {
+      reportId: msg.attemptId,
       attemptId: msg.attemptId,
       worker: msg.worker,
     }
     all {
       inFlightDispatches.contains(msg),
       inFlightDispatches' = inFlightDispatches.exclude(Set(msg)),
-      inFlightReports' = inFlightReports.union(Set(rep)),
-      authenticReports' = authenticReports.union(Set(rep)),
+      inFlightReplies' = inFlightReplies.union(Set(reply)),
+      authenticReports' = authenticReports.union(Set(auth)),
       workerRoutable' = workerRoutable,
-      opEntry' = opEntry,
-      subOutcome' = subOutcome,
-      subTarget' = subTarget,
-      attemptCount' = attemptCount,
+      opState' = opState,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      acceptedCount' = acceptedCount,
+      preMintRejected' = preMintRejected,
+      unresolvedWaitEnded' = unresolvedWaitEnded,
+      injectedBogus' = injectedBogus,
     }
   }
 
-  // Worker 执行期失败通知(DispatchReply::failed)或未达/超时: 裁决 Unresolved 且保持 OpAwaiting.
-  action authorityTimeoutOrFailed(subId: int): bool = {
-    val canResolve = match opEntry.get(subId) {
-      | OpAwaiting(_) => subOutcome.get(subId) == SubIdle
-      | _ => false
-    }
-    val nextOutcome = match opEntry.get(subId) {
-      | OpAwaiting(a) => SubUnresolved({
-          opId: subId,
-          attemptId: a.attemptId,
-          worker: a.targetWorker,
-        })
-      | _ => subOutcome.get(subId)
+  // Worker 准入拒收(如 Draining/能力不符)或执行期异常: 返回携带自身身份的拒绝/失败通知, 不伪造 Report.
+  action workerReplyFailed(msg: DispatchMsg): bool = {
+    val reply = {
+      worker: msg.worker,
+      attemptId: msg.attemptId,
+      kind: ReplyFailed,
     }
     all {
-      canResolve,
-      subOutcome' = subOutcome.put(subId, nextOutcome),
+      inFlightDispatches.contains(msg),
+      inFlightDispatches' = inFlightDispatches.exclude(Set(msg)),
+      inFlightReplies' = inFlightReplies.union(Set(reply)),
       workerRoutable' = workerRoutable,
-      opEntry' = opEntry,
-      subTarget' = subTarget,
-      attemptCount' = attemptCount,
-      inFlightDispatches' = inFlightDispatches,
-      inFlightReports' = inFlightReports,
+      opState' = opState,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      acceptedCount' = acceptedCount,
+      preMintRejected' = preMintRejected,
+      unresolvedWaitEnded' = unresolvedWaitEnded,
+      injectedBogus' = injectedBogus,
       authenticReports' = authenticReports,
     }
   }
 
-  // 注入错配或过时 Report.
-  action injectMismatchedReport(subId: int, wrongWorker: int): bool = {
-    val bogus = {
-      reportId: BOGUS_REPORT,
-      opId: subId,
-      attemptId: BOGUS_ATTEMPT,
-      worker: wrongWorker,
+  // 注入错配来源 Worker 或错配 Attempt 的非法 Report 响应.
+  action injectInvalidReply(spoofWorker: bool): bool = {
+    val awaitingOk = match opState {
+      | OpAwaiting(_) => not(injectedBogus)
+      | _ => false
+    }
+    val bogus = match opState {
+      | OpAwaiting(a) =>
+          if (spoofWorker) {
+            worker: if (a.lockedWorker == 1) 2 else 1,
+            attemptId: a.attemptId,
+            kind: ReplyReport(BOGUS_REPORT),
+          } else {
+            worker: a.lockedWorker,
+            attemptId: BOGUS_ATTEMPT,
+            kind: ReplyReport(BOGUS_REPORT),
+          }
+      | _ => { worker: 1, attemptId: BOGUS_ATTEMPT, kind: ReplyReport(BOGUS_REPORT) }
     }
     all {
-      opEntry.get(subId) != OpNone,
-      not(inFlightReports.contains(bogus)),
-      inFlightReports' = inFlightReports.union(Set(bogus)),
+      awaitingOk,
+      injectedBogus' = true,
+      inFlightReplies' = inFlightReplies.union(Set(bogus)),
       workerRoutable' = workerRoutable,
-      opEntry' = opEntry,
-      subOutcome' = subOutcome,
-      subTarget' = subTarget,
-      attemptCount' = attemptCount,
+      opState' = opState,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      acceptedCount' = acceptedCount,
+      preMintRejected' = preMintRejected,
+      unresolvedWaitEnded' = unresolvedWaitEnded,
       inFlightDispatches' = inFlightDispatches,
       authenticReports' = authenticReports,
     }
   }
 
-  // Authority 验收 Report: 核对 Operation、Attempt 与锁定目标一致, 不依赖当前可路由性.
-  action authorityReceiveReport(rep: ReportMsg): bool = {
-    val curOp = opEntry.get(rep.opId)
-    val matched = match curOp {
-      | OpAwaiting(a) => (rep.attemptId == a.attemptId and rep.worker == a.targetWorker)
+  // Authority 等待超时或断线: 结束本地等待但保持 OpAwaiting, 不自动重试或关闭.
+  action authorityTimeout: bool = {
+    val canTimeout = match opState {
+      | OpAwaiting(_) => true
       | _ => false
     }
-    val nextOp =
-      if (matched) OpClosed({ attemptId: rep.attemptId, reportId: rep.reportId, worker: rep.worker })
-      else curOp
-    val nextOutcome =
-      if (matched and subOutcome.get(rep.opId) == SubIdle)
-        SubCompleted({ opId: rep.opId, attemptId: rep.attemptId, reportId: rep.reportId, worker: rep.worker })
-      else subOutcome.get(rep.opId)
     all {
-      inFlightReports.contains(rep),
-      inFlightReports' = inFlightReports.exclude(Set(rep)),
-      opEntry' = opEntry.put(rep.opId, nextOp),
-      subOutcome' = subOutcome.put(rep.opId, nextOutcome),
+      canTimeout,
+      unresolvedWaitEnded' = true,
       workerRoutable' = workerRoutable,
-      subTarget' = subTarget,
-      attemptCount' = attemptCount,
+      opState' = opState,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      acceptedCount' = acceptedCount,
+      preMintRejected' = preMintRejected,
+      injectedBogus' = injectedBogus,
       inFlightDispatches' = inFlightDispatches,
+      inFlightReplies' = inFlightReplies,
+      authenticReports' = authenticReports,
+    }
+  }
+
+  // Authority 验收 DispatchReply:
+  // 仅当携带 Report 且回复方 Worker 与锁定目标及 Attempt 均匹配时回到 OpIdle(不要求当前仍可路由).
+  action authorityReceiveReply(reply: DispatchReplyMsg): bool = {
+    val validReport = match opState {
+      | OpAwaiting(a) =>
+          reply.worker == a.lockedWorker and reply.attemptId == a.attemptId and
+            match reply.kind {
+              | ReplyReport(_) => true
+              | ReplyFailed => false
+            }
+      | _ => false
+    }
+    val matchedFailed = match opState {
+      | OpAwaiting(a) =>
+          reply.worker == a.lockedWorker and reply.attemptId == a.attemptId and reply.kind == ReplyFailed
+      | _ => false
+    }
+    val nextOpState = if (validReport) OpIdle else opState
+    val nextAccepted = if (validReport) acceptedCount + 1 else acceptedCount
+    all {
+      inFlightReplies.contains(reply),
+      inFlightReplies' = inFlightReplies.exclude(Set(reply)),
+      opState' = nextOpState,
+      acceptedCount' = nextAccepted,
+      unresolvedWaitEnded' = (unresolvedWaitEnded or matchedFailed),
+      workerRoutable' = workerRoutable,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      preMintRejected' = preMintRejected,
+      injectedBogus' = injectedBogus,
+      inFlightDispatches' = inFlightDispatches,
+      authenticReports' = authenticReports,
+    }
+  }
+
+  // 仅处于 OpIdle(或已 OpClosed)时允许显式关闭 Operation.
+  action closeOperation: bool = {
+    val canClose = (opState == OpIdle or opState == OpClosed)
+    all {
+      canClose,
+      opState' = OpClosed,
+      workerRoutable' = workerRoutable,
+      usedAttempts' = usedAttempts,
+      issuedHistory' = issuedHistory,
+      acceptedCount' = acceptedCount,
+      preMintRejected' = preMintRejected,
+      unresolvedWaitEnded' = unresolvedWaitEnded,
+      injectedBogus' = injectedBogus,
+      inFlightDispatches' = inFlightDispatches,
+      inFlightReplies' = inFlightReplies,
       authenticReports' = authenticReports,
     }
   }
 
   action step: bool = any {
+    createOperation,
     {
       nondet target = WORKERS.oneOf()
       toggleWorkerRoutable(target)
     },
     {
-      nondet subId = SUBMISSIONS.oneOf()
+      nondet attemptId = ATTEMPT_IDS.oneOf()
       nondet target = WORKERS.oneOf()
-      submitExact(subId, target)
+      dispatchExact(attemptId, target)
     },
     {
-      nondet subId = SUBMISSIONS.oneOf()
-      submitAny(subId)
+      nondet attemptId = ATTEMPT_IDS.oneOf()
+      dispatchAny(attemptId)
     },
     {
       nondet msg = inFlightDispatches.oneOf()
@@ -228,135 +335,93 @@ module routing {
       }
     },
     {
-      nondet subId = SUBMISSIONS.oneOf()
-      nondet target = WORKERS.oneOf()
-      injectMismatchedReport(subId, target)
-    },
-    {
-      nondet subId = SUBMISSIONS.oneOf()
-      authorityTimeoutOrFailed(subId)
-    },
-    {
-      nondet rep = inFlightReports.oneOf()
+      nondet msg = inFlightDispatches.oneOf()
       all {
-        inFlightReports.size() > 0,
-        authorityReceiveReport(rep),
+        inFlightDispatches.size() > 0,
+        workerReplyFailed(msg),
       }
+    },
+    {
+      nondet spoofWorker = Set(true, false).oneOf()
+      injectInvalidReply(spoofWorker)
+    },
+    authorityTimeout,
+    {
+      nondet reply = inFlightReplies.oneOf()
+      all {
+        inFlightReplies.size() > 0,
+        authorityReceiveReply(reply),
+      }
+    },
+    closeOperation,
+  }
+
+  // Exact 目标绝不回退到其他 Worker.
+  val exactNeverFallsBack: bool = and {
+    issuedHistory.foldl(true, (ok, h) =>
+      ok and match h.target {
+        | TargetAnyKind => true
+        | TargetExactKind(w) => h.worker == w
+      }
+    ),
+    match opState {
+      | OpAwaiting(a) =>
+          match a.target {
+            | TargetAnyKind => true
+            | TargetExactKind(w) => a.lockedWorker == w
+          }
+      | _ => true
     },
   }
 
-  // Exact 目标绝不回退, Rejected 时不创建 Operation.
-  val exactNeverFallsBack: bool =
-    SUBMISSIONS.forall(subId =>
-      match subTarget.get(subId) {
-        | TargetAnyKind => true
-        | TargetExactKind(w) => and {
-            (subOutcome.get(subId) == SubRejected) implies (opEntry.get(subId) == OpNone),
-            match opEntry.get(subId) {
-              | OpNone => true
-              | OpAwaiting(a) => a.targetWorker == w
-              | OpClosed(c) => c.worker == w
-            },
-            match subOutcome.get(subId) {
-              | SubIdle => true
-              | SubRejected => true
-              | SubUnresolved(u) => u.worker == w
-              | SubCompleted(c) => c.worker == w
-            },
-          }
+  // 选路拒绝不签发 Attempt; 只有验收完最新 Attempt 后才可回到 OpIdle 或进入 OpClosed.
+  val attemptAccountingConsistent: bool = and {
+    usedAttempts.size() == issuedHistory.length(),
+    acceptedCount <= issuedHistory.length(),
+    (opState == OpUncreated) implies (issuedHistory.length() == 0),
+    (opState == OpIdle or opState == OpClosed) implies (issuedHistory.length() == acceptedCount),
+    match opState {
+      | OpAwaiting(a) =>
+          issuedHistory.length() == acceptedCount + 1 and
+            issuedHistory[issuedHistory.length() - 1].attemptId == a.attemptId and
+            issuedHistory[issuedHistory.length() - 1].worker == a.lockedWorker
+      | _ => true
+    },
+  }
+
+  // 每一次已验收的 Attempt 都必定对应锁定 Worker 真实产出的 Report(错配来源或失败通知绝不能解除等待).
+  val acceptedAttemptsRequireAuthenticLockedReport: bool =
+    Set(0, 1).forall(idx =>
+      if (idx >= acceptedCount) true
+      else {
+        val h = issuedHistory[idx]
+        authenticReports.contains({
+          reportId: h.attemptId,
+          attemptId: h.attemptId,
+          worker: h.worker,
+        })
       }
     )
-
-  // Rejected 不产生任何 Operation 或 Attempt.
-  val rejectedCreatesNoOperation: bool =
-    SUBMISSIONS.forall(subId =>
-      (subOutcome.get(subId) == SubRejected) implies (opEntry.get(subId) == OpNone and attemptCount.get(subId) == 0)
-    )
-
-  // Completed 与 OpClosed 必定对应一条真实匹配的 Report.
-  val completedRequiresAuthenticReport: bool =
-    SUBMISSIONS.forall(subId => and {
-      match opEntry.get(subId) {
-        | OpClosed(c) => authenticReports.contains({
-            reportId: c.reportId,
-            opId: subId,
-            attemptId: c.attemptId,
-            worker: c.worker,
-          })
-        | _ => true
-      },
-      match subOutcome.get(subId) {
-        | SubCompleted(c) => authenticReports.contains({
-            reportId: c.reportId,
-            opId: subId,
-            attemptId: c.attemptId,
-            worker: c.worker,
-          })
-        | _ => true
-      },
-    })
-
-  // Unresolved 不得无证关闭 Operation; 错配报告永不关闭 Operation.
-  val unresolvedKeepsOperationOpenUnlessReported: bool =
-    SUBMISSIONS.forall(subId => and {
-      attemptCount.get(subId) <= 1,
-      match opEntry.get(subId) {
-        | OpClosed(c) => c.attemptId != BOGUS_ATTEMPT and c.reportId != BOGUS_REPORT
-        | _ => true
-      },
-      match subOutcome.get(subId) {
-        | SubUnresolved(u) =>
-            match opEntry.get(subId) {
-              | OpNone => false
-              | OpAwaiting(a) => a.attemptId == u.attemptId and a.targetWorker == u.worker
-              | OpClosed(c) => authenticReports.contains({
-                  reportId: c.reportId,
-                  opId: subId,
-                  attemptId: c.attemptId,
-                  worker: c.worker,
-                })
-            }
-        | _ => true
-      },
-    })
 
   val invariants: bool = and {
     exactNeverFallsBack,
-    rejectedCreatesNoOperation,
-    completedRequiresAuthenticReport,
-    unresolvedKeepsOperationOpenUnlessReported,
+    attemptAccountingConsistent,
+    acceptedAttemptsRequireAuthenticLockedReport,
   }
 
-  val witnessExactCompleted: bool =
-    match subOutcome.get(1) {
-      | SubCompleted(_) =>
-          match subTarget.get(1) {
-            | TargetExactKind(_) => true
-            | _ => false
-          }
-      | _ => false
-    }
+  val witnessMultiAttemptCompleted: bool =
+    opState == OpClosed and acceptedCount == 2
 
-  val witnessExactRejectedWhileOtherRoutable: bool =
-    subOutcome.get(1) == SubRejected and
-      match subTarget.get(1) {
-        | TargetExactKind(w) => WORKERS.exists(other => other != w and workerRoutable.get(other))
+  val witnessExactRejectedWithoutMinting: bool =
+    preMintRejected and opState == OpIdle
+
+  val witnessFailedOrTimeoutKeepsAwaiting: bool =
+    unresolvedWaitEnded and
+      match opState {
+        | OpAwaiting(_) => true
         | _ => false
       }
 
-  val witnessUnresolvedKeepsAwaiting: bool =
-    match subOutcome.get(1) {
-      | SubUnresolved(_) =>
-          match opEntry.get(1) {
-            | OpAwaiting(_) => true
-            | _ => false
-          }
-      | _ => false
-    }
-
-  val witnessCompletedAfterWorkerUnroutable: bool =
-    match opEntry.get(1) {
-      | OpClosed(c) => not(workerRoutable.get(c.worker))
-      | _ => false
-    }
+  val witnessLateReportAcceptedWhileUnroutable: bool =
+    acceptedCount >= 1 and issuedHistory.length() >= 1 and not(workerRoutable.get(issuedHistory[0].worker))
 }

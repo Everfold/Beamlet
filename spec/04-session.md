@@ -12,7 +12,7 @@
 
 每个 `Authority` 在本地按 `RoleSession` 独立维护 `Worker` 存活视图，不同 `Authority` 允许存在短暂视图差异：
 
-1. **单调状态快照**：`Worker` 发布的 `Presence` 必须携带自身 `RoleSession`、实际启用的精确能力列表以及当前 `PresenceState`（`Accepting`、`Draining` 或 `Offline`）。首份有效快照即可完成登记；同一 `RoleSession` 内状态仅允许按 `Accepting` → `Draining` → `Offline` 单调推进，收到状态回退的过时快照必须拒绝。
+1. **固定能力与单调状态快照**：`Worker` 发布的 `Presence` 必须携带自身 `RoleSession`、实际启用的精确能力列表以及当前 `PresenceState`（`Accepting`、`Draining` 或 `Offline`）。首份有效快照即可完成登记；同一 `RoleSession` 存续期间能力集合固定不变（变更能力必须分配新的会话标识），且状态仅允许按 `Accepting` → `Draining` → `Offline` 单调推进；收到能力集合不一致或状态回退的快照必须拒绝。
 2. **本地单调时钟租约**：每个 `Authority` 按自身本地单调时钟记录最近一次有效 `Presence` 的到达时间；持续收到 `Accepting` 快照即刷新本地租约期限。
 3. **可路由判定**：仅当该会话当前处于 `Accepting` 且距最近一次有效快照到达未超出本地租约期限时，该 `Worker` 会话方可视为**可路由**；收到 `Draining` 或 `Offline`、或本地租约到期后，立即退出可路由集合。
 
@@ -26,7 +26,7 @@ sequenceDiagram
 
     par Authority 排空
         S->>A: 触发停止
-        A->>A: 停止新提交接入并拒绝未签发提交
+        A->>A: 停止新请求接入并停止签发新 Attempt
         A->>A: 等待已签发的在途 Dispatch 结束
     and Worker 排空
         S->>W: 触发停止

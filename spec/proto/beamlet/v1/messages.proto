@@ -36,7 +36,7 @@ export message RoleSession {
   string session_id = 2;
 }
 
-// Worker 发布的完整状态快照, 首份有效快照即可完成登记.
+// Worker 发布的完整状态快照; 同一 RoleSession 内 capabilities 固定不变, state 单调推进.
 export message Presence {
   RoleSession session = 1;
   repeated string capabilities = 2;
@@ -57,10 +57,12 @@ export message Dispatch {
   Task task = 4;
 }
 
-// Worker 对单次 Dispatch 的一次性响应: 正常生成 Report 或执行期失败通知.
+// Worker 对单次 Dispatch 的一次性响应, 携带回复方会话身份及 Report 或未产出报告的拒绝/失败通知.
 export message DispatchReply {
+  RoleSession worker = 1;
   oneof kind {
-    Report report = 1;
-    string failed = 2;
+    Report report = 2;
+    // 准入拒收或执行期异常通知; 均不构成 Report, 原 Operation 保持 AwaitingReport.
+    string failed = 3;
   }
 }

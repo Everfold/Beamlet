@@ -1,4 +1,4 @@
-// RoleSession 身份、Presence 单调状态与本地单调时钟租约模型.
+// RoleSession 身份、固定能力集、Presence 单调状态与本地单调时钟租约模型.
 module session {
   type PresenceMode =
     | ModeAccepting
@@ -8,10 +8,12 @@ module session {
   type SessionEntry =
     | AbsentEntry
     | Entry({
+        caps: int,
         mode: PresenceMode,
         lastSeenAt: int,
       })
 
+  pure val CAPS = Set(1, 2)
   pure val MAX_NOW = 4
   pure val LEASE_TIMEOUT = 2
 
@@ -29,35 +31,42 @@ module session {
     }
 
   var entry: SessionEntry
+  var initialCaps: int
   var now: int
   var maxModeRank: int
-  var rejectedRegression: bool
+  var rejectedInvalid: bool
 
   action init: bool = all {
     entry' = AbsentEntry,
+    initialCaps' = 0,
     now' = 0,
     maxModeRank' = 0,
-    rejectedRegression' = false,
+    rejectedInvalid' = false,
   }
 
   // 会话快照观测规则:
-  // 同会话内状态仅允许按 Accepting -> Draining -> Offline 单调推进并刷新本地到达时间; 状态回退则拒绝.
-  action observePresence(mode: PresenceMode): bool = {
+  // 同会话内能力集固定不变, 状态仅按 Accepting -> Draining -> Offline 单调推进并刷新到达时间; 能力不一致或状态回退均被拒绝.
+  action observePresence(caps: int, mode: PresenceMode): bool = {
     val rank = modeRank(mode)
     val accepted = match entry {
       | AbsentEntry => true
-      | Entry(e) => rank >= modeRank(e.mode)
+      | Entry(e) => caps == e.caps and rank >= modeRank(e.mode)
     }
     val nextEntry =
-      if (accepted) Entry({ mode: mode, lastSeenAt: now })
+      if (accepted) Entry({ caps: caps, mode: mode, lastSeenAt: now })
       else entry
+    val nextInitialCaps = match entry {
+      | AbsentEntry => caps
+      | Entry(_) => initialCaps
+    }
     val nextMaxRank =
       if (accepted and rank > maxModeRank) rank
       else maxModeRank
     all {
       entry' = nextEntry,
+      initialCaps' = nextInitialCaps,
       maxModeRank' = nextMaxRank,
-      rejectedRegression' = (rejectedRegression or not(accepted)),
+      rejectedInvalid' = (rejectedInvalid or not(accepted)),
       now' = now,
     }
   }
@@ -66,14 +75,16 @@ module session {
     now < MAX_NOW,
     now' = now + 1,
     entry' = entry,
+    initialCaps' = initialCaps,
     maxModeRank' = maxModeRank,
-    rejectedRegression' = rejectedRegression,
+    rejectedInvalid' = rejectedInvalid,
   }
 
   action step: bool = any {
     {
+      nondet caps = CAPS.oneOf()
       nondet mode = Set(ModeAccepting, ModeDraining, ModeOffline).oneOf()
-      observePresence(mode)
+      observePresence(caps, mode)
     },
     advanceClock,
   }
@@ -86,11 +97,11 @@ module session {
         | Entry(e) => e.mode == ModeAccepting and (now - e.lastSeenAt < LEASE_TIMEOUT)
       }
 
-  // 会话状态按 Accepting -> Draining -> Offline 单调推进, 到达时间不超过本地单调时钟.
-  val modeNeverRegresses: bool =
+  // 会话能力集固定不变, 状态按 Accepting -> Draining -> Offline 单调推进, 到达时间不超过本地单调时钟.
+  val sessionImmutableCapsAndMonotonicMode: bool =
     match entry {
-      | AbsentEntry => maxModeRank == 0
-      | Entry(e) => modeRank(e.mode) == maxModeRank and e.lastSeenAt <= now
+      | AbsentEntry => maxModeRank == 0 and initialCaps == 0
+      | Entry(e) => e.caps == initialCaps and modeRank(e.mode) == maxModeRank and e.lastSeenAt <= now
     }
 
   // 非 Accepting 状态永不可路由.
@@ -102,7 +113,7 @@ module session {
 
   val invariants: bool = and {
     routableRequiresAcceptingAndFreshLease,
-    modeNeverRegresses,
+    sessionImmutableCapsAndMonotonicMode,
     nonAcceptingNeverRoutable,
   }
 
@@ -121,6 +132,6 @@ module session {
       | Entry(e) => e.mode == ModeDraining and (now - e.lastSeenAt < LEASE_TIMEOUT) and not(isSessionRoutable(entry, now))
     }
 
-  val witnessRegressionRejected: bool =
-    rejectedRegression
+  val witnessInvalidRejected: bool =
+    rejectedInvalid
 }

@@ -17,7 +17,7 @@ flowchart BT
     LDG["执行台账 (02-ledger.md, quint/ledger)"]
     ROL["角色与基础派发 (03-roles.md, quint/roles)"]
     SES["会话与存活观测 (04-session.md, quint/session, proto/beamlet/v1)"]
-    RTE["目标、派发与裁决 (05-routing.md, quint/routing, proto/beamlet/v1)"]
+    RTE["目标选定与定向派发 (05-routing.md, quint/routing, proto/beamlet/v1)"]
     TRP["抽象传输保证 (06-transport.md)"]
 
     CONV --> KRN --> LDG --> ROL --> SES --> RTE --> TRP
@@ -33,5 +33,5 @@ flowchart BT
 | [02-ledger.md](02-ledger.md) | [spec/quint/ledger/](quint/ledger/ledger.qnt) | `Ledger` 多 `Operation` 管理与 `Attempt` 身份防重用 |
 | [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、二分结果契约与不变量 |
 | [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleSession`、`Presence` 单调状态与本地租约 |
-| [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Target` 零回退、`Dispatch` 准入与三态 `Outcome` 裁决 |
+| [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Target` 零回退、定向 `Dispatch` 准入与多 `Attempt` 派发验收 |
 | [06-transport.md](06-transport.md) | — | 下游传输实现须满足的无状态投递、控制隔离与排空保证 |

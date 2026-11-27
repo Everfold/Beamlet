@@ -43,7 +43,7 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `Authority` | 持有 `Ledger`、负责创建 `Operation`、签发 `Attempt`、派发执行并验收 `Report` 的协调角色 | 不同 `Authority` 之间不共享 `Ledger` |
-| `Worker` | 接收既有 `Attempt`、执行任务并产出 `Report` 或失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
+| `Worker` | 接收既有 `Attempt`、执行任务并通过响应返回 `Report` 或拒绝/失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
 
 ---
 
@@ -54,20 +54,18 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `RoleSession` | 持久角色标识与单次运行会话标识组成的角色会话身份 | 禁止按标识值大小或字典序推断会话新旧 |
-| `Presence` | `Worker` 发布的完整状态快照，含会话身份、启用能力集与当前状态 | 会话内状态仅按 `Accepting` → `Draining` → `Offline` 单调推进；用于登记与续期本地租约 |
+| `Presence` | `Worker` 发布的完整状态快照，含会话身份、固定能力集与当前状态 | 同一 `RoleSession` 内能力集固定不变，状态仅按 `Accepting` → `Draining` → `Offline` 单调推进 |
 | `PresenceState` | `Worker` 自报接收状态：`Accepting`（接收新派发中）、`Draining`（排空中）、`Offline`（已退出） | 失联标记由观察方按本地单调时钟另行判定；`Accepting` 不预留并发槽位 |
 
 ---
 
-## 选路与提交
+## 选路与派发
 
-### 选路与提交：任务、派发与裁决
+### 选路与派发：任务、目标与跨角色消息
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
-| `Task` | 由精确匹配的能力标识与不透明业务输入载荷构成的不可变任务内容 | 贯穿 `Submission`、`Operation` 与 `Dispatch` 的唯一请求载体 |
-| `Target` | 提交目标约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleSession`） | 每次提交至多选人一次；`Exact` 不可路由时直接拒绝，绝不回退 |
-| `Submission` | 外部提交创建请求的描述，含 `Target` 与 `Task` | `Authority` 的提交输入语义，不规定跨进程线协议；尚未创建 `Operation` 或 `Attempt` |
-| `Dispatch` | 发往唯一选定 `Worker` 的派发消息，含 `Authority`、`Worker`、既有 `Attempt` 与 `Task` | 只传递既有 `Attempt` 授权 |
-| `DispatchReply` | `Worker` 对单次 `Dispatch` 的一次性响应：完整 `Report` 或执行期失败通知 | 执行期失败无法排除副作用，绝不伪造为 `Report` 或执行前拒收 |
-| `Outcome` | 对单次 `Submission` 的三态终局裁决：`Rejected`、`Completed`、`Unresolved` | `Rejected` 承诺未创建 `Operation`；`Completed` 必对应已验收 `Report`；`Unresolved` 保持原 `AwaitingReport` |
+| `Task` | 由精确匹配的能力标识与不透明业务输入载荷构成的不可变任务内容 | 作为 `Operation` 的不可变请求与 `Dispatch` 的任务载体 |
+| `Target` | 单次派发的目标约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleSession`） | 每次签发 `Attempt` 前选定唯一目标；`Exact` 不可路由时直接拒绝，绝不回退 |
+| `Dispatch` | 发往唯一选定 `Worker` 的派发消息，含 `Authority`、`Worker`、既有 `Attempt` 与 `Task` | 只传递既有 `Attempt` 授权，不自行产生新授权 |
+| `DispatchReply` | `Worker` 对单次 `Dispatch` 的一次性响应，含回复方 `RoleSession` 及完整 `Report` 或拒绝/失败通知 | 准入拒收与执行异常均不产出 `Report`，使原 `Operation` 保持 `AwaitingReport` |

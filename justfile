@@ -68,13 +68,13 @@ check-roles-model:
 check-session-model:
     quint typecheck spec/quint/session/session_test.qnt
     quint test spec/quint/session/session_test.qnt
-    quint run spec/quint/session/session.qnt --main=session --invariant=invariants --witnesses witnessRoutable witnessTtlExpires witnessDrainingStopsRouting witnessRegressionRejected --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
+    quint run spec/quint/session/session.qnt --main=session --invariant=invariants --witnesses witnessRoutable witnessTtlExpires witnessDrainingStopsRouting witnessInvalidRejected --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
     quint verify spec/quint/session/session.qnt --main=session --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
 check-routing-model:
     quint typecheck spec/quint/routing/routing_test.qnt
     quint test spec/quint/routing/routing_test.qnt
-    quint run spec/quint/routing/routing.qnt --main=routing --invariant=invariants --witnesses witnessExactCompleted witnessExactRejectedWhileOtherRoutable witnessUnresolvedKeepsAwaiting witnessCompletedAfterWorkerUnroutable --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
+    quint run spec/quint/routing/routing.qnt --main=routing --invariant=invariants --witnesses witnessMultiAttemptCompleted witnessExactRejectedWithoutMinting witnessFailedOrTimeoutKeepsAwaiting witnessLateReportAcceptedWhileUnroutable --max-samples=2000 --max-steps=20 --seed=42 --verbosity=1
     quint verify spec/quint/routing/routing.qnt --main=routing --backend=tlc --invariant=invariants --max-steps=8 --verbosity=1
 
 check-spec: check-proto check-kernel-model check-ledger-model check-roles-model check-session-model check-routing-model
