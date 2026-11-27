@@ -1,44 +1,39 @@
-// RoleSession、Link 世代与多路径租约场景测试.
+// RoleSession、Presence 序列号与本地租约场景测试.
 module session_test {
   import session.* from "./session"
 
-  // 断线重连推进 epoch 后旧租约立即失效, 拒绝旧 epoch 快照, 直到新 epoch 收到新快照才恢复.
-  run reconnectInvalidatesLeaseUntilNewEpochTest =
-    init
-      .then(observePresence(1, 1, 1, ModeAccepting))
-      .expect(isSessionRoutable(links, entry, now))
-      .then(disconnectLink(1))
-      .expect(not(isSessionRoutable(links, entry, now)))
-      .then(reconnectLink(1))
-      .expect(not(isSessionRoutable(links, entry, now)))
-      .then(observePresence(1, 1, 2, ModeAccepting))
-      .expect(not(isSessionRoutable(links, entry, now)))
-      .then(observePresence(1, 2, 2, ModeAccepting))
-      .expect(isSessionRoutable(links, entry, now))
-
-  // 同 sequence 他路转发不延长 TTL; 乱序旧 sequence 被拒绝.
+  // 同 sequence 重放不延长首次到达时间, TTL 到期后退出可路由.
   run replaySameSequenceDoesNotExtendTtlTest =
     init
-      .then(observePresence(1, 1, 1, ModeAccepting))
+      .then(observePresence(1, ModeAccepting))
+      .expect(isSessionRoutable(entry, now))
       .then(advanceClock)
-      .then(observePresence(2, 1, 1, ModeAccepting))
+      .then(observePresence(1, ModeAccepting))
+      .expect(replayedSameSeq and isSessionRoutable(entry, now))
       .then(advanceClock)
-      .expect(not(isSessionRoutable(links, entry, now)))
-      .then(observePresence(1, 1, 2, ModeDraining))
-      .then(observePresence(2, 1, 1, ModeAccepting))
-      .expect(match entry {
-        | Entry(e) => e.seq == 2 and e.mode == ModeDraining
-        | AbsentEntry => false
+      .expect(not(isSessionRoutable(entry, now)))
+
+  // 乱序旧 sequence 与同序号冲突状态均被拒绝并保持原视图不变.
+  run staleAndConflictingSequenceRejectedTest =
+    init
+      .then(observePresence(2, ModeDraining))
+      .expect(not(isSessionRoutable(entry, now)))
+      .then(observePresence(1, ModeAccepting))
+      .then(observePresence(2, ModeAccepting))
+      .expect(and {
+        rejectedStaleOrConflict,
+        not(isSessionRoutable(entry, now)),
+        entry == Entry({ seq: 2, firstSeenAt: 0, mode: ModeDraining }),
       })
 
-  // 路径 1 Link 断线时路径 2 仍保持可路由, 直至本地 TTL 过期.
-  run multiPathFailoverAndTtlExpiryTest =
+  // 新 sequence 续期本地租约, 收到 Draining 后即使未到期也立即停止路由.
+  run freshSequenceRenewsLeaseAndStopsOnDrainingTest =
     init
-      .then(observePresence(1, 1, 1, ModeAccepting))
-      .then(observePresence(2, 1, 1, ModeAccepting))
-      .then(disconnectLink(1))
-      .expect(not(isSourceRoutable(links, entry, 1, now)) and isSourceRoutable(links, entry, 2, now))
+      .then(observePresence(1, ModeAccepting))
       .then(advanceClock)
+      .then(observePresence(2, ModeAccepting))
       .then(advanceClock)
-      .expect(not(isSessionRoutable(links, entry, now)))
+      .expect(isSessionRoutable(entry, now))
+      .then(observePresence(3, ModeDraining))
+      .expect(not(isSessionRoutable(entry, now)))
 }
