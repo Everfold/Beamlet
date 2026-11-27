@@ -38,11 +38,9 @@ export message RoleSession {
 
 // Worker 发布的完整状态快照, 首份有效快照即可完成登记.
 export message Presence {
-  string pool = 1;
-  RoleSession session = 2;
-  repeated string capabilities = 3;
-  uint64 sequence = 4;
-  PresenceState state = 5;
+  RoleSession session = 1;
+  repeated string capabilities = 2;
+  PresenceState state = 3;
 }
 
 // 不可变业务任务描述, 携带精确能力标识与不透明业务载荷.
@@ -53,11 +51,10 @@ export message Task {
 
 // 发往唯一选定 Worker 的派发消息, 直接携带既有 Attempt 授权与 Task.
 export message Dispatch {
-  string pool = 1;
-  RoleSession authority = 2;
-  RoleSession worker = 3;
-  Attempt attempt = 4;
-  Task task = 5;
+  RoleSession authority = 1;
+  RoleSession worker = 2;
+  Attempt attempt = 3;
+  Task task = 4;
 }
 
 // Worker 对单次 Dispatch 的一次性响应: 正常生成 Report 或执行期失败通知.

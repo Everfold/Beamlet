@@ -49,13 +49,12 @@
 
 ## 会话与存活
 
-### 会话与存活：身份、分组与状态
+### 会话与存活：身份与状态
 
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `RoleSession` | 持久角色标识与单次运行会话标识组成的角色会话身份 | 禁止按标识值大小或字典序推断会话新旧 |
-| `Pool` | 大小写敏感的精确逻辑隔离分组 | 限定 `Presence` 可见域与选路候选范围，不修剪或改写 |
-| `Presence` | `Worker` 发布的完整状态快照，含所属分组、会话身份、启用能力集、会话序号与当前状态 | 会话内序号单调递增；相同快照重复到达不延长租约时间 |
+| `Presence` | `Worker` 发布的完整状态快照，含会话身份、启用能力集与当前状态 | 会话内状态仅按 `Accepting` → `Draining` → `Offline` 单调推进；用于登记与续期本地租约 |
 | `PresenceState` | `Worker` 自报接收状态：`Accepting`（接收新派发中）、`Draining`（排空中）、`Offline`（已退出） | 失联标记由观察方按本地单调时钟另行判定；`Accepting` 不预留并发槽位 |
 
 ---
@@ -68,7 +67,7 @@
 | --- | --- | --- |
 | `Task` | 由精确匹配的能力标识与不透明业务输入载荷构成的不可变任务内容 | 贯穿 `Submission`、`Operation` 与 `Dispatch` 的唯一请求载体 |
 | `Target` | 提交目标约束：`Any`（从匹配可用候选中任选其一）或 `Exact`（锁定唯一 `RoleSession`） | 每次提交至多选人一次；`Exact` 不可路由时直接拒绝，绝不回退 |
-| `Submission` | 外部提交创建请求的描述，含目标分组、`Target` 与 `Task` | `Authority` 的提交输入语义，不规定跨进程线协议；尚未创建 `Operation` 或 `Attempt` |
-| `Dispatch` | 发往唯一选定 `Worker` 的派发消息，含目标分组、`Authority`、`Worker`、既有 `Attempt` 与 `Task` | 只传递既有 `Attempt` 授权 |
+| `Submission` | 外部提交创建请求的描述，含 `Target` 与 `Task` | `Authority` 的提交输入语义，不规定跨进程线协议；尚未创建 `Operation` 或 `Attempt` |
+| `Dispatch` | 发往唯一选定 `Worker` 的派发消息，含 `Authority`、`Worker`、既有 `Attempt` 与 `Task` | 只传递既有 `Attempt` 授权 |
 | `DispatchReply` | `Worker` 对单次 `Dispatch` 的一次性响应：完整 `Report` 或执行期失败通知 | 执行期失败无法排除副作用，绝不伪造为 `Report` 或执行前拒收 |
 | `Outcome` | 对单次 `Submission` 的三态终局裁决：`Rejected`、`Completed`、`Unresolved` | `Rejected` 承诺未创建 `Operation`；`Completed` 必对应已验收 `Report`；`Unresolved` 保持原 `AwaitingReport` |

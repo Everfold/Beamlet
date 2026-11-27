@@ -1,4 +1,4 @@
-// RoleSession 身份、Presence 序列号与本地单调时钟租约模型.
+// RoleSession 身份、Presence 单调状态与本地单调时钟租约模型.
 module session {
   type PresenceMode =
     | ModeAccepting
@@ -8,58 +8,56 @@ module session {
   type SessionEntry =
     | AbsentEntry
     | Entry({
-        seq: int,
-        firstSeenAt: int,
         mode: PresenceMode,
+        lastSeenAt: int,
       })
 
-  pure val MAX_SEQ = 3
   pure val MAX_NOW = 4
   pure val LEASE_TIMEOUT = 2
+
+  pure def modeRank(m: PresenceMode): int =
+    match m {
+      | ModeAccepting => 1
+      | ModeDraining => 2
+      | ModeOffline => 3
+    }
 
   pure def isSessionRoutable(entry: SessionEntry, currentTime: int): bool =
     match entry {
       | AbsentEntry => false
-      | Entry(e) => e.mode == ModeAccepting and currentTime - e.firstSeenAt < LEASE_TIMEOUT
+      | Entry(e) => e.mode == ModeAccepting and currentTime - e.lastSeenAt < LEASE_TIMEOUT
     }
 
   var entry: SessionEntry
   var now: int
-  var maxObservedSeq: int
-  var replayedSameSeq: bool
-  var rejectedStaleOrConflict: bool
+  var maxModeRank: int
+  var rejectedRegression: bool
 
   action init: bool = all {
     entry' = AbsentEntry,
     now' = 0,
-    maxObservedSeq' = 0,
-    replayedSameSeq' = false,
-    rejectedStaleOrConflict' = false,
+    maxModeRank' = 0,
+    rejectedRegression' = false,
   }
 
   // 会话快照观测规则:
-  // sequence 递增时以当前本地单调时钟登记或续期; 同序号同状态重放不刷新首次到达时间; 序号回退或同序号内容矛盾则拒绝.
-  action observePresence(seq: int, mode: PresenceMode): bool = {
-    val isAdvance = match entry {
-      | AbsentEntry => seq >= 1
-      | Entry(e) => seq > e.seq
+  // 同会话内状态仅允许按 Accepting -> Draining -> Offline 单调推进并刷新本地到达时间; 状态回退则拒绝.
+  action observePresence(mode: PresenceMode): bool = {
+    val rank = modeRank(mode)
+    val accepted = match entry {
+      | AbsentEntry => true
+      | Entry(e) => rank >= modeRank(e.mode)
     }
-    val isSameReplay = match entry {
-      | AbsentEntry => false
-      | Entry(e) => seq == e.seq and mode == e.mode
-    }
-    val isRejected = not(isAdvance) and not(isSameReplay)
     val nextEntry =
-      if (isAdvance) Entry({ seq: seq, firstSeenAt: now, mode: mode })
+      if (accepted) Entry({ mode: mode, lastSeenAt: now })
       else entry
-    val nextMaxSeq =
-      if (isAdvance) seq
-      else maxObservedSeq
+    val nextMaxRank =
+      if (accepted and rank > maxModeRank) rank
+      else maxModeRank
     all {
       entry' = nextEntry,
-      maxObservedSeq' = nextMaxSeq,
-      replayedSameSeq' = (replayedSameSeq or isSameReplay),
-      rejectedStaleOrConflict' = (rejectedStaleOrConflict or isRejected),
+      maxModeRank' = nextMaxRank,
+      rejectedRegression' = (rejectedRegression or not(accepted)),
       now' = now,
     }
   }
@@ -68,33 +66,31 @@ module session {
     now < MAX_NOW,
     now' = now + 1,
     entry' = entry,
-    maxObservedSeq' = maxObservedSeq,
-    replayedSameSeq' = replayedSameSeq,
-    rejectedStaleOrConflict' = rejectedStaleOrConflict,
+    maxModeRank' = maxModeRank,
+    rejectedRegression' = rejectedRegression,
   }
 
   action step: bool = any {
     {
-      nondet seq = 1.to(MAX_SEQ).oneOf()
       nondet mode = Set(ModeAccepting, ModeDraining, ModeOffline).oneOf()
-      observePresence(seq, mode)
+      observePresence(mode)
     },
     advanceClock,
   }
 
-  // 仅当会话处于 ModeAccepting 且距最新 sequence 首次到达未超出本地租约期限时才可路由.
+  // 仅当会话处于 ModeAccepting 且距最近有效快照到达未超出本地租约期限时才可路由.
   val routableRequiresAcceptingAndFreshLease: bool =
     isSessionRoutable(entry, now) iff
       match entry {
         | AbsentEntry => false
-        | Entry(e) => e.mode == ModeAccepting and (now - e.firstSeenAt < LEASE_TIMEOUT)
+        | Entry(e) => e.mode == ModeAccepting and (now - e.lastSeenAt < LEASE_TIMEOUT)
       }
 
-  // sequence 单调不回退, 且首次到达时间戳不超过当前本地单调时钟.
-  val sequenceMonotonicAndFirstSeenValid: bool =
+  // 会话状态按 Accepting -> Draining -> Offline 单调推进, 到达时间不超过本地单调时钟.
+  val modeNeverRegresses: bool =
     match entry {
-      | AbsentEntry => maxObservedSeq == 0
-      | Entry(e) => e.seq == maxObservedSeq and e.firstSeenAt <= now
+      | AbsentEntry => maxModeRank == 0
+      | Entry(e) => modeRank(e.mode) == maxModeRank and e.lastSeenAt <= now
     }
 
   // 非 Accepting 状态永不可路由.
@@ -106,26 +102,25 @@ module session {
 
   val invariants: bool = and {
     routableRequiresAcceptingAndFreshLease,
-    sequenceMonotonicAndFirstSeenValid,
+    modeNeverRegresses,
     nonAcceptingNeverRoutable,
   }
 
   val witnessRoutable: bool =
     isSessionRoutable(entry, now)
 
-  val witnessReplayDoesNotExtendTtl: bool =
-    replayedSameSeq and
-      match entry {
-        | AbsentEntry => false
-        | Entry(e) => e.mode == ModeAccepting and now > e.firstSeenAt and not(isSessionRoutable(entry, now))
-      }
+  val witnessTtlExpires: bool =
+    match entry {
+      | AbsentEntry => false
+      | Entry(e) => e.mode == ModeAccepting and not(isSessionRoutable(entry, now))
+    }
 
   val witnessDrainingStopsRouting: bool =
     match entry {
       | AbsentEntry => false
-      | Entry(e) => e.mode == ModeDraining and (now - e.firstSeenAt < LEASE_TIMEOUT) and not(isSessionRoutable(entry, now))
+      | Entry(e) => e.mode == ModeDraining and (now - e.lastSeenAt < LEASE_TIMEOUT) and not(isSessionRoutable(entry, now))
     }
 
-  val witnessStaleOrConflictRejected: bool =
-    rejectedStaleOrConflict
+  val witnessRegressionRejected: bool =
+    rejectedRegression
 }

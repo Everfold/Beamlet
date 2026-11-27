@@ -32,6 +32,6 @@ flowchart BT
 | [01-kernel.md](01-kernel.md) | [spec/quint/kernel/](quint/kernel/state_machine.qnt) | `Operation`、`Attempt`、`Report` 三种原语及内核状态机 |
 | [02-ledger.md](02-ledger.md) | [spec/quint/ledger/](quint/ledger/ledger.qnt) | `Ledger` 多 `Operation` 管理与 `Attempt` 身份防重用 |
 | [03-roles.md](03-roles.md) | [spec/quint/roles/](quint/roles/roles.qnt) | `Authority` 与 `Worker` 关系、二分结果契约与不变量 |
-| [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleSession`、`Pool`、`Presence` 快照与本地租约 |
+| [04-session.md](04-session.md) | [spec/quint/session/](quint/session/session.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `RoleSession`、`Presence` 单调状态与本地租约 |
 | [05-routing.md](05-routing.md) | [spec/quint/routing/](quint/routing/routing.qnt)、[messages.proto](proto/beamlet/v1/messages.proto) | `Target` 零回退、`Dispatch` 准入与三态 `Outcome` 裁决 |
 | [06-transport.md](06-transport.md) | — | 下游传输实现须满足的无状态投递、控制隔离与排空保证 |

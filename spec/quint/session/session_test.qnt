@@ -1,39 +1,48 @@
-// RoleSession、Presence 序列号与本地租约场景测试.
+// RoleSession、Presence 单调状态与本地租约场景测试.
 module session_test {
   import session.* from "./session"
 
-  // 同 sequence 重放不延长首次到达时间, TTL 到期后退出可路由.
-  run replaySameSequenceDoesNotExtendTtlTest =
+  // 持续收到 Accepting 快照续期本地租约, 未刷新则 TTL 到期退出可路由.
+  run heartbeatRenewsLeaseAndExpiresWithoutRefreshTest =
     init
-      .then(observePresence(1, ModeAccepting))
+      .then(observePresence(ModeAccepting))
       .expect(isSessionRoutable(entry, now))
       .then(advanceClock)
-      .then(observePresence(1, ModeAccepting))
-      .expect(replayedSameSeq and isSessionRoutable(entry, now))
+      .then(observePresence(ModeAccepting))
+      .then(advanceClock)
+      .expect(isSessionRoutable(entry, now))
       .then(advanceClock)
       .expect(not(isSessionRoutable(entry, now)))
 
-  // 乱序旧 sequence 与同序号冲突状态均被拒绝并保持原视图不变.
-  run staleAndConflictingSequenceRejectedTest =
+  // Draining 与 Offline 立即停止可路由, 且拒绝状态回退.
+  run drainingAndOfflineStopRoutingAndRejectRegressionTest =
     init
-      .then(observePresence(2, ModeDraining))
+      .then(observePresence(ModeAccepting))
+      .then(observePresence(ModeDraining))
       .expect(not(isSessionRoutable(entry, now)))
-      .then(observePresence(1, ModeAccepting))
-      .then(observePresence(2, ModeAccepting))
+      .then(observePresence(ModeAccepting))
       .expect(and {
-        rejectedStaleOrConflict,
+        rejectedRegression,
         not(isSessionRoutable(entry, now)),
-        entry == Entry({ seq: 2, firstSeenAt: 0, mode: ModeDraining }),
+        entry == Entry({ mode: ModeDraining, lastSeenAt: 0 }),
+      })
+      .then(observePresence(ModeOffline))
+      .then(observePresence(ModeDraining))
+      .expect(and {
+        rejectedRegression,
+        not(isSessionRoutable(entry, now)),
+        entry == Entry({ mode: ModeOffline, lastSeenAt: 0 }),
       })
 
-  // 新 sequence 续期本地租约, 收到 Draining 后即使未到期也立即停止路由.
-  run freshSequenceRenewsLeaseAndStopsOnDrainingTest =
+  // 直接收到 Offline 快照亦不可路由, 也不允许再回退为 Accepting.
+  run directOfflineSessionNeverRoutableTest =
     init
-      .then(observePresence(1, ModeAccepting))
-      .then(advanceClock)
-      .then(observePresence(2, ModeAccepting))
-      .then(advanceClock)
-      .expect(isSessionRoutable(entry, now))
-      .then(observePresence(3, ModeDraining))
+      .then(observePresence(ModeOffline))
       .expect(not(isSessionRoutable(entry, now)))
+      .then(observePresence(ModeAccepting))
+      .expect(and {
+        rejectedRegression,
+        not(isSessionRoutable(entry, now)),
+        entry == Entry({ mode: ModeOffline, lastSeenAt: 0 }),
+      })
 }
