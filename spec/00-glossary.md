@@ -43,7 +43,7 @@
 | 术语 | 定义 | 边界 |
 | --- | --- | --- |
 | `Authority` | 持有 `Ledger`、负责创建 `Operation`、签发 `Attempt`、派发执行并验收 `Report` 的协调角色 | 不同 `Authority` 之间不共享 `Ledger` |
-| `Worker` | 接收既有 `Attempt`、执行任务并通过响应返回 `Report` 或拒绝/失败通知的无台账执行角色 | 不持有 `Ledger`，不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
+| `Worker` | 接收既有 `Attempt`、执行任务并通过响应返回 `Report` 或拒绝/失败通知的无台账执行角色 | 可并发独立执行多个在途 `Attempt`，响应后不保留历史账本；不得擅自再签发新授权；共用 `Worker` 不代表共享 `Operation` |
 
 ---
 

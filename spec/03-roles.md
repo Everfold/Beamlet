@@ -22,7 +22,7 @@ sequenceDiagram
 ```
 
 - **`Authority`**：持有私有 `Ledger`，唯一负责登记 `Operation`、签发新 `Attempt`、向目标发起单次派发、校验并接受 `Report` 以及决定重试或关闭。不同 `Authority` 之间不共享 `Ledger`。
-- **`Worker`**：无台账执行者；接收既有 `Attempt` 与业务请求并执行处理，正常结束时产出绑定原 `Operation` 与 `Attempt` 的 `Report`，准入拒收或执行异常未完成时返回拒绝/失败通知而不伪造 `Report`。`Worker` 不持有或修改 `Ledger`，亦不得擅自再签发新 `Attempt`。共用同一个 `Worker` 不代表共享或接管任何 `Authority` 的 `Operation`。
+- **`Worker`**：无台账执行者；可同时并发接收并独立执行多个在途 `Attempt`（来自同一或不同 `Authority`），正常结束时产出绑定原 `Operation` 与 `Attempt` 的 `Report`，准入拒收或执行异常未完成时返回拒绝/失败通知而不伪造 `Report`，单次响应完成后不保留历史账本。`Worker` 不持有或修改 `Ledger`，亦不得擅自再签发新 `Attempt`。共用同一个 `Worker` 不代表共享或接管任何 `Authority` 的 `Operation`。
 
 ## 二分结果契约
 
